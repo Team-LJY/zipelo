@@ -1,0 +1,48 @@
+<Project>
+    <PropertyGroup>
+        <_ZipeloWorkerProject>$(MSBuildThisFileDirectory)../Zipelo.Worker/Zipelo.Worker.csproj</_ZipeloWorkerProject>
+    </PropertyGroup>
+
+    <Target Name="PrepareZipeloWorkerDeployment">
+        <PropertyGroup>
+            <_ZipeloWorkerSelfContained Condition="'$(SelfContained)' == ''">false</_ZipeloWorkerSelfContained>
+            <_ZipeloWorkerSelfContained Condition="'$(SelfContained)' != ''">$(SelfContained)</_ZipeloWorkerSelfContained>
+        </PropertyGroup>
+    </Target>
+
+    <!-- 개발 빌드의 작업자 출력을 앱 기준 고정 하위 폴더에 배치함. -->
+    <Target Name="StageZipeloWorkerForBuild" AfterTargets="Build" DependsOnTargets="PrepareZipeloWorkerDeployment"
+        Condition="'$(DesignTimeBuild)' != 'true' And ('$(OS)' == 'Windows_NT' Or '$(RuntimeIdentifier)' == 'win-x64')">
+        <MSBuild Projects="$(_ZipeloWorkerProject)" Targets="GetTargetPath"
+            RemoveProperties="TargetFramework;PublishProfile;PublishProfileFullPath;PublishDir;OutputPath;OutDir;BaseOutputPath;BaseIntermediateOutputPath;IntermediateOutputPath;TargetDir"
+            Properties="Configuration=$(Configuration);TargetFramework=net10.0;RuntimeIdentifier=$(RuntimeIdentifier);SelfContained=$(_ZipeloWorkerSelfContained);UseAppHost=true">
+            <Output TaskParameter="TargetOutputs" ItemName="_ZipeloWorkerTargetPath" />
+        </MSBuild>
+        <Error Condition="'@(_ZipeloWorkerTargetPath)' == ''" Text="작업자 출력 위치를 확인하지 못했습니다." />
+        <PropertyGroup>
+            <_ZipeloWorkerBuildDirectory>@(_ZipeloWorkerTargetPath->'%(RootDir)%(Directory)')</_ZipeloWorkerBuildDirectory>
+        </PropertyGroup>
+        <ItemGroup>
+            <_ZipeloWorkerBuildFile Include="$(_ZipeloWorkerBuildDirectory)**/*"
+                Exclude="$(_ZipeloWorkerBuildDirectory)publish/**/*" />
+        </ItemGroup>
+        <Error Condition="!Exists('$(_ZipeloWorkerBuildDirectory)Zipelo.Worker.exe') Or !Exists('$(_ZipeloWorkerBuildDirectory)Zipelo.Worker.dll') Or !Exists('$(_ZipeloWorkerBuildDirectory)Zipelo.Worker.runtimeconfig.json') Or !Exists('$(_ZipeloWorkerBuildDirectory)Zipelo.Worker.deps.json') Or !Exists('$(_ZipeloWorkerBuildDirectory)Zipelo.Core.dll') Or !Exists('$(_ZipeloWorkerBuildDirectory)Zipelo.Runtime.dll')"
+            Text="작업자 필수 빌드 파일이 누락되었습니다. Desktop과 작업자를 같은 구성으로 빌드하세요." />
+        <Copy SourceFiles="@(_ZipeloWorkerBuildFile)"
+            DestinationFiles="@(_ZipeloWorkerBuildFile->'$(TargetDir)worker/%(RecursiveDir)%(Filename)%(Extension)')"
+            SkipUnchangedFiles="true" />
+    </Target>
+
+    <!-- 게시 시 개발 빌드 폴더 대신 같은 RID와 런타임 방식의 게시물을 사용함. -->
+    <Target Name="PublishZipeloWorker" AfterTargets="Publish" DependsOnTargets="PrepareZipeloWorkerDeployment"
+        Condition="'$(DesignTimeBuild)' != 'true' And ('$(OS)' == 'Windows_NT' Or '$(RuntimeIdentifier)' == 'win-x64')">
+        <PropertyGroup>
+            <_ZipeloWorkerPublishDirectory>$([System.IO.Path]::GetFullPath('$(PublishDir)', '$(MSBuildProjectDirectory)'))/worker/</_ZipeloWorkerPublishDirectory>
+        </PropertyGroup>
+        <MSBuild Projects="$(_ZipeloWorkerProject)" Targets="Publish"
+            RemoveProperties="TargetFramework;PublishProfile;PublishProfileFullPath;PublishDir;OutputPath;OutDir;BaseOutputPath;BaseIntermediateOutputPath;IntermediateOutputPath;TargetDir;NoBuild"
+            Properties="Configuration=$(Configuration);TargetFramework=net10.0;RuntimeIdentifier=$(RuntimeIdentifier);SelfContained=$(_ZipeloWorkerSelfContained);UseAppHost=true;PublishSingleFile=false;PublishTrimmed=false;PublishDir=$(_ZipeloWorkerPublishDirectory)" />
+        <Error Condition="!Exists('$(_ZipeloWorkerPublishDirectory)Zipelo.Worker.exe') Or !Exists('$(_ZipeloWorkerPublishDirectory)Zipelo.Worker.dll') Or !Exists('$(_ZipeloWorkerPublishDirectory)Zipelo.Worker.runtimeconfig.json') Or !Exists('$(_ZipeloWorkerPublishDirectory)Zipelo.Worker.deps.json') Or !Exists('$(_ZipeloWorkerPublishDirectory)Zipelo.Core.dll') Or !Exists('$(_ZipeloWorkerPublishDirectory)Zipelo.Runtime.dll')"
+            Text="작업자 게시 파일이 누락되어 배포를 완료할 수 없습니다." />
+    </Target>
+</Project>
