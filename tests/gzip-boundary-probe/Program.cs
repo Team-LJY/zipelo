@@ -61,6 +61,15 @@ internal static class Program
             var fixture = Fixture.Wrap(raw, [], 0);
             Run($"empty.raw.{raw.Length}", () => Verify(fixture, [], 1));
         }
+        Run("empty.fixture.raw-boundary-hash", () =>
+        {
+            var fixture = Fixture.Create([]);
+            Equal(fixture.RawLength, 2);
+            Check(fixture.Bytes.AsSpan(fixture.HeaderLength, fixture.RawLength)
+                .SequenceEqual(new byte[] { 0x03, 0x00 }));
+            Verify(fixture, [], 1);
+            Verify(fixture, [], 65536);
+        });
         Run("raw.finished-consumed-unread", RawContract);
         Run("crc.known-trailer", () =>
         {
@@ -339,6 +348,10 @@ internal sealed record Fixture(byte[] Bytes, int HeaderLength, int RawLength)
     public static Fixture Create(byte[] plain, byte flags = 0, string name = "sample.txt",
         CompressionLevel level = CompressionLevel.Optimal)
     {
+        if (plain.Length == 0)
+        {
+            return Wrap([0x03, 0x00], plain, flags, name);
+        }
         using var raw = new MemoryStream();
         using (var compressor = new DeflateStream(raw, level, true)) { compressor.Write(plain); }
         return Wrap(raw.ToArray(), plain, flags, name);
