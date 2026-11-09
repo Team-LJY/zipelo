@@ -19,7 +19,7 @@
 
     <!-- 개발 배치는 같은 구성의 작업자 빌드 출력에서 실행 의존 파일만 복사함. -->
     <Target Name="StageUbuntuWorkerForBuild" AfterTargets="Build" DependsOnTargets="PrepareUbuntuWorkerDeployment"
-        Condition="'$(DesignTimeBuild)' != 'true'">
+        Condition="'$(ZipeloSharedRuntimeValidation)' != 'true' And '$(DesignTimeBuild)' != 'true'">
         <MSBuild Projects="$(_UbuntuWorkerProject)" Targets="GetTargetPath"
             RemoveProperties="$(_UbuntuWorkerRemoveProperties)"
             Properties="Configuration=$(Configuration);TargetFramework=net10.0;RuntimeIdentifier=$(RuntimeIdentifier);SelfContained=$(_UbuntuWorkerSelfContained);UseAppHost=true;PublishSingleFile=false;PublishTrimmed=false;PublishAot=false">
@@ -47,7 +47,7 @@
 
     <!-- 최종 배치는 UI 게시 위치 아래에 SDK가 같은 RID로 별도 게시하도록 함. -->
     <Target Name="PublishUbuntuWorker" AfterTargets="Publish" DependsOnTargets="PrepareUbuntuWorkerDeployment"
-        Condition="'$(DesignTimeBuild)' != 'true'">
+        Condition="'$(ZipeloSharedRuntimeValidation)' != 'true' And '$(DesignTimeBuild)' != 'true'">
         <Error Condition="'$(RuntimeIdentifier)' != 'linux-x64'" Text="Ubuntu 최종 게시에는 명시적인 linux-x64 RID가 필요합니다." />
         <Error Condition="'$(PublishDir)' == ''" Text="Ubuntu UI 게시 출력 디렉터리가 비어 있습니다." />
         <PropertyGroup>

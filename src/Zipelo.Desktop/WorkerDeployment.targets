@@ -14,7 +14,7 @@
 
     <!-- 개발 빌드의 작업자 출력을 앱 기준 고정 하위 폴더에 배치함. -->
     <Target Name="StageZipeloWorkerForBuild" AfterTargets="Build" DependsOnTargets="PrepareZipeloWorkerDeployment"
-        Condition="'$(DesignTimeBuild)' != 'true' And ('$(OS)' == 'Windows_NT' Or '$(RuntimeIdentifier)' == 'win-x64')">
+        Condition="'$(ZipeloSharedRuntimeValidation)' != 'true' And '$(DesignTimeBuild)' != 'true' And ('$(OS)' == 'Windows_NT' Or '$(RuntimeIdentifier)' == 'win-x64')">
         <MSBuild Projects="$(_ZipeloWorkerProject)" Targets="GetTargetPath"
             RemoveProperties="TargetFramework;PublishProfile;PublishProfileFullPath;PublishDir;OutputPath;OutDir;BaseOutputPath;BaseIntermediateOutputPath;IntermediateOutputPath;TargetDir"
             Properties="Configuration=$(Configuration);TargetFramework=net10.0;RuntimeIdentifier=$(RuntimeIdentifier);SelfContained=$(_ZipeloWorkerSelfContained);UseAppHost=true">
@@ -37,7 +37,7 @@
 
     <!-- 최종 배치는 UI 게시 위치 아래에 SDK가 같은 RID로 별도 게시하도록 함. -->
     <Target Name="PublishZipeloWorker" AfterTargets="Publish" DependsOnTargets="PrepareZipeloWorkerDeployment"
-        Condition="'$(DesignTimeBuild)' != 'true' And ('$(OS)' == 'Windows_NT' Or '$(RuntimeIdentifier)' == 'win-x64')">
+        Condition="'$(ZipeloSharedRuntimeValidation)' != 'true' And '$(DesignTimeBuild)' != 'true' And ('$(OS)' == 'Windows_NT' Or '$(RuntimeIdentifier)' == 'win-x64')">
         <Error Condition="'$(PublishDir)' == ''" Text="Windows UI 게시 출력 디렉터리가 비어 있습니다." />
         <PropertyGroup>
             <_ZipeloWorkerPublishSelfContained>$(_ZipeloWorkerSelfContained)</_ZipeloWorkerPublishSelfContained>

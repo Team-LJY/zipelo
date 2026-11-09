@@ -1,0 +1,36 @@
+{
+    "schema": 1,
+    "version": "10.0.14",
+    "source": "https://builds.dotnet.microsoft.com/dotnet/release-metadata/10.0/releases.json",
+    "platforms": {
+        "win-x64": [
+            {
+                "file": "dotnet-runtime-10.0.14-win-x64.zip",
+                "url": "https://builds.dotnet.microsoft.com/dotnet/Runtime/10.0.14/dotnet-runtime-10.0.14-win-x64.zip",
+                "sha512": "a176095f1db69b42c81acc60940744078d6bf2d2ac643e418342aa9c81889f4bd13e42f4621b131f9e77e4bc781ad46e375956219df9a4f979031d2a5a8d93cd"
+            },
+            {
+                "file": "windowsdesktop-runtime-10.0.14-win-x64.zip",
+                "url": "https://builds.dotnet.microsoft.com/dotnet/WindowsDesktop/10.0.14/windowsdesktop-runtime-10.0.14-win-x64.zip",
+                "sha512": "3214913702264452ac4b283b6fb2f6c14ab748cea36c7561608245c4a7d8cc10436a160032038865d039a016eab4975f65f1ae906de7615953fbec760f764ac4"
+            },
+            {
+                "file": "dotnet-apphost-pack-10.0.14-win-x64.zip",
+                "url": "https://builds.dotnet.microsoft.com/dotnet/Runtime/10.0.14/dotnet-apphost-pack-10.0.14-win-x64.zip",
+                "sha512": "8655e16f192f8a7e6f125703fe1e390cd43023c91addc52280c71139fcff130bc4e220629401e588774fa2c125630e15983a90e8c462069d527b95cc363ac8ca"
+            }
+        ],
+        "linux-x64": [
+            {
+                "file": "dotnet-runtime-10.0.14-linux-x64.tar.gz",
+                "url": "https://builds.dotnet.microsoft.com/dotnet/Runtime/10.0.14/dotnet-runtime-10.0.14-linux-x64.tar.gz",
+                "sha512": "634326028645f38731c8c4e71a68356e4ca0d6b6607139a234ab760687f742063edaf33a1f20dda615742d2dc8300ca2ff857619d51fbb38090383b71334af89"
+            },
+            {
+                "file": "dotnet-apphost-pack-10.0.14-linux-x64.tar.gz",
+                "url": "https://builds.dotnet.microsoft.com/dotnet/Runtime/10.0.14/dotnet-apphost-pack-10.0.14-linux-x64.tar.gz",
+                "sha512": "4db5b9543fcebfd3e43d2ff6d7f6383e7ab359753bd27125330a85a0bbbd9ddd42651e31d4c07b716d0377a20f798a00cc3b1d4ebb5c4ecfc3f76dc13ab20d88"
+            }
+        ]
+    }
+}
