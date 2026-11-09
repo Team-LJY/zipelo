@@ -25,7 +25,19 @@ internal sealed class DecoderFactory
     public bool IsDeflateError(Exception error) => formatError.IsInstanceOfType(error);
 }
 
-internal sealed class Decoder
+internal interface IDecoder
+{
+    Action<byte[], int, int> SetInput { get; }
+    Func<byte[], int, int, int> Inflate { get; }
+    long TotalIn { get; }
+    long TotalOut { get; }
+    int Remaining { get; }
+    bool Finished { get; }
+    bool NeedInput { get; }
+    bool NeedDictionary { get; }
+}
+
+internal sealed class Decoder : IDecoder
 {
     private readonly Func<long> totalIn;
     private readonly Func<long> totalOut;

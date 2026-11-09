@@ -1,10 +1,15 @@
 using System.Text.Json;
 using Zipelo.PrefixFixtures;
 
+if (args.Length == 1 && args[0] == "--self-test")
+{
+    return DriverRegression.Run();
+}
+
 if (args.Length != 6 || args[0] != "--assembly" || args[2] != "--sha256" || args[4] != "--corpus"
     || args[3].Length != 64 || args[3].Any(value => !Uri.IsHexDigit(value)))
 {
-    Console.Error.WriteLine("사용법: Zipelo.PrefixProbe --assembly <DLL> --sha256 <SHA256> --corpus <JSONL>");
+    Console.Error.WriteLine("사용법: Zipelo.PrefixProbe --assembly <DLL> --sha256 <SHA256> --corpus <JSONL> 또는 --self-test");
     return 2;
 }
 try

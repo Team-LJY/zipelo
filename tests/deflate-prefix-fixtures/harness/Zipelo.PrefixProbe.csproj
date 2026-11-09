@@ -14,6 +14,7 @@
         <Compile Include="../Spec.cs" />
         <Compile Include="Decoder.cs" />
         <Compile Include="Driver.cs" />
+        <Compile Include="DriverRegression.cs" />
         <Compile Include="Program.cs" />
         <None Include="../expectations.json" Link="expectations.json" CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>

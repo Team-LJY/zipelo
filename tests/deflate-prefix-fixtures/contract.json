@@ -1,5 +1,5 @@
 {
-    "schemaVersion": 1,
+    "schemaVersion": 2,
     "scope": "독립 raw Deflate prefix fixture 7개와 외부 DLL 비교 실행기임. decoder 구현과 내부 테이블 변조를 포함하지 않음.",
     "counts": {
         "fixtures": 7,
@@ -8,18 +8,22 @@
         "matrix": 84,
         "gated": 24,
         "trueEofControls": 6,
-        "totalTrialsPerDecoder": 114
+        "totalTrialsPerDecoder": 114,
+        "scheduledCheckpointAssertions": 36,
+        "driverRegressions": 16,
+        "recalculation": "7*3*2*2=84, 경계6*2*2=24, 실제EOF3*2=6으로 decoder당114조건은 유지함. 경계 trial 안에 Reject2개를 추가하여 checkpoint 계획은7*4=28에서9*4=36으로 증가함. 직접 실행기 회귀16개는 decoder 비교 수에 합산하지 않음."
     },
-    "sourceOnlyStatus": "복원, 빌드, spec, emit, decoder 비교를 실행하지 않음. 비트 구성과 소스의 정적 검토만 수행함.",
+    "sourceOnlyStatus": "이 개정의 소스/계약/직접 회귀와 정적 검사만 작성함. 복원/빌드/실행하지 않음. 이전9ebd4fd7의 중앙78통과/36실패 기록은 PR 설명에 보존하며 새 head로 이월하지 않음.",
     "normative": {
         "prefix": "동일 canonical prefix에 가능한 완성이 남으면 입력을 기다림. 어떤 완성도 불가능하면 형식화된 Deflate 오류가 필요함.",
-        "timing": "RFC1951은 분할 API 오류 시점을 정하지 않음. 추가 입력을 요청하지 않는 즉시 거부는 이 시험의 수용 기준임.",
+        "timing": "RFC1951은 분할 API 오류 시점을 정하지 않음. 이 시험은 byte 단위 API의 공급 경계에서 tail 공급 전 형식화된 거부를 요구함. 비트별 정확한 API 오류 시점 인증이 아님.",
         "emptyDistance": "길이0 거리 심벌은 코드가 없음. 실제 거리 사용 전에는 정상이며 LL 길이 참조가 확정되면 입력 비트가0개여도 거부해야 함.",
         "singleCode": "1비트 코드0을 정상으로 보존함. EOB-only는 출력0/완료, 거리 단일 코드는 정상 겹침 복사를 허용함. 미사용1 분기는 거부함.",
         "subtree": "정상 완전 트리의 부분 조회만 다룸. subtree zero-slot의 실제 raw 도달은 미확정이며 재현했다고 주장하지 않음.",
         "outcomes": "Budget/Timeout/Eof/NoProgress/NoProgressLimit/ArrayError/HarnessInvariant/HarnessException은 정상 Deflate 거부가 아님. true-eof 대조의 Eof 통과는 잘림 감지 계약일 뿐 형식화된 거부 통과가 아님.",
         "invalidOutput": "오류 전 전달량은 ErrorPrefix의 일부까지 허용함. 무효 표본의 OutputText 빈 문자열은 최종 출력 기대값이 아니며 ExpectedOutputSha256은 null임.",
-        "invalidConsumption": "FaultStartBit/DecisiveEndBit는 독립 문법 위치임. TotalIn은 바이트 API이므로 별도 소비 범위를 대조함. EOB미사용42, 단일거리미사용43..44, 빈거리참조42바이트임. 선행 읽기량을 실제 소비량과 혼동하지 않음."
+        "invalidConsumption": "FaultStartBit/DecisiveEndBit는 독립 문법 위치임. TotalIn은 바이트 API이므로 별도 소비 범위를 대조함. EOB미사용42, 단일거리미사용43..44, 빈거리참조42바이트임. 선행 읽기량을 실제 소비량과 혼동하지 않음.",
+        "checkpointFields": "Wait의 OutputLength/Consumed/Remaining은 정확한 대기 상태임. Reject의 OutputLength는 허용 상한, Consumed/Remaining은 소비 상한 끝점의 참고값임. 실제 거부 판정은 ErrorPrefix와 ErrorConsumedMin..Max, TotalIn+Remaining=offered를 검사하므로 단일거리43..44 소비를 보존함."
     },
     "encoding": {
         "fields": "BFINAL=1, BTYPE=2, HDIST=0, HCLEN=14. 18개 meta 길이를 RFC 순서로 각3비트 작성함. LL+D 길이열은 반복심벌 없이 직접 작성함.",
@@ -122,7 +126,7 @@
         ],
         "tailValue": 0,
         "matrix": "7*3*2*2=84. 꼬리1바이트는 충분한 조회 비트 대조와 선행 읽기 소비 검사용임. 완료 후 새 입력을 공급하지 않으므로 일부 분할에서는 꼬리가 미공급 상태일 수 있음.",
-        "gated": "checkpoint가 있는6개 표본에2출력*2꼬리를 적용하여24조건임. 각 경계에서 실제 Inflate 반환0/NeedInput을 확인하고 출력합/소비/잔여를 검사한 뒤에만 다음 구간을 공급함. Reject 경계는 추가 공급 없이 형식화된 거부가 필요함.",
+        "gated": "checkpoint가 있는6개 표본에2출력*2꼬리를 적용하여24조건임. 기존 Wait/빈거리 Reject/subtree 경계를 보존함. EOB-unused는41 Wait 다음42 Reject, single-distance-unused는43 Wait 다음44 Reject를 검사함. Reject를 판정하기 전 tail을 공급하지 않음. 경계 도달 뒤 출력 배출을 계속하되 형식화된 거부만 통과함. 추가 입력 요구는 MissingImmediateRejection이며 Budget/Timeout/EOF/거짓 완료는 통과가 아님.",
         "trueEof": "정상 EOB-only41, 단일거리43, subtree110바이트를 실제 EOF로 끝내는6조건임. IsFinished=false와 고정 출력/소비/잔여를 검사함.",
         "pump": "매번 Inflate로 먼저 출력을 배출함. 미완료/반환0/NeedInput일 때만 SetInput함. 반환0이나 입력 배열 소진만으로 성공하지 않음.",
         "limits": {
@@ -130,14 +134,15 @@
             "cooperativeSecondsPerTrial": 5,
             "cumulativeOutputBytesPerTrial": 65536,
             "callsPerTrial": 100000,
-            "noProgress": "출력0/미완료/사전요청없음/입력요청없음은 즉시 NoProgress임. 호출 상한과 외부 프로세스 제한은 내부 무한루프도 별도로 제한함."
+            "noProgress": "출력0/미완료/사전요청없음/입력요청없음은 즉시 NoProgress임. 호출 상한과 외부 프로세스 제한은 내부 무한루프도 별도로 제한함.",
+            "cooperativeChecks": "Inflate 호출 전과 반환/throw 후 finally의 출력/guard 수집이 끝난 시점에5초 초과를 검사함. 완료 후 stability probe의 호출 전/반환/throw 후에도 동일하게 검사함. 늦은 성공/Deflate 거부는 Timeout으로 실패함. 협조적 검사는 비반환 호출을 중단하지 못하며 외부60초 프로세스 제한이 이를 담당함."
         },
         "budget": "호출 요청 크기를 남은 누적 예산으로 제한함. TotalOut 증가분을 예외에서도 누적하고 한도 도달 시 Budget으로 실패함. 반환하지 못한 출력과 반환 출력량을 분리 기록함.",
         "invariants": "각 호출 앞뒤 guard16바이트, 미보고 출력 영역, 입력 불변, 단조 TotalIn/TotalOut, TotalIn+RemainingInput=offered를 확인함. 오류 전 출력의 패턴/합/해시/최초 차이와 예외 타입을 기록함.",
         "success": "정상은 정확한 출력/길이/해시, TotalIn=rawLength, IsFinished가 필요함. 완료 후 추가 Inflate가 출력/소비/잔여/완료를 바꾸지 않는지도 확인함.",
         "failure": "Deflate로 분류되더라도 허용 출력 prefix/소비 범위/미완료/guard/모든 checkpoint를 만족해야 통과함. 예외 메시지만으로 세부 내부 원인을 인증하지 않음. 실패한 인스턴스를 재사용하지 않음.",
         "binding": "외부 DLL의 SHA256을 먼저 검사하고 그 assembly의 공개 Inflater(bool true), SetInput/Inflate(byte[],int,int), 공개 상태 속성만 사용함. 내부 테이블/비공개 API/decoder 소스 수정 없음. decoder마다 별도 프로세스로 실행함.",
-        "harnessOutput": "decoder 식별1행, observation114행, summary1행. exit0은114조건 모두 계약 통과, exit1은 계약 실패/실행기 오류, 잘못된 CLI는exit2임. corpus spec exit0은 명세 대조만 뜻함.",
+        "harnessOutput": "decoder 식별1행, observation114행, summary1행. exit0은114조건 모두 계약 통과, exit1은 계약 실패/실행기 오류, 잘못된 CLI는exit2임. corpus spec exit0은 명세 대조만 뜻함. --self-test는 회귀16행+요약1행, 전부 충족 시exit0 아니면exit1임. 실제 실행은 중앙에 남아 있음.",
         "commands": [
             "dotnet restore tests/deflate-prefix-fixtures/corpus/Zipelo.PrefixCorpus.csproj --configfile tests/deflate-prefix-fixtures/NuGet.Config --packages <project-root>/tests/.prefix-cache -p:NuGetAudit=false",
             "dotnet restore tests/deflate-prefix-fixtures/harness/Zipelo.PrefixProbe.csproj --configfile tests/deflate-prefix-fixtures/NuGet.Config --packages <project-root>/tests/.prefix-cache -p:NuGetAudit=false",
@@ -146,6 +151,7 @@
             "dotnet tests/deflate-prefix-fixtures/corpus/bin/Release/net10.0/Zipelo.PrefixCorpus.dll",
             "dotnet tests/deflate-prefix-fixtures/corpus/bin/Release/net10.0/Zipelo.PrefixCorpus.dll --emit > <project-root>/tests/.prefix-run/fixtures.jsonl",
             "dotnet tests/deflate-prefix-fixtures/harness/bin/Release/net10.0/Zipelo.PrefixProbe.dll --assembly <absolute-pinned-decoder-DLL> --sha256 <measured-DLL-SHA256> --corpus <project-root>/tests/.prefix-run/fixtures.jsonl",
+            "dotnet tests/deflate-prefix-fixtures/harness/bin/Release/net10.0/Zipelo.PrefixProbe.dll --self-test",
             "dotnet tests/deflate-prefix-fixtures/corpus/bin/Release/net10.0/Zipelo.PrefixCorpus.dll --invalid",
             "dotnet tests/deflate-prefix-fixtures/harness/bin/Release/net10.0/Zipelo.PrefixProbe.dll --invalid"
         ],
@@ -167,7 +173,8 @@
                 "source": "33f64eb0f28cdd2b084cb822fcc224c7c5aba553"
             }
         ],
-        "recording": "정확한 소스head/manifest/DLL/emit 해시, OS/SDK/runtime, 양 OS의 동일 parsed emit/raw해시, 조건별 관찰/종료값/timeout/잔류를 기록함. 기존 baseline 결과를 이 시험 통과로 이월하지 않음."
+        "recording": "정확한 소스head/manifest/DLL/emit 해시, OS/SDK/runtime, 양 OS의 동일 parsed emit/raw해시, 조건별 관찰/종료값/timeout/잔류를 기록함. 기존 baseline 결과를 이 시험 통과로 이월하지 않음. 기대 gate 메타데이터가 바뀌어 emit JSONL은 새 head로 다시 생성해야 함. 같은7개 raw 바이트/비트/출력 기대는 그대로이며 raw 해시가 이전 head와 같은지 중앙이 대조함.",
+        "driverRegression": "--self-test는 외부 DLL/emit 없이 실제 Driver를 제어 mock과 가상 경과시간으로 호출하는16개 회귀임. 정상 완료/정상 거부2, 늦은 완료/거부2, 늦은 stability 반환/throw2, 늦은 guard 손상 throw1, 호출 전 만료1, 두 Reject 경계의 정상 거부/누락 x출력1/257=8임. finally 출력/반환량/guard/예외 보존, Wait 후 Reject와 tail 미공급을 확인함. mock의0바이트 배열은 Deflate raw 표본이 아니며 decoder 통과 근거로 세지 않음. sleep/새 패키지 없음."
     },
     "exclusions": [
         "기존 PR20/22와 decoder 변경",

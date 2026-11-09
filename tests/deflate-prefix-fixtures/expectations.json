@@ -42,6 +42,13 @@
                 "outputLength": 0,
                 "consumed": 41,
                 "remaining": 0
+            },
+            {
+                "offered": 42,
+                "expected": "Reject",
+                "outputLength": 0,
+                "consumed": 42,
+                "remaining": 0
             }
         ]
     },
@@ -87,6 +94,13 @@
                 "expected": "Wait",
                 "outputLength": 8,
                 "consumed": 43,
+                "remaining": 0
+            },
+            {
+                "offered": 44,
+                "expected": "Reject",
+                "outputLength": 8,
+                "consumed": 44,
                 "remaining": 0
             }
         ]

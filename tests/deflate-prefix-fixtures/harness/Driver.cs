@@ -16,9 +16,20 @@ internal sealed class Driver
     private const int OutputLimit = 65536;
     private const int CallLimit = 100000;
     private const byte GuardByte = 0xa5;
-    private readonly DecoderFactory factory;
+    private readonly Func<IDecoder> createDecoder;
+    private readonly Func<Exception, bool> isDeflateError;
+    private readonly Func<TimeSpan>? elapsedOverride;
 
-    public Driver(DecoderFactory factory) { this.factory = factory; }
+    public Driver(DecoderFactory factory)
+        : this(() => factory.Create(), factory.IsDeflateError, null) { }
+
+    internal Driver(Func<IDecoder> createDecoder, Func<Exception, bool> isDeflateError,
+        Func<TimeSpan>? elapsedOverride)
+    {
+        this.createDecoder = createDecoder;
+        this.isDeflateError = isDeflateError;
+        this.elapsedOverride = elapsedOverride;
+    }
 
     public Observation Run(EmittedFixture fixture, Trial trial)
     {
@@ -27,9 +38,10 @@ internal sealed class Driver
         var source = trial.Cut is int cut ? raw[..cut] : raw.Concat(new byte[trial.TailBytes]).ToArray();
         var original = (byte[])source.Clone();
         var expected = Specification.Bytes(spec.Valid ? spec.OutputText : spec.ErrorPrefix);
-        var decoder = factory.Create();
+        var decoder = createDecoder();
         var buffer = new byte[GuardSize + trial.OutputChunk + GuardSize];
         var watch = Stopwatch.StartNew();
+        bool TimedOut() => (elapsedOverride?.Invoke() ?? watch.Elapsed) > TimeSpan.FromSeconds(5);
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
         var violations = new List<string>();
         var checkpoints = new List<string>();
@@ -114,17 +126,18 @@ internal sealed class Driver
         {
             while (true)
             {
-                if (watch.Elapsed > TimeSpan.FromSeconds(5)) { outcome = "Timeout"; break; }
+                if (TimedOut()) { outcome = "Timeout"; break; }
                 if (calls >= CallLimit) { outcome = "NoProgressLimit"; break; }
                 var call = Call();
                 exceptionType = call.Error?.GetType().FullName;
+                if (TimedOut()) { outcome = "Timeout"; break; }
                 if (observed >= OutputLimit) { outcome = "Budget"; break; }
                 if (violations.Count > 0) { outcome = "HarnessInvariant"; break; }
                 if (call.Error is not null)
                 {
                     exceptionType = call.Error.GetType().FullName;
                     outcome = call.Error is IndexOutOfRangeException ? "ArrayError"
-                        : factory.IsDeflateError(call.Error) ? "Deflate" : "UnexpectedException";
+                        : isDeflateError(call.Error) ? "Deflate" : "UnexpectedException";
                     break;
                 }
                 if (decoder.Finished)
@@ -132,7 +145,10 @@ internal sealed class Driver
                     outcome = "Complete";
                     var beforeIn = decoder.TotalIn;
                     var beforeRemaining = decoder.Remaining;
+                    if (TimedOut()) { outcome = "Timeout"; break; }
                     var afterFinish = Call();
+                    exceptionType = afterFinish.Error?.GetType().FullName;
+                    if (TimedOut()) { outcome = "Timeout"; break; }
                     if (afterFinish.Error is not null || afterFinish.Count != 0 || !decoder.Finished
                         || beforeIn != decoder.TotalIn || beforeRemaining != decoder.Remaining)
                     {

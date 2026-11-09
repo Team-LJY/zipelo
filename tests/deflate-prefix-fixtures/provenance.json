@@ -1,9 +1,9 @@
 {
-    "schemaVersion": 1,
+    "schemaVersion": 2,
     "repository": "Team-LJY/zipelo",
     "branch": "fix/deflate-prefix-fixtures",
     "baseCommit": "018e7593ecb2b3a7ae0bc17a440ecf2c0de8b4dd",
-    "authoringStatus": "소스와 계약만 작성함. 복원/컴파일/실행/emit/decoder 비교는 하지 않음.",
+    "authoringStatus": "이번 개정은 소스 작성과 정적 검사만 수행함. 복원/컴파일/실행 없음. 이전9ebd4fd7의 중앙 검증 기록은 PR 설명에 보존함.",
     "ownership": "새 tests/deflate-prefix-fixtures 경로만 추가함. 기존 PR20/22, decoder와 제품 파일은 변경하지 않음.",
     "basis": [
         {
@@ -56,16 +56,19 @@
         "expectations.json",
         "harness/Decoder.cs",
         "harness/Driver.cs",
+        "harness/DriverRegression.cs",
         "harness/Program.cs",
         "harness/Zipelo.PrefixProbe.csproj",
         "provenance.json"
     ],
-    "dependencies": "PackageReference/ProjectReference 없음. 새 decoder와 production 의존성 없음. SHA256SUMS는 자기 자신을 제외한13파일의 저장소 루트 기준 해시임.",
+    "dependencies": "PackageReference/ProjectReference 없음. 새 decoder와 production 의존성 없음. SHA256SUMS는 자기 자신을 제외한14파일의 저장소 루트 기준 해시임.",
     "limitations": [
         "subtree zero-slot raw 도달 미확정",
         "오류 시점은 시험 계약이며 RFC의 분할 API 보장이 아님",
         "예상 raw 해시는 작성 과정에서 실행하여 산출하지 않음",
         "원문 emit/log/raw/binary 업로드 없음",
         "생산 채택/main 병합/성능/전체 안전성 검증 아님"
-    ]
+    ],
+    "revisionParent": "9ebd4fd7668e43808d19fe8bfa067921b45257fa",
+    "revisionScope": "두 Reject checkpoint, Inflate/stability 전후 협조적 시간 검사, Driver 제어 회귀16개와 계약/해시만 보강함. 기존7fixture raw 작성 소스와 normative 기대값은 보존함."
 }
