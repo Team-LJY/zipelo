@@ -28,6 +28,41 @@ internal static class ExtractionCases
         Check.Equal(entries.Sum(e => (long)e.Bytes.Length), result.Usage.OutputBytes);
     }
 
+    public static async Task DeflateTail(string root, bool secondStream, bool large, string? fault = null)
+    {
+        FixtureEntry[] entries =
+        [
+            new("first.bin", ZipFixture.Payload(1024), true, ZipFixture.DeflateTail(secondStream, large)),
+            new("after.bin", [19, 71, 203, 0, 255])
+        ];
+        var zip = ZipFixture.Build(entries);
+        ZipFixture.VerifyTailLayout(zip, entries);
+        if (fault is not null) { ZipFixture.CorruptTailDeclaration(zip, fault); }
+        var area = new TestArea(root, zip);
+        using var source = area.Open();
+        var expectedOutput = entries.Sum(entry => (long)entry.Bytes.Length);
+        var limits = TestArea.Limits with { MaxOutputBytes = expectedOutput + (fault == "length" ? 1 : 0) };
+        var result = await Launch.Client().ExtractToNewFolderAsync(area.Job, source, area.Destination, limits, default);
+        Console.WriteLine($"OBSERVE Deflate tail second={secondStream}, large={large}, fault={fault ?? "none"}, " +
+            $"published={result.Publication.Published}, error={result.Publication.Error}, " +
+            $"entries={result.VerifiedEntries}, output={result.Usage.OutputBytes}, " +
+            $"exit={result.WorkerExitCode}, confirmed={result.WorkerExitConfirmed}");
+        area.Preserved(source);
+        if (fault is not null)
+        {
+            area.Rejected(result, fault == "overlap"
+                ? [ArchiveError.IntegrityFailure]
+                : [ArchiveError.EngineFailure, ArchiveError.IntegrityFailure]);
+            if (fault == "overlap") { Check.That(result.WorkerExitCode is null, "항목 경계 침범 뒤 Worker 시작"); }
+            return;
+        }
+        // PR #10의 명시된 첫 스트림 정책을 검사함. 원본 전체 인증을 뜻하지 않음.
+        TestArea.Successful(result, entries.Length);
+        area.VerifyTree(entries);
+        Check.Equal(expectedOutput, result.Usage.OutputBytes);
+        Check.That(result.Usage.ProcessedBytes >= 3L * zip.Length, "후행 바이트의 입력 복사/재읽기 예산 누락");
+    }
+
     public static async Task OffsetSource(string root)
     {
         var zip = ZipFixture.Build(Item);

@@ -15,10 +15,12 @@
             "src/Zipelo.Runtime/PendingFolderPublication.cs": "2701cfbea1d5d26f25ddb5c8af2555f6a9812d4cc602a7d3c4385ad1a18c8647",
             "src/Zipelo.Worker/Program.cs": "adb9f68a77a86f57399462f4a6cbc3c591e41cb0e4964dec66a1fe0441f72fec",
             "docs/STREAMING_EXTRACTION.md": "1f5c7c42b2632f454cab1e2241ae5920bcbf46488223a6a25ee816e70ac44cfb"
-        }
+        },
+        "policy_head": "069bdef56cd4f74294a76cffbd2a4ab4ac16d43b",
+        "policy_document_git_blob": "8e4bdb057942a9edffa0073e57b5a49cfad0ff05"
     },
     "api": "StreamingZipWorkerClient.ExtractToNewFolderAsync / --extract-stream-v2",
-    "count": 60,
+    "count": 67,
     "cases": [
         "real.empty",
         "real.empty-items",
@@ -38,6 +40,13 @@
         "zip.duplicate",
         "zip.crc",
         "zip.truncated",
+        "zip.deflate_tail_garbage_small",
+        "zip.deflate_tail_garbage_large",
+        "zip.deflate_tail_second_small",
+        "zip.deflate_tail_second_large",
+        "zip.deflate_tail_bad_crc",
+        "zip.deflate_tail_bad_length",
+        "zip.deflate_tail_overlap",
         "peer.valid",
         "peer.range-valid",
         "peer.version",
@@ -104,13 +113,15 @@
         "range_budget": "64 KiB 응답 버퍼를 재사용하는 최대 769회 요청, 실제 파일은 66 KiB 미만, 누적 범위 트래픽 48 MiB 경계 시험",
         "io": "호스트 원본 읽기 64 KiB 이내 검사. 전체 입력 초과는 작은 Stream의 선언 Length=16777217만 사용함",
         "time": "사례별 45초, 작업 15초, 가짜 peer 자체 12초, 장벽 5초. 기한 사례 2초. 사용자 정의 대기 Stream은 토큰에 협조함",
-        "disk": "테스트가 새 GUID 하위 폴더만 생성하고 기존 부모 권한을 바꾸지 않음. Linux 새 폴더를 0700으로 생성함. 모든 결과는 검토용으로 남기며 재귀 삭제하지 않음"
+        "disk": "테스트가 새 GUID 하위 폴더만 생성하고 기존 부모 권한을 바꾸지 않음. Linux 새 폴더를 0700으로 생성함. 모든 결과는 검토용으로 남기며 재귀 삭제하지 않음",
+        "fixture_suffix_bytes": 65540
     },
     "validation": {
-        "static": "passed: XML/JSON, 60 unique registrations, 6 explicit compile items, entry point references, dependency SHA-256 and formatting; not C# compilation",
+        "static": "passed: XML/JSON, 67 unique registrations, 6 explicit compile items, original 60 cases unchanged, dependency SHA-256, fixed policy blob and formatting; not C# compilation",
         "compile": "not_run: local SDK absent",
         "windows": "not_run",
-        "ubuntu": "not_run"
+        "ubuntu": "not_run",
+        "fixture_formula": "passed: Python zlib independently decoded both manually encoded raw Stored block formulas (9/65535 decoded bytes); this did not execute the C# fixture or product"
     },
     "suspected_product_issue": {
         "case": "path.parent_replacement",
@@ -138,5 +149,17 @@
         "tests/streaming-extraction/ExtractionCases.cs",
         "tests/streaming-extraction/Program.cs",
         "tests/streaming-extraction/contract.json"
-    ]
+    ],
+    "deflate_tail_policy": {
+        "source": "https://github.com/Team-LJY/zipelo/blob/069bdef56cd4f74294a76cffbd2a4ab4ac16d43b/docs/STREAMING_EXTRACTION.md",
+        "dependency_note": "제품 코드 기준 head 624be260과 정책 head 069bdef5 사이에는 문서 1개만 변경됨. 코드 SHA-256은 기존 dependency.files를 유지하며 정책 문서는 별도 고정 blob으로 식별함",
+        "expected": "packed 범위 안 첫 raw Deflate 출력만 게시함. 후행 garbage/두 번째 스트림 자체는 허용하되 다음 정상 ZIP 항목의 내용/범위, 원본, 길이/CRC와 게시 조건을 보존해야 함",
+        "fixtures": "garbage 7/65537바이트와 독립 최종 Stored Deflate 스트림 14/65540바이트를 첫 Deflate 뒤에 추가함. local/central packed 길이와 후속 레코드 오프셋을 함께 계산하고 실행 전 경계를 확인함",
+        "read_ahead": "작은 후행 데이터와 64 KiB 초과 후행 데이터를 구분함. 실제 내부 버퍼 크기/소비량은 관측하지 않으며 Stream.Position으로 정확한 Deflate 소비를 증명하지 않음",
+        "controls": "길이/CRC를 local/central 양쪽에서 함께 변조해 해제 내용 불일치를 검사함. packed 길이만 1바이트 늘려 다음 local 레코드 침범도 거절해야 함. 기존 60개 기대값은 유지함",
+        "limits": "성공 4개는 실제 첫 출력+후속 ZIP 항목의 합을 MaxOutputBytes로 사용함. 각 입력은 67 KiB 미만이며 suffix 포함 원본을 보존하고 ProcessedBytes가 전체 입력의 복사/양쪽 재읽기 합계 이상인지 검사함",
+        "risk": "후행 바이트 의미/무결성을 검증하지 않아 숨은 데이터와 다른 도구의 해석 차이가 가능함. 성공은 ZIP 전체 인증/정규화가 아니며 CRC도 암호학적 인증이 아님",
+        "observation": "각 새 사례는 게시/오류/검증 항목 수/실제 출력량/Worker 종료 상태를 OBSERVE로 기록한 뒤 고정 기대값을 검사함. 허용 또는 거절 중 하나면 통과하는 검사는 아님",
+        "execution": "not_run: 로컬 SDK 없음. 정적 정책 대조와 fixture 구조 확인은 실제 C# 또는 Windows/Ubuntu 결과를 대체하지 않음"
+    }
 }
