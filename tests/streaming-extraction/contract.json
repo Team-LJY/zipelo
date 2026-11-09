@@ -374,12 +374,12 @@
         "compile": "Runtime을 포함한 테스트/Worker 양쪽 검증 빌드에 -p:DefineConstants=ZIPELO_STREAM_DIAGNOSTICS를 전달함. 일반 출력과 별도 diagnostic 출력/중간 폴더를 사용함. 프로젝트 기본 설정은 바꾸지 않음",
         "opt_in": "명시적 --diagnostics 없이는 진단 API 시작/종료를 호출하지 않고 파일도 만들지 않음. 일반 Runtime 빌드에서 이 플래그를 쓰면 IsEnabled=false를 확인해 시험 루트 생성/Worker 실행 전에 종료 2임",
         "file": "기존 링크 검사와 새 GUID 시험 루트 생성 후 해당 루트의 고정 stream-diagnostics.tsv만 지정함. 임의 로그 경로 옵션/환경 변수가 없음. 부모가 시험 소유이고 실행 중 교체되지 않는 환경이 필요하며 동일 사용자에 의한 부모 이동까지 원자적으로 막는다는 보장은 없음",
-        "start": "StreamingExtractionDiagnostics.TryStart(path)는 프로세스당 한 번만 호출함. true는 시작 요청 수락일 뿐 파일 개방 성공이 아님. false이면 사례를 실행하지 않고 종료 2임",
+        "start": "StreamingExtractionDiagnostics.TryStart(path)는 프로세스당 한 번만 호출하며 전체 선택 사례를 하나의 Start/Stop 세션으로 감쌈. Stop 이후 같은 프로세스에서 재시작할 수 없으므로 반복 재현은 새 프로세스를 사용함. true는 시작 요청 수락일 뿐 파일 개방 성공이 아님. false이면 사례를 실행하지 않고 종료 2임",
         "correlation": "진단 모드에서만 시험 stdout에 등록 사례 이름과 Stopwatch.GetTimestamp()의 BEGIN/END를 남김. Runtime TSV의 단조 ticks/job ID와 대응할 수 있음. Worker stdout/stderr에는 텍스트를 추가하지 않으며 가짜 Worker 모드의 조기 분기를 유지함",
         "stop": "실행 종료 또는 실패 후 finally에서 StopAsync().WaitAsync(TimeSpan.FromSeconds(1))로 최대 1초만 기다림. 이는 15초 작업/45초 사례/25초 종료 확인 예산과 분리됨. Status와 Dropped를 항상 시험 stdout에 보고하며 대기 예외는 타입만 기록함",
         "integrity": "완료 대기 성공, Status=2, Dropped=0인 경우만 logComplete=true임. 사례 종료 124는 닫힌 로그도 보수적으로 불완전 표시함. 값은 종료 시점의 상태 관찰이며 독립 OS Worker 종료나 누락 없는 전체 실행 증명이 아님",
         "exit": "사례 결과가 성공 0인데 진단이 불완전하면 전체 종료 2로 보고함. 기존 실패 1/설정 실패 2/차단 3/시간 초과 또는 종료 미확인 124는 보존함. 진단 실패로 제품 실패를 성공 처리하지 않음",
-        "bounds": "제품 계약: 큐 1024건, 프로세스 전체 기록 시도 16384건, 한 줄 512바이트, 파일 4 MiB. 포화/쓰기 실패는 상태와 Dropped로 관찰함. background 쓰기 스레드의 강제 중단은 하지 않으며 멈춘 파일시스템에서 잔류할 수 있음",
+        "bounds": "제품 계약: 큐 1024건, 프로세스 전체 기록 시도 16384건, 한 줄 512바이트, 파일 4 MiB. 기록 시도 한도 초과는 Status를 바꾸지 않고 Dropped만 증가시킬 수 있으므로 Status=2여도 Dropped가 양수이면 불완전함. 포화/쓰기 실패는 상태와 Dropped로 관찰함. background 쓰기 스레드의 강제 중단은 하지 않으며 멈춘 파일시스템에서 잔류할 수 있음",
         "validation": "정적 API/시그니처/분기/예산/파일 범위 대조만 수행함. 기본/진단 C# 컴파일, 실제 Status/Dropped/1초 제한/Windows 정지 재현은 중앙 검증 필요",
         "central_checks": [
             "일반 빌드 + 진단 옵션 없음: 기본 72개/선택 실행과 동일하며 진단 파일 없음",
@@ -390,6 +390,8 @@
             "--diagnostics <임의 경로>: 종료 2, 임의 경로 접근/실행 없음",
             "전체 진단 실행: 기존 72개 순서/기대값/15초/45초 보존, 한도 도달 시 불완전 표시",
             "시간 초과/Worker 종료 미확인: 124 보존, 후속 선택 사례 미실행, 로그 종료 최대 1초와 불완전 표시 확인"
-        ]
+        ],
+        "cancellation_interpretation": "operation.cancelled는 deadline 전용 표시가 아님. 정상 성공 정리와 range 오류에서도 내부 Cancel이 호출됨. 기록 값은 caller token 취소 여부일 뿐이며 0을 deadline 증거로 해석하지 않음. 앞선 단계, 단조 경과 시간과 별도 종료 결과를 함께 대조함",
+        "process_identity": "process.started의 PID는 Process.Start가 반환한 process.Id임. 실행파일 표시는 시작 의도와 경로 문자열 해시이며 실행파일 내용 해시나 OS가 확인한 실제 이미지/명령행이 아님. 실제 이미지/명령행과 잔류 Worker 여부는 중앙 검증에서 별도로 확인함"
     }
 }
