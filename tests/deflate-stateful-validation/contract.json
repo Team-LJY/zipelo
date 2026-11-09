@@ -1,6 +1,6 @@
 {
     "schemaVersion": 1,
-    "status": "source-prepared; no restore, compilation or execution by author; central validation pending",
+    "status": "pump revised; author static checks only; new head central rebuild and all 220 cases pending",
     "scope": "stage 2: public Inflater.Reset, zlib dictionary and partial output APIs; fixed/stored fixtures only",
     "parent": {
         "pr": 17,
@@ -44,8 +44,9 @@
             259
         ],
         "validFixtureEnvelopePairs": 11,
-        "checks": "Every normal-return call checks output sum, TotalOut delta, monotonic TotalIn and TotalIn+RemainingInput=offered. Output buffer guard bytes are preserved. Compare every output byte and final SHA256 to an independent pattern. Drain until IsFinished, not until a zero read or input exhaustion.",
-        "end": "Known byte length, including raw final padding byte, must equal TotalIn. Offered-but-unconsumed bytes plus never-offered bytes form the complete tail. Check sentinel unchanged and not consumed; after finish extra Inflate returns zero with unchanged counters."
+        "checks": "Every normal-return call checks output sum, TotalOut delta, monotonic TotalIn and TotalIn+RemainingInput=offered. Every loop Inflate validates guard bytes in finally, including exceptions; guard damage is Mismatch. Compare every output byte and final SHA256 to an independent pattern. Drain until IsFinished, not until a zero read or input exhaustion.",
+        "end": "Known byte length, including raw final padding byte, must equal TotalIn. Offered-but-unconsumed bytes plus never-offered bytes form the complete tail. Check sentinel unchanged and not consumed; after finish extra Inflate returns zero with unchanged counters. Extra Inflate after finish also verifies the entire prefilled output buffer unchanged in finally, including exceptions.",
+        "pump": "Call Inflate before supplying input. If output is positive, continue draining without refill. Handle dictionary request before input refill. Only an unfinished zero-output call requesting input may receive another chunk; no bytes left then means Truncated. Zero output alone is never success. With no input request and no consumption, classify NoProgress. All paths retain call/time limits."
     },
     "reset": {
         "completed": "Same actual Inflater decodes a successful stream with sentinel remaining, Reset verifies TotalIn/TotalOut/RemainingInput=0, needs input true, finished/dictionary false, Adler=0 raw or 1 zlib; decode a distinct normal stored stream, reset again, reject first reference distance 1 with TotalOut=0. Discard rejected instance.",
@@ -155,7 +156,7 @@
         "restore": "dotnet restore tests/deflate-stateful-validation/Zipelo.StatefulProbe.csproj --configfile tests/deflate-stateful-validation/NuGet.Config --packages <isolated-empty-packages> -p:NuGetAudit=false",
         "build": "dotnet build tests/deflate-stateful-validation/Zipelo.StatefulProbe.csproj --no-restore -c Release -p:NuGetAudit=false",
         "run": "dotnet tests/deflate-stateful-validation/bin/Release/net10.0/Zipelo.Experimental.DeflateStatefulValidation.dll",
-        "cli": "No args expected exit0 with 220 passed/0 failed; --invalid expected exit2. Both expectations remain unobserved.",
+        "cli": "No args expected exit0 with 220 passed/0 failed; --invalid expected exit2. New head outcomes remain unobserved; historical outcomes are recorded separately.",
         "warnings": "Referenced unchanged history project preserves original SYSLIB0051 warning; do not globally suppress warnings or override its warning policy.",
         "record": "Exact head, source/assembly SHA, SDK/runtime, offline source/package count0, build warnings/exits, per-OS outcomes, 60-second external limit, no residual processes; preserve source hashes. Do not upload logs, generated fixtures or binaries."
     },
@@ -173,5 +174,35 @@
         "performance",
         "file publication/security certification",
         "new packages/installations/tracing/release"
-    ]
+    ],
+    "historicalValidation": {
+        "head": "0aa779a78d90d591b70b1b7cffe100cdbcee1134",
+        "source": "central report; author did not execute",
+        "perOS": {
+            "Windows": {
+                "passed": 214,
+                "failed": 6,
+                "exit": 1,
+                "invalidCliExit": 2
+            },
+            "Linux": {
+                "passed": 214,
+                "failed": 6,
+                "exit": 1,
+                "invalidCliExit": 2
+            }
+        },
+        "build": "offline restore/build exit0; original SYSLIB0051 warning1, errors0; all source/DLL hashes unchanged; no timeout or residual processes",
+        "failedCases": [
+            "valid.fixed-overlap-259.Raw.1.1",
+            "valid.stored-fixed-xy.Raw.1.1",
+            "valid.fixed-overlap-259.Zlib.1.1",
+            "valid.dictionary-xy.Zlib.1.1",
+            "valid.fixed-overlap-259.GzipBody.1.1",
+            "dictionary.output-adler.dictionary-xy.1"
+        ],
+        "diagnosticSummary": "Central minimal comparison on Windows/Linux with official 1.4.2 and history-patched decoder: raw 731C0500 plus DEADBEEF5AA5C33C, original feed1/output1 pump produces 259 correct A bytes then unexpected FE at index259. While draining output, TotalIn stays3 but offered increases4..12 and RemainingInput1..9. Input and guards unchanged. Inflate-first refill only after zero output and input request succeeds for 1/1,7/1,1/257 with length259, consumed4 and expected hash. This minimal diagnostic does not establish that all six cases are fixed.",
+        "interpretation": "Odd-size SetInput appends to the bit buffer while IsNeedingInput tests only the byte window. Pending-output returns can postpone bit consumption. Changing the test pump avoids unnecessary refill; no decoder safety certification or final API fault attribution is claimed."
+    },
+    "followUp": "PR17 RawProbe uses the same input-first pattern; review separately. Preserve all 25 inherited files and existing PRs in this change."
 }

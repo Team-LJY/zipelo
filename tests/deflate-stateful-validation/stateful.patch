@@ -440,7 +440,7 @@
 +}
 --- /dev/null
 +++ b/tests/deflate-stateful-validation/StateDriver.cs
-@@ -0,0 +1,174 @@
+@@ -0,0 +1,186 @@
 +using System.Buffers.Binary;
 +using System.Diagnostics;
 +using System.Security.Cryptography;
@@ -493,13 +493,6 @@
 +                {
 +                    throw new ProbeFailure(Failure.Limit, "호출/시간 한도");
 +                }
-+                if (inflater.IsNeedingInput && offered < input.Length)
-+                {
-+                    var count = Math.Min(feedSize, input.Length - offered);
-+                    inflater.SetInput(input, offered, count);
-+                    offered += count;
-+                    Counters(offered);
-+                }
 +                Array.Fill(output, (byte)0xa6);
 +                var beforeIn = inflater.TotalIn;
 +                var beforeOut = inflater.TotalOut;
@@ -513,8 +506,11 @@
 +                {
 +                    throw new ProbeFailure(Failure.Decode, "Inflate 거부: 문법/이력/체크섬 세부 원인은 fixture로 구분함");
 +                }
++                finally
++                {
++                    Require(output[0] == 0xa6 && output[^1] == 0xa6, "출력 경계 보존");
++                }
 +                Require(written >= 0 && written <= outputSize, "반환 출력 길이");
-+                Require(output[0] == 0xa6 && output[^1] == 0xa6, "출력 경계 보존");
 +                Require(inflater.TotalIn >= beforeIn && inflater.TotalOut - beforeOut == written,
 +                    "호출별 카운터");
 +                Counters(offered);
@@ -551,11 +547,19 @@
 +                }
 +                if (written == 0 && !inflater.IsFinished)
 +                {
-+                    if (inflater.IsNeedingInput && offered == input.Length)
++                    if (inflater.IsNeedingInput)
 +                    {
-+                        throw new ProbeFailure(Failure.Truncated, "완료 전 입력 소진");
++                        if (offered == input.Length)
++                        {
++                            throw new ProbeFailure(Failure.Truncated, "완료 전 입력 소진");
++                        }
++                        // 대기 출력을 먼저 배출한 뒤 필요한 입력만 공급함.
++                        var count = Math.Min(feedSize, input.Length - offered);
++                        inflater.SetInput(input, offered, count);
++                        offered += count;
++                        Counters(offered);
 +                    }
-+                    if (inflater.TotalIn == beforeIn && !inflater.IsNeedingInput)
++                    else if (inflater.TotalIn == beforeIn)
 +                    {
 +                        throw new ProbeFailure(Failure.NoProgress, "소비/출력/요청 없는 호출");
 +                    }
@@ -589,9 +593,17 @@
 +            var beforeFinishedIn = inflater.TotalIn;
 +            var beforeFinishedOut = inflater.TotalOut;
 +            var beforeRemaining = inflater.RemainingInput;
-+            Require(inflater.Inflate(output, 1, outputSize) == 0 && inflater.IsFinished &&
-+                inflater.TotalIn == beforeFinishedIn && inflater.TotalOut == beforeFinishedOut &&
-+                inflater.RemainingInput == beforeRemaining, "완료 후 추가 출력 없음");
++            Array.Fill(output, (byte)0xa6);
++            try
++            {
++                Require(inflater.Inflate(output, 1, outputSize) == 0 && inflater.IsFinished &&
++                    inflater.TotalIn == beforeFinishedIn && inflater.TotalOut == beforeFinishedOut &&
++                    inflater.RemainingInput == beforeRemaining, "완료 후 추가 출력 없음");
++            }
++            finally
++            {
++                Require(output.All(value => value == 0xa6), "완료 후 출력 버퍼 불변");
++            }
 +            var actualHash = Convert.ToHexString(hash.GetHashAndReset());
 +            Require(actualHash == sample.Output.Sha256(), "독립 패턴 SHA256");
 +            pending = new(delivered, actualHash, inflater.TotalIn);

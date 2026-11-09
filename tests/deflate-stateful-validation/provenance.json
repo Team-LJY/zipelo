@@ -155,10 +155,23 @@
         "HistoryAliases.cs": "c4bb5f61d825961a2b83bc10de734b5977addbf41d1ea2361fc8bd5430943212",
         "NuGet.Config": "bcc893bead312e9bf4d7e24ce2f4b7bb1940d6ac41ce4936649457c64bb6ff28",
         "Program.cs": "0acb8fae973e86d71b46af6d5a3c3f15e288ae87040a2812c4bef9eca8f416b1",
-        "StateDriver.cs": "e027b89536e428b7ba6efb242f44721236b83775849b703bd98e8dec30f6a80c",
+        "StateDriver.cs": "83bc92e2f669e7dd9fa8c0405a50721e0013cb6d4ac3a1f0a244655648f59ba9",
         "Zipelo.StatefulProbe.csproj": "cef821ca2f07ca488aa87eef2ad22fc5bb0dd62ee9956e86e7f6db80a527716d"
     },
     "patch": "stateful.patch is the exact additions of new C# sources, project and offline config; inherited patches unchanged",
     "inventory": "inheritedFiles plus newFilePaths; SHA256SUMS is repository-root relative and excludes itself",
-    "observations": "No restore, compile, fixture execution, test execution or binary generation by author. Expectations independent of target output. Fixed head central validation pending."
+    "observations": "Author static checks only. Historical central execution at 0aa779a7 is recorded in contract.json; revised head execution pending. No result carryover.",
+    "revision": {
+        "fromHead": "0aa779a78d90d591b70b1b7cffe100cdbcee1134",
+        "changedFiles": [
+            "StateDriver.cs",
+            "contract.json",
+            "provenance.json",
+            "stateful.patch",
+            "SHA256SUMS"
+        ],
+        "behavior": "Inflate-first pump, refill only after unfinished zero-output/input-request; finally guards and finished-output-buffer immutability checks",
+        "preserved": "All 25 inherited files, Fixtures.cs, Program.cs, 220 grouped cases and independent expectations unchanged",
+        "validation": "Historical central 214/6 at old head only; revised source not restored, built or run by author; central full rerun pending"
+    }
 }
