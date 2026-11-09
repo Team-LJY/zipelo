@@ -1,0 +1,130 @@
+{
+    "upstream_repository": "https://github.com/icsharpcode/SharpZipLib",
+    "upstream_commit": "33f64eb0f28cdd2b084cb822fcc224c7c5aba553",
+    "upstream_version": "1.4.2",
+    "assembly_name": "Zipelo.Experimental.SharpZipLibHistoryProbe",
+    "status": "unverified-experiment-not-upstream-package",
+    "files": [
+        {
+            "upstream_path": "src/ICSharpCode.SharpZipLib/Zip/Compression/Inflater.cs",
+            "local_path": "vendor/Zip/Compression/Inflater.cs",
+            "git_blob_sha1": "439b4c6010eb548ad995fbd00327ad962de1f87a",
+            "original_sha256": "03d71ba116df441a962ae11473af40725a0273f6bbec9e14073e84f88f517e44",
+            "modified_sha256": "03d71ba116df441a962ae11473af40725a0273f6bbec9e14073e84f88f517e44",
+            "changed": false
+        },
+        {
+            "upstream_path": "src/ICSharpCode.SharpZipLib/Zip/Compression/InflaterDynHeader.cs",
+            "local_path": "vendor/Zip/Compression/InflaterDynHeader.cs",
+            "git_blob_sha1": "8e0196b11f71a9bb0e8141f6c08f24e28978fc01",
+            "original_sha256": "6c0e651185f27f4e92d02fa74df2fd4c2fd4b7edcb49781089f9a11c7f808eb2",
+            "modified_sha256": "6c0e651185f27f4e92d02fa74df2fd4c2fd4b7edcb49781089f9a11c7f808eb2",
+            "changed": false
+        },
+        {
+            "upstream_path": "src/ICSharpCode.SharpZipLib/Zip/Compression/InflaterHuffmanTree.cs",
+            "local_path": "vendor/Zip/Compression/InflaterHuffmanTree.cs",
+            "git_blob_sha1": "ed318824ffe33ee67a18b942b8cf24e55045881b",
+            "original_sha256": "3529df0ca4eff9a43017e08d89f8295ce052d77086a9f29618e35da88dd522d7",
+            "modified_sha256": "3529df0ca4eff9a43017e08d89f8295ce052d77086a9f29618e35da88dd522d7",
+            "changed": false
+        },
+        {
+            "upstream_path": "src/ICSharpCode.SharpZipLib/Zip/Compression/DeflaterConstants.cs",
+            "local_path": "vendor/Zip/Compression/DeflaterConstants.cs",
+            "git_blob_sha1": "b7c7d2a6994bd421d2b9d24d09e5b4a93b401a7c",
+            "original_sha256": "99386bd2339eb6a45c9c11f1096a038d71f5fd403d8806f7d028711f5d78d983",
+            "modified_sha256": "99386bd2339eb6a45c9c11f1096a038d71f5fd403d8806f7d028711f5d78d983",
+            "changed": false
+        },
+        {
+            "upstream_path": "src/ICSharpCode.SharpZipLib/Zip/Compression/DeflaterHuffman.cs",
+            "local_path": "vendor/Zip/Compression/DeflaterHuffman.cs",
+            "git_blob_sha1": "2f71366fca724a2b1f3f69b7dd942d306d733b82",
+            "original_sha256": "318219fbb9b6dd56b6443024b88c04fa1ed69eb9c952d2a69118559998f45d12",
+            "modified_sha256": "318219fbb9b6dd56b6443024b88c04fa1ed69eb9c952d2a69118559998f45d12",
+            "changed": false
+        },
+        {
+            "upstream_path": "src/ICSharpCode.SharpZipLib/Zip/Compression/DeflaterPending.cs",
+            "local_path": "vendor/Zip/Compression/DeflaterPending.cs",
+            "git_blob_sha1": "80d3e2142e34300d07d54ab82579a5c7c21ac62a",
+            "original_sha256": "a8815ccc4e203b32bf7a2785b6b1b6d204b4e0621ebfb5f8e3cb7d9f29c8e10a",
+            "modified_sha256": "a8815ccc4e203b32bf7a2785b6b1b6d204b4e0621ebfb5f8e3cb7d9f29c8e10a",
+            "changed": false
+        },
+        {
+            "upstream_path": "src/ICSharpCode.SharpZipLib/Zip/Compression/PendingBuffer.cs",
+            "local_path": "vendor/Zip/Compression/PendingBuffer.cs",
+            "git_blob_sha1": "6ed7e4ab8a72c2a2e9f264792620a42d03dcc307",
+            "original_sha256": "1e3a8d5d1b81ddf24fe05a51644213b259c1dd9d0473f90804ae71fd28f7f5a1",
+            "modified_sha256": "1e3a8d5d1b81ddf24fe05a51644213b259c1dd9d0473f90804ae71fd28f7f5a1",
+            "changed": false
+        },
+        {
+            "upstream_path": "src/ICSharpCode.SharpZipLib/Zip/Compression/Streams/OutputWindow.cs",
+            "local_path": "vendor/Zip/Compression/Streams/OutputWindow.cs",
+            "git_blob_sha1": "d8241c18c20062e32464ebfe4ffc2dd817f6d0b3",
+            "original_sha256": "88fce20b006a38a7e4b90a227c95988c46ada3d2ae96f6b53e917da9de52e856",
+            "modified_sha256": "2e16f3b7f0fbb0ee7ec187a62a3d9a479b2ce732612ecf8ce30bb1a072314895",
+            "changed": true
+        },
+        {
+            "upstream_path": "src/ICSharpCode.SharpZipLib/Zip/Compression/Streams/StreamManipulator.cs",
+            "local_path": "vendor/Zip/Compression/Streams/StreamManipulator.cs",
+            "git_blob_sha1": "aff6a9c6c52529dd7c152acdb5623161c50eb618",
+            "original_sha256": "5d6dbd9dee806e34a853ab8c6f68d6a1a2cb33148f28c1ad23857f960bd47e94",
+            "modified_sha256": "5d6dbd9dee806e34a853ab8c6f68d6a1a2cb33148f28c1ad23857f960bd47e94",
+            "changed": false
+        },
+        {
+            "upstream_path": "src/ICSharpCode.SharpZipLib/Checksum/Adler32.cs",
+            "local_path": "vendor/Checksum/Adler32.cs",
+            "git_blob_sha1": "b2a0f151a12c26dc90fea101087ab5325f4dc1fc",
+            "original_sha256": "659c93673e5d13e1f17db211b5dad1b953f16b3c4552df465ad2e7b290bf4ccc",
+            "modified_sha256": "659c93673e5d13e1f17db211b5dad1b953f16b3c4552df465ad2e7b290bf4ccc",
+            "changed": false
+        },
+        {
+            "upstream_path": "src/ICSharpCode.SharpZipLib/Checksum/IChecksum.cs",
+            "local_path": "vendor/Checksum/IChecksum.cs",
+            "git_blob_sha1": "db74a5a5d20a76b8340efabad88f4df0e53c48be",
+            "original_sha256": "32b3d05de60dcf3764142885206200b258be847ca4fd488e32e6dfe068d9270b",
+            "modified_sha256": "32b3d05de60dcf3764142885206200b258be847ca4fd488e32e6dfe068d9270b",
+            "changed": false
+        },
+        {
+            "upstream_path": "src/ICSharpCode.SharpZipLib/Core/Exceptions/SharpZipBaseException.cs",
+            "local_path": "vendor/Core/Exceptions/SharpZipBaseException.cs",
+            "git_blob_sha1": "eb14e2d49f9aef92e483e4a6180656423762080b",
+            "original_sha256": "1824f4fb34890a1cb4a8c292f78a910cf8199ab6aa3bdf850aed9292a119a38e",
+            "modified_sha256": "1824f4fb34890a1cb4a8c292f78a910cf8199ab6aa3bdf850aed9292a119a38e",
+            "changed": false
+        },
+        {
+            "upstream_path": "src/ICSharpCode.SharpZipLib/Core/Exceptions/StreamDecodingException.cs",
+            "local_path": "vendor/Core/Exceptions/StreamDecodingException.cs",
+            "git_blob_sha1": "e22b11b0d164da18564233ca9cfa8b76d079bbc0",
+            "original_sha256": "8f62c5cfd77d9ed6295f362ad950f71b94d501285fd83fa5b3a581d1403f6f46",
+            "modified_sha256": "8f62c5cfd77d9ed6295f362ad950f71b94d501285fd83fa5b3a581d1403f6f46",
+            "changed": false
+        },
+        {
+            "upstream_path": "src/ICSharpCode.SharpZipLib/Core/Exceptions/ValueOutOfRangeException.cs",
+            "local_path": "vendor/Core/Exceptions/ValueOutOfRangeException.cs",
+            "git_blob_sha1": "d41cf988275043a10d7f605b8bb83d3bdef2b5ca",
+            "original_sha256": "ba3938db192c344ca9a383969ee856de254306c195fbd46ec4a2526b01964384",
+            "modified_sha256": "ba3938db192c344ca9a383969ee856de254306c195fbd46ec4a2526b01964384",
+            "changed": false
+        },
+        {
+            "upstream_path": "LICENSE.txt",
+            "local_path": "vendor/LICENSE.txt",
+            "git_blob_sha1": "f4597ac929a3206971bb0f8549cf937916082266",
+            "original_sha256": "d7fbbc16f871bf24fa5624c7eaf945054b778985f32676dcacba41fddca61133",
+            "modified_sha256": "d7fbbc16f871bf24fa5624c7eaf945054b778985f32676dcacba41fddca61133",
+            "changed": false
+        }
+    ],
+    "reason": "유효 이력 기반 거리 검사와 상태 변경 전 용량 검사를 추가함. 복사와 비트 해석 알고리즘은 유지함."
+}

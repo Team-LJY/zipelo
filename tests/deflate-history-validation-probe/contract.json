@@ -1,0 +1,67 @@
+{
+    "schemaVersion": 1,
+    "baseCommit": "018e7593ecb2b3a7ae0bc17a440ecf2c0de8b4dd",
+    "status": "미검증 테스트 전용 수정본임. 정식 SharpZipLib 패키지나 제품 검증기가 아님.",
+    "scope": [
+        "upstream 14개 소스와 MIT 고지를 그대로 보존하되 OutputWindow만 수정함.",
+        "PR #15, 생산 코드, NuGet 원본과 cache에 연결하지 않음.",
+        "BCL 결합, GZip 파서와 게시, 성능 측정은 제외함."
+    ],
+    "historyRules": [
+        "historyLength는 0..32768이며 초기값과 Reset 값은 0임.",
+        "Write는 1, CopyStored는 실제 copied, Repeat는 원래 요청 길이를 포화 합산함.",
+        "CopyDict는 보관한 dictionary 길이로 대입함. CopyOutput과 블록 전환은 이력을 줄이지 않음.",
+        "Repeat는 distance < 1 또는 distance > historyLength를 SharpZipBaseException으로 거부함.",
+        "Write와 Repeat 용량 검사 및 Repeat 음수 길이 검사는 상태 변경 전에 수행함. CopyStored는 기존 방식으로 가용 용량까지 잘라 실제 복사량을 반환함.",
+        "오류 전후 불변 주장은 OutputWindow 배열과 세 카운터에만 적용함. 이미 소비된 inflater 입력은 복원하지 않으며 오류 후 인스턴스를 폐기함.",
+        "GZip용 raw 모드는 dictionary를 주입하지 않음. CopyDict 경계 검사는 윈도 단위 호환 검사이며 zlib dictionary 전체 경로 검증을 대신하지 않음."
+    ],
+    "sourcePolicy": [
+        "provenance.json은 원본 Git blob SHA-1과 원본/수정 바이트 SHA-256을 기록함.",
+        "history-validation.patch는 원본에서 수정본으로 가는 정확한 unified diff임. 나머지 13개 소스와 LICENSE.txt는 바이트 일치해야 함.",
+        "vendor 내부 형식, BOM, 기존 영어 주석과 고지는 원본 보존을 위해 변경하지 않음.",
+        "원본 MIT 전문과 Copyright 2000-2018 SharpZipLib Contributors를 vendor/LICENSE.txt에 보존함.",
+        "별도 assembly 이름을 사용하고 NuGet 패키지 ID/서명/배포물로 위장하지 않음. 원본과 비교 시 별도 프로세스 또는 명시적 assembly alias를 사용함.",
+        "상류 업데이트 시 새 고정 커밋과 원본 해시를 기록하고 패치를 수동 재검토한 뒤 기존 회귀 및 독립 corpus를 재검증함. 자동 추적 버전 변경은 하지 않음."
+    ],
+    "warnings": {
+        "policy": "경고를 일괄 숨기지 않음. NoWarn 또는 pragma warning disable을 추가하지 않음. TreatWarningsAsErrors=false로 경고를 그대로 보고함.",
+        "nullable": "upstream의 기존 nullable 비활성 문맥을 유지하며 작성한 두 파일은 #nullable enable임.",
+        "expected": [
+            "SharpZipBaseException의 Exception(SerializationInfo, StreamingContext) 호출에서 SYSLIB0051 예상됨.",
+            "그 외 경고 종류와 개수는 실제 .NET 10 중앙 빌드에서 확인해야 함. 0경고를 주장하지 않음."
+        ]
+    },
+    "validation": {
+        "local": "원본 Git blob 일치, 파일 해시, 컴파일 목록과 패치 범위를 정적으로 확인함. C# 복원/빌드/실행은 하지 않음.",
+        "prerequisites": "중앙의 기존 .NET 10 SDK와 참조 팩으로만 오프라인 복원함. 패키지 소스가 비어 있는 NuGet.Config를 사용함. 없는 구성요소를 다운로드하지 않음.",
+        "commands": [
+            "dotnet restore tests/deflate-history-validation-probe/Zipelo.HistoryProbe.csproj --configfile tests/deflate-history-validation-probe/NuGet.Config",
+            "dotnet build tests/deflate-history-validation-probe/Zipelo.HistoryProbe.csproj -c Release --no-restore",
+            "dotnet run --project tests/deflate-history-validation-probe/Zipelo.HistoryProbe.csproj -c Release --no-build",
+            "dotnet run --project tests/deflate-history-validation-probe/Zipelo.HistoryProbe.csproj -c Release --no-build -- --raw <synthetic.raw> <feedBytes> <outputBytes>"
+        ],
+        "exitCodes": {
+            "0": "독립 회귀 전부 통과 또는 raw 해제 종료 후 관측 결과 반환임. 제품 채택을 뜻하지 않음.",
+            "1": "회귀 실패 또는 raw 처리 실패임. raw 실패에는 확정 해시가 없음.",
+            "2": "잘못된 명령행 인수임."
+        },
+        "externalTimeout": "각 독립 실행에 중앙 외부 시간 제한을 둠. raw 호출의 15초 검사는 협조적이며 반환하지 않는 inflater 내부 호출을 중단하지 못함."
+    },
+    "corpusIntegration": {
+        "ownership": "카논의 tests/gzip-deflate-corpus 파일을 수정하거나 전체 corpus를 중복 생성하지 않음.",
+        "input": "중앙이 검토한 불변 synthetic raw 파일을 --raw에 전달함. 또는 public RawProbe.Run을 별도 harness에서 호출함.",
+        "matrix": "feedBytes 1/2/3/7/65536, outputBytes 1/258/65536으로 비교 가능함.",
+        "valid": "exit 0의 Decoded/Sha256/Consumed를 corpus의 독립 기대 길이/해시/raw 끝과 비교함. Offered-Remaining=Consumed도 확인함.",
+        "invalid": "잘못된 역참조는 exit 1 및 Failure=Deflate를 요구함. Budget/Truncated/예상 밖 예외를 같은 성공 판정으로 인정하지 않음.",
+        "trailing": "raw 도구는 첫 스트림 경계만 보고하며 후행 바이트 자체를 거부하지 않음. Remaining은 공급했지만 미소비한 바이트이고 아직 공급하지 않은 꼬리는 inputLength-Offered임. Consumed를 전체 입력 길이와 같다고 강제하지 않음.",
+        "limits": "입력 16MiB, 누적 공급 입력과 해제 처리량 128MiB, 해제 16MiB, 청크 최대64KiB임. 입력은 크기 제한된 메모리에 보관하고 전체 해제 버퍼는 만들지 않음. 윈도 상태 시험의 최대32KiB 복사는 거부 전후 비교 전용임.",
+        "result": "SHA256은 출력 대조용이며 문법 검증을 대신하지 않음. 공개 RawResult는 이 실험의 관측값이고 GZip/파일 게시 성공이 아님."
+    },
+    "remaining": [
+        "중앙 Windows/Linux 컴파일과 독립 실행",
+        "최종 독립 corpus 대조",
+        "zlib dictionary 통합 경로의 별도 검증",
+        "전체 Deflate 문법과 보안 정확성 검토 및 정식 채택 판단"
+    ]
+}
