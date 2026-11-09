@@ -1,0 +1,122 @@
+{
+    "schemaVersion": 1,
+    "repository": "https://github.com/Team-LJY/zipelo",
+    "baseCommit": "018e7593ecb2b3a7ae0bc17a440ecf2c0de8b4dd",
+    "branch": "fix/dynamic-deflate-fixture-corpus",
+    "authorProfile": "KonomoriKanon-dev",
+    "scope": "새 tests/dynamic-deflate-corpus 아래9개 파일만 추가함. 기존 PR16/17/18, baseline, upstream decoder 및 생산 파일은 변경하지 않음.",
+    "originalWork": "dynamic/오류 recipe, 명세와 제한된 작성기를 이 PR에서 작성함. upstream decoder 소스, 패키지 또는 바이너리를 복제하지 않음.",
+    "legacyReference": {
+        "commit": "5129ca83d2462e9a3a8ee2ceda79fe489e189ccc",
+        "url": "https://github.com/Team-LJY/zipelo/tree/5129ca83d2462e9a3a8ee2ceda79fe489e189ccc/tests/gzip-deflate-corpus",
+        "reused": "spec/rawHex JSONL 필드 계약, 저비트 우선 비트 writer/토큰 기록 개념과 literal-only recipe를 재사용함. 필요한 소규모 개념은 독립 namespace로 다시 작성하며 전체 파일/프로젝트 참조는 없음.",
+        "changed": "동적 코드 길이/반복/거리 및 malformed 표본용 메타데이터를 새로 추가함. 기존 Pattern과 corpus 또는 decoder 관찰 모드를 가져오지 않음.",
+        "readOnlySourceHashes": [
+            {
+                "path": "tests/gzip-deflate-corpus/Corpus.cs",
+                "sha256": "08a5743788c187b97a31a305191bffb94816feb6cfc5d1219f1578945286df7f",
+                "gitBlobSha": "e343a29053c0e7a48de0ccef38d47e0dc3f2d860"
+            },
+            {
+                "path": "tests/gzip-deflate-corpus/Program.cs",
+                "sha256": "4c52046fc64ee0c1f36f907e40198270c05d38559e4e4ce33c2c86d454d087e0",
+                "gitBlobSha": "d2ff29321128985bbde46405bf5b4883657b311d"
+            },
+            {
+                "path": "tests/gzip-deflate-corpus/expectations.json",
+                "sha256": "9a68dfb57ee6efa5d15920cdf2855aecf40dd0c39e47652da669ee4b0c9d2cc1",
+                "gitBlobSha": "75acf5727898fd924736bb1099cf65e4de073547"
+            },
+            {
+                "path": "tests/gzip-deflate-corpus/contract.json",
+                "sha256": "8da94856a2ea0e8e7b84954ef7e94736326a5c07acfb145bb13187657c3a6c6d",
+                "gitBlobSha": "0b85ed2a9bac05f7ea8f9b0234ce132dd95addf1"
+            }
+        ],
+        "literalOnlyControl": {
+            "id": "dynamic.literal-only.a",
+            "rawLength": 42,
+            "endBitExclusive": 331,
+            "rawSha256": "309A625CB0AC4192F71A76BEA1291E944E5516F44102C4A7AB18830788C6AAFF"
+        },
+        "resultTransfer": "PR16의 중앙 실행 결과를 이 PR의 통과 결과로 이월하지 않음."
+    },
+    "specificationSources": [
+        "https://www.rfc-editor.org/rfc/rfc1951.html#section-3.1.1",
+        "https://www.rfc-editor.org/rfc/rfc1951.html#section-3.2.2",
+        "https://www.rfc-editor.org/rfc/rfc1951.html#section-3.2.3",
+        "https://www.rfc-editor.org/rfc/rfc1951.html#section-3.2.6",
+        "https://www.rfc-editor.org/rfc/rfc1951.html#section-3.2.7",
+        "https://www.rfc-editor.org/rfc/rfc1951.html#section-3.3"
+    ],
+    "observationSources": [
+        "https://github.com/icsharpcode/SharpZipLib/blob/33f64eb0f28cdd2b084cb822fcc224c7c5aba553/src/ICSharpCode.SharpZipLib/Zip/Compression/InflaterDynHeader.cs#L45",
+        "https://github.com/dotnet/runtime/blob/v10.0.14/src/native/external/zlib-ng/inflate.c#L810"
+    ],
+    "sourceUse": "RFC 규칙을 근거로 recipe를 작성했으며 문서 전문이나 상류 코드를 vendor하지 않음. 저장소의 기존 라이선스 상태/보류를 변경하지 않음.",
+    "files": [
+        {
+            "path": "tests/dynamic-deflate-corpus/Corpus.cs",
+            "role": "정상10개와 무효8개 recipe 및 독립 출력 패턴임.",
+            "sha256": "d1d040628908b6d76b6ec38cd3df6eedd10103d31704601f045f98da3f7b3919"
+        },
+        {
+            "path": "tests/dynamic-deflate-corpus/FixtureWriter.cs",
+            "role": "제한된 명시적 비트/토큰 작성기와 canonical 코드 계산임. decoder/입력 탐색/범용 compressor가 아님.",
+            "sha256": "07cd36575b8480352bd34b5d8850adf7ba88a2e0207a896a2a9cb980a880cb9b"
+        },
+        {
+            "path": "tests/dynamic-deflate-corpus/NuGet.Config",
+            "role": "외부 source/fallback을 비우는 프로젝트 전용 설정임.",
+            "sha256": "026d16a16d2935475ad6b679752acd549757d489cdca32c1a919acccbbc35920"
+        },
+        {
+            "path": "tests/dynamic-deflate-corpus/Program.cs",
+            "role": "명세 대조 및 JSONL emit 계약임. decoder 실행이나 파일 저장은 없음.",
+            "sha256": "87a46b9f2a5bbb268813f041f0379ed2adfcdc02264c7e8fb1855f7020c8452b"
+        },
+        {
+            "path": "tests/dynamic-deflate-corpus/SHA256SUMS",
+            "role": "자기 자신을 제외한8개 파일의 바이트 SHA-256임."
+        },
+        {
+            "path": "tests/dynamic-deflate-corpus/Zipelo.DynamicDeflateCorpus.csproj",
+            "role": "독립 net10.0 BCL-only executable임. 명시적 소스3개만 컴파일함.",
+            "sha256": "bb5ecffd721459fa1c5f4a243216401562f391851375ea94c2df7cbfe2c0238f"
+        },
+        {
+            "path": "tests/dynamic-deflate-corpus/contract.json",
+            "role": "트리 배열/canonical 코드, 규격 기대, 실행/비교 계약과 한계임.",
+            "sha256": "7fde00c4b4b86c66f88e4dfc5b96d5a39543853ab280469db4de51692aac57d7"
+        },
+        {
+            "path": "tests/dynamic-deflate-corpus/expectations.json",
+            "role": "독립 출력 SHA, 비트 수, 길이, 오류 위치와 대조군 고정값임.",
+            "sha256": "da76ba2d1e2fcceb967f6cc0195502986995947a9974034a79bac62439eaa174"
+        },
+        {
+            "path": "tests/dynamic-deflate-corpus/provenance.json",
+            "role": "출처, 전체 파일 목록과 재사용 범위임."
+        }
+    ],
+    "hashPolicy": "위7개 내용 파일 해시를 기록함. provenance.json 해시는 SHA256SUMS에 기록하고 SHA256SUMS 자체 해시는 PR/완료 보고에 기록하여 자기 참조를 피함. generated raw/emit/log/binary는 목록에 없음.",
+    "validation": {
+        "performed": [
+            "소스와 RFC의 정적 대조",
+            "알려진 ASCII 출력 패턴 SHA-256 독립 계산",
+            "JSON/XML 문법과 명세 참조/개수/비트 길이 대조",
+            "legacy4개 파일의 원격 Git blob과 로컬 바이트 일치 확인",
+            "새 소스 파일의 SHA-256 계산"
+        ],
+        "notPerformed": [
+            "C# 컴파일",
+            "fixture writer 실행",
+            "emit 생성",
+            "패키지 복원/다운로드",
+            "decoder 비교",
+            "VM 접근"
+        ],
+        "status": "실행 전 소스 후보임. 중앙의 승인된 offline 컴파일/명세 검사/decoder 관찰이 남음.",
+        "limits": "새 raw 해시는 실행 전 독립 고정하지 않음. emit의 rawSha256은 생성 바이트 식별자일 뿐 정확성 증명이 아님. 출력 SHA와 명세 기대는 decoder와 독립임."
+    }
+}

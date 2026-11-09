@@ -1,0 +1,329 @@
+{
+    "schemaVersion": 1,
+    "baseCommit": "018e7593ecb2b3a7ae0bc17a440ecf2c0de8b4dd",
+    "scope": "독립 synthetic raw dynamic Deflate corpus임. 소스와 명세만 작성하며 decoder, 생산 코드와 기존 PR을 변경하지 않음.",
+    "counts": {
+        "total": 18,
+        "valid": 10,
+        "invalid": 8
+    },
+    "sources": [
+        "https://www.rfc-editor.org/rfc/rfc1951.html#section-3.1.1",
+        "https://www.rfc-editor.org/rfc/rfc1951.html#section-3.2.2",
+        "https://www.rfc-editor.org/rfc/rfc1951.html#section-3.2.3",
+        "https://www.rfc-editor.org/rfc/rfc1951.html#section-3.2.6",
+        "https://www.rfc-editor.org/rfc/rfc1951.html#section-3.2.7",
+        "https://www.rfc-editor.org/rfc/rfc1951.html#section-3.3"
+    ],
+    "treeProfiles": {
+        "meta01": {
+            "count": 19,
+            "nonzero": {
+                "0": 1,
+                "1": 1
+            },
+            "canonical": {
+                "0": "0",
+                "1": "1"
+            }
+        },
+        "meta012": {
+            "count": 19,
+            "nonzero": {
+                "0": 1,
+                "1": 2,
+                "2": 2
+            },
+            "canonical": {
+                "0": "0",
+                "1": "10",
+                "2": "11"
+            }
+        },
+        "meta016": {
+            "count": 19,
+            "nonzero": {
+                "0": 1,
+                "1": 2,
+                "16": 2
+            },
+            "canonical": {
+                "0": "0",
+                "1": "10",
+                "16": "11"
+            }
+        },
+        "meta018": {
+            "count": 19,
+            "nonzero": {
+                "0": 1,
+                "1": 2,
+                "18": 2
+            },
+            "canonical": {
+                "0": "0",
+                "1": "10",
+                "18": "11"
+            }
+        },
+        "ll-a258": {
+            "count": 286,
+            "nonzero": {
+                "65": 1,
+                "256": 2,
+                "285": 2
+            },
+            "canonical": {
+                "65": "0",
+                "256": "10",
+                "285": "11"
+            }
+        },
+        "ll-stored-match": {
+            "count": 260,
+            "nonzero": {
+                "256": 1,
+                "259": 1
+            },
+            "canonical": {
+                "256": "0",
+                "259": "1"
+            }
+        },
+        "ll-a": {
+            "count": 257,
+            "nonzero": {
+                "65": 1,
+                "256": 1
+            },
+            "canonical": {
+                "65": "0",
+                "256": "1"
+            }
+        },
+        "ll-ab": {
+            "count": 257,
+            "nonzero": {
+                "65": 1,
+                "66": 2,
+                "256": 2
+            },
+            "canonical": {
+                "65": "0",
+                "66": "10",
+                "256": "11"
+            }
+        },
+        "ll-abc-no-eob": {
+            "count": 257,
+            "nonzero": {
+                "65": 1,
+                "66": 2,
+                "67": 2
+            },
+            "canonical": {
+                "65": "0",
+                "66": "10",
+                "67": "11"
+            }
+        },
+        "ll-overfull": {
+            "count": 257,
+            "nonzero": {
+                "65": 1,
+                "66": 1,
+                "256": 1
+            },
+            "canonical": null,
+            "proof": "Kraft=3/2, no prefix code exists"
+        },
+        "meta-overfull": {
+            "count": 19,
+            "nonzero": {
+                "0": 1,
+                "1": 1,
+                "2": 1
+            },
+            "canonical": null,
+            "proof": "Kraft=3/2, no prefix code exists"
+        },
+        "distance-one": {
+            "count": 1,
+            "nonzero": {
+                "0": 1
+            },
+            "canonical": {
+                "0": "0"
+            },
+            "shape": "single-one-bit, allowed"
+        },
+        "distance-two": {
+            "count": 2,
+            "nonzero": {
+                "1": 1
+            },
+            "canonical": {
+                "1": "0"
+            },
+            "shape": "single-one-bit, allowed"
+        },
+        "distance-empty": {
+            "count": 1,
+            "nonzero": {},
+            "canonical": {},
+            "shape": "no distance references, allowed"
+        },
+        "fixed-ll": {
+            "count": 288,
+            "ranges": {
+                "0..143": 8,
+                "144..255": 9,
+                "256..279": 7,
+                "280..287": 8
+            },
+            "canonicalUsed": {
+                "65": "01110001",
+                "257": "0000001",
+                "256": "0000000"
+            }
+        },
+        "fixed-distance": {
+            "count": 32,
+            "ranges": {
+                "0..31": 5
+            },
+            "canonicalUsed": {
+                "0": "00000",
+                "30": "11110",
+                "31": "11111"
+            },
+            "reserved": "30/31 may occur in fixed code table but must never occur as actual distance tokens"
+        },
+        "distance-30": {
+            "count": 30,
+            "nonzero": {
+                "0": 1,
+                "1": 1
+            },
+            "canonical": {
+                "0": "0",
+                "1": "1"
+            }
+        },
+        "distance-31": {
+            "count": 31,
+            "nonzero": {
+                "0": 1,
+                "1": 1
+            },
+            "canonical": {
+                "0": "0",
+                "1": "1"
+            }
+        },
+        "distance-32": {
+            "count": 32,
+            "nonzero": {
+                "0": 1,
+                "1": 1
+            },
+            "canonical": {
+                "0": "0",
+                "1": "1"
+            }
+        }
+    },
+    "profileNotation": "nonzero/ranges에 없는 길이는0임. 접미사 -intended-only는 정상 대조군의 의도된 배열만 뜻하며 잘못된 반복/메타 열의 실제 복원 배열이 아님. -reference-only도 suffix 작성에만 사용한 정상 트리임. 이러한 접미사를 제거한 이름으로 원본 프로필을 찾음. --emit trees는 전체 길이 배열과 유효한 경우 모든 canonical 코드워드를 기록함.",
+    "wire": {
+        "fields": "정수 필드는 LSB-first, canonical Huffman 코드는 코드워드의 MSB-first임. 바이트 내부는 낮은 비트부터 채움.",
+        "metaOrder": [
+            16,
+            17,
+            18,
+            0,
+            8,
+            7,
+            9,
+            6,
+            10,
+            5,
+            11,
+            4,
+            12,
+            3,
+            13,
+            2,
+            14,
+            1,
+            15
+        ],
+        "header": "모든 dynamic 표본은 HCLEN=14이고 18개 meta 길이를 기록함. 17비트 고정 필드 +54비트 meta 선언 =71비트임. stored-dynamic은 앞에56비트 stored 블록이 있음.",
+        "end": "유효 표본의 EndBitExclusive는 최종 EOB 다음 0기준 비트임. 무효 표본은 작성된 명목상 끝이며 정상 완료를 뜻하지 않음. rawLength=ceil(end/8). 마지막 미사용 패딩은0으로 작성함.",
+        "fault": "faultBitOffset은 잘못된 선언/토큰의 시작이지 decoder가 예외를 던지는 정확한 비트나 consumed 값이 아님. tree overfull은 마지막 위반 길이 선언의 시작을 표시함.",
+        "audit": "--emit tokens는 모든 작성 필드/토큰의 시작, 길이와 의미를 연속 기록함. 과다 할당 meta의 suffix는 reference-only tree로 작성된 설명용 비트이며 손상 트리에서 해독 가능한 토큰이라고 주장하지 않음."
+    },
+    "validity": {
+        "history": "dictionary 없는 독립 raw 스트림으로 시작함. P=0의 거리1은 무효, P=1의 길이258/거리1과 stored XY 뒤 길이5/거리2는 유효임. 겹침과 블록 사이 이력 유지가 필요함.",
+        "hdist": "선언 수30/31/32 모두 RFC상 유효 기대임. 예약 꼬리의 길이가0이므로 트리에 포함되지 않고 실제 사용하지 않음. 특정 decoder가 거부해도 정상 기대를 바꾸지 않음.",
+        "malformed": "각 오류군은 expectations.json의 정상 control과 비교함. EOB 누락은 완전한 대체 LL 트리, 반복16은 첫 두 토큰 순서 교환, 반복18은 남은1칸에11개 요구, 과다 할당은 Kraft3/2, reserved30/31은 fixed 실제 사용으로 구분함. malformed tree의 canonical 코드는 null임.",
+        "oracle": "예상 길이/유효성/코드 구성은 RFC와 직접 계산으로 정함. SHA-256은 알려진 출력 패턴의 독립 계산이며 decoder 결과를 사용하지 않음. CRC/해시 일치만으로 문법이나 완료를 판정하지 않음."
+    },
+    "provenance": "provenance.json과 SHA256SUMS 참조. PR16의 계약/emit 필드 개념과 literal-only 구성만 재사용하며 프로젝트나 전체 corpus 파일을 복제하거나 참조하지 않음.",
+    "expectedHashes": "출력 SHA-256은 A259, XYXYXYX, A, AB, AAAA를 별도 계산한 고정값임. raw SHA는 emit 시 식별용으로 계산하며 새 raw의 독립 해시 고정이나 decoder 검증을 뜻하지 않음. 기존 literal-only만 PR16의 고정 raw SHA와 대조함.",
+    "modes": {
+        "spec": "인수 없음:18개 작성 표본을 기대 길이/끝 비트/출력 패턴 해시/오류 위치와 비교함. exit0은 이 명세 대조만 뜻함.",
+        "emit": "--emit: 명세 대조 후 fixture당 JSON 한 줄, 총18줄을 stdout에 출력함. spec(id,valid,rawLength,endBitExclusive,rawSha256,outputLength,outputSha256,expectedFailure,faultBitOffset,control), rawHex, trees, tokens, outputPattern과 명목상 끝 구분을 포함함. decoderObservation은 null임.",
+        "invalid": "다른 인수는 exit2임. 명세 불일치/도구 실패는 exit1임. --verify-bcl 및 라이브러리별 실행 모드는 제공하지 않음.",
+        "noSideEffects": "자체 파일 쓰기, 패키지 다운로드, 네트워크와 decoder 실행이 없음. 생성 emit/raw/log/binary는 업로드하지 않음."
+    },
+    "centralExecution": {
+        "prerequisite": "기존 SDK10.0.403와 runtime10.0.14, 설치된 참조 팩만 사용함. 부족하면 다운로드/설치하지 말고 중단함. 외부 PackageReference/ProjectReference 없음.",
+        "commands": [
+            "dotnet restore tests/dynamic-deflate-corpus/Zipelo.DynamicDeflateCorpus.csproj --configfile tests/dynamic-deflate-corpus/NuGet.Config --packages <project-root>/tests/.dynamic-corpus-cache -p:NuGetAudit=false",
+            "dotnet build tests/dynamic-deflate-corpus/Zipelo.DynamicDeflateCorpus.csproj -c Release --no-restore",
+            "dotnet tests/dynamic-deflate-corpus/bin/Release/net10.0/Zipelo.DynamicDeflateCorpus.dll",
+            "dotnet tests/dynamic-deflate-corpus/bin/Release/net10.0/Zipelo.DynamicDeflateCorpus.dll --emit",
+            "dotnet tests/dynamic-deflate-corpus/bin/Release/net10.0/Zipelo.DynamicDeflateCorpus.dll --invalid"
+        ],
+        "record": "정확한 head, 파일 해시, SDK/runtime, 각 명령 종료값, 명세18개, emit18행과 Windows/Linux JSON 동일성을 기록함. 복원/컴파일/실행은 작성자가 수행하지 않음.",
+        "externalSecondsPerProcess": 60
+    },
+    "centralDecoderComparison": {
+        "status": "재현 계약만 제공함. 분할/decoder harness 구현이나 실행은 이 PR에 없음.",
+        "matrix": {
+            "inputChunks": [
+                1,
+                2,
+                3,
+                7,
+                65536
+            ],
+            "outputChunks": [
+                1,
+                258,
+                65536
+            ],
+            "fixtures": 18,
+            "combinationsPerDecoder": 270
+        },
+        "isolation": "각 조합에 새 inflater와 불변 raw를 사용함. 실패한 인스턴스는 폐기함. Reset/dictionary 통합 시험을 뜻하지 않음.",
+        "valid": "IsFinished까지 출력 배출 후 정확한 길이/해시 및 TotalIn=rawLength를 대조함. 각 호출 TotalIn+RemainingInput=offered와 단조 카운터를 확인함. EOF/read0/Position은 완료 또는 소비량의 대체 근거가 아님.",
+        "invalid": "규격상 실패 이유는 expectedFailure로 유지함. 실제 라이브러리의 예외 타입/메시지와 출력량/consumed는 관찰란에 별도 기록함. Deflate 단계의 구조적 거부가 필요하며 timeout, harness 오류, 단순 해시 불일치는 통과가 아님. 오류 메시지만으로 세부 native 원인을 인증하지 않음.",
+        "hdistObservation": "SharpZipLib upstream33f64eb0의 distanceCodeCount>30 및 .NET10.0.14 번들 zlib-ng의 PKZIP_BUG_WORKAROUND 미정의 경로에서 ndist>30 거부를 정적으로 확인했음. 이는 실행 결과가 아니며 31/32의 거부는 known-compatibility-rejection으로 별도 기록하고 normative pass에 포함하지 않음.",
+        "bcl": "공개 BCL에는 정확한 consumed/IsFinished가 없으므로 반환 출력/예외만 관찰함. Position과 private API, 전역 strict 설정에 의존하지 않음. 양 decoder의 같은 거부로 입력을 무효로 재분류하지 않음.",
+        "limits": "출력은 64KiB 이하 청크로 해시하며 총4096바이트 상한과 프로세스60초 외부 제한을 적용함. 타임아웃은 실패임. 실패 전 출력과 해시는 임시 상태이며 정상 결과로 게시하지 않음.",
+        "observationSources": [
+            "https://github.com/icsharpcode/SharpZipLib/blob/33f64eb0f28cdd2b084cb822fcc224c7c5aba553/src/ICSharpCode.SharpZipLib/Zip/Compression/InflaterDynHeader.cs#L45",
+            "https://github.com/dotnet/runtime/blob/v10.0.14/src/native/external/zlib-ng/inflate.c#L810"
+        ]
+    },
+    "exclusions": [
+        "새 decoder와 범용 compressor",
+        "production 의존성/생산 연결/채택/main 병합",
+        "상위 Reset, zlib dictionary, 부분 배출 harness 구현",
+        "GZip wrapper/파일 게시",
+        "성능/전체 decoder 안전성 인증",
+        "설치/VM/WPR/공개 배포 및 라이선스 보류 해제"
+    ],
+    "validationStatus": "명세 작성, 독립 출력 패턴 해시 계산과 소스 정적 검토만 수행함. 새 fixture writer, C# 컴파일, emit, decoder 비교와 패키지 복원은 실행하지 않음."
+}
