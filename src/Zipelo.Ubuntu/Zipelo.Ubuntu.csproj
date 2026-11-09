@@ -16,6 +16,8 @@
         <PackageReference Include="Avalonia" Version="11.3.9" />
         <PackageReference Include="Avalonia.Desktop" Version="11.3.9" />
         <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.9" />
+        <!-- GHSA-xrw6-gwf8-vvr9 수정 백포트 버전으로 고정함. -->
+        <PackageReference Include="Tmds.DBus.Protocol" Version="[0.21.3]" />
         <ProjectReference Include="../Zipelo.Core/Zipelo.Core.csproj" />
         <ProjectReference Include="../Zipelo.Runtime/Zipelo.Runtime.csproj" />
     </ItemGroup>
