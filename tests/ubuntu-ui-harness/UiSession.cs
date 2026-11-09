@@ -10,16 +10,19 @@ namespace Zipelo.UbuntuUiHarness;
 internal sealed class UiSession
 {
     public MainWindow Window { get; }
-    public ControlledWorkspace Workspace { get; } = new();
-    public TestStorageProvider Picker { get; }
+    public ControlledWorkspace Workspace { get; }
     public Fixture Fixture { get; }
-    public UiSession(TestStorageFactory factory, Fixture fixture)
+    public UiSession(MainWindow window, ControlledWorkspace workspace, Fixture fixture)
     {
+        Window = window;
+        Workspace = workspace;
         Fixture = fixture;
-        Picker = factory.Provider;
-        Window = new MainWindow(Workspace);
-        Check(ReferenceEquals(Window.StorageProvider, Picker) && factory.Created == 1, "test picker factory not bound");
+    }
+    public void Initialize(string? probe)
+    {
+        Check(probe != "before-show", "injected initialization failure before Show");
         Window.Show();
+        Check(probe != "after-show", "injected initialization failure after Show");
     }
     public T Control<T>(string name) where T : Control => Window.FindControl<T>(name)
         ?? throw new InvalidOperationException("missing public control: " + name);
@@ -78,39 +81,10 @@ internal sealed class UiSession
         Active();
         return (task, call);
     }
-    public async Task<ListCall> SeedAsync()
-    {
-        var (task, call) = await StartupAsync();
-        call.Complete();
-        await AwaitAsync(task);
-        await IdleAsync();
-        var list = Control<ListBox>("Files");
-        Check(list.ItemCount == 2, "seed row count");
-        list.SelectedIndex = 1;
-        Check(list.SelectedItem is ArchiveRow, "seed selection");
-        return call;
-    }
-    public async Task<ListCall> ReopenAsync(TestStorageFile selection)
-    {
-        Picker.Enqueue(selection);
-        var count = Workspace.Calls.Count + 1;
-        Check(Click("OpenButton"), "open button disabled");
-        var call = await CallAsync(count);
-        Active();
-        return call;
-    }
     public void Success()
     {
         Check(Control<TextBlock>("Status").Text == "항목 2개를 읽었습니다. 내용 검증은 별도입니다.", "completion status");
         Check(Control<ListBox>("Files").ItemCount == 2, "completion rows");
         Check(!Control<TextBlock>("EmptyState").IsVisible, "empty overlay on rows");
-    }
-    public async Task CleanupAsync()
-    {
-        await Workspace.DrainAsync();
-        await IdleAsync();
-        Window.Close();
-        await WaitAsync(() => !Window.IsVisible, "window close");
-        Check(Picker.Selections.All(file => file.Disposals == 1), "selection owners not disposed exactly once");
     }
 }

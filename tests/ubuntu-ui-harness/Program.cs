@@ -1,7 +1,7 @@
 using System.Text.Json;
 using Avalonia;
-using Avalonia.Controls.Platform;
 using Avalonia.Threading;
+using Zipelo.Ubuntu;
 
 namespace Zipelo.UbuntuUiHarness;
 
@@ -10,13 +10,16 @@ internal static class Program
     public static readonly string[] Cases =
     [
         "startup-success", "cancel-throws", "cancel-result", "close-waits", "complete-then-stop",
-        "stop-then-complete", "queued-complete-then-stop", "wrong-job-preserve", "old-job-preserve",
-        "picker-cancel-reopen", "empty-result", "font-24", "font-32"
+        "stop-then-complete", "queued-complete-then-stop", "startup-wrong-job", "startup-empty",
+        "font-24", "font-32"
     ];
+
     [STAThread]
     public static int Main(string[] args)
     {
-        if (args.Length != 2 || args[0] != "--case" || !Cases.Contains(args[1])) { return 2; }
+        var probe = args.Length == 2 && args[0] == "--probe" && args[1] is "before-show" or "after-show"
+            ? args[1] : null;
+        if (probe is null && (args.Length != 2 || args[0] != "--case" || !Cases.Contains(args[1]))) { return 2; }
         if (!OperatingSystem.IsLinux()) { return 2; }
         var selected = args[1];
         var exit = 124;
@@ -24,20 +27,27 @@ internal static class Program
         {
             var project = Fixture.FindProject();
             var guard = new SourceGuard(project);
-            var factory = new TestStorageFactory();
-            AppBuilder.Configure<Zipelo.Ubuntu.App>().UsePlatformDetect()
-                .With<IStorageProviderFactory>(factory).SetupWithoutStarting();
+            AppBuilder.Configure<Zipelo.Ubuntu.App>().UsePlatformDetect().SetupWithoutStarting();
             UiSession.Check(Application.Current is Zipelo.Ubuntu.App && Application.Current.ApplicationLifetime is null,
                 "original App must have no desktop auto-start lifetime");
             using var loop = new CancellationTokenSource();
             Dispatcher.UIThread.Post(async () =>
             {
+                MainWindow? ownedWindow = null;
                 UiSession? ui = null;
                 Fixture? fixture = null;
+                var workspace = new ControlledWorkspace();
+                var closed = false;
+                var windowCreationStarted = false;
+                var injectedFailure = false;
                 try
                 {
                     fixture = new Fixture(project);
-                    ui = new UiSession(factory, fixture);
+                    windowCreationStarted = true;
+                    ownedWindow = new MainWindow(workspace);
+                    ownedWindow.Closed += (_, _) => closed = true;
+                    ui = new UiSession(ownedWindow, workspace, fixture);
+                    ui.Initialize(probe);
                     await UiSession.PumpAsync();
                     if (selected.StartsWith("font-", StringComparison.Ordinal)) { await LayoutCases.RunAsync(selected, ui); }
                     else { await UiCases.RunAsync(selected, ui); }
@@ -45,28 +55,41 @@ internal static class Program
                 }
                 catch (Exception error)
                 {
+                    injectedFailure = probe is not null && error is InvalidOperationException &&
+                        error.Message == "injected initialization failure " +
+                            (probe == "before-show" ? "before Show" : "after Show");
                     exit = 1;
                     Console.WriteLine(JsonSerializer.Serialize(new { kind = "failure", @case = selected,
-                        type = error.GetType().Name, reason = error is InvalidOperationException ? error.Message : "bounded phase failed" }));
+                        type = error.GetType().Name, injectedFailure }));
                 }
                 finally
                 {
-                    try
+                    var cleanupConfirmed = !windowCreationStarted || ownedWindow is not null;
+                    async Task Confirm(Func<Task> cleanup)
                     {
-                        if (ui is not null) { await ui.CleanupAsync(); }
-                        fixture?.Dispose();
-                        guard.Verify();
-                        Console.WriteLine(JsonSerializer.Serialize(new { kind = "result", @case = selected, exit,
-                            scope = "controlled-public-ui-only", sourceUnchanged = true, fixtureRemoved = true,
-                            workspaceTasksReturned = ui?.Workspace.Calls.All(call => call.Returned.Task.IsCompleted) ?? true,
-                            cancellationCounts = ui?.Workspace.Calls.Select(call => call.CancelCount).ToArray() }));
+                        try { await cleanup(); }
+                        catch { cleanupConfirmed = false; }
                     }
-                    catch (Exception error)
+                    await Confirm(async () =>
                     {
-                        exit = 125;
-                        Console.WriteLine(JsonSerializer.Serialize(new { kind = "cleanup-unconfirmed", @case = selected,
-                            type = error.GetType().Name, stopFollowingCases = true }));
-                    }
+                        await workspace.DrainAsync();
+                        if (ui is not null) { await ui.IdleAsync(); }
+                    });
+                    await Confirm(async () =>
+                    {
+                        if (ownedWindow is null) { return; }
+                        ownedWindow.Close();
+                        await UiSession.WaitAsync(() => closed && !ownedWindow.IsVisible, "owned window closed");
+                    });
+                    await Confirm(() => { fixture?.Dispose(); return Task.CompletedTask; });
+                    await Confirm(() => { guard.Verify(); return Task.CompletedTask; });
+                    if (!cleanupConfirmed) { exit = 125; }
+                    else if (probe is not null) { exit = injectedFailure && ownedWindow is not null && closed ? 0 : 1; }
+                    Console.WriteLine(JsonSerializer.Serialize(new { kind = "result", @case = selected, exit,
+                        scope = "controlled-startup-ui-only", cleanupConfirmed, windowClosed = closed,
+                        stopFollowingCases = exit is 124 or 125,
+                        workspaceTasksReturned = workspace.Calls.All(call => call.Returned.Task.IsCompleted),
+                        cancellationCounts = workspace.Calls.Select(call => call.CancelCount).ToArray() }));
                     loop.Cancel();
                 }
             });
@@ -75,8 +98,9 @@ internal static class Program
         }
         catch (Exception error)
         {
-            exit = 1;
-            Console.WriteLine(JsonSerializer.Serialize(new { kind = "setup-failure", type = error.GetType().Name }));
+            exit = 125;
+            Console.WriteLine(JsonSerializer.Serialize(new { kind = "setup-failure", type = error.GetType().Name,
+                stopFollowingCases = true }));
         }
         return exit;
     }

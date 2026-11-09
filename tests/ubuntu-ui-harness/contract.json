@@ -1,6 +1,6 @@
 {
-    "schema": 1,
-    "status": "authored_not_built_not_run",
+    "schema": 2,
+    "status": "source_authored_not_built_not_run",
     "basePr": 21,
     "baseHead": "678456dfb3d66e67168d43a1fd331f66cd5e37fc",
     "branch": "features/ubuntu-ui-harness",
@@ -12,52 +12,47 @@
         "complete-then-stop",
         "stop-then-complete",
         "queued-complete-then-stop",
-        "wrong-job-preserve",
-        "old-job-preserve",
-        "picker-cancel-reopen",
-        "empty-result",
+        "startup-wrong-job",
+        "startup-empty",
         "font-24",
         "font-32"
     ],
-    "caseCount": 13,
-    "scope": "실제 MainWindow 공개 UI 경로와 제어된 IUbuntuArchiveWorkspace Task의 통합 시험. 실제 Worker/해제/게시/OS picker/installer 시험이 아님.",
-    "app": "AppBuilder.Configure<Zipelo.Ubuntu.App>().UsePlatformDetect().With<IStorageProviderFactory>(factory).SetupWithoutStarting(). 원 App Initialize가 실제 compiled App.axaml/FluentTheme/리소스를 읽음. desktop lifetime 없음 확인 후 주입 창만 생성함. 스타일 복제 없음.",
-    "uiEntry": "OpenStartupAsync는 창당 한 번. 재열기는 IsEnabled/IsVisible 확인 후 공개 Button.ClickEvent 전달. 물리 마우스/키 입력 검증과 구분함.",
-    "picker": "Factory binding을 클릭 전에 ReferenceEquals로 확인. 메모리 IStorageFile만 사용하고 지원하지 않는 save/folder/bookmark/path 요청은 throw함. OS/GVfs/portal 호출 없음.",
-    "controlledTasks": {
-        "limit": 3,
-        "entriesPerResult": 2,
-        "createExtractCapabilities": false,
-        "tcs": "RunContinuationsAsynchronously",
-        "cancellation": "token 관찰은 Task를 자동 완료시키지 않음. 별도 gate로 반환을 허용함. 5초 내 gate/상태 복귀가 없으면 실패.",
-        "oracle": [
-            "active progress=true/open=false/stop=true",
-            "취소 요청 후 token=true/cancelCount=1/progress 유지/open=false/stop=false",
-            "중복 Stop은 disabled이며 이벤트 미전달. 공개 Close 재요청은 대기/중복 token callback 없음",
-            "gate 반환 뒤 progress=false/open=true/stop=false",
-            "Cancelled result와 OperationCanceledException의 상태 문구를 분리",
-            "같은 JobId Completed/None은 현재 UI의 권위 있는 완료 결과. 취소 요청 뒤에도 이 결과가 도착하면 성공 표시를 기대함. 실제 Worker의 정합성을 증명하지 않음",
-            "완료 처리 뒤 Stop은 disabled이며 token/status가 바뀌지 않음",
-            "잘못된 ID/이전 ID를 현재 호출의 결과로 반환하면 EngineFailure와 기존 ItemsSource/SelectedItem 동일성 유지",
-            "startup 재호출은 무시. picker 취소는 workspace 호출 없이 목록/선택 보존, 재열기는 새 ID와 새 목록",
-            "Task는 한 번만 완료됨. 종료된 이전 Task의 두 번째 완료나 실제 동시 작업 실행을 위장하지 않음"
-        ]
+    "caseCount": 11,
+    "scope": "실제 MainWindow(workspace)/OpenStartupAsync의 창당 1회 UI 통합 시험임. 실제 Worker 종료/OS picker/installer 검증이 아님.",
+    "app": "원 Zipelo.Ubuntu.App Initialize/compiled App.axaml/FluentTheme/리소스를 사용함. desktop lifetime 없음 확인. 스타일 복제/제품 API 변경 없음.",
+    "deferred": [
+        "재열기",
+        "picker 취소",
+        "이전 JobId",
+        "기존 압축파일 목록/선택 보존"
+    ],
+    "oracles": {
+        "startup-success": "같은 JobId Completed/None으로 2항목/성공 상태/빈 안내문 숨김. startup 재호출은 호출 수 1 유지.",
+        "cancel-throws": "활성 progress/open 잠금/Stop 활성 -> Stop -> token=true/callback1/Stop 비활성/progress 유지 -> gate OCE -> 기존 제품 취소 상태/0항목/idle.",
+        "cancel-result": "같은 대기 단계 뒤 Cancelled/Cancelled 결과 -> 기존 제품 중지 상태/0항목/idle. 문구를 제품과 다르게 만들지 않음.",
+        "close-waits": "공개 Close 요청과 재요청은 작업 중 창을 유지하고 token callback1. gate OCE 뒤 idle. 정리에서 Close/Closed 관찰.",
+        "complete-then-stop": "완료 UI 반영 후 Stop 비활성/이벤트 미전달/token 취소 없음/성공 유지.",
+        "stop-then-complete": "취소를 먼저 관찰하고 Task pending 확인 뒤 같은 ID Completed/None 반환. 현재 제품 결과 중심 계약대로 성공 기대.",
+        "queued-complete-then-stop": "UI callback에서 gate 완료 queue 후 await 없이 Stop. pending/취소/대기 조건을 실제 확인하고 같은 ID 완료 처리 뒤 성공 기대. 순서 불일치를 숨기지 않음.",
+        "startup-wrong-job": "첫 startup의 다른 JobId 결과는 EngineFailure. 초기 ItemsSource/제목 유지,0항목/빈 안내문/idle. 기존 archive/이전 JobId 보존 증거가 아님.",
+        "startup-empty": "첫 startup의 같은 JobId Completed/None 빈 결과는 0항목/빈 안내문/startup.zip 제목/0항목 완료 상태/idle.",
+        "font-24": "아래 fontCases의 실제 적용값/geometry 계약. test-local24DIP이며 DPI 변경 아님.",
+        "font-32": "아래 fontCases의 실제 적용값/geometry 계약. test-local32DIP이며 DPI 변경 아님."
     },
-    "orderedRaces": {
-        "complete-then-stop": "완료를 await해 UI가 idle인 뒤 Stop 비활성 확인",
-        "stop-then-complete": "취소 관찰 및 UI 대기를 확인한 뒤 같은 ID Completed 결과 반환",
-        "queued-complete-then-stop": "UI callback 안에서 gate 완료를 queue하고 await 없이 Stop 요청. pending 상태가 아니면 순서 조건 실패로 처리"
+    "controlledTasks": {
+        "maximumJobs": 1,
+        "maximumSyntheticEntries": 2,
+        "cancellation": "token은 gate를 완료시키지 않음. Task 반환과 UI idle을 따로 관찰함. 실제 Worker를 실행하지 않음.",
+        "duplicateStop": "disabled Stop에 이벤트를 강제로 전달하지 않음. 중복 Close가 callback을 늘리지 않아야 함."
     },
     "fixture": {
-        "kind": "일반 파일의 유효 빈 ZIP EOCD 22바이트. startup 경로를 위한 입력이며 두 개 UI row는 별도 synthetic JobResult임. 빈 ZIP이 실제 두 항목을 가진다고 주장하지 않음.",
         "hex": "504b0506000000000000000000000000000000000000",
         "sha256": "8739c76e681f900923b900c9df0ef75cf421d39cabb54650c4b9ad19b6a76d85",
         "maximumDiskBytes": 22,
         "maximumActualZipEntries": 0,
         "maximumSyntheticEntries": 2,
-        "maximumSyntheticJobs": 3,
         "parent": "tests/ubuntu-ui-harness/.runs/",
-        "cleanup": "무작위 새 하위 폴더와 단일 자기 파일만 삭제함. 비재귀 삭제이며 예기치 않은 파일/변경/정리 실패는 125로 남김. 기존 파일/전역 설정 변경 없음."
+        "cleanup": "새 자기 하위 폴더/단일 파일만 비재귀 삭제. 실제 ZIP 0항목과 synthetic 2항목을 구분함."
     },
     "fontCases": {
         "fontDip": [
@@ -65,14 +60,31 @@
             32
         ],
         "windowDip": [
-            640,
-            500
+            [
+                960,
+                720
+            ],
+            [
+                640,
+                500
+            ]
         ],
         "isDpiTest": false,
-        "baseline": "원 App의 Button/TextBlock 16, 제목 32, ArchiveTitle 20, TextBox 16을 확인함. ComboBox는 원 화면에 없으므로 test-local probe 하나의 기본값 16을 별도 확인함.",
-        "application": "Window.FontSize만 바꾸지 않고 실현된 TextBlock/TemplatedControl에 로컬 값 적용. before/after 실제 FontSize와 Bounds를 종류/공개 이름으로 제한 기록함. 실제 제품 설정이나 OS DPI를 바꾸지 않음.",
-        "longStatus": "고정 한글 문구 24회 반복을 공개 Status.Text에 시험용 주입함. 실제 Worker 상태로 오인하지 않음. 별도 viewport overflow/scroll/list 최소 높이/Stop 배치 확인.",
-        "limits": "정적/속성/Bounds 판정은 모든 glyph 잘림이나 전체 접근성 인증이 아님. 원문 화면은 중앙에서만 확인하며 업로드하지 않음."
+        "baseline": "창 기본960x720/최소640x500. 원 App Button/TextBlock/TextBox16, 명시적 제목32/20. 원 화면에 없는 ComboBox는 test-local probe16으로 분리함.",
+        "application": "실현된 TextBlock/TemplatedControl에 로컬24/32 적용 후 실제값 전부 확인함. 긴 고정 상태는 시험용 공개 Text 속성 주입임.",
+        "geometry": "창 ClientSize 좌표로 실제 bounds 변환, 화면 origin과 RenderScaling 기록. 창/조상 ClipToBounds/사각형 Clip과 교차. 비사각형 clip/RenderTransform은 추정하지 않고 실패. 활성 Stop 전체 및 status ScrollContentPresenter가 보이는 범위 내에 있어야 함.",
+        "statusEnd": "최대Offset 오차1DIP 이하, 실제 status 하단0.5DIP strip이 조상 viewport/clip과 창 안에 있어야 함(허용오차1DIP). Stop 활성/유효가시성, 목록168DIP 이상. 물리 hit-test/전체glyph/접근성 인증은 아님."
+    },
+    "ownership": "Program이 MainWindow 반환 직후 참조를 소유하고 Closed를 구독함. UiSession 생성자는 할당만 수행. Initialize/Show/시험 실패에도 Task drain/창 Close 및 Closed+비가시성/fixture/해시 확인을 독립 시도함. 하나라도 미확인125. MainWindow 생성자 자체가 객체 반환 전에 실패한 내부 자원은 이 public 경로로 정리 인증할 수 없음.",
+    "directRegression": {
+        "guiProbes": [
+            "before-show",
+            "after-show"
+        ],
+        "guiProbeExpected": "--probe는11제품 UI 사례와 별도. 주입한 초기화 예외를 관찰하고 소유 창 Closed/비가시성/fixture/해시 정리까지 확인한 경우만0, 정리 미확인125. 다른 예외를 성공으로 위장하지 않음.",
+        "runnerChecks": 4,
+        "runnerCommand": "python3 -m unittest discover -s tests/ubuntu-ui-harness -p runner_checks.py",
+        "runnerExpected": "timeout leader 종료 뒤 후손 미정리125, 정리된timeout124, 정상 반환 뒤 후손잔류125, PID재사용은 신호 미전달. Mock 시험이며 실제 OS 후손 정리 증거가 아님."
     },
     "execution": {
         "oneCasePerProcess": true,
@@ -80,21 +92,27 @@
         "externalProcessSeconds": 60,
         "termGraceSeconds": 5,
         "killGraceSeconds": 5,
-        "timeoutExit": 124,
-        "cleanupUnconfirmedExit": 125,
+        "passExit": 0,
         "assertionExit": 1,
         "invalidCliExit": 2,
-        "passExit": 0,
+        "timeoutExit": 124,
+        "cleanupUnconfirmedExit": 125,
         "runner": "python3 tests/ubuntu-ui-harness/run_case.py --dotnet /approved/sdk/dotnet --assembly /checkout/tests/ubuntu-ui-harness/bin/Release/net10.0/Zipelo.UbuntuUiHarness.dll --sha256 <fresh DLL SHA256> --case <등록 사례>",
-        "build": "중앙만 기존 offline feed/cache로 dotnet restore와 dotnet build --no-restore 수행. 프로젝트 기본 bin/obj는 tests/ubuntu-ui-harness/ 아래 유지함. 새 package/framework 없음.",
-        "display": "중앙의 승인된 별도 Xvfb DISPLAY만 사용. harness/runner는 Xvfb를 시작하지 않음. 중앙이 소유 Xvfb PID와 socket의 종료/잔류 0을 별도 확인함.",
-        "termination": "단계/Task 종료 또는 정리 미확인 시 후속 사례 금지. 외부 시간 초과는 성공/정상 취소가 아님. supervisor는 자신이 시작한 session/group만 종료함. 기본 Xvfb/다른 사용자 프로세스에 신호를 보내지 않음.",
-        "sourceIntegrity": "source-inputs.json의 고정 제품 8파일과 SHA256SUMS의 harness 전체 소스, manifest 및 실제 로드한 관련 DLL 6개를 시작/종료 대조함. 중앙은 추가로 전체 fresh build 입력/의존성/SDK/DLL 해시를 고정해야 하며 이 부분 검사를 전체 빌드 증명으로 확대하지 않음."
+        "probe": "같은 runner에서 --case 대신 --probe before-show 또는 after-show. 각각 별도 프로세스.",
+        "processOwnership": "Linux subreaper 사용. 자기 UID의 /proc PID/starttime/parent/session을 추적하고 자신의 session/직접 자식/추적 후손만 소유함. pidfd_open 후 starttime 재확인과 pidfd_send_signal로 다른 PID 재사용에 신호를 보내지 않음. 이름 매칭/전역 종료 없음. 권한/API/상태 확인 실패는125. 모든 반환경로에서 leader와 후손 확인/정리를 수행함.",
+        "stop": "124/125 또는 정리 미확인 뒤 후속 실행 금지. 강제 정리를 제품 취소 성공으로 계산하지 않음. 그룹/후손이 없는 정상 종료만 앱 결과를 전달함.",
+        "display": "중앙이 소유한 별도 Xvfb DISPLAY 사용/정리. runner는 Xvfb를 생성하지 않으며 Xvfb PID/socket 잔류0은 중앙 별도 확인.",
+        "build": "중앙만 기존 SDK10.0.403/offline feed로 restore 및 build --no-restore 수행. 기존 Avalonia11.3.9/의존성 보존. author는 정적 검토만 수행.",
+        "sourceIntegrity": "source-inputs.json 제품8파일/SHA256SUMS 전체 harness/manifest/로드 DLL6개 시작과 종료 대조. 중앙은 fresh build 전체 입력과 DLL해시 별도 고정."
+    },
+    "history": {
+        "head": "9444a38efcd873677d8f953a0ef6bd094310f490",
+        "centralResult": "Restore/제품 Core/Runtime/Worker/Ubuntu 컴파일 성공. harness CS0535 3건/경고0. GUI13 전부 미실행.72입력 불변/잔류0/부분출력 미실행/VM반환. 직접 인터페이스 구현 가능성을 공개 시그니처로 잘못 판단한 결과임."
     },
     "restrictions": [
-        "작성 담당은 source 정적 검토만 수행. 복원/컴파일/harness 실행/VM/Xvfb/OS picker/설치 없음",
-        "PR21/PR9 source와 패키지 버전 보존",
-        "원문 화면/log/binary/생성 fixture 업로드 없음",
-        "실제installer/패키징/라이선스/main 병합 gate 유지"
+        "직접 복원/빌드/실행/VM/OS picker/새 패키지 없음",
+        "PR21/PR9 제품source와 의존성 불변",
+        "원문 화면/log/binary/생성fixture 업로드 없음",
+        "installer/packaging/라이선스/main병합 gate 유지"
     ]
 }

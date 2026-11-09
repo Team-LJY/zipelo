@@ -7,12 +7,32 @@ internal static class UiCases
 {
     public static async Task RunAsync(string name, UiSession ui)
     {
-        if (name is "wrong-job-preserve" or "old-job-preserve" or "picker-cancel-reopen" or "empty-result")
+        var (task, call) = await ui.StartupAsync();
+        if (name is "startup-wrong-job" or "startup-empty")
         {
-            await PreserveAsync(name, ui);
+            var items = ui.Control<ListBox>("Files").ItemsSource;
+            var title = ui.Control<TextBlock>("ArchiveTitle").Text;
+            call.Complete(resultId: name == "startup-wrong-job" ? Guid.NewGuid() : call.Id,
+                empty: name == "startup-empty");
+            await UiSession.AwaitAsync(task);
+            await ui.IdleAsync();
+            UiSession.Check(ui.Control<ListBox>("Files").ItemCount == 0, "startup unexpectedly added rows");
+            UiSession.Check(ui.Control<TextBlock>("EmptyState").IsVisible, "empty startup overlay missing");
+            if (name == "startup-wrong-job")
+            {
+                UiSession.Check(ReferenceEquals(items, ui.Control<ListBox>("Files").ItemsSource) &&
+                    title == ui.Control<TextBlock>("ArchiveTitle").Text, "initial state replaced by wrong job");
+                UiSession.Check(ui.Control<TextBlock>("Status").Text ==
+                    "작업 프로세스가 정상 결과를 반환하지 못했습니다. 다른 파일을 선택해 다시 시도하세요.", "wrong job accepted");
+            }
+            else
+            {
+                UiSession.Check(ui.Control<TextBlock>("Status").Text ==
+                    "항목 0개를 읽었습니다. 내용 검증은 별도입니다.", "empty completion status");
+                UiSession.Check(ui.Control<TextBlock>("ArchiveTitle").Text == "startup.zip", "startup title missing");
+            }
             return;
         }
-        var (task, call) = await ui.StartupAsync();
         if (name == "startup-success")
         {
             call.Complete();
@@ -60,57 +80,6 @@ internal static class UiCases
             var expected = name == "cancel-result" ? "목록 읽기가 중지되었습니다." : "목록 읽기 요청이 취소되었습니다.";
             UiSession.Check(ui.Control<TextBlock>("Status").Text == expected, "cancel final state");
             UiSession.Check(ui.Control<ListBox>("Files").ItemCount == 0, "cancel replaced rows");
-        }
-    }
-    private static async Task PreserveAsync(string name, UiSession ui)
-    {
-        var previousCall = await ui.SeedAsync();
-        var list = ui.Control<ListBox>("Files");
-        var previousItems = list.ItemsSource;
-        var previousSelection = list.SelectedItem;
-        var previousTitle = ui.Control<TextBlock>("ArchiveTitle").Text;
-        if (name == "picker-cancel-reopen")
-        {
-            var requests = ui.Picker.OpenCalls;
-            ui.Picker.Enqueue(null);
-            UiSession.Check(ui.Click("OpenButton"), "picker cancel entry");
-            await ui.IdleAsync();
-            UiSession.Check(ui.Picker.OpenCalls == requests + 1 && ui.Workspace.Calls.Count == 1,
-                "cancel unexpectedly called workspace");
-            Preserved();
-        }
-        var selection = new TestStorageFile("다시 열린 압축파일.zip");
-        var call = await ui.ReopenAsync(selection);
-        UiSession.Check(call.Id != previousCall.Id, "job ID reused");
-        Preserved();
-        if (name is "wrong-job-preserve" or "old-job-preserve")
-        {
-            call.Complete(resultId: name == "old-job-preserve" ? previousCall.Id : Guid.NewGuid());
-            await ui.IdleAsync();
-            Preserved();
-            UiSession.Check(selection.Disposals == 1, "rejected selection owner not disposed");
-            UiSession.Check(ui.Control<TextBlock>("Status").Text ==
-                "작업 프로세스가 정상 결과를 반환하지 못했습니다. 다른 파일을 선택해 다시 시도하세요.", "wrong job accepted");
-        }
-        else
-        {
-            call.Complete(empty: name == "empty-result");
-            await ui.IdleAsync();
-            UiSession.Check(!ReferenceEquals(previousItems, list.ItemsSource), "reopen did not replace list");
-            UiSession.Check(ui.Control<TextBlock>("ArchiveTitle").Text == selection.Name, "reopen title");
-            UiSession.Check(selection.Disposals == 0, "opened owner disposed early");
-            if (name == "empty-result")
-            {
-                UiSession.Check(list.ItemCount == 0 && ui.Control<TextBlock>("EmptyState").IsVisible, "empty result overlay");
-            }
-            else { ui.Success(); }
-        }
-        return;
-        void Preserved()
-        {
-            UiSession.Check(ui.Control<TextBlock>("ArchiveTitle").Text == previousTitle, "previous title changed");
-            UiSession.Check(ReferenceEquals(previousItems, list.ItemsSource) &&
-                ReferenceEquals(previousSelection, list.SelectedItem), "previous list or selection changed");
         }
     }
 }

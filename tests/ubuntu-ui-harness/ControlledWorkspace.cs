@@ -44,7 +44,7 @@ internal sealed class ControlledWorkspace : IUbuntuArchiveWorkspace
     public List<ListCall> Calls { get; } = [];
     public async Task<JobResult> ListAsync(Guid jobId, Stream input, CancellationToken cancellationToken)
     {
-        UiSession.Check(Calls.Count < 3, "workspace call bound exceeded");
+        UiSession.Check(Calls.Count < 1, "workspace call bound exceeded");
         var bytes = new byte[Fixture.Bytes.Length];
         await input.ReadExactlyAsync(bytes, cancellationToken);
         UiSession.Check(bytes.SequenceEqual(Fixture.Bytes), "fixture input differs");
