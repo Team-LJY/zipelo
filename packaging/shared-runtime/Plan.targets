@@ -1,0 +1,15 @@
+<Project>
+    <PropertyGroup Condition="'$(ZipeloSharedRuntimeValidation)' == 'true'">
+        <AppHostRelativeDotNet>runtime</AppHostRelativeDotNet>
+        <AppHostRelativeDotNet Condition="'$(MSBuildProjectName)' == 'Zipelo.Worker'">../runtime</AppHostRelativeDotNet>
+    </PropertyGroup>
+    <ItemGroup Condition="'$(ZipeloSharedRuntimeValidation)' == 'true'">
+        <AssemblyMetadata Include="ZipeloPublishPlan" Value="$(ZipeloPublishPlanHash)" />
+    </ItemGroup>
+    <Target Name="ValidateZipeloPublishPlan" BeforeTargets="PrepareForBuild">
+        <Error Condition="'$(ZipeloSharedRuntimeValidation)' != 'true' Or '$(ZipeloSharedRuntimeAssembler)' != 'true' Or '$(ZipeloPublishPlanHash)' == ''"
+            Text="검증 계획으로 실행한 게시만 허용합니다." />
+        <Error Condition="'$(SelfContained)' != 'false' Or '$(AppHostDotNetSearch)' != 'AppRelative' Or '$(RuntimeFrameworkVersion)' != '10.0.14' Or '$(RollForward)' != 'Disable'"
+            Text="공유 런타임 게시 계약과 일치하지 않습니다." />
+    </Target>
+</Project>

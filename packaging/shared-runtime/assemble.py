@@ -155,6 +155,40 @@ def validate_paths(output, archives, dotnet, root=ROOT):
     return normalized_output, normalized_archives, normalized_dotnet
 
 
+def prepare_runtime(archives, rid, staging, payload, inputs):
+    windows = rid == "win-x64"
+    suffix = ".exe" if windows else ""
+    runtime = payload / "runtime"
+    notices = {"LICENSE.txt", "ThirdPartyNotices.txt", "THIRD-PARTY-NOTICES.txt"}
+    roots = ["host/fxr/" + VERSION + "/", "shared/Microsoft.NETCore.App/" + VERSION + "/"]
+    if windows:
+        roots.append("shared/Microsoft.WindowsDesktop.App/" + VERSION + "/")
+    allowed_runtime = lambda name: name in notices | {"dotnet" + suffix} or any(name.startswith(p) for p in roots)
+    for item in inputs[:-1]:
+        extract(archives / item["file"], runtime, allowed_runtime)
+    pack = staging / "apphost-pack"
+    host_prefix = "packs/Microsoft.NETCore.App.Host." + rid + "/" + VERSION + "/"
+    extract(archives / inputs[-1]["file"], pack,
+            lambda name: name in notices or name.startswith(host_prefix))
+    apphost = pack / host_prefix / "runtimes" / rid / "native" / ("apphost" + suffix)
+    require(apphost.is_file(), "공식 apphost pack 배치 불일치")
+    require_x64(apphost, windows)
+    core = runtime / roots[1]
+    fxr = runtime / roots[0] / ("hostfxr.dll" if windows else "libhostfxr.so")
+    require_x64(fxr, windows)
+    for name in ["System.Private.CoreLib.dll", "Microsoft.NETCore.App.deps.json",
+                 "Microsoft.NETCore.App.runtimeconfig.json", "hostpolicy.dll" if windows else "libhostpolicy.so"]:
+        require((core / name).is_file(), "런타임 필수 파일 누락: " + name)
+    require(any((runtime / name).is_file() for name in notices if "LICENSE" in name), "런타임 라이선스 누락")
+    require(any((runtime / name).is_file() for name in notices if name != "LICENSE.txt"), "런타임 고지 누락")
+    if windows:
+        desktop = runtime / roots[2]
+        for name in ["PresentationFramework.dll", "Microsoft.WindowsDesktop.App.deps.json",
+                     "Microsoft.WindowsDesktop.App.runtimeconfig.json"]:
+            require((desktop / name).is_file(), "Desktop 런타임 필수 파일 누락: " + name)
+    return apphost
+
+
 def assemble(args):
     require(args.validation, "--validation으로 개발 검증을 명시해야 함")
     args.output, args.archives, args.dotnet = validate_paths(args.output, args.archives, args.dotnet)
@@ -171,34 +205,7 @@ def assemble(args):
         staging = Path(temporary)
         payload = staging / "payload"
         payload.mkdir()
-        runtime = payload / "runtime"
-        notices = {"LICENSE.txt", "ThirdPartyNotices.txt", "THIRD-PARTY-NOTICES.txt"}
-        roots = ["host/fxr/" + VERSION + "/", "shared/Microsoft.NETCore.App/" + VERSION + "/"]
-        if windows:
-            roots.append("shared/Microsoft.WindowsDesktop.App/" + VERSION + "/")
-        allowed_runtime = lambda name: name in notices | {"dotnet" + suffix} or any(name.startswith(p) for p in roots)
-        for item in inputs[:-1]:
-            extract(args.archives / item["file"], runtime, allowed_runtime)
-        pack = staging / "apphost-pack"
-        host_prefix = "packs/Microsoft.NETCore.App.Host." + args.rid + "/" + VERSION + "/"
-        extract(args.archives / inputs[-1]["file"], pack,
-                lambda name: name in notices or name.startswith(host_prefix))
-        apphost = pack / host_prefix / "runtimes" / args.rid / "native" / ("apphost" + suffix)
-        require(apphost.is_file(), "공식 apphost pack 배치 불일치")
-        require_x64(apphost, windows)
-        core = runtime / roots[1]
-        fxr = runtime / roots[0] / ("hostfxr.dll" if windows else "libhostfxr.so")
-        require_x64(fxr, windows)
-        for name in ["System.Private.CoreLib.dll", "Microsoft.NETCore.App.deps.json",
-                     "Microsoft.NETCore.App.runtimeconfig.json", "hostpolicy.dll" if windows else "libhostpolicy.so"]:
-            require((core / name).is_file(), "런타임 필수 파일 누락: " + name)
-        require(any((runtime / name).is_file() for name in notices if "LICENSE" in name), "런타임 라이선스 누락")
-        require(any((runtime / name).is_file() for name in notices if name != "LICENSE.txt"), "런타임 고지 누락")
-        if windows:
-            desktop = runtime / roots[2]
-            for name in ["PresentationFramework.dll", "Microsoft.WindowsDesktop.App.deps.json",
-                         "Microsoft.WindowsDesktop.App.runtimeconfig.json"]:
-                require((desktop / name).is_file(), "Desktop 런타임 필수 파일 누락: " + name)
+        apphost = prepare_runtime(args.archives, args.rid, staging, payload, inputs)
         app = "Zipelo.Desktop" if windows else "Zipelo.Ubuntu"
         ui_stage = staging / "ui"
         worker_stage = staging / "worker"

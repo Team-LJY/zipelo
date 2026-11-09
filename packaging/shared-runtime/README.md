@@ -62,3 +62,39 @@ UI의 별도 `SharedRuntimeValidation.pubxml`은 조립기 전용임. 실험 플
 - https://github.com/dotnet/designs/blob/main/proposed/apphost-embed-install-location.md 의 AppRelative 단독 검색과 실패 동작.
 - https://github.com/dotnet/sdk/blob/main/src/Tasks/Microsoft.NET.Build.Tasks/ResolveAppHosts.cs 의 RuntimeFrameworkVersion/apphost pack 관계.
 - https://builds.dotnet.microsoft.com/dotnet/release-metadata/10.0/releases.json 의 10.0.14 아카이브 및 SHA-512.
+
+## Python 없는 Windows SDK와의 분리 실행
+
+기존 단일 환경용 assemble.py도 유지함. 새 handoff.py의 prepare/finalize는 Python만 사용하며 SDK를 실행하지 않음. RID별로 별도의 계획을 생성함. 준비 단계에는 공식 아카이브와 검토된 제품 제3자 고지가 필요함. legal 담당의 검토가 끝나기 전 임의 요약을 완성 고지로 넣지 않음.
+
+```sh
+python3 packaging/shared-runtime/handoff.py --validation prepare --rid linux-x64 --archives /approved/archives --notices /approved/THIRD_PARTY_NOTICES.txt --output /approved/plan-linux
+```
+
+prepare는 기존 경로 보호를 적용하고 공식 SHA-512를 확인한 뒤 runtime/, apphost/, source/와 게시 도구를 새 번들에 준비함. 출력된 planSha256을 별도로 기록함. plan.json에는 무작위 planId, RID/10.0.14/Release/개발 검증 옵션, 공식 입력 및 모든 소스/런타임/apphost/도구의 크기와 SHA-256이 들어감. 복사 대상은 명시적 src 파일과 제품 LICENSE 및 검토된 고지임. SDK/개인 캐시/인증 자료는 포함하지 않음. 원본 소스에 bin/obj가 있어도 전달하지 않음.
+
+Windows의 기존 PowerShell에서 준비 번들의 publish.ps1을 검토한 뒤 실행함. 실행 정책을 우회하거나 변경하지 않음. 아래 값은 검증 담당이 실제 승인 경로와 준비 시 기록한 해시로 대체해야 함.
+
+```powershell
+.\publish.ps1 -Validation -Bundle 'C:\approved\plan-linux' -PlanSha256 '<prepare에서 기록한 SHA-256>' -Dotnet 'C:\approved\sdk\dotnet.exe' -WorkParent 'C:\approved\builds' -PackageSource 'C:\approved\public-package-feed'
+```
+
+게시기는 준비된 전체 파일을 해시 대조하고 매번 새 작업 디렉터리에 source/를 명시적 목록으로 복사함. SDK 10 버전을 확인하고, 명시적 로컬 패키지 소스만 들어 있는 임시 NuGet.Config로 오프라인 복원함. 캐시/타기팅 팩/의존성 부족 시 실패하며 인터넷이나 새 SDK 설치로 우회하지 않음. publish는 --no-restore임. 경로의 reparse point와 입력 내부 작업 부모를 거부함. 새 작업 폴더가 입력의 상위에 생성되더라도 실제 새 하위 폴더만 사용하며 기존 입력을 복사하거나 삭제하지 않음.
+
+Plan.targets를 SDK에 전달해 앱/Worker별 상대 런타임 경로와 AssemblyMetadata의 ZipeloPublishPlan 값을 준비 계획 SHA-256으로 고정함. Core/Runtime/Worker 제품 소스는 변경하지 않음. 게시 성공 및 소스 재검사 후에만 publish-receipt.json을 기록하며 계획 ID/해시/RID/버전/SDK 버전과 UI/Worker 전체 출력 해시를 연결함. 실패한 작업 폴더에는 완료 영수증이 없고 최종화할 수 없음. 기존 작업이나 결과를 재사용하지 않음.
+
+Linux에서는 원래 준비 번들과 새 results/를 사용해 최종화함. 계획 해시는 준비 때 별도로 기록한 값이며 결과 폴더에서 자동 신뢰하지 않음.
+
+```sh
+python3 packaging/shared-runtime/handoff.py --validation finalize --bundle /approved/plan-linux --results /approved/returned-results --plan-sha256 '<prepare에서 기록한 SHA-256>' --output /approved/candidate-linux
+```
+
+최종화는 준비 파일 및 현재 소스/도구와 계획의 일치, 전체 결과와 영수증 해시, 실제 apphost의 x64 및 내장 DLL/검색 위치를 확인함. 공식 template의 placeholder 위치를 기준으로 AppRelative 단독 비트와 경로를 확인하며 Linux는 두 구성 버퍼 외 전체 바이트도 비교함. Windows는 SDK 리소스 갱신을 허용하되 공식 template의 .text 코드를 비교함. .NET HostWriter v10 계약이 달라지면 검사 우회 없이 실패해야 함.
+
+각 제품 DLL에 해당 계획 해시와 ZipeloPublishPlan 메타데이터 문자열이 있어야 하므로 기존 계획의 낡은 결과를 영수증만 새로 써서 통과시킬 수 없음. 이 검사는 신뢰하는 SDK 게시기의 작업 연결 및 변조 탐지이며 악성 게시기에 대한 암호학적 빌드 증명은 아님. 게시기와 전달 매체는 검증 담당이 신뢰할 수 있어야 함. 최종화는 runtimeconfig/deps/RID/필수 파일 및 기존 고지 요구도 다시 확인함. Windows 교차 게시의 Linux 실행 권한은 입력을 바꾸지 않고 새 후보에서 계획에 기록한 공식 apphost 모드 0755로 배치함.
+
+최종 후보는 준비/게시/계획 해시와 전체 파일 해시를 기록하며 actualExecutionValidated=false, releaseReady=false임. 기본 self-contained 배포와 installer PR #5는 전환하지 않음. 두 OS의 실제 준비/PowerShell/오프라인 복원/게시/최종화와 기능/크기는 아직 미검증임. 새 설치, 다운로드, VM 실행은 작성 범위에 포함하지 않음.
+
+검사 명령은 `python3 -B -m unittest discover -s tests/shared-runtime -p 'test_*.py' -v`임. 기존 경로 19개와 분리 게시 대역 검사를 구분함. 대역 ELF/어셈블리는 tests/ 임시 루트의 작은 비실행 파일이며 실제 SDK 게시나 실제 바이너리 통과의 근거가 아님. PowerShell 구문/실행은 기존 Windows 환경의 별도 검증이 필요함.
+
+HostWriter 근거: https://github.com/dotnet/runtime/blob/v10.0.0/src/installer/managed/Microsoft.NET.HostModel/AppHost/HostWriter.cs . Windows PE 리소스는 SDK가 변경할 수 있으므로 실행파일 전체를 원본 template의 해시와 같다고 요구하지 않음.
