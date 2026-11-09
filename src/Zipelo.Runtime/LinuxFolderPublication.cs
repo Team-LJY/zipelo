@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Text;
 using Microsoft.Win32.SafeHandles;
@@ -18,15 +19,80 @@ internal sealed class LinuxFolderPublication : PendingFolderPublication
 
     internal override void Initialize()
     {
-        var system = new byte[256];
-        if (Fstatfs(parent, system) != 0) { ThrowLast(); }
-        // ext2/3/4의 공통 식별값으로 ext4를 확정할 수 없어 XFS만 허용함.
-        if (BitConverter.ToInt64(system, 0) != 0x58465342)
+        RequireFileSystem();
+        parentIdentity = Inspect(parent, true);
+        AddRoot(Create(parent, TemporaryName, true));
+    }
+
+    private void RequireFileSystem()
+    {
+        var magic = FileSystemMagic(parent);
+        var expectedType = magic switch
+        {
+            0xEF53 => "ext4",
+            0x58465342 => "xfs",
+            _ => throw new ArchiveException(ArchiveError.OutputUnavailable)
+        };
+        var before = MountStatus();
+        var mountId = BitConverter.ToUInt64(before, 144);
+        var device = FormattableString.Invariant($"{BitConverter.ToUInt32(before, 136)}:{BitConverter.ToUInt32(before, 140)}");
+
+        // procfs 핸들을 고정하고 하위 bind mount와 링크를 통한 정보 대체를 거부함.
+        using var proc = Open(-100, "/proc", 0x90000, 0, 0x04);
+        if (FileSystemMagic(proc) != 0x9FA0) { throw new ArchiveException(ArchiveError.OutputUnavailable); }
+        var name = FormattableString.Invariant($"{GetProcessId()}/task/{GetThreadId()}/mountinfo");
+        using var info = Open(proc.DangerousGetHandle().ToInt32(), name, 0x80000, 0, 0x0F);
+        if (FileSystemMagic(info) != 0x9FA0) { throw new ArchiveException(ArchiveError.OutputUnavailable); }
+        using var stream = new FileStream(info, FileAccess.Read);
+        using var bytes = new MemoryStream();
+        var buffer = new byte[8192];
+        int count;
+        while ((count = stream.Read(buffer, 0, buffer.Length)) != 0)
+        {
+            if (bytes.Length + count > 4 * 1024 * 1024) { throw new ArchiveException(ArchiveError.OutputUnavailable); }
+            bytes.Write(buffer, 0, count);
+        }
+        var content = new UTF8Encoding(false, true).GetString(bytes.ToArray());
+        var matches = 0;
+        foreach (var line in content.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var fields = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (!ulong.TryParse(fields[0], NumberStyles.None, CultureInfo.InvariantCulture, out var id))
+            {
+                throw new ArchiveException(ArchiveError.OutputUnavailable);
+            }
+            if (id != mountId) { continue; }
+            var separator = Array.IndexOf(fields, "-");
+            if (++matches != 1 || separator < 6 || fields.Length != separator + 4 ||
+                fields[2] != device || fields[separator + 1] != expectedType)
+            {
+                throw new ArchiveException(ArchiveError.OutputUnavailable);
+            }
+        }
+        var after = MountStatus();
+        if (matches != 1 || BitConverter.ToUInt64(after, 144) != mountId ||
+            Identity(before) != Identity(after) || FileSystemMagic(parent) != magic)
         {
             throw new ArchiveException(ArchiveError.OutputUnavailable);
         }
-        parentIdentity = Inspect(parent, true);
-        AddRoot(Create(parent, TemporaryName, true));
+    }
+
+    private byte[] MountStatus()
+    {
+        // mountinfo의 기존 mount ID와 대조하므로 UNIQUE 플래그를 요청하지 않음.
+        var status = Stat(parent, "", 0x1100, 0x17FF);
+        if ((BitConverter.ToUInt32(status, 0) & 0x1000) == 0 || BitConverter.ToUInt64(status, 144) == 0)
+        {
+            throw new ArchiveException(ArchiveError.OutputUnavailable);
+        }
+        return status;
+    }
+
+    private long FileSystemMagic(SafeFileHandle handle)
+    {
+        var system = new byte[256];
+        if (Fstatfs(handle, system) != 0) { ThrowLast(); }
+        return BitConverter.ToInt64(system, 0);
     }
 
     protected override SafeFileHandle Create(SafeFileHandle directory, string name, bool folder)
@@ -36,11 +102,11 @@ internal sealed class LinuxFolderPublication : PendingFolderPublication
             // 기존 권한은 변경하지 않고 새 디렉터리를 0700 이하로 생성함.
             if (Mkdirat(directory, name, 0x1C0) != 0) { ThrowLast(); }
             unboundCreation = true;
-            var handle = Open(directory.DangerousGetHandle().ToInt32(), name, 0x90000, 0, 0x0E);
+            var handle = Open(directory.DangerousGetHandle().ToInt32(), name, 0x90000, 0, 0x0F);
             unboundCreation = false;
             return handle;
         }
-        return Open(directory.DangerousGetHandle().ToInt32(), name, 0x800C2, 0x180, 0x0E);
+        return Open(directory.DangerousGetHandle().ToInt32(), name, 0x800C2, 0x180, 0x0F);
     }
 
     protected override string Inspect(SafeFileHandle handle, bool directory)
@@ -59,10 +125,10 @@ internal sealed class LinuxFolderPublication : PendingFolderPublication
     private static string Identity(byte[] status)
         => $"{BitConverter.ToUInt32(status, 136):X8}:{BitConverter.ToUInt32(status, 140):X8}:{BitConverter.ToUInt64(status, 32):X16}";
 
-    private byte[] Stat(SafeFileHandle directory, string name, int flags)
+    private byte[] Stat(SafeFileHandle directory, string name, int flags, uint mask = 0x7FF)
     {
         var status = new byte[256];
-        if (Statx(directory, name, flags, 0x7FF, status) != 0) { ThrowLast(); }
+        if (Statx(directory, name, flags, mask, status) != 0) { ThrowLast(); }
         if ((BitConverter.ToUInt32(status, 0) & 0x10F) != 0x10F)
         {
             throw new ArchiveException(ArchiveError.OutputUnavailable);
@@ -72,7 +138,7 @@ internal sealed class LinuxFolderPublication : PendingFolderPublication
 
     protected override void VerifyChildren(Node node, IReadOnlyCollection<string> names)
     {
-        using var enumeration = Open(node.Handle.DangerousGetHandle().ToInt32(), ".", 0x90000, 0, 0x0E);
+        using var enumeration = Open(node.Handle.DangerousGetHandle().ToInt32(), ".", 0x90000, 0, 0x0F);
         var buffer = new byte[65536];
         var remaining = new HashSet<string>(names, StringComparer.Ordinal);
         while (true)
@@ -190,6 +256,10 @@ internal sealed class LinuxFolderPublication : PendingFolderPublication
     private static extern int Unlinkat(SafeFileHandle directory, [MarshalAs(UnmanagedType.LPUTF8Str)] string name, int flags);
     [DllImport("libc", EntryPoint = "fsync", SetLastError = true)]
     private static extern int Fsync(SafeFileHandle file);
+    [DllImport("libc", EntryPoint = "getpid")]
+    private static extern int GetProcessId();
+    [DllImport("libc", EntryPoint = "gettid")]
+    private static extern int GetThreadId();
     [DllImport("libc", EntryPoint = "geteuid")]
     private static extern uint GetEffectiveUser();
     [DllImport("libc", EntryPoint = "fcntl", SetLastError = true)]

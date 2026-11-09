@@ -4,7 +4,7 @@
 
 메모리 해제와 Windows/Linux x64 새 폴더 게시 소스를 작성함. NewFolderPublisher의 구현 진입점은 연결했지만 일반 UI의 SupportsSafeExtraction=false와 Extract capability 미노출은 유지함. 로컬 .NET SDK가 없어 이번 C# 컴파일과 실제 게시 실행은 미검증임. 이전 Windows 62개 통과는 단일 ZIP 파일 게시에 관한 보고이며 새 폴더 게시의 증거가 아님.
 
-Windows는 로컬 NTFS와 아래 쓰기 ACL 조건에 한정함. Linux는 현재 XFS, openat2/statx/renameat2와 아래 소유자/모드 조건에 한정함. ext2/ext3/ext4는 구분 미완성으로 임시 폴더 생성 전에 거부함. Ubuntu 24.04/26.04 LTS의 실제 실행은 각각 별도 검증해야 함. 조건이 확인되지 않으면 OutputUnavailable로 실패하며 다른 경로 API로 우회하지 않음.
+Windows는 로컬 NTFS와 아래 쓰기 ACL 조건에 한정함. Linux는 열린 부모 fd의 mount ID, 장치 번호와 검증된 procfs mountinfo가 ext4 또는 XFS로 일치하는 경우, openat2/statx/renameat2와 아래 소유자/모드 조건에 한정함. ext2/ext3 유형과 확인 불가능한 마운트는 임시 폴더 생성 전에 거부함. Ubuntu 24.04/26.04 LTS의 실제 실행은 각각 별도 검증해야 함. 조건이 확인되지 않으면 OutputUnavailable로 실패하며 다른 경로 API로 우회하지 않음.
 
 ## UI와 검증 진입점
 
@@ -53,9 +53,15 @@ NTFS는 열린 자식 파일이 있는 디렉터리 rename을 제한하므로 �
 
 ## Linux 게시
 
-openat2(RESOLVE_NO_SYMLINKS)로 부모를 열고 해당 fd의 fstatfs 값이 XFS(0x58465342)인 경우만 허용함. ext2/ext3/ext4는 모두 0xEF53을 사용하므로 이 값으로 ext4라고 판정하지 않음. ext 계열과 그 밖의 파일시스템은 임시 항목 생성 전 OutputUnavailable로 실패 폐쇄함. ext4 지원 목표를 철회한 것이 아니며, 보유 fd에 연결된 신뢰 가능한 판별과 실제 OS 검증이 선행되어야 함. 문자열 경로의 마운트 이름으로 대체 판정하지 않음.
+openat2(RESOLVE_NO_SYMLINKS)로 부모를 열고 fstatfs의 ext 공통 magic(0xEF53) 또는 XFS magic(0x58465342)을 확인함. magic만으로 ext4를 확정하지 않음. 같은 부모 fd에 statx(AT_EMPTY_PATH, STATX_BASIC_STATS|STATX_MNT_ID)를 호출해 반환 mask, mount ID와 장치 major:minor를 얻음. STATX_MNT_ID_UNIQUE는 mountinfo의 ID와 다르므로 요청하지 않음.
 
-부모 소유자가 현재 euid이고 그룹/기타 쓰기가 없는 경우만 허용함. 다른 계정이 부모 항목을 교체할 수 있는 공용 디렉터리는 거부함. 새 임시 디렉터리는 mkdirat 0700, 파일은 openat2 O_CREAT|O_EXCL 0600으로 생성함. umask는 권한을 줄일 수 있지만 넓히지 않음. 이후 작업은 보유 디렉터리 fd 상대, RESOLVE_BENEATH|NO_SYMLINKS|NO_MAGICLINKS로 수행함.
+/proc를 링크 없이 열어 fstatfs의 PROC_SUPER_MAGIC(0x9FA0)을 확인하고, 현재 getpid()/gettid()의 task mountinfo를 보유 proc fd 상대 openat2로 열음. RESOLVE_BENEATH|NO_SYMLINKS|NO_MAGICLINKS|NO_XDEV로 하위 링크와 bind mount를 거부하고 정보 fd도 procfs인지 다시 확인함. 외부 명령이나 사용자 지정 정보 파일은 사용하지 않음. 현재 프로세스의 정상 procfs와 PID/mount namespace를 전제로 하며 관리자에 의한 namespace/procfs 조작 방어로 확대하지 않음.
+
+mountinfo를 최대 4 MiB까지 읽고 mount ID에 해당하는 정확히 한 레코드의 장치 번호와 파일시스템 유형을 대조함. ext magic은 유형이 정확히 ext4, XFS magic은 정확히 xfs여야 함. 부모 fd를 계속 보유하며 조회 전후 mount ID, 장치/inode와 magic도 대조함. 경로 접두사나 mount point 문자열은 판별에 쓰지 않음. 분리된 마운트의 레코드 누락, 중복, 불일치, procfs 접근 실패, STATX_MNT_ID 미지원과 크기 한도 초과는 모두 임시 생성 전 OutputUnavailable임. 열린 fd의 마운트 참조가 유지되는 동안 일반 mount ID 재사용을 막는 Linux 수명 계약에 의존함.
+
+여기서 ext4는 커널이 보고하는 마운트 파일시스템 유형임. 디스크를 직접 읽어 포맷 생성 이력이나 ext 기능 비트를 판별한 것은 아님. 유형 ext2/ext3를 허용하지 않으며, ext4 드라이버의 구형 디스크 호환 모드를 별도 검증했다고 주장하지 않음. 조건을 만족하면 기존 핸들 기준 쓰기/검증/게시/정리 경로를 사용하며, 파일시스템 연산 실패를 성공으로 바꾸지 않음.
+
+부모 소유자가 현재 euid이고 그룹/기타 쓰기가 없는 경우만 허용함. 다른 계정이 부모 항목을 교체할 수 있는 공용 디렉터리는 거부함. 새 임시 디렉터리는 mkdirat 0700, 파일은 openat2 O_CREAT|O_EXCL 0600으로 생성함. umask는 권한을 줄일 수 있지만 넓히지 않음. 이후 작업은 보유 디렉터리 fd 상대, RESOLVE_BENEATH|NO_SYMLINKS|NO_MAGICLINKS|NO_XDEV로 수행함.
 
 각 노드의 statx 장치/ inode, 타입, uid/모드와 일반 파일 링크 수 1을 확인함. 쓰기/flush/전체 바이트 재읽기 뒤 getdents64 이름 집합을 비교하고 디렉터리 fsync 후 renameat2(RENAME_NOREPLACE)로 게시함. 루트 이름과 보유 inode의 일치를 게시 직전에 확인함. 파일시스템이 해당 연산을 지원하지 않으면 우회하지 않음.
 
@@ -63,7 +69,7 @@ openat2(RESOLVE_NO_SYMLINKS)로 부모를 열고 해당 fd의 fstatfs 값이 XFS
 
 ## 실제 검증과 남은 조건
 
-이번 변경은 소스 검토 단계임. 실제 C# 컴파일, Windows NTFS에서 자식 핸들 종료 후 rename과 충돌 뒤 재열기 정리, ACL 거부, 링크/경합/취소, Ubuntu 각 LTS XFS 게시와 ext 계열 거부 실행은 미검증임. ext4 게시 구현은 위 판별 문제로 차단 상태임. 테스트 담당자가 기존 실패 폐쇄 상태 검사와 차단된 8개 게시 사례를 새 조건에 맞춰 연결해야 함. 공개 capability나 일반 UI 해제를 활성화하지 않음.
+이번 변경은 소스 검토 단계임. 실제 C# 컴파일, Windows NTFS에서 자식 핸들 종료 후 rename과 충돌 뒤 재열기 정리, ACL 거부, 링크/경합/취소, Ubuntu 각 LTS ext4/XFS 게시와 ext2/ext3 유형 거부 실행은 미검증임. 로컬 tests/security와 tests/runtime을 읽기 전용으로 연 핸들에서는 mount ID 33, 장치 259:1, magic 0xEF53과 mountinfo의 ext4가 일치함을 확인했음. 이 관찰은 C# 판별/게시 실행의 통과 증거가 아님. procfs 또는 mount ID를 확인할 수 없는 환경에서는 기본 ext4도 차단되며, 해당 환경의 procfs/namespace 제공 조건을 검토해야 함. 권한 변경이나 마운트 생성으로 우회하지 않음. 테스트 담당자가 기존 실패 폐쇄 상태 검사와 차단된 8개 게시 사례를 새 조건에 맞춰 연결해야 함. 공개 capability나 일반 UI 해제를 활성화하지 않음.
 
 강제 종료/전원 손실 시 임시 트리가 남을 수 있음. 게시 후 부모 디렉터리 fsync나 전원 장애 복구 트랜잭션까지 보장하지 않음. 실패 정리에서 모르는 노드, 변경된 ID 또는 OS 오류가 발견되면 기존 자료 보존을 우선해 잔존을 보고함. 네이티브 I/O의 강제 시간 제한과 실제 경합 검증도 남아 있음.
 
@@ -75,5 +81,9 @@ openat2(RESOLVE_NO_SYMLINKS)로 부모를 열고 해당 fd의 fstatfs 값이 XFS
 - [Native rename의 부모 핸들과 덮어쓰기 정책](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ntifs/ns-ntifs-_file_rename_information)
 - [핸들 보안 설명자 읽기](https://learn.microsoft.com/en-us/windows/win32/api/aclapi/nf-aclapi-getsecurityinfo)
 - [Linux openat2 경계](https://man7.org/linux/man-pages/man2/openat2.2.html)
+- [Linux statx의 fd 조회와 mount ID](https://man7.org/linux/man-pages/man2/statx.2.html)
+- [Linux mountinfo의 ID, 장치와 파일시스템 유형](https://man7.org/linux/man-pages/man5/proc_pid_mountinfo.5.html)
+- [Linux 6.8 마운트 참조와 ID 해제 구현](https://raw.githubusercontent.com/torvalds/linux/v6.8/fs/namespace.c)
+- [Linux 6.8 커널 mountinfo 생성 구현](https://raw.githubusercontent.com/torvalds/linux/v6.8/fs/proc_namespace.c)
 - [Linux statfs의 ext 공통 식별값과 XFS 식별값](https://man7.org/linux/man-pages/man2/statfs.2.html)
 - [Linux renameat2 덮어쓰기 금지](https://man7.org/linux/man-pages/man2/rename.2.html)
