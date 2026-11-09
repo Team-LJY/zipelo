@@ -3,7 +3,7 @@
     "base_commit": "626483e8935aaa03d5a34feebc61be2f9180b80d",
     "dependency": {
         "pr": "https://github.com/Team-LJY/zipelo/pull/10",
-        "head": "4736301ff80e85c5d555b2c4a582ea38ca2411be",
+        "head": "dca92ee10f5af1f159a4650f38aee3e3c1650d6f",
         "files": {
             "src/Zipelo.Runtime/Streaming/ZipStreamIndex.cs": "981bcdecc754f68aca0bcb39fc6f6db1e779c72798a58bcb9d83a96963a96468",
             "src/Zipelo.Runtime/Streaming/ExtractionWire.cs": "f64c47add55bf7499227ce65921e1e4241cd51425336052f402b9381c086129f",
@@ -11,15 +11,18 @@
             "src/Zipelo.Runtime/PendingFolderPublication.Streaming.cs": "9ba2e3441560ee40997b3c42f10ef9a1670c8058a834637d51a11ba28bc3d0f9",
             "src/Zipelo.Worker/RemoteSnapshotStream.cs": "b21e6705e1345bbf15b3d8c88b81beeadf6382b08e45b2b78b78b53641d7d5dd",
             "src/Zipelo.Worker/StreamingZipExtractor.cs": "a0a2600e5c1255fac7de39023d9e9efdf24c4be47e55a544af0abd418f221bac",
-            "src/Zipelo.Runtime/Streaming/StreamingZipWorkerClient.cs": "3241b683edfc8b5d4e5d7d718fe7e3ecc29f164dc45a16ee006b051df8797821",
+            "src/Zipelo.Runtime/Streaming/StreamingZipWorkerClient.cs": "5fc0945a2b60f28f3a378cb69398cacab965314108e2cbc35234cefe1c693fb5",
             "src/Zipelo.Runtime/PendingFolderPublication.cs": "2701cfbea1d5d26f25ddb5c8af2555f6a9812d4cc602a7d3c4385ad1a18c8647",
             "src/Zipelo.Worker/Program.cs": "adb9f68a77a86f57399462f4a6cbc3c591e41cb0e4964dec66a1fe0441f72fec",
             "docs/STREAMING_EXTRACTION.md": "c19abfce34453850a5819acf14ada4c24db0731b1eb078719ac01d34e3424d7a",
-            "src/Zipelo.Runtime/Streaming/StreamingExtractionDiagnostics.cs": "52e3b492c49f802b6f0839f4d9f33ddbf4c8b958049978c6147c45b1ce1e1b4c"
+            "src/Zipelo.Runtime/Streaming/StreamingExtractionDiagnostics.cs": "52e3b492c49f802b6f0839f4d9f33ddbf4c8b958049978c6147c45b1ce1e1b4c",
+            "src/Zipelo.Runtime/WindowsFolderPublication.cs": "a25fe945f963ba3a93804aaf9d84f902042dc302c23ae0fe17609ae4beb2d46d"
         },
         "policy_head": "069bdef56cd4f74294a76cffbd2a4ab4ac16d43b",
         "policy_document_git_blob": "8e4bdb057942a9edffa0073e57b5a49cfad0ff05",
-        "previous_code_head": "624be260489b0be96f5f9a2132c3ae36d2a27b3f"
+        "previous_code_head": "624be260489b0be96f5f9a2132c3ae36d2a27b3f",
+        "previous_diagnostics_head": "4736301ff80e85c5d555b2c4a582ea38ca2411be",
+        "reference_scope": "head와 files는 현재 고정한 제품 소스의 원격 바이트/Git blob/SHA-256 대조 기준이며 실행 통과를 뜻하지 않음. policy_head는 유지되는 Deflate 정책의 과거 기준, previous_code_head와 previous_diagnostics_head는 이전 코드/진단 검토의 과거 기준임. 실제 실행 후보와 결과는 중앙 manifest에서 별도로 고정함"
     },
     "api": "StreamingZipWorkerClient.ExtractToNewFolderAsync / --extract-stream-v2",
     "count": 72,
@@ -369,7 +372,7 @@
         ]
     },
     "diagnostics": {
-        "product_head": "4736301ff80e85c5d555b2c4a582ea38ca2411be",
+        "product_head": "dca92ee10f5af1f159a4650f38aee3e3c1650d6f",
         "product_contract": "https://github.com/Team-LJY/zipelo/pull/10",
         "compile": "Runtime을 포함한 테스트/Worker 양쪽 검증 빌드에 -p:DefineConstants=ZIPELO_STREAM_DIAGNOSTICS를 전달함. 일반 출력과 별도 diagnostic 출력/중간 폴더를 사용함. 프로젝트 기본 설정은 바꾸지 않음",
         "opt_in": "명시적 --diagnostics 없이는 진단 API 시작/종료를 호출하지 않고 파일도 만들지 않음. 일반 Runtime 빌드에서 이 플래그를 쓰면 IsEnabled=false를 확인해 시험 루트 생성/Worker 실행 전에 종료 2임",
@@ -380,7 +383,7 @@
         "integrity": "완료 대기 성공, Status=2, Dropped=0인 경우만 logComplete=true임. 사례 종료 124는 닫힌 로그도 보수적으로 불완전 표시함. 값은 종료 시점의 상태 관찰이며 독립 OS Worker 종료나 누락 없는 전체 실행 증명이 아님",
         "exit": "사례 결과가 성공 0인데 진단이 불완전하면 전체 종료 2로 보고함. 기존 실패 1/설정 실패 2/차단 3/시간 초과 또는 종료 미확인 124는 보존함. 진단 실패로 제품 실패를 성공 처리하지 않음",
         "bounds": "제품 계약: 큐 1024건, 프로세스 전체 기록 시도 16384건, 한 줄 512바이트, 파일 4 MiB. 기록 시도 한도 초과는 Status를 바꾸지 않고 Dropped만 증가시킬 수 있으므로 Status=2여도 Dropped가 양수이면 불완전함. 포화/쓰기 실패는 상태와 Dropped로 관찰함. background 쓰기 스레드의 강제 중단은 하지 않으며 멈춘 파일시스템에서 잔류할 수 있음",
-        "validation": "정적 API/시그니처/분기/예산/파일 범위 대조만 수행함. 기본/진단 C# 컴파일, 실제 Status/Dropped/1초 제한/Windows 정지 재현은 중앙 검증 필요",
+        "validation": "과거 진단 기준 4736301ff80e85c5d555b2c4a582ea38ca2411be에서 API/시그니처/분기/예산/파일 범위를 정적으로 대조함. 현재 product_head dca92ee10f5af1f159a4650f38aee3e3c1650d6f는 노드별 cleanup 진단 관련 파일을 포함한 원격 12개 파일의 바이트/Git blob/SHA-256 대조만 완료함. 이번 메타데이터 변경은 C# 컴파일 또는 실제 재현 통과 결과가 아니며 현재 후보 실행 검증은 중앙 담당 범위임",
         "central_checks": [
             "일반 빌드 + 진단 옵션 없음: 기본 72개/선택 실행과 동일하며 진단 파일 없음",
             "일반 빌드 + --diagnostics: 종료 2, 새 시험 루트/Worker 없음",
