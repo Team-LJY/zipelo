@@ -17986,10 +17986,10 @@
     },
     "distribution_notice_bundle": {
         "path": "legal/THIRD_PARTY_NOTICES.txt",
-        "sha256": "353925cdb781dab7d6eed26ccf87c1179bdcfe4e8f2aa9e9acc141f1808a10f8",
-        "bytes": 672076,
+        "sha256": "f4216f4ee544d064239e1cfc48a07b3ff400748724bfeadb47ff41f558c99fe4",
+        "bytes": 671869,
         "verification_manifest_path": "legal/notice-bundle-manifest.json",
-        "verification_manifest_sha256": "84e22b6d8b4ed839f2c8030c7a67ffc98a62b7bfebc7be035e4e1c5ee36cc4b5",
+        "verification_manifest_sha256": "440d935f8a0d4036d08e573dd39c01d429bc8d820010aa5daabaeb41c1f7801c",
         "original_notice_count": 22,
         "component_count": 18,
         "applicable_external_asset_count": 982,

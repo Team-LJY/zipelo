@@ -1440,8 +1440,6 @@ GENERATED APPHOSTS / 생성된 앱 호스트
 정확한 SDK apphost pack 출처와 최종 적용 조건 대조는 남아 있습니다. 공식 안내는 실행 호스트 등 앱에 포함된 런타임 부분도 배포 조건의 대상임을 명시합니다.
 ubuntu_round9 | Zipelo.Ubuntu | 76bc91dcd86737ce1eb400932facff3981a36b092b1e60eaf63a9135dd2a36dd
 ubuntu_round9 | worker/Zipelo.Worker | 8c855b4f5cad1a6a1e368b0ad6949ef249682524ede4dfd4a972cdfff7423c82
-windows_round10 | createdump.exe | da50d230f70332385b86c44f9dc3f571b60340f8b603bc0e2f201b5a19240acd
-windows_round10 | worker/createdump.exe | da50d230f70332385b86c44f9dc3f571b60340f8b603bc0e2f201b5a19240acd
 windows_round10 | worker/Zipelo.Worker.exe | 06a96f5e3472cfc3029ca3ddb34fbc284b8381e03ca14de9ed395f7f329a0a07
 windows_round10 | Zipelo.exe | 5c2370b8f70c91479f5235d3cc3c9e4106e935dec6a745591e6d994455e48fa4
 
