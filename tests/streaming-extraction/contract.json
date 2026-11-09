@@ -20,7 +20,7 @@
         "policy_document_git_blob": "8e4bdb057942a9edffa0073e57b5a49cfad0ff05"
     },
     "api": "StreamingZipWorkerClient.ExtractToNewFolderAsync / --extract-stream-v2",
-    "count": 67,
+    "count": 72,
     "cases": [
         "real.empty",
         "real.empty-items",
@@ -88,7 +88,12 @@
         "destination.directory",
         "destination.link",
         "path.parent_link",
-        "path.parent_replacement"
+        "path.parent_replacement",
+        "publication.v1_normal",
+        "publication.common_normal",
+        "publication.common_parent_replaced",
+        "publication.common_parent_missing",
+        "publication.common_parent_link"
     ],
     "commands": {
         "build_tests": "dotnet build tests/streaming-extraction/Zipelo.StreamingExtractionTests.csproj -c Release --configfile tests/streaming-extraction/NuGet.Config --artifacts-path tests/streaming-extraction/.work/test-artifacts -o tests/streaming-extraction/.work/app -p:UseAppHost=false --disable-build-servers",
@@ -117,8 +122,8 @@
         "fixture_suffix_bytes": 65540
     },
     "validation": {
-        "static": "passed: XML/JSON, 67 unique registrations, 6 explicit compile items, original 60 cases unchanged, dependency SHA-256, fixed policy blob and formatting; not C# compilation",
-        "compile": "not_run: local SDK absent",
+        "static": "passed: JSON/XML, 72 unique registrations, previous 67 unchanged, seven explicit C# files, four-file scope, reflection signatures and formatting; not C# compilation",
+        "compile": "not_run for current candidate: local SDK absent; previous 483b9947 candidate had reported CS8752, corrected at 15ab2677",
         "windows": "not_run",
         "ubuntu": "not_run",
         "fixture_formula": "passed: Python zlib independently decoded both manually encoded raw Stored block formulas (9/65535 decoded bytes); this did not execute the C# fixture or product"
@@ -137,7 +142,8 @@
         "동일 사용자에 의한 아주 짧은 파일/부모 교체의 모든 타이밍은 보장하지 않음. 정상 EOF 뒤 최종 게시 직전의 결정적 취소/경합 시험 진입점도 없음",
         "원본 두 번 읽기 중 불일치/Length 변화는 검사하나 변경 후 복구 및 두 번 같은 혼합 상태 관찰의 원자성은 제품이 보장하지 않음",
         "2 MiB 메타데이터, 65536 범위 요청/출력 프레임, 4096 노드와 정확한 16 MiB 입출력 전체 경계는 이 작은 통합 묶음에서 직접 소진하지 않음. 축소 JobLimits와 이전 프로토콜 검사를 별도 근거로 구분함",
-        "대용량 성능/OS 자원 격리/비협조적 사용자 Stream 강제 중단은 미검증이며 완료라고 주장하지 않음"
+        "대용량 성능/OS 자원 격리/비협조적 사용자 Stream 강제 중단은 미검증이며 완료라고 주장하지 않음",
+        "공용 게시 부모 변경 검사는 실제 내부 객체를 reflection으로 호출함. 공개 v1 PublishAsync 중간 주입과 검사/rename 사이 경합은 별도 시험 진입점이 없어 미검증임"
     ],
     "files": [
         "tests/streaming-extraction/Zipelo.StreamingExtractionTests.csproj",
@@ -148,7 +154,8 @@
         "tests/streaming-extraction/SourceStreams.cs",
         "tests/streaming-extraction/ExtractionCases.cs",
         "tests/streaming-extraction/Program.cs",
-        "tests/streaming-extraction/contract.json"
+        "tests/streaming-extraction/contract.json",
+        "tests/streaming-extraction/PublicationCases.cs"
     ],
     "deflate_tail_policy": {
         "source": "https://github.com/Team-LJY/zipelo/blob/069bdef56cd4f74294a76cffbd2a4ab4ac16d43b/docs/STREAMING_EXTRACTION.md",
@@ -161,5 +168,20 @@
         "risk": "후행 바이트 의미/무결성을 검증하지 않아 숨은 데이터와 다른 도구의 해석 차이가 가능함. 성공은 ZIP 전체 인증/정규화가 아니며 CRC도 암호학적 인증이 아님",
         "observation": "각 새 사례는 게시/오류/검증 항목 수/실제 출력량/Worker 종료 상태를 OBSERVE로 기록한 뒤 고정 기대값을 검사함. 허용 또는 거절 중 하나면 통과하는 검사는 아님",
         "execution": "not_run: 로컬 SDK 없음. 정적 정책 대조와 fixture 구조 확인은 실제 C# 또는 Windows/Ubuntu 결과를 대체하지 않음"
+    },
+    "common_publication": {
+        "scope": "v1 NewFolderPublisher.PublishAsync 정상 대조 1개, v1/v2 공용 PendingFolderPublication의 정상 대조 1개와 부모 교체/소실/외부 링크 전환 거절 3개",
+        "injection": "공개 API에 결정적 중간 훅이 없어 시험 코드에서 실제 Runtime 내부 게시 객체를 reflection으로 생성함. Initialize/WriteAsync/Verify가 완료된 뒤 부모를 이동하고 동기 Publish를 호출함. 제품 코드는 복사/수정하지 않으며 reflection 멤버 누락은 실패임",
+        "guarantees": "게시 직전 이미 교체된 경로는 거절하고 원래/이동된 부모 양쪽에 결과를 게시하지 않음. 외부 sentinel, 이동된 부모의 기존 표식, 대체된 부모의 표식/링크와 원본 fixture를 보존함. 실패 시 실제 Abort로 소유 임시 항목을 정리하고 정리 실패를 숨기지 않음",
+        "v1_limit": "공용 객체의 동일 Publish 경로와 공개 v1 정상 동작을 분리 검증함. 공개 PublishAsync 호출 중 교체를 주입하거나 v1 전체 Worker 해제/오류 변환을 결정적으로 실행하는 검사는 아님",
+        "race_limit": "교체 완료부터 Publish 호출까지 시험 스레드가 순서를 통제함. 재개방/동일성 검사와 rename 사이의 정확한 TOCTOU 경합, 같은 사용자의 일시 이동 후 복원 또는 모든 동시 변경을 원자적으로 차단하는 보장은 검증하지 않음",
+        "platform": "Windows가 열린 부모 이동 또는 링크 생성을 거절하면 BLOCKED임. 권한 변경 없이 새 GUID 시험 트리 안에서만 이동/링크 생성함",
+        "fixture": "1 KiB 파일 1개, 새 시험 부모/이동 부모/외부 sentinel 폴더만 사용함",
+        "required_product_fix": {
+            "branch": "fix/linux-parent-identity",
+            "head": null,
+            "status": "backend 작업 head 대기. 현재 고정 제품 후보는 부모 동일성 공백이 있어 거절 사례를 통과로 간주하지 않음"
+        },
+        "validation": "not_run: SDK absent; public v1/common phase/OS results pending central validation"
     }
 }

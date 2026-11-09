@@ -74,6 +74,11 @@ internal static class Program
         ("destination.link", root => ExtractionCases.Conflict(root, "link")),
         ("path.parent_link", root => ExtractionCases.ParentLink(root)),
         ("path.parent_replacement", root => ExtractionCases.ParentReplacement(root)),
+        ("publication.v1_normal", root => PublicationCases.PublicV1(root)),
+        ("publication.common_normal", root => PublicationCases.Common(root, "none")),
+        ("publication.common_parent_replaced", root => PublicationCases.Common(root, "directory")),
+        ("publication.common_parent_missing", root => PublicationCases.Common(root, "missing")),
+        ("publication.common_parent_link", root => PublicationCases.Common(root, "link")),
     ];
 
     public static async Task<int> Main(string[] args)

@@ -13,6 +13,7 @@
         <Compile Include="ZipFixture.cs" />
         <Compile Include="FakeWorker.cs" />
         <Compile Include="ExtractionCases.cs" />
+        <Compile Include="PublicationCases.cs" />
         <Compile Include="SourceStreams.cs" />
         <ProjectReference Include="../../src/Zipelo.Runtime/Zipelo.Runtime.csproj" />
     </ItemGroup>
