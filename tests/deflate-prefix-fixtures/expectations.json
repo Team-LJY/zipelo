@@ -1,0 +1,162 @@
+[
+    {
+        "id": "valid.eob-only",
+        "valid": true,
+        "dataStartBit": 329,
+        "endBitExclusive": 330,
+        "rawLength": 42,
+        "outputText": "",
+        "faultStartBit": null,
+        "decisiveEndBit": null,
+        "errorConsumedMin": 0,
+        "errorConsumedMax": 0,
+        "errorPrefix": "",
+        "reason": "단일 LL 심벌256의 1비트 코드0으로 빈 블록을 종료함.",
+        "checkpoints": [
+            {
+                "offered": 41,
+                "expected": "Wait",
+                "outputLength": 0,
+                "consumed": 41,
+                "remaining": 0
+            }
+        ]
+    },
+    {
+        "id": "invalid.eob-only-unused",
+        "valid": false,
+        "dataStartBit": 329,
+        "endBitExclusive": 330,
+        "rawLength": 42,
+        "outputText": "",
+        "faultStartBit": 329,
+        "decisiveEndBit": 330,
+        "errorConsumedMin": 42,
+        "errorConsumedMax": 42,
+        "errorPrefix": "",
+        "reason": "EOB-only 트리에서 비트1과 일치하는 코드가 없음.",
+        "checkpoints": [
+            {
+                "offered": 41,
+                "expected": "Wait",
+                "outputLength": 0,
+                "consumed": 41,
+                "remaining": 0
+            }
+        ]
+    },
+    {
+        "id": "valid.single-distance",
+        "valid": true,
+        "dataStartBit": 334,
+        "endBitExclusive": 347,
+        "rawLength": 44,
+        "outputText": "AAAAAAAAAAA",
+        "faultStartBit": null,
+        "decisiveEndBit": null,
+        "errorConsumedMin": 0,
+        "errorConsumedMax": 0,
+        "errorPrefix": "",
+        "reason": "A8개 뒤 길이3/거리1을 겹쳐 복사하여 A11개를 출력함.",
+        "checkpoints": [
+            {
+                "offered": 43,
+                "expected": "Wait",
+                "outputLength": 8,
+                "consumed": 43,
+                "remaining": 0
+            }
+        ]
+    },
+    {
+        "id": "invalid.single-distance-unused",
+        "valid": false,
+        "dataStartBit": 334,
+        "endBitExclusive": 347,
+        "rawLength": 44,
+        "outputText": "",
+        "faultStartBit": 344,
+        "decisiveEndBit": 345,
+        "errorConsumedMin": 43,
+        "errorConsumedMax": 44,
+        "errorPrefix": "AAAAAAAA",
+        "reason": "거리0의 유일한 코드0 대신 미사용 비트1을 실제 사용함.",
+        "checkpoints": [
+            {
+                "offered": 43,
+                "expected": "Wait",
+                "outputLength": 8,
+                "consumed": 43,
+                "remaining": 0
+            }
+        ]
+    },
+    {
+        "id": "valid.empty-distance-unused",
+        "valid": true,
+        "dataStartBit": 333,
+        "endBitExclusive": 336,
+        "rawLength": 42,
+        "outputText": "A",
+        "faultStartBit": null,
+        "decisiveEndBit": null,
+        "errorConsumedMin": 0,
+        "errorConsumedMax": 0,
+        "errorPrefix": "",
+        "reason": "LL의 길이257 선언은 미사용이며 본문은 A와 EOB뿐임. 빈 거리 트리를 호출하지 않음.",
+        "checkpoints": []
+    },
+    {
+        "id": "invalid.empty-distance-reference",
+        "valid": false,
+        "dataStartBit": 333,
+        "endBitExclusive": 338,
+        "rawLength": 43,
+        "outputText": "",
+        "faultStartBit": 336,
+        "decisiveEndBit": 336,
+        "errorConsumedMin": 42,
+        "errorConsumedMax": 42,
+        "errorPrefix": "A",
+        "reason": "길이257을 실제 사용했으나 거리 트리가 비어 있어 가능한 거리 코드가 없음. 뒤의10은 거리 없는 명목상 EOB임.",
+        "checkpoints": [
+            {
+                "offered": 42,
+                "expected": "Reject",
+                "outputLength": 1,
+                "consumed": 42,
+                "remaining": 0
+            }
+        ]
+    },
+    {
+        "id": "valid.subtree-split",
+        "valid": true,
+        "dataStartBit": 854,
+        "endBitExclusive": 893,
+        "rawLength": 112,
+        "outputText": "BAAAAAAAC",
+        "faultStartBit": null,
+        "decisiveEndBit": null,
+        "errorConsumedMin": 0,
+        "errorConsumedMax": 0,
+        "errorPrefix": "",
+        "reason": "10비트 B, A7개, 11비트 C, 11비트 EOB로 완전한 트리를 사용함.",
+        "checkpoints": [
+            {
+                "offered": 108,
+                "expected": "Wait",
+                "outputLength": 1,
+                "consumed": 108,
+                "remaining": 0
+            },
+            {
+                "offered": 110,
+                "expected": "Wait",
+                "outputLength": 8,
+                "consumed": 109,
+                "remaining": 1
+            }
+        ]
+    }
+]
