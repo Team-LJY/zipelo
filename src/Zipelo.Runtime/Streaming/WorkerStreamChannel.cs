@@ -50,14 +50,15 @@ public sealed class WorkerStreamChannel : IDisposable
         Enter(WorkerStreamDirection.Read);
         try
         {
-            using var linked = CancellationTokenSource.CreateLinkedTokenSource(token, deadline.Token);
-            var operationToken = linked.Token;
-            operationToken.ThrowIfCancellationRequested();
             if (validator.Phase == WorkerStreamPhase.InputCompleted) { return null; }
             if (validator.Phase == WorkerStreamPhase.Faulted)
             {
                 throw new WorkerStreamException(WorkerStreamError.Faulted);
             }
+
+            using var linked = CancellationTokenSource.CreateLinkedTokenSource(token, deadline.Token);
+            var operationToken = linked.Token;
+            operationToken.ThrowIfCancellationRequested();
 
             var bytes = new byte[HeaderBytes];
             var first = await stream.ReadAsync(bytes.AsMemory(0, 1), operationToken).ConfigureAwait(false);

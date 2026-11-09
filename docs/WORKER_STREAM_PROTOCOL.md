@@ -83,7 +83,12 @@ Guid는 .NET Guid.TryWriteBytes(Span<byte>)와 Guid(ReadOnlySpan<byte>)의 바�
 -> Terminal -> InputCompleted임. 빈 작업도 BeginJob, EndJob, EOF 순서로 허용함.
 EndJob 전 EOF, 헤더/페이로드 중간 EOF는 Truncated임.
 종료 후 어떤 바이트라도 들어오면 즉시 TrailingData임. 중복 종료도 이에 포함됨.
-같은 수신 채널에서 InputCompleted 이후 ReadAsync는 null을 반환함.
+같은 수신 채널에서 InputCompleted 이후 ReadAsync는 취소된 토큰이나 만료된 기한에도
+null을 반환하며 Phase와 기존 TerminalStatus를 보존함. Failed/Cancelled 종료를 Completed로 바꾸지 않음.
+Faulted 재읽기는 취소/기한보다 WorkerStreamError.Faulted를 우선함.
+최초 실패 호출의 예외 처리와 오류 분류는 그대로 유지하며, 재읽기에서 최초 예외를 재발생시키지는 않음.
+확정 상태 검사는 연결 취소 토큰 생성과 I/O보다 먼저 수행함.
+EndJob만 받은 Terminal 상태는 EOF가 미검증이므로 취소/기한 검사를 계속 적용함.
 EOF 이후 데이터를 다시 공급하는 비표준 스트림은 지원하지 않음.
 
 프레임 헤더는 페이로드 할당 전에 검증함. 알려지지 않은 프레임 종류 또는 종류별
