@@ -9,13 +9,19 @@ namespace Zipelo.Runtime;
 internal sealed class LinuxFolderPublication : PendingFolderPublication
 {
     private readonly SafeFileHandle parent;
+    private readonly string parentPath;
+    private ulong parentMountId;
     private readonly uint user = GetEffectiveUser();
     private string parentIdentity = "";
     private bool unboundCreation;
     internal int? NativeError { get; private set; }
     internal int? CleanupError { get; private set; }
 
-    internal LinuxFolderPublication(string path) => parent = Open(-100, path, 0x90000, 0, 0x04);
+    internal LinuxFolderPublication(string path)
+    {
+        parentPath = path;
+        parent = Open(-100, path, 0x90000, 0, 0x04);
+    }
 
     internal override void Initialize()
     {
@@ -33,7 +39,7 @@ internal sealed class LinuxFolderPublication : PendingFolderPublication
             0x58465342 => "xfs",
             _ => throw new ArchiveException(ArchiveError.OutputUnavailable)
         };
-        var before = MountStatus();
+        var before = MountStatus(parent);
         var mountId = BitConverter.ToUInt64(before, 144);
         var device = FormattableString.Invariant($"{BitConverter.ToUInt32(before, 136)}:{BitConverter.ToUInt32(before, 140)}");
 
@@ -69,18 +75,19 @@ internal sealed class LinuxFolderPublication : PendingFolderPublication
                 throw new ArchiveException(ArchiveError.OutputUnavailable);
             }
         }
-        var after = MountStatus();
+        var after = MountStatus(parent);
         if (matches != 1 || BitConverter.ToUInt64(after, 144) != mountId ||
             Identity(before) != Identity(after) || FileSystemMagic(parent) != magic)
         {
             throw new ArchiveException(ArchiveError.OutputUnavailable);
         }
+        parentMountId = mountId;
     }
 
-    private byte[] MountStatus()
+    private byte[] MountStatus(SafeFileHandle handle)
     {
         // mountinfo의 기존 mount ID와 대조하므로 UNIQUE 플래그를 요청하지 않음.
-        var status = Stat(parent, "", 0x1100, 0x17FF);
+        var status = Stat(handle, "", 0x1100, 0x17FF);
         if ((BitConverter.ToUInt32(status, 0) & 0x1000) == 0 || BitConverter.ToUInt64(status, 144) == 0)
         {
             throw new ArchiveException(ArchiveError.OutputUnavailable);
@@ -171,6 +178,21 @@ internal sealed class LinuxFolderPublication : PendingFolderPublication
         }
     }
 
+    private void RequireParentIdentity(SafeFileHandle selectedParent)
+    {
+        var pinned = MountStatus(parent);
+        var selected = MountStatus(selectedParent);
+        if (parentMountId == 0 ||
+            BitConverter.ToUInt64(pinned, 144) != parentMountId ||
+            BitConverter.ToUInt64(selected, 144) != parentMountId ||
+            Identity(pinned) != parentIdentity || Identity(selected) != parentIdentity ||
+            Inspect(parent, true) != parentIdentity || Inspect(selectedParent, true) != parentIdentity ||
+            FileSystemMagic(selectedParent) != FileSystemMagic(parent))
+        {
+            throw new ArchiveException(ArchiveError.UnsafePath);
+        }
+    }
+
     internal override void Publish(string leaf, CancellationToken token)
     {
         RequireName(Root);
@@ -179,6 +201,10 @@ internal sealed class LinuxFolderPublication : PendingFolderPublication
             token.ThrowIfCancellationRequested();
             if (Fsync(node.Handle) != 0) { ThrowLast(); }
         }
+        token.ThrowIfCancellationRequested();
+        // 원래 경로를 링크 없이 다시 열어 게시 전 교체를 검사함. rename과 원자적이지 않음.
+        using var selectedParent = Open(-100, parentPath, 0x90000, 0, 0x04);
+        RequireParentIdentity(selectedParent);
         token.ThrowIfCancellationRequested();
         // RENAME_NOREPLACE가 없는 커널/FS에서는 대체 경로 없이 실패함.
         if (Renameat2(parent, TemporaryName, parent, leaf, 1) != 0) { ThrowLast(); }
