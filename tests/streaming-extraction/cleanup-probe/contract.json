@@ -58,7 +58,7 @@
         "124": "45초 초과 또는 작업/정리 종료 미확인"
     },
     "central_execution": "각 명령을 따로 실행하고 시험 호스트 PID의 OS 실제 이미지/명령행과 종료, 잔류 소유 임시 항목을 확인한 뒤 다음 사례를 시작함. 첫 정지/미정리에서는 후속 실행을 중단함. 현재 프로세스의 CTS/본문을 종료했다고 OS 종료를 대신 선언하지 않음. VM 접근/덤프/새 도구/설치/보안 설정 변경은 이 실행기 범위에 없음",
-    "validation": "정적 소스/API/소유권/JSON/XML/분기/예산 검토만 수행함. 로컬 SDK 부재로 이번 24작업 코드의 C# 일반/진단 컴파일, 실제 실행/중단/진단 상한은 중앙 검토 및 실행 필요",
+    "validation": "정적 소스/API/소유권/JSON/XML/예산 및 admission 승인/폐쇄 경계만 검토함. 71c9b91d는 중앙 VM 실행 전에 경합 보완을 요청받았으며 실행 통과 기준이 아님. 로컬 SDK 부재로 수정 코드의 C# 일반/진단 컴파일, 실제 동시성/Windows 실행/중단은 중앙 검토 및 실행 필요",
     "commands": [
         "dotnet build tests/streaming-extraction/cleanup-probe/Zipelo.CleanupProbe.csproj -c Release --configfile tests/streaming-extraction/NuGet.Config --artifacts-path tests/streaming-extraction/.work/cleanup-probe-artifacts -o tests/streaming-extraction/.work/cleanup-probe-app -p:UseAppHost=false --disable-build-servers -p:DefineConstants=ZIPELO_STREAM_DIAGNOSTICS",
         "dotnet tests/streaming-extraction/.work/cleanup-probe-app/Zipelo.CleanupProbe.dll --list",
@@ -76,11 +76,25 @@
             "cleanup.async"
         ],
         "lifetime": "각 작업에 새 ProbeState/job ID/Task/CTS/GUID 시험 루트와 Runtime 소유 root를 사용함. 첫 작업만 진단 파일을 열며 이후 작업도 첫 파일에 기록함. 프로세스가 같아도 같은 스레드 실행을 보장하지 않음",
-        "next_gate": "현재 Task의 Abort 성공, 객체 Dispose 반환, 사후 잔류 검사와 sentinel 바이트 확인이 끝나야 함. 이어 부모 취소 전파 registration.DisposeAsync, 작업 CTS.CancelAsync, 작업 관찰 registration.DisposeAsync를 모두 await하고 CTS.Dispose 반환까지 확인함. 이 게이트와 작업 결과 0을 통과해야 완료 수에 포함하고 다음 작업을 시작함",
+        "next_gate": "현재 Task의 Abort 성공, 객체 Dispose 반환, 사후 잔류 검사와 sentinel 바이트 확인이 끝나야 함. 이어 부모 취소 전파 registration.DisposeAsync, 작업 CTS.CancelAsync, 작업 관찰 registration.DisposeAsync를 모두 await하고 CTS.Dispose 반환까지 확인함. 작업 결과 0과 이 완료 조건 뒤에만 다음 후보를 준비하며 실제 작업 승인은 별도 admissionGate에서 직렬화함",
         "cancellation": "전체 CTS만 시작 시 CancelAfter(15초)를 한 번 설정함. 작업 CTS는 전체 토큰의 등록 콜백으로 취소를 전달받으며 작업마다 예산을 재시작하지 않음. 정상 경로에서 Abort 이전에 추가 취소하지 않음. 취소 전파와 관찰 콜백의 등록 해제/완료까지 await하므로 이전 CTS와 다음 CTS가 겹치지 않음",
-        "stopping": "첫 작업 실패/차단/취소/미정리에서 반환함. 확인된 진단 Status 3/4 또는 Dropped>0도 다음 작업을 막음. 초기 Status 0은 writer 미개방으로서 즉시 실패로 취급하지 않고 최종 종료 검사를 적용함. 45초 실패 뒤에는 전체 CTS 취소와 동일한 순차 Task만 25초 관찰하며 추가 작업/Dispose/재삭제를 시작하지 않음",
-        "reporting": "PROBE_OPERATION에 1-based index/cycle/type/job/operationExit/completed/cleanupConfirmed/residueChecked/cancellationSettled/ctsDisposed를 출력함. 최종 PROBE에 planned=24/started/completed/lastType/job/caseExit/taskSettled/마지막 정리 및 취소 상태/stage, DIAGNOSTICS에 stopped/Status/Dropped/logComplete를 출력함. 완료 수는 정리와 취소 수명 종료가 확인된 작업 수이며 진단이나 전체 사례 성공을 뜻하지 않음",
-        "excluded_variables": "제품의 실패 정리 전 취소 시점과 입력/출력 publication 동시 보유는 이번에 추가하지 않음. 삭제 API/공유/ACL/ancestry/no-follow/생성 및 역순 삭제는 기존 Runtime 그대로임"
+        "stopping": "첫 작업 실패/차단/취소/미정리 또는 확인된 진단 Status 3/4/Dropped>0에서 반복을 끝내며 finally에서 admission을 닫음. 전체 취소 등록 콜백도 같은 gate를 닫고, 감독자는 45초 실패/예외를 출력하기 전에 직접 닫음. 종료 관찰 전 CloseAdmission으로 현재 등록 Task를 포착한 뒤 순차 실행 Task, 포착 Task, 전체 CancelAsync 및 admission 콜백 DisposeAsync를 같은 25초 한도 안에서 기다림. 기존 승인 작업의 늦은 본문 실행/정리 관찰은 가능하지만 닫힌 gate 뒤 새 작업 승인은 불가함. 초기 진단 Status 0은 최종 종료 검사 대상임",
+        "reporting": "PROBE_OPERATION에 1-based index/cycle/type/job/operationExit/completed/cleanupConfirmed/residueChecked/cancellationSettled/ctsDisposed를 출력함. 최종 PROBE에 planned=24/started/completed/lastType/job/caseExit/taskSettled/admissionClosed/admittedTaskSettled/마지막 정리 및 취소 상태/stage, DIAGNOSTICS에 stopped/Status/Dropped/logComplete를 출력함. 완료 수는 정리와 취소 수명 종료가 확인된 작업 수이며 진단이나 전체 사례 성공을 뜻하지 않음",
+        "excluded_variables": "제품의 실패 정리 전 취소 시점과 입력/출력 publication 동시 보유는 이번에 추가하지 않음. 삭제 API/공유/ACL/ancestry/no-follow/생성 및 역순 삭제는 기존 Runtime 그대로임",
+        "admission": {
+            "gate": "SequenceState의 단일 admissionGate가 TryAdmit과 CloseAdmission을 직렬화함. TryAdmit은 gate 안에서 closed/전체 토큰을 확인하고 Task.Run 큐 등록, currentTask와 First/Last/Started 등록까지 처리함. CloseAdmission은 같은 gate 안에서 admissionClosed=true를 기록하고 currentTask를 반환함. 닫힌 gate는 다시 열지 않음",
+            "linearization": "작업 승인은 TryAdmit의 currentTask=pending 등록 지점, 중단은 CloseAdmission 또는 취소를 확인한 TryAdmit이 gate 안에서 admissionClosed=true를 기록하는 지점임. 중단이 먼저이면 Task를 만들지 않고 null로 거절함. 승인이 먼저이면 이후 중단이 그 Task를 포착하며 본문과 취소 정리까지 기존 감독 한도 안에서 관찰함",
+            "lock_scope": "gate에는 조건 확인, Task.Run 큐 등록과 상태 대입만 있음. Runtime/네이티브 호출, await, Wait/Result, Cancel/CancelAsync, 취소 registration 등록/해제 및 콜백 완료 대기는 gate 밖임. Task 본문이 별도 스레드에서 실행될 수 있으나 gate 소유 스레드는 본문을 호출하거나 기다리지 않음",
+            "rejected_candidate": "승인 전 만든 후보 상태/CTS/취소 등록은 있을 수 있으나 거절된 후보의 RunAsync Task, 파일 또는 Runtime 소유 root는 생성하지 않음. 등록 해제/취소 콜백 완료와 CTS.Dispose는 잠금 밖에서 수행하고, 그 정리도 순차 Task의 종료 관찰에 포함함. First/Last/Started는 승인된 Task만 가리킴",
+            "limits": "전체 토큰의 취소 플래그 전환과 gate 폐쇄, 모든 OS 호출을 원자적으로 묶는 보장이 아님. gate 확인 뒤 토큰이 바뀌어도 폐쇄보다 먼저 승인된 현재 Task는 존재할 수 있음. 이미 승인된 Task의 시작 시각이나 native 취소/강제 종료를 보장하지 않음",
+            "static_review": [
+                "CloseAdmission이 먼저 gate를 차지하면 이후 TryAdmit은 closed를 확인하고 Task.Run 이전에 반환함",
+                "TryAdmit이 먼저 승인하면 Task 등록이 끝나기 전 CloseAdmission은 gate를 획득할 수 없으며, 이후 같은 Task를 반환함",
+                "승인 검사와 Task 등록 사이 토큰 전환/콜백 지연도 위 두 gate 순서로 분류됨. 닫힌 뒤 승인하는 세 번째 순서가 없음",
+                "실제 Task await/작업 취소/등록 DisposeAsync/CTS.Dispose와 25초 종료 관찰은 모두 gate 밖임",
+                "본문 또는 후보 정리의 실패/예외는 루프를 끝내고 finally가 gate를 닫음. 후속 작업 승인을 재시도하지 않음"
+            ]
+        }
     },
     "historical_validation": {
         "head": "146d85a1c2c379a2dae3499ffba9fcc51392c4cf",

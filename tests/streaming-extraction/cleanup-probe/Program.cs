@@ -250,6 +250,7 @@ internal static class Program
     {
         var sequence = new SequenceState();
         var cancellation = new CancellationTokenSource();
+        var admissionRegistration = cancellation.Token.Register(() => { _ = sequence.CloseAdmission(); });
         cancellation.CancelAfter(TimeSpan.FromSeconds(15));
         var pending = Task.Run(() => RunSequenceAsync(runtime, sequence, parent, cancellation.Token));
         var result = 1;
@@ -257,13 +258,20 @@ internal static class Program
         try { result = await pending.WaitAsync(TimeSpan.FromSeconds(45)); }
         catch (TimeoutException)
         {
+            _ = sequence.CloseAdmission();
             timedOut = true;
             Console.Error.WriteLine("FAIL: 연속 사례 전체 45초 제한 초과");
         }
-        catch (Exception failure) { Console.Error.WriteLine("FAIL: " + failure.GetType().Name); }
+        catch (Exception failure)
+        {
+            _ = sequence.CloseAdmission();
+            Console.Error.WriteLine("FAIL: " + failure.GetType().Name);
+        }
 
-        // 전체 예산은 한 번만 적용하며 현재 작업과 취소 콜백만 관찰함.
-        var stop = Task.WhenAll(pending, cancellation.CancelAsync());
+        // 승인 종료와 현재 Task 포착을 같은 잠금에서 처리함.
+        var admittedTask = sequence.CloseAdmission();
+        var stop = Task.WhenAll(pending, admittedTask, cancellation.CancelAsync(),
+            admissionRegistration.DisposeAsync().AsTask());
         try { await stop.WaitAsync(TimeSpan.FromSeconds(25)); }
         catch (Exception failure) { Console.Error.WriteLine("STOP_OBSERVATION: " + failure.GetType().Name); }
         var settled = stop.IsCompleted;
@@ -289,6 +297,7 @@ internal static class Program
         Console.WriteLine($"PROBE case=cleanup.sequence24, hostPid={Environment.ProcessId}, planned=24, " +
             $"started={sequence.Started}, completed={sequence.Completed}, lastType={last?.Name ?? "none"}, " +
             $"job={last?.Job.ToString("N") ?? "none"}, caseExit={result}, taskSettled={settled}, " +
+            $"admissionClosed=true, admittedTaskSettled={admittedTask.IsCompleted}, " +
             $"cleanupConfirmed={cleanupConfirmed}, abortReturned={last?.AbortReturned == true}, " +
             $"abortSucceeded={last?.AbortSucceeded == true}, disposeReturned={last?.DisposeReturned == true}, " +
             $"residueChecked={last?.ResidueChecked == true}, cancellationSettled={last?.CancellationSettled == true}, " +
@@ -306,79 +315,123 @@ internal static class Program
         string parent, CancellationToken token)
     {
         string[] order = ["cleanup.empty", "cleanup.sync", "cleanup.async"];
-        for (var index = 0; index < 24; index++)
+        try
         {
-            if (token.IsCancellationRequested) { return 1; }
-            var state = new ProbeState(runtime, order[index % order.Length]);
-            state.DiagnosticStarted = sequence.First?.DiagnosticStarted == true;
-            sequence.First ??= state;
-            sequence.Last = state;
-            sequence.Started = index + 1;
-            var cancellation = new CancellationTokenSource();
-            CancellationTokenRegistration propagation = default;
-            CancellationTokenRegistration registration = default;
-            var result = 1;
-            try
+            for (var index = 0; index < 24; index++)
             {
-                propagation = token.Register(() => cancellation.Cancel());
-                registration = cancellation.Token.Register(() => state.Record("probe.token.cancelled"));
-                var pending = Task.Run(() => RunAsync(runtime, state, parent, cancellation.Token,
-                    startDiagnostics: index == 0, operationIndex: index + 1));
-                result = await pending.ConfigureAwait(false);
-            }
-            catch (Exception failure) { Console.Error.WriteLine("OPERATION_FAIL: " + failure.GetType().Name); }
-            finally
-            {
+                var state = new ProbeState(runtime, order[index % order.Length]);
+                state.DiagnosticStarted = sequence.First?.DiagnosticStarted == true;
+                var cancellation = new CancellationTokenSource();
+                CancellationTokenRegistration propagation = default;
+                CancellationTokenRegistration registration = default;
+                var admitted = false;
+                var result = 1;
                 try
                 {
-                    state.Mark("probe.cancellation.drain.begin");
-                    // 부모 전파와 작업 콜백이 모두 끝난 뒤 CTS를 정리함.
-                    await propagation.DisposeAsync().ConfigureAwait(false);
-                    await cancellation.CancelAsync().ConfigureAwait(false);
-                    await registration.DisposeAsync().ConfigureAwait(false);
-                    state.CancellationSettled = true;
-                    state.Mark("probe.cancellation.drain.end");
-                    cancellation.Dispose();
-                    state.CancellationDisposed = true;
-                    state.Mark("probe.cts.dispose.end");
+                    propagation = token.Register(() => cancellation.Cancel());
+                    registration = cancellation.Token.Register(() => state.Record("probe.token.cancelled"));
+                    var pending = sequence.TryAdmit(state, index + 1, token,
+                        () => RunAsync(runtime, state, parent, cancellation.Token,
+                            startDiagnostics: index == 0, operationIndex: index + 1));
+                    if (pending is not null)
+                    {
+                        admitted = true;
+                        result = await pending.ConfigureAwait(false);
+                    }
                 }
-                catch (Exception failure)
+                catch (Exception failure) { Console.Error.WriteLine("OPERATION_FAIL: " + failure.GetType().Name); }
+                finally
                 {
-                    result = 1;
-                    Console.Error.WriteLine("CANCELLATION_UNCONFIRMED: " + failure.GetType().Name);
+                    try
+                    {
+                        state.Mark("probe.cancellation.drain.begin");
+                        // 부모 전파와 작업 콜백이 모두 끝난 뒤 CTS를 정리함.
+                        await propagation.DisposeAsync().ConfigureAwait(false);
+                        await cancellation.CancelAsync().ConfigureAwait(false);
+                        await registration.DisposeAsync().ConfigureAwait(false);
+                        state.CancellationSettled = true;
+                        state.Mark("probe.cancellation.drain.end");
+                        cancellation.Dispose();
+                        state.CancellationDisposed = true;
+                        state.Mark("probe.cts.dispose.end");
+                    }
+                    catch (Exception failure)
+                    {
+                        result = 1;
+                        Console.Error.WriteLine("CANCELLATION_UNCONFIRMED: " + failure.GetType().Name);
+                    }
                 }
-            }
 
-            if (!state.CleanupConfirmed || !state.CancellationSettled || !state.CancellationDisposed)
-            {
-                result = 124;
-            }
-            if (result == 0)
-            {
-                Require(state.AbortSucceeded && state.DisposeReturned && state.ResidueChecked);
-                sequence.Completed++;
-                state.Record("probe.sequence.completed", sequence.Completed);
-                if (StreamingExtractionDiagnostics.Status is 3 or 4 || StreamingExtractionDiagnostics.Dropped != 0)
+                if (!admitted)
                 {
-                    result = 2;
+                    return state.CancellationSettled && state.CancellationDisposed ? 1 : 124;
                 }
+                if (!state.CleanupConfirmed || !state.CancellationSettled || !state.CancellationDisposed)
+                {
+                    result = 124;
+                }
+                if (result == 0)
+                {
+                    Require(state.AbortSucceeded && state.DisposeReturned && state.ResidueChecked);
+                    sequence.Completed++;
+                    state.Record("probe.sequence.completed", sequence.Completed);
+                    if (StreamingExtractionDiagnostics.Status is 3 or 4 || StreamingExtractionDiagnostics.Dropped != 0)
+                    {
+                        result = 2;
+                    }
+                }
+                Console.WriteLine($"PROBE_OPERATION index={index + 1}, cycle={index / 3 + 1}, type={state.Name}, " +
+                    $"job={state.Job:N}, operationExit={result}, completed={sequence.Completed}, " +
+                    $"cleanupConfirmed={state.CleanupConfirmed}, residueChecked={state.ResidueChecked}, " +
+                    $"cancellationSettled={state.CancellationSettled}, ctsDisposed={state.CancellationDisposed}");
+                if (result != 0) { return result; }
+                if (token.IsCancellationRequested) { return 1; }
             }
-            Console.WriteLine($"PROBE_OPERATION index={index + 1}, cycle={index / 3 + 1}, type={state.Name}, " +
-                $"job={state.Job:N}, operationExit={result}, completed={sequence.Completed}, " +
-                $"cleanupConfirmed={state.CleanupConfirmed}, residueChecked={state.ResidueChecked}, " +
-                $"cancellationSettled={state.CancellationSettled}, ctsDisposed={state.CancellationDisposed}");
-            if (result != 0) { return result; }
-            if (token.IsCancellationRequested) { return 1; }
+            return 0;
         }
-        return 0;
+        finally
+        {
+            _ = sequence.CloseAdmission();
+        }
     }
 
     private sealed class SequenceState
     {
+        private readonly object admissionGate = new();
+        private bool admissionClosed;
+        private Task? currentTask;
         internal volatile ProbeState? First;
         internal volatile ProbeState? Last;
         internal volatile int Started;
         internal volatile int Completed;
+
+        internal Task<int>? TryAdmit(ProbeState state, int index, CancellationToken token, Func<Task<int>> body)
+        {
+            lock (admissionGate)
+            {
+                if (admissionClosed || token.IsCancellationRequested)
+                {
+                    admissionClosed = true;
+                    return null;
+                }
+                // 승인과 Task 등록 사이에 감독 측 중단 선언이 끼어들 수 없음.
+                var pending = Task.Run(body);
+                currentTask = pending;
+                First ??= state;
+                Last = state;
+                Started = index;
+                return pending;
+            }
+        }
+
+        internal Task CloseAdmission()
+        {
+            lock (admissionGate)
+            {
+                admissionClosed = true;
+                return currentTask ?? Task.CompletedTask;
+            }
+        }
     }
 
     private static void RequireParent(string parent)
