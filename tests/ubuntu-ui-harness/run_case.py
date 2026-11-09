@@ -148,6 +148,7 @@ def main():
                 timed_out = True
                 break
             time.sleep(0.02)
+        timed_out = timed_out or time.monotonic() >= deadline
     except BaseException:
         failed = True
     finally:
