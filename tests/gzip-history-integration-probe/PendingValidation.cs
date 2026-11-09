@@ -10,7 +10,7 @@ internal sealed class PendingValidation
 
     public void Execute(ReadOnlyMemory<byte> input, ProbeBudget budget, bool selected,
         CancellationToken token = default, int feedSize = ProbeBudget.ChunkSize,
-        Action? afterChunk = null, Action? beforeCommit = null)
+        Action? afterChunk = null, Action? beforeCommit = null, IRawInflater? inflater = null)
     {
         if (used)
         {
@@ -29,7 +29,7 @@ internal sealed class PendingValidation
                 }
                 sink.Append(bytes);
                 afterChunk?.Invoke();
-            }, token, feedSize);
+            }, token, feedSize, inflater);
             budget.Check(token);
             if (selected)
             {

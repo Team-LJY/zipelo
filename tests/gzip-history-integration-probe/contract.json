@@ -22,7 +22,7 @@
         "project": "tests/gzip-history-integration-probe/Zipelo.GzipHistoryIntegrationProbe.csproj",
         "assembly": "Zipelo.Experimental.GzipHistoryIntegrationProbe",
         "inheritedRegressionCases": 184,
-        "additionalGroupedCases": 126,
+        "additionalGroupedCases": 136,
         "expectedExit": 0,
         "actualResult": null,
         "invalidArgumentsExit": 2,
@@ -41,7 +41,7 @@
             "SharpZipBaseException"
         ],
         "crc": "official SharpZipLib [1.4.2] global reference",
-        "sourceChanges": "none to either fixed baseline; global type aliases bind the unchanged parser adapter and direct raw contract to the history assembly; exception catch binds to the same assembly",
+        "sourceChanges": "Candidate BoundaryProbe.cs is a documented copy of the fixed PR15 parser with only failure-path output accounting changes. Program.cs remains linked unchanged. Global aliases bind both parser adapter and exception catch to history assembly.",
         "guard": "assembly.identity checks parser private field type and both assembly identities",
         "separation": "baseline executable uses official package; candidate links original parser and regression sources, references history executable as an assembly without running its entry point"
     },
@@ -55,9 +55,11 @@
     },
     "budgets": {
         "chunkSize": 65536,
-        "accounting": "Input read-ahead charged once per Read via Cursor high-water mark, decoded bytes charged additionally; repeated Read calls share caller ProbeBudget without reset/refund; selected output charged once; metadata and elapsed time cumulative",
+        "accounting": "Input high-water/read-ahead accounting is unchanged. Every Inflate call records its observable TotalOut delta in finally before exception propagation or post-call cancellation/time checks. Successful output is not charged twice. Selected output is charged only on the existing sink delivery path. Repeated attempts share the same budget without reset/refund.",
         "time": "same start and TimeProvider through parse, hashing, disposal and final check; cooperative checks cannot interrupt synchronous decoder call",
-        "externalLimitSecondsPerProcess": 60
+        "externalLimitSecondsPerProcess": 60,
+        "failedOutput": "TotalOut measures bytes copied into the caller output buffer, including bytes copied by a call that subsequently throws. It does not expose bytes still held only inside OutputWindow. No decoder internals are modified.",
+        "overLimit": "Record actual bounded output delta even when it exceeds ProcessedLimit; then throw Budget. Processed may exceed the configured limit by at most 65536 and remains recorded. Check rejects later attempts. A valid delta that exceeds the budget takes precedence over an Inflate exception; invalid negative/oversized delta produces Boundary. Otherwise preserve Deflate/cancellation/original exception."
     },
     "coverage": [
         "all original baseline negative expectations unchanged",
@@ -66,7 +68,8 @@
         "header options/FHCRC, CRC/ISIZE, truncation and trailing/single-member policies",
         "consumed/remaining, read-ahead and exact trailer position, output counters",
         "input/processed/output/metadata limits and cancellation inherited unchanged",
-        "new final cancellation/deadline after sink disposal, same-budget repeated attempts, input immutability, fresh inflater after rejection"
+        "new final cancellation/deadline after sink disposal, same-budget repeated attempts, input immutability, fresh inflater after rejection",
+        "10 additional groups: selected true/false actual stored-A then reserved-block failure, over-limit failure, return-time cancellation/deadline/other exception; verify retained TotalOut cost, no sink output or committed result, and same-budget retry refusal before another Inflate call"
     ],
     "exclusions": [
         "product adoption or main merge",
@@ -87,5 +90,21 @@
         "warnings": "Candidate authored sources treat warnings as errors. Referenced unchanged history project preserves its own warning policy and original SYSLIB0051 warning; do not pass a global warnings-as-errors override or suppress it.",
         "results": "Record exact head, SDK/runtime, restore/build exits and warnings, separately baseline/candidate counts and invalid CLI exits on Windows/Linux, package/source/DLL hashes before/after and no residual processes. Do not upload logs, binaries or generated corpus.",
         "constraints": "Apply 60-second external process bound and isolated output/package locations. No restore/build/run was performed by author."
+    },
+    "regressionFixtures": [
+        {
+            "rawHex": "00 01 00 FE FF 41 07",
+            "basis": "non-final stored block, LEN=1 and NLEN=65534, literal 0x41, then final reserved BTYPE=3; malformed independently of trailer",
+            "expected": "Deflate with one observed TotalOut byte retained when budget sufficient; Budget with usage retained when one byte over limit"
+        },
+        {
+            "rawHex": "01 01 00 FE FF 41",
+            "basis": "final stored block with one literal A; valid",
+            "expected": "one copied output byte; injected post-return cancellation/deadline/IOException must retain cost without publishing"
+        }
+    ],
+    "priorCandidate": {
+        "head": "4ada9f9e8c693288127792c925bc88a5ebc4a9fe",
+        "status": "unexecuted candidate with failure-path output accounting omission identified by static review; not a validated baseline"
     }
 }

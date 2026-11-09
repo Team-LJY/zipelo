@@ -145,6 +145,7 @@ internal static class IntegrationProgram
             Uncommitted(pending);
         });
 
+        BudgetRegression.Register(Run);
         Console.WriteLine($"candidate.integration passed={passed} failed={failed}");
         return inheritedExit == 0 && failed == 0 ? 0 : 1;
     }

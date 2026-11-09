@@ -14,10 +14,11 @@
     <ItemGroup>
         <PackageReference Include="SharpZipLib" Version="[1.4.2]" />
         <ProjectReference Include="../deflate-history-validation-probe/Zipelo.HistoryProbe.csproj" Aliases="history" />
-        <Compile Include="../gzip-boundary-probe/BoundaryProbe.cs" Link="Baseline/BoundaryProbe.cs" />
+        <Compile Include="BoundaryProbe.cs" />
         <Compile Include="../gzip-boundary-probe/Program.cs" Link="Baseline/Program.cs" />
         <Compile Include="HistoryAliases.cs" />
         <Compile Include="IntegrationProgram.cs" />
+        <Compile Include="BudgetRegression.cs" />
         <Compile Include="PendingValidation.cs" />
     </ItemGroup>
 </Project>

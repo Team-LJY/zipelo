@@ -167,23 +167,36 @@
         }
     ],
     "newFilePaths": [
+        "tests/gzip-history-integration-probe/BoundaryProbe.cs",
+        "tests/gzip-history-integration-probe/BudgetRegression.cs",
         "tests/gzip-history-integration-probe/HistoryAliases.cs",
         "tests/gzip-history-integration-probe/IntegrationProgram.cs",
         "tests/gzip-history-integration-probe/NuGet.Config",
         "tests/gzip-history-integration-probe/PendingValidation.cs",
         "tests/gzip-history-integration-probe/SHA256SUMS",
         "tests/gzip-history-integration-probe/Zipelo.GzipHistoryIntegrationProbe.csproj",
+        "tests/gzip-history-integration-probe/boundary-accounting.patch",
         "tests/gzip-history-integration-probe/contract.json",
         "tests/gzip-history-integration-probe/integration.patch",
         "tests/gzip-history-integration-probe/provenance.json"
     ],
-    "patch": "integration.patch contains exact additions of candidate C# sources, project and offline NuGet configuration; no decoder or parser patch",
+    "patch": "integration.patch contains exact additions of candidate C# sources, project and offline NuGet configuration. boundary-accounting.patch is the minimal diff to apply to a copy of fixed PR15 BoundaryProbe.cs placed at the candidate path. Upstream decoder unchanged.",
     "fullInventory": "inheritedFiles plus newFilePaths; SHA256SUMS covers all except itself, repository-root relative",
     "authoredSourceSha256": {
+        "BoundaryProbe.cs": "73c251e2370b24b724dd0719e09fff4d26c780d8d81b09b054ff4b69bbb96933",
+        "BudgetRegression.cs": "3fad50415e8847f48e4aaa646379b663662de106dc6e9df080bd1c86d8a85997",
         "HistoryAliases.cs": "86075bfe12d2dfc5e37b178dfa429dc49d1dee882609fdc29e9ccef1210133eb",
-        "IntegrationProgram.cs": "6f36eae23a5a634b0ed1a5a1176f3436e2df94fbc495fd32cc9d4074def24307",
+        "IntegrationProgram.cs": "cb5f72b7849d70da42594f78efb8a82f5d8fca18a2b4ca7e0497c15c5261d752",
         "NuGet.Config": "026d16a16d2935475ad6b679752acd549757d489cdca32c1a919acccbbc35920",
-        "PendingValidation.cs": "f071235af37caddb9a249fd758c2309dc014d4a7c60532fae1975c4e728ffeb3",
-        "Zipelo.GzipHistoryIntegrationProbe.csproj": "ef4303858bbfd7051bbdedbabc38dd71f6c377ff3f2ac6e736a2e77dc1f0edcb"
+        "PendingValidation.cs": "40587701e6699d9bb93123cf323aa045dfcd2c9939a575361f58736135789294",
+        "Zipelo.GzipHistoryIntegrationProbe.csproj": "fd1d5cf5f6b98ae3f1d5f317103851d4abbe6a343ef14a151ff7a36f975e5fee"
+    },
+    "candidateParser": {
+        "sourceHead": "174d9d87d90ed973d9baa06ca1d8de401eba591b",
+        "sourcePath": "tests/gzip-boundary-probe/BoundaryProbe.cs",
+        "sourceSha256": "173fa27d57154e0a5069d1cbc371edebb3da0f0a73e76aa9bea39aa3d2fecc40",
+        "candidatePath": "tests/gzip-history-integration-probe/BoundaryProbe.cs",
+        "candidateSha256": "73c251e2370b24b724dd0719e09fff4d26c780d8d81b09b054ff4b69bbb96933",
+        "reason": "Preserve frozen baseline while accounting observable output in finally on exception/cancellation and retaining over-limit usage."
     }
 }
