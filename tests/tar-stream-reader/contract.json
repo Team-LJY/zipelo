@@ -1,0 +1,54 @@
+{
+    "schemaVersion": 1,
+    "baseCommit": "cc39e8949a9a04d28a3ddc58850f696b52da6e21",
+    "scope": "Worker 내부 USTAR 일반 파일과 디렉터리만 처리함. ZIP, 프로토콜, UI, 게시 및 공개 지원 표시에는 연결하지 않음.",
+    "implementation": "하나의 엄격한 수동 USTAR 검증기로 두 순회를 처리함. TarReader 재해석과 확장 메타데이터의 선행 할당을 피함. 정상 호환 표본은 BCL TarWriter로 생성함.",
+    "sourceContract": [
+        "seek 가능 스트림을 호출자가 독점 보유함. 처음부터 읽으며 스트림을 닫지 않음.",
+        "첫 순회에서 선택하지 않은 항목까지 전부 검증함. 읽기 실패 또는 손상은 목록 선택 전 거부함.",
+        "선택은 읽기 전용 목록의 순번 ID로 고정함. 빈 선택은 목록 전용임. 디렉터리 선택은 바이트를 발생시키지 않음.",
+        "선택이 있으면 두 번째 전체 순회에서 항목을 대조하며 선택 바이트만 전달함. 전체 입력 SHA256이 달라지면 실패함.",
+        "입력 SHA256은 순회 간 동일성 검사이며 저장된 내용 무결성 보증이 아님. ContentVerification은 Unavailable임."
+    ],
+    "sinkContract": [
+        "수신기는 최대 64KiB 청크를 즉시 소비하거나 복사함. 전달 메모리를 보관하지 않음.",
+        "수신 바이트는 임시 결과임. ReadAsync 성공 반환 전 게시하지 않음. 오류, 취소, 입력 변경 시 전체 결과를 폐기함.",
+        "수신기 예외는 그대로 전파함. 빈 파일은 빈 청크 한 번으로 표시함. 파일시스템 출력 및 정리는 이 단위에 없음."
+    ],
+    "strictSubset": [
+        "ustar NUL magic, 00 version, unsigned 헤더 체크섬, 비음수 octal 숫자만 허용함.",
+        "NUL 뒤 문자열 여유 영역은 0이어야 하며 이름은 엄격한 UTF8임. prefix 이름을 허용함.",
+        "일반 파일 0 또는 NUL, 디렉터리 5만 허용함. 디렉터리 크기는 0임.",
+        "PAX x/g, GNU L/K/S, 링크, sparse, 장치, FIFO, 연속 파일, 다중 볼륨 및 미지 유형을 거부함.",
+        "본문 padding과 마지막 12바이트 헤더 여유 영역은 0이어야 함. 종료 0블록 두 개와 정렬된 0 후행 블록만 허용함.",
+        "경로는 지정한 Windows 또는 Linux OutputPathPolicy로 검사함. 역슬래시는 양쪽에서 거부함. 중복과 파일 조상 충돌은 모든 항목에서 거부함.",
+        "uid/gid/mode/mtime은 숫자 문법만 검사하며 복원하지 않음. linkname은 비어 있어야 하며 device 번호는 0이어야 함.",
+        "GZip과 TAR.GZ, 암호, 복구, 권한 복원은 연결하지 않음."
+    ],
+    "limits": {
+        "inputBytes": 16777216,
+        "entries": 1024,
+        "processedBytes": 134217728,
+        "outputBytes": 16777216,
+        "metadataHeaderBytes": 1048576,
+        "durationSeconds": 300,
+        "chunkBytes": 65536,
+        "rule": "호출자 제한과 각 상한 중 작은 값을 사용함. JobBudget 하나로 두 순회, 선택 콜백 및 수신 시간까지 누적함. 모든 읽은 바이트와 건너뛴 데이터도 처리량에 포함함. 항목 수는 첫 순회만 세며 두 번째 순회는 목록과 대조함. 메타데이터는 순회별 원시 헤더 512바이트 단위 제한이며 실제 관리 힙 크기나 OS 메모리 격리를 뜻하지 않음."
+    },
+    "failureLimits": [
+        "검사는 협조적 취소임. 임의 Stream 또는 수신기가 멈추면 강제 종료하지 못함. 중앙 실행 외부 시간 제한이 필요함.",
+        "실패하면 UstarResult를 반환하지 않음. 단일 사용 인스턴스이며 실패 후 재시도도 새 작업임.",
+        "네이티브 게시 및 Windows 정리 정지 문제는 별도 미해결임. 이 검사의 통과를 제품 압축 해제 성공으로 취급하지 않음."
+    ],
+    "validation": {
+        "local": "정적 검토만 수행함. dotnet/csc/mcs 부재로 C# 컴파일과 실행은 미검증임.",
+        "commands": [
+            "dotnet restore src/Zipelo.Worker/Zipelo.Worker.csproj --configfile tests/security/NuGet.Config",
+            "dotnet restore tests/tar-stream-reader/Zipelo.TarReaderTests.csproj --configfile tests/security/NuGet.Config",
+            "dotnet build src/Zipelo.Worker/Zipelo.Worker.csproj -c Release --no-restore",
+            "dotnet build tests/tar-stream-reader/Zipelo.TarReaderTests.csproj -c Release --no-restore",
+            "dotnet run --project tests/tar-stream-reader/Zipelo.TarReaderTests.csproj -c Release --no-build"
+        ],
+        "prerequisites": "중앙의 기존 .NET 10 SDK 및 참조 팩으로 오프라인 restore를 먼저 수행함. 신규 외부 패키지 의존성이 없음. Windows/Linux 양쪽에서 독립 콘솔 검사를 수행함."
+    }
+}
