@@ -1,0 +1,9 @@
+Package: zipelo-draft
+Version: @VERSION@
+Architecture: amd64
+Maintainer: @MAINTAINER@
+Section: utils
+Priority: optional
+Depends: @DEPENDS@
+Description: Zipelo development validation draft
+ Unreleased archive UI. No claim of completed extraction or platform support.

@@ -1,0 +1,14 @@
+{
+    "schema": 1,
+    "platform": "win-x64",
+    "validationPassed": false,
+    "selfContained": false,
+    "creationValidationEnabled": true,
+    "fileOpenArgumentsValidated": false,
+    "validatedSystems": [],
+    "checks": {},
+    "files": {},
+    "evidence": [],
+    "dependencies": [],
+    "fileOpenArgumentsContract": "single-local-zip-path-v1"
+}

@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Zipelo (Development Draft)
+Name[ko]=Zipelo (개발 검증 초안)
+Comment=Archive workspace under development
+Exec=/usr/bin/zipelo
+TryExec=/usr/bin/zipelo
+Icon=zipelo
+Terminal=false
+Categories=Utility;Archiving;
+StartupNotify=true
