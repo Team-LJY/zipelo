@@ -232,6 +232,71 @@ tests.Add(("invalid.limits", () =>
     return Task.CompletedTask;
 }));
 
+var longPrefix = new string('p', 70) + "/" + new string('q', 70);
+var longLeaf = new string('a', 80);
+foreach (var policy in new[] { FileNamePolicy.Linux, FileNamePolicy.Windows })
+{
+    Reject("long.exact." + policy, Fixtures.Archive(
+        new Fixture(longLeaf, [], Prefix: longPrefix), new Fixture(longLeaf, [], Prefix: longPrefix)),
+        ArchiveError.OutputConflict, policy: policy);
+    Reject("long.parent.first." + policy, Fixtures.Archive(
+        new Fixture(longLeaf, [], Prefix: longPrefix), new Fixture(longLeaf + "/child", [], Prefix: longPrefix)),
+        ArchiveError.OutputConflict, policy: policy);
+    Reject("long.child.first." + policy, Fixtures.Archive(
+        new Fixture(longLeaf + "/child", [], Prefix: longPrefix), new Fixture(longLeaf, [], Prefix: longPrefix)),
+        ArchiveError.OutputConflict, policy: policy);
+    Reject("long.directory.file.same." + policy, Fixtures.Archive(
+        new Fixture(longLeaf + "/", [], '5', longPrefix), new Fixture(longLeaf, [], Prefix: longPrefix)),
+        ArchiveError.OutputConflict, policy: policy);
+    foreach (var reverse in new[] { false, true })
+    {
+        tests.Add(($"long.siblings.directories.{policy}.{reverse}", async () =>
+        {
+            var entries = new[]
+            {
+                new Fixture(longLeaf, [1], Prefix: longPrefix),
+                new Fixture(longLeaf + "x", [2], Prefix: longPrefix),
+                new Fixture(longLeaf + "-dir/", [], '5', longPrefix),
+                new Fixture(longLeaf + "-dir/child", [3], Prefix: longPrefix)
+            };
+            if (reverse) { Array.Reverse(entries); }
+            using var source = new MemoryStream(Fixtures.Archive(entries), false);
+            using var sink = new HashSink();
+            var result = await new UstarReader(defaults, policy).ReadAsync(source,
+                listed => listed.Select(e => e.Id).ToArray(), sink.Write, default);
+            Check(result.Entries.Count == 4 && result.Usage.OutputBytes == 3 && sink.Counts.Count == 3);
+        }));
+    }
+    tests.Add(("long.maximum.siblings." + policy, async () =>
+    {
+        var entries = Enumerable.Range(0, 1024).Select(i =>
+            new Fixture(longLeaf + i.ToString("D4", System.Globalization.CultureInfo.InvariantCulture), [(byte)i], Prefix: longPrefix)).ToArray();
+        using var source = new MemoryStream(Fixtures.Archive(entries), false);
+        using var sink = new HashSink();
+        var result = await new UstarReader(defaults, policy).ReadAsync(source, _ => ["1023"], sink.Write, default);
+        Check(result.Entries.Count == 1024 && result.Usage.Entries == 1024 && result.Usage.OutputBytes == 1);
+        Check(result.Usage.ProcessedBytes == source.Length * 2 && sink.Counts.Count == 1 && sink.Counts["1023"] == 1);
+        Check(sink.Digest("1023") == Convert.ToHexString(SHA256.HashData(new byte[] { 255 })));
+    }));
+}
+foreach (var childFirst in new[] { false, true })
+{
+    var entries = new[]
+    {
+        new Fixture(longLeaf.ToUpperInvariant(), [], Prefix: longPrefix.ToUpperInvariant()),
+        new Fixture(longLeaf + "/child", [], Prefix: longPrefix)
+    };
+    if (childFirst) { Array.Reverse(entries); }
+    var bytes = Fixtures.Archive(entries);
+    Reject("long.case.parent.windows." + childFirst, bytes, ArchiveError.OutputConflict, policy: FileNamePolicy.Windows);
+    tests.Add(("long.case.parent.linux." + childFirst, async () => { await Run(bytes); }));
+}
+var caseNames = Fixtures.Archive(
+    new Fixture(longLeaf, [], Prefix: longPrefix),
+    new Fixture(longLeaf.ToUpperInvariant(), [], Prefix: longPrefix.ToUpperInvariant()));
+Reject("long.case.exact.windows", caseNames, ArchiveError.OutputConflict, policy: FileNamePolicy.Windows);
+tests.Add(("long.case.exact.linux", async () => { await Run(caseNames); }));
+
 var failures = 0;
 foreach (var test in tests)
 {
@@ -286,7 +351,7 @@ static byte[] Field(byte[] bytes, int offset, string value)
     return copy;
 }
 
-internal sealed record Fixture(string Name, byte[] Data, char Type = '0');
+internal sealed record Fixture(string Name, byte[] Data, char Type = '0', string Prefix = "");
 
 internal static class Fixtures
 {
@@ -296,7 +361,11 @@ internal static class Fixtures
         foreach (var entry in entries)
         {
             var header = new byte[512];
-            Encoding.UTF8.GetBytes(entry.Name).CopyTo(header, 0);
+            var name = Encoding.UTF8.GetBytes(entry.Name);
+            var prefix = Encoding.UTF8.GetBytes(entry.Prefix);
+            if (name.Length > 100 || prefix.Length > 155) { throw new ArgumentException("Fixture name too long."); }
+            name.CopyTo(header, 0);
+            prefix.CopyTo(header, 345);
             Number(header, 100, 8, 420);
             Number(header, 108, 8, 0);
             Number(header, 116, 8, 0);

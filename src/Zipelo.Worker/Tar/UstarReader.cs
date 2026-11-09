@@ -207,14 +207,18 @@ internal sealed class UstarReader
         if (seen.ContainsKey(entry.Name)) { throw new ArchiveException(ArchiveError.OutputConflict); }
         foreach (var previous in seen)
         {
-            if ((previous.Value == EntryKind.File && entry.Name.StartsWith(previous.Key + "/", OutputPathPolicy.Comparison(policy))) ||
-                (entry.Kind == EntryKind.File && previous.Key.StartsWith(entry.Name + "/", OutputPathPolicy.Comparison(policy))))
+            if ((previous.Value == EntryKind.File && IsDescendant(entry.Name, previous.Key)) ||
+                (entry.Kind == EntryKind.File && IsDescendant(previous.Key, entry.Name)))
             {
                 throw new ArchiveException(ArchiveError.OutputConflict);
             }
         }
         seen.Add(entry.Name, entry.Kind);
     }
+
+    private bool IsDescendant(string path, string ancestor) =>
+        path.Length > ancestor.Length && path[ancestor.Length] == '/' &&
+        path.AsSpan(0, ancestor.Length).Equals(ancestor.AsSpan(), OutputPathPolicy.Comparison(policy));
 
     private static string Text(ReadOnlySpan<byte> field)
     {
