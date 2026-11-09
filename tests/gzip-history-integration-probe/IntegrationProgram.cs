@@ -1,0 +1,238 @@
+using System.Reflection;
+using System.Security.Cryptography;
+using Zipelo.GzipBoundaryProbe;
+
+internal static class IntegrationProgram
+{
+    private static int passed;
+    private static int failed;
+
+    public static int Main(string[] args)
+    {
+        if (args.Length != 0)
+        {
+            return 2;
+        }
+
+        Console.WriteLine("candidate.inherited-suite.begin");
+        var inheritedExit = Program.Main([]);
+        Console.WriteLine($"candidate.inherited-suite.exit={inheritedExit}");
+        Run("assembly.identity", () =>
+        {
+            var field = typeof(SharpInflater).GetField("inflater", BindingFlags.Instance | BindingFlags.NonPublic);
+            Check(field?.FieldType == typeof(Inflater));
+            Check(typeof(Inflater).Assembly.GetName().Name == "Zipelo.Experimental.SharpZipLibHistoryProbe");
+            Check(typeof(SharpZipBaseException).Assembly == typeof(Inflater).Assembly);
+            Check(typeof(ICSharpCode.SharpZipLib.Checksum.Crc32).Assembly != typeof(Inflater).Assembly);
+        });
+
+        var zero = Fixture.Create(new byte[3]);
+        var invalidHistory = Fixture.Wrap([3, 2, 0], new byte[3], 0);
+        var text = "123456789"u8.ToArray();
+        var basic = Fixture.Create(text);
+        foreach (var selected in new[] { false, true })
+        {
+            foreach (var feed in new[] { 1, 2, 3, 7, 65536 })
+            {
+                var label = $"{selected}.{feed}";
+                Run($"valid.controls.{label}", () =>
+                {
+                    Verify(zero, new byte[3], selected, feed);
+                    Verify(Fixture.Wrap([3, 0], [], 0), [], selected, feed);
+                    Verify(Fixture.Wrap([1, 0, 0, 255, 255], [], 0), [], selected, feed);
+                });
+                Run($"reject.history.{label}", () => Reject(invalidHistory.Bytes, Failure.Deflate, selected, feed));
+                Run($"reject.crc.{label}", () => Reject(Mutate(basic.Bytes, basic.Bytes.Length - 8), Failure.Crc, selected, feed));
+                Run($"reject.size.{label}", () => Reject(Mutate(basic.Bytes, basic.Bytes.Length - 4), Failure.Size, selected, feed));
+                Run($"reject.header.{label}", () => Reject(Mutate(basic.Bytes, 0), Failure.Header, selected, feed));
+                Run($"reject.trailing.{label}", () => Reject([.. basic.Bytes, 0], Failure.TrailingData, selected, feed));
+                Run($"reject.member.{label}", () => Reject([.. basic.Bytes, .. zero.Bytes], Failure.TrailingData, selected, feed));
+                Run($"reject.trailer-truncation.{label}", () => Reject(basic.Bytes[..^1], Failure.Truncated, selected, feed));
+            }
+
+            Run($"final.cancel.{selected}", () =>
+            {
+                using var cts = new CancellationTokenSource();
+                var pending = new PendingValidation();
+                Expect<OperationCanceledException>(() => pending.Execute(basic.Bytes, new(new()), selected,
+                    cts.Token, beforeCommit: cts.Cancel));
+                Uncommitted(pending);
+            });
+            Run($"final.deadline.{selected}", () =>
+            {
+                var clock = new ManualClock();
+                var pending = new PendingValidation();
+                var budget = new ProbeBudget(new(Duration: TimeSpan.FromSeconds(1)), clock);
+                ExpectFailure(Failure.Budget, () => pending.Execute(basic.Bytes, budget, selected,
+                    beforeCommit: () => clock.Advance(TimeSpan.FromSeconds(1))));
+                Uncommitted(pending);
+            });
+            Run($"cumulative.processed.{selected}", () =>
+            {
+                var cost = (long)basic.Bytes.Length + text.Length;
+                var budget = new ProbeBudget(new(Processed: cost));
+                var first = new PendingValidation();
+                first.Execute(basic.Bytes, budget, selected);
+                Check(first.CommitCount == 1 && budget.Processed == cost);
+                var second = new PendingValidation();
+                ExpectFailure(Failure.Budget, () => second.Execute(basic.Bytes, budget, selected));
+                Uncommitted(second);
+                Check(budget.Processed == cost);
+            });
+            Run($"cumulative.time.{selected}", () =>
+            {
+                var clock = new ManualClock();
+                var budget = new ProbeBudget(new(Duration: TimeSpan.FromSeconds(1)), clock);
+                new PendingValidation().Execute(basic.Bytes, budget, selected);
+                clock.Advance(TimeSpan.FromSeconds(1));
+                var second = new PendingValidation();
+                ExpectFailure(Failure.Budget, () => second.Execute(basic.Bytes, budget, selected));
+                Uncommitted(second);
+            });
+            Run($"failure.discard.{selected}", () =>
+            {
+                var failedAttempt = Reject(invalidHistory.Bytes, Failure.Deflate, selected, 1);
+                Expect<InvalidOperationException>(() => failedAttempt.Execute(zero.Bytes, new(new()), selected));
+                Uncommitted(failedAttempt);
+                Verify(zero, new byte[3], selected, 1);
+            });
+        }
+
+        foreach (byte flags in Enumerable.Range(0, 32).Select(value => (byte)value))
+        {
+            Run($"unselected.flags.{flags}", () => Verify(Fixture.Create(text, flags), text, false, 1));
+        }
+        Run("unselected.all-prefixes", () =>
+        {
+            var optional = Fixture.Create(text, 31);
+            for (var length = 0; length < optional.Bytes.Length; length++)
+            {
+                var pending = new PendingValidation();
+                try
+                {
+                    pending.Execute(optional.Bytes.AsMemory(0, length), new(new()), false, feedSize: 1);
+                }
+                catch (ProbeException error) when (error.Failure is Failure.Header or Failure.Truncated
+                    or Failure.Deflate or Failure.Crc or Failure.Size)
+                {
+                    Uncommitted(pending);
+                    continue;
+                }
+                throw new Exception("잘린 입력이 거부되지 않음");
+            }
+        });
+        Run("pending.output-failure", () =>
+        {
+            var pending = new PendingValidation();
+            var sentinel = new IOException("시험 수신기 실패");
+            try
+            {
+                pending.Execute(basic.Bytes, new(new()), true, afterChunk: () => throw sentinel);
+            }
+            catch (IOException error) when (ReferenceEquals(error, sentinel))
+            {
+                Uncommitted(pending);
+                return;
+            }
+            throw new Exception("수신기 실패가 전파되지 않음");
+        });
+        Run("pending.output-cancel", () =>
+        {
+            using var cts = new CancellationTokenSource();
+            var pending = new PendingValidation();
+            Expect<OperationCanceledException>(() => pending.Execute(basic.Bytes, new(new()), true,
+                cts.Token, afterChunk: cts.Cancel));
+            Uncommitted(pending);
+        });
+
+        Console.WriteLine($"candidate.integration passed={passed} failed={failed}");
+        return inheritedExit == 0 && failed == 0 ? 0 : 1;
+    }
+
+    private static void Verify(Fixture fixture, byte[] plain, bool selected, int feed)
+    {
+        var originalHash = SHA256.HashData(fixture.Bytes);
+        var budget = new ProbeBudget(new(Output: selected ? plain.Length : 0));
+        var pending = new PendingValidation();
+        pending.Execute(fixture.Bytes, budget, selected, feedSize: feed);
+        var result = pending.CommittedBoundary ?? throw new Exception("확정 경계 없음");
+        Check(pending.CommitCount == 1);
+        Check(pending.CommittedHash == (selected ? Convert.ToHexString(SHA256.HashData(plain)) : null));
+        Check(result.HeaderBytes == fixture.HeaderLength && result.DeflateBytes == fixture.RawLength);
+        Check(result.MemberBytes == fixture.Bytes.Length && result.InflatedBytes == plain.Length);
+        Check(result.InflaterTotalOut == plain.Length);
+        Check(result.OfferedBytes - result.ReadAheadBytes == result.DeflateBytes);
+        Check(budget.Processed == (long)fixture.Bytes.Length + plain.Length);
+        Check(budget.Output == (selected ? plain.Length : 0) && budget.Metadata == fixture.HeaderLength);
+        Check(originalHash.AsSpan().SequenceEqual(SHA256.HashData(fixture.Bytes)));
+    }
+
+    private static PendingValidation Reject(byte[] input, Failure expected, bool selected, int feed)
+    {
+        var originalHash = SHA256.HashData(input);
+        var pending = new PendingValidation();
+        ExpectFailure(expected, () => pending.Execute(input, new(new()), selected, feedSize: feed));
+        Uncommitted(pending);
+        Check(originalHash.AsSpan().SequenceEqual(SHA256.HashData(input)));
+        return pending;
+    }
+
+    private static byte[] Mutate(byte[] input, int index)
+    {
+        var copy = (byte[])input.Clone();
+        copy[index] ^= 1;
+        return copy;
+    }
+
+    private static void Uncommitted(PendingValidation pending) =>
+        Check(pending.CommitCount == 0 && pending.CommittedHash == null && pending.CommittedBoundary == null);
+
+    private static void ExpectFailure(Failure expected, Action action)
+    {
+        try
+        {
+            action();
+        }
+        catch (ProbeException error) when (error.Failure == expected)
+        {
+            return;
+        }
+        throw new Exception($"예상 거부 없음: {expected}");
+    }
+
+    private static void Expect<T>(Action action) where T : Exception
+    {
+        try
+        {
+            action();
+        }
+        catch (T)
+        {
+            return;
+        }
+        throw new Exception($"예상 예외 없음: {typeof(T).Name}");
+    }
+
+    private static void Check(bool condition)
+    {
+        if (!condition)
+        {
+            throw new Exception("검사 실패");
+        }
+    }
+
+    private static void Run(string name, Action action)
+    {
+        try
+        {
+            action();
+            passed++;
+            Console.WriteLine($"PASS integration.{name}");
+        }
+        catch (Exception error)
+        {
+            failed++;
+            Console.WriteLine($"FAIL integration.{name}: {error.GetType().Name}: {error.Message}");
+        }
+    }
+}

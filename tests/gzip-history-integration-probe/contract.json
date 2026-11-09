@@ -1,0 +1,91 @@
+{
+    "schemaVersion": 1,
+    "status": "source-prepared; candidate compilation and execution pending central validation",
+    "scope": "stage 1: test-only strict single-member GZip boundary parser with history-validating inflater",
+    "baseline": {
+        "pr": 15,
+        "head": "174d9d87d90ed973d9baa06ca1d8de401eba591b",
+        "project": "tests/gzip-boundary-probe/Zipelo.GzipBoundaryProbe.csproj",
+        "historicalCentralResult": {
+            "platforms": [
+                "Windows",
+                "Ubuntu 26"
+            ],
+            "passed": 183,
+            "failed": 1,
+            "exit": 1,
+            "failure": "deflate.invalid-backreference-history"
+        },
+        "rerunThisCandidateBranch": "not executed; run baseline in its own process; preserve exit 1 and refusal expectation"
+    },
+    "candidate": {
+        "project": "tests/gzip-history-integration-probe/Zipelo.GzipHistoryIntegrationProbe.csproj",
+        "assembly": "Zipelo.Experimental.GzipHistoryIntegrationProbe",
+        "inheritedRegressionCases": 184,
+        "additionalGroupedCases": 126,
+        "expectedExit": 0,
+        "actualResult": null,
+        "invalidArgumentsExit": 2,
+        "outputSections": [
+            "candidate.inherited-suite.begin",
+            "candidate.inherited-suite.exit",
+            "candidate.integration"
+        ],
+        "note": "expected counts are source enumeration, not observed results; grouped tests include multiple controls and all optional-header prefixes"
+    },
+    "binding": {
+        "historyProject": "tests/deflate-history-validation-probe/Zipelo.HistoryProbe.csproj",
+        "historyAlias": "history",
+        "types": [
+            "Inflater",
+            "SharpZipBaseException"
+        ],
+        "crc": "official SharpZipLib [1.4.2] global reference",
+        "sourceChanges": "none to either fixed baseline; global type aliases bind the unchanged parser adapter and direct raw contract to the history assembly; exception catch binds to the same assembly",
+        "guard": "assembly.identity checks parser private field type and both assembly identities",
+        "separation": "baseline executable uses official package; candidate links original parser and regression sources, references history executable as an assembly without running its entry point"
+    },
+    "transaction": {
+        "helper": "PendingValidation",
+        "finalization": "Only after Read completes header, raw finish/counters, CRC/ISIZE and EOF, pending SHA is computed, hash sink is disposed, optional test hook runs, and shared budget/cancellation is checked. Boundary and optional hash are then committed once.",
+        "failure": "exception propagates; no committed boundary/hash; one-use wrapper cannot retry; local default inflater is abandoned, no reset/reuse",
+        "selectedFalse": "full parse/decode/CRC/ISIZE/budget/EOF checks; no sink output, no selected hash; successful boundary only",
+        "publication": "no filesystem output, temp archive, rename, ValidatedArchive, or product file publication is implemented",
+        "rollback": "no inflater rollback claim; only final result withholding"
+    },
+    "budgets": {
+        "chunkSize": 65536,
+        "accounting": "Input read-ahead charged once per Read via Cursor high-water mark, decoded bytes charged additionally; repeated Read calls share caller ProbeBudget without reset/refund; selected output charged once; metadata and elapsed time cumulative",
+        "time": "same start and TimeProvider through parse, hashing, disposal and final check; cooperative checks cannot interrupt synchronous decoder call",
+        "externalLimitSecondsPerProcess": 60
+    },
+    "coverage": [
+        "all original baseline negative expectations unchanged",
+        "matching CRC/ISIZE invalid history versus valid zero and static empty controls",
+        "selected true/false and feed 1/2/3/7/65536",
+        "header options/FHCRC, CRC/ISIZE, truncation and trailing/single-member policies",
+        "consumed/remaining, read-ahead and exact trailer position, output counters",
+        "input/processed/output/metadata limits and cancellation inherited unchanged",
+        "new final cancellation/deadline after sink disposal, same-budget repeated attempts, input immutability, fresh inflater after rejection"
+    ],
+    "exclusions": [
+        "product adoption or main merge",
+        "GZip filesystem publication or production integration",
+        "stage 2 general dynamic trees, upper zlib dictionary/Reset integration, new partial-drain matrix",
+        "stage 3 performance measurement",
+        "complete decoder/security certification"
+    ],
+    "execution": {
+        "environment": "central isolated workspace using existing verified SDK 10.0.403/runtime 10.0.14; do not install SDK or download packages",
+        "sourceVerification": "From repository root, sha256sum -c tests/gzip-history-integration-probe/SHA256SUMS; compare full file inventory in provenance.json. Check again after execution.",
+        "restore": "dotnet restore <project> --configfile tests/gzip-history-integration-probe/NuGet.Config --source <existing-verified-offline-feed> --packages <isolated-packages-path> -p:NuGetAudit=false",
+        "restoreChecks": "Only official SharpZipLib 1.4.2 net6.0 asset; no network sources/fallback; verify existing approved nupkg SHA before use. History project has zero PackageReference. Baseline and candidate each restored separately.",
+        "build": "dotnet build <project> --no-restore -c Release -p:NuGetAudit=false",
+        "runBaseline": "dotnet tests/gzip-boundary-probe/bin/Release/net10.0/Zipelo.GzipBoundaryProbe.dll",
+        "runCandidate": "dotnet tests/gzip-history-integration-probe/bin/Release/net10.0/Zipelo.Experimental.GzipHistoryIntegrationProbe.dll",
+        "invalidCli": "Run both DLLs with --invalid; expect exit 2.",
+        "warnings": "Candidate authored sources treat warnings as errors. Referenced unchanged history project preserves its own warning policy and original SYSLIB0051 warning; do not pass a global warnings-as-errors override or suppress it.",
+        "results": "Record exact head, SDK/runtime, restore/build exits and warnings, separately baseline/candidate counts and invalid CLI exits on Windows/Linux, package/source/DLL hashes before/after and no residual processes. Do not upload logs, binaries or generated corpus.",
+        "constraints": "Apply 60-second external process bound and isolated output/package locations. No restore/build/run was performed by author."
+    }
+}

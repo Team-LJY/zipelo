@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <AssemblyName>Zipelo.Experimental.GzipHistoryIntegrationProbe</AssemblyName>
+        <StartupObject>IntegrationProgram</StartupObject>
+        <IsPackable>false</IsPackable>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+        <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+        <Deterministic>true</Deterministic>
+    </PropertyGroup>
+    <ItemGroup>
+        <PackageReference Include="SharpZipLib" Version="[1.4.2]" />
+        <ProjectReference Include="../deflate-history-validation-probe/Zipelo.HistoryProbe.csproj" Aliases="history" />
+        <Compile Include="../gzip-boundary-probe/BoundaryProbe.cs" Link="Baseline/BoundaryProbe.cs" />
+        <Compile Include="../gzip-boundary-probe/Program.cs" Link="Baseline/Program.cs" />
+        <Compile Include="HistoryAliases.cs" />
+        <Compile Include="IntegrationProgram.cs" />
+        <Compile Include="PendingValidation.cs" />
+    </ItemGroup>
+</Project>
