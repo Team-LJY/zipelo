@@ -1,0 +1,34 @@
+[
+    {
+        "path": "legal/notices/avalonia-11.3.9/LICENSE.txt",
+        "url": "https://api.github.com/repos/AvaloniaUI/Avalonia/contents/licence.md?ref=4e302560fc9f84de1fe64360e29165574cf2ea65",
+        "git_blob_sha": "41951805ac6a5cdb91373db7725fbaa9c004d912",
+        "sha256": "213814d306090074d234d760239ff0f67eb9b8d20eefb4d5631bb39dbe0b769b",
+        "bytes": 1096,
+        "origin_type": "pinned_upstream_source"
+    },
+    {
+        "path": "legal/notices/avalonia-11.3.9/NOTICE.txt",
+        "url": "https://api.github.com/repos/AvaloniaUI/Avalonia/contents/NOTICE.md?ref=4e302560fc9f84de1fe64360e29165574cf2ea65",
+        "git_blob_sha": "7083706c3ead793f34a29908e921233ecb5e2fef",
+        "sha256": "0e1ecea8b94eaacec8ade631994149d678940d05163b21d6f4be3d5dccb0a08d",
+        "bytes": 18076,
+        "origin_type": "pinned_upstream_source"
+    },
+    {
+        "path": "legal/notices/tmds.dbus.protocol-0.21.3/COPYING.txt",
+        "url": "https://api.github.com/repos/tmds/Tmds.DBus/contents/COPYING?ref=8cb04f66c330b64244e996ff68f685f27f7381a0",
+        "git_blob_sha": "d1060c2f634ad623ba500dff09ac3044c9747c82",
+        "sha256": "aca3b49277abcc7886ccb2f115603a9f5b15fc3f96019a10c00f2974098b210c",
+        "bytes": 1151,
+        "origin_type": "pinned_upstream_source"
+    },
+    {
+        "path": "legal/notices/microcom.runtime-0.11.0/LICENSE.txt",
+        "url": "https://api.github.com/repos/kekekeks/MicroCom/contents/LICENSE?ref=7e773759cfc1012a5d080d4129c4718a662884b0",
+        "git_blob_sha": "6bcf96f0b4029b873c3d9b55d4c1117bbd157e28",
+        "sha256": "6ee769c9ac4dac9abb16b98b1341e9528ff9f4ab685481410d3376d14148f3a9",
+        "bytes": 1072,
+        "origin_type": "pinned_upstream_source"
+    }
+]
