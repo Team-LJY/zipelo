@@ -1,0 +1,103 @@
+{
+    "schema_version": 1,
+    "base_commit": "260428ec8836bf122589d995c7526468a09e190d",
+    "dependency": {
+        "pr": "https://github.com/Team-LJY/zipelo/pull/7",
+        "head": "6fe660aa914dec9e4d2f4c8f85e8ff3932a805a6",
+        "files": {
+            "src/Zipelo.Runtime/Streaming/WorkerStreamContract.cs": "0e8e8c21478224d6ed861e50a5ec310dce8b6af522ce3d66e4f899a926cf7a94",
+            "src/Zipelo.Runtime/Streaming/WorkerStreamValidator.cs": "933e93fc4d4cae7ac9e1bc0621ed0598994ff057ff0c320c7dc5f7cc59ada09a",
+            "src/Zipelo.Runtime/Streaming/WorkerStreamChannel.cs": "4109e345138763df3ecec0368755660b5891349567908ac7ddb996b38ca94046"
+        },
+        "original_requested_head": "1235f8e2f3bf0d505ed7e7c9dffc74332827f2bf",
+        "update": "종료 상태 우선순위 수정이 작업 중 추가됨. InputCompleted 재읽기와 Faulted 재읽기는 취소/만료 기한보다 먼저 확정 상태를 처리함. 새 회귀 사례는 이전 1235f8e2의 재읽기 결함을 통과로 완화하지 않음"
+    },
+    "registered_cases": [
+        "wire.empty_job",
+        "wire.empty_item",
+        "wire.one_byte",
+        "wire.chunk_boundaries",
+        "wire.fragmented_reads",
+        "wire.golden_64_byte_header",
+        "wire.all_header_truncations",
+        "wire.metadata_and_data_truncations",
+        "wire.magic_version_reserved",
+        "wire.kind_length_and_uint_overflow",
+        "wire.huge_declaration_allocation_bound",
+        "state.job_and_item_ids",
+        "state.sequence_duplicate_gap_overflow",
+        "state.missing_and_nested_transitions",
+        "state.duplicate_item_id",
+        "state.actual_declared_end_lengths",
+        "state.status_and_open_item",
+        "state.failed_cancelled_eof",
+        "state.eof_before_terminal",
+        "state.trailing_byte_duplicate_end",
+        "state.terminal_without_eof_deadline",
+        "state.final_status_over_cancel_and_deadline",
+        "budget.invalid_limits",
+        "budget.validate_header_does_not_spend",
+        "budget.wire_exact_and_one_short",
+        "budget.data_cumulative_16mib",
+        "budget.small_chunk_frame_count",
+        "budget.empty_item_count",
+        "budget.signed_and_payload_lengths",
+        "cancel.before_io",
+        "cancel.read_header",
+        "cancel.read_body",
+        "cancel.write_header",
+        "cancel.write_body",
+        "cancel.write_flush",
+        "deadline.read_wait",
+        "deadline.write_wait",
+        "deadline.between_calls",
+        "flow.slow_producer",
+        "flow.slow_consumer_snapshot",
+        "flow.flush_completion",
+        "fault.read_io_and_reuse",
+        "fault.write_io_and_reuse",
+        "api.concurrent_call_and_dispose",
+        "api.direction_stream_lifetime",
+        "api.invalid_write_before_output"
+    ],
+    "registered_count": 46,
+    "commands": {
+        "build": "dotnet build tests/stream-protocol/Zipelo.StreamProtocolTests.csproj -c Release --configfile tests/stream-protocol/NuGet.Config --artifacts-path tests/stream-protocol/.work/artifacts -o tests/stream-protocol/.work/bin -p:UseAppHost=false --disable-build-servers",
+        "list": "dotnet tests/stream-protocol/.work/bin/Zipelo.StreamProtocolTests.dll --list",
+        "run": "dotnet tests/stream-protocol/.work/bin/Zipelo.StreamProtocolTests.dll",
+        "self_contained": "중앙 SDK 환경에서 같은 프로젝트를 OS별 RID와 --self-contained true로 별도 tests/stream-protocol/.work 출력에 게시한 뒤 Zipelo.StreamProtocolTests 앱호스트를 무인수 실행함. Windows만 .exe를 붙임"
+    },
+    "scope": "기존 98개, PR #6, v1 실행 경로와 16 MiB 상한은 변경하지 않음. 이 프로젝트는 파일을 열거나 Worker 프로세스를 시작하지 않는 메모리 전송 계약 검사임",
+    "bounds": {
+        "header_bytes": 64,
+        "chunk_bytes": 65536,
+        "default_data_bytes": 16777216,
+        "default_wire_bytes": 22020096,
+        "large_cumulative_test": "64 KiB 배열 하나를 두 항목에서 256번 재사용함. 16 MiB 실제 파일이나 전체 결과 배열을 생성하지 않음",
+        "roundtrip": "최대 정상 왕복 페이로드 합계 131071바이트. 프레임 및 출력 복사는 이 작은 입력 크기로 제한됨",
+        "hostile_lengths": "고정 64바이트 헤더 또는 8바이트 선언만 제공함. 거절 시 본문 접근 금지와 동일 스레드의 동기 완료 호출당 1 MiB 미만 할당을 요구함. 이는 프로세스 최대 메모리/성능 측정이 아님",
+        "waiting": "게이트 1개와 협조적 취소를 사용함. 대기 진입 확인 4초, 사례별 8초 상한. 전체 기한 검사는 40/180/250ms 제한을 사용함. 매우 느린 검증 환경의 실패는 로그를 보고 분리해야 함"
+    },
+    "validation": {
+        "static": "passed: XML/JSON, 46 unique registrations, 5 explicit compile items, dependency SHA-256, golden header size, formatting and delimiter inspection; not C# compilation",
+        "compile": "not_run: local SDK absent",
+        "windows": "not_run",
+        "ubuntu": "not_run"
+    },
+    "limitations": [
+        "실제 stdin/stdout 파이프와 Worker 프로세스 통합은 PR #7 범위 밖이며 미검증",
+        "취소를 무시하는 Stream의 강제 중단, 디스크 게시/CRC/경로, 양방향 예산은 검증하지 않음",
+        "큰 실제 파일의 처리량과 최대 메모리 개선을 주장하지 않음",
+        "반환 프레임을 호출자가 무제한 보관하는 상황은 다루지 않음"
+    ],
+    "files": [
+        "tests/stream-protocol/ChannelTests.cs",
+        "tests/stream-protocol/ControlledStream.cs",
+        "tests/stream-protocol/NuGet.Config",
+        "tests/stream-protocol/Program.cs",
+        "tests/stream-protocol/TestSupport.cs",
+        "tests/stream-protocol/ValidatorTests.cs",
+        "tests/stream-protocol/Zipelo.StreamProtocolTests.csproj",
+        "tests/stream-protocol/contract.json"
+    ]
+}
