@@ -1,16 +1,16 @@
 # 제3자 소프트웨어 고지 검토 초안
 
-이 고지 묶음은 **검토 미완료이며 출시용 고지 완료본이 아닙니다.** `dependency-inventory.json`의 `release_ready`는 `false`입니다. Windows 배포 경로별 라이선스 적용 조건과 최종 배포물의 고지 포함 확인이 남아 있습니다.
+이 고지 묶음은 **검토 미완료이며 출시용 고지 완료본이 아닙니다.** `dependency-inventory.json`의 `release_ready`는 `false`입니다. 확인된 Windows 라이선스의 배포 의무 이행과 최종 배포물의 고지 포함 확인이 남아 있습니다.
 
 ## 단일 파일 배포 입력
 
-패키징의 단일 `--notices` 입력에는 [THIRD_PARTY_NOTICES.txt](THIRD_PARTY_NOTICES.txt)를 사용합니다. 이 TXT에는 구성요소 18개의 정확한 패키지와 버전, snapshot별 적용 파일 982개 및 확보한 원문 17개 전체가 들어 있습니다. 다른 파일의 상대 링크를 열어야 원문을 읽을 수 있는 구조가 아닙니다.
+패키징의 단일 --notices 입력에는 [THIRD_PARTY_NOTICES.txt](THIRD_PARTY_NOTICES.txt)를 사용합니다. 구성요소 18개의 정확한 버전과 적용 파일 982개, 확보한 라이선스/고지/공식 안내 원문 22개 전체가 들어 있습니다. Windows 파일에는 공식 파일별 배포 라이선스도 함께 표시합니다. 다른 파일의 상대 링크를 열어 원문을 찾아야 하는 구조가 아닙니다.
 
-[notice-bundle-manifest.json](notice-bundle-manifest.json)에 각 원문의 SHA-256, TXT 안의 바이트 시작 위치와 길이, 원문과의 바이트 일치 결과를 기록했습니다. 구성요소별 적용 파일 절의 해시와 범위도 기록했습니다. 원문 구간의 BOM과 줄바꿈까지 그대로 보존했으며, 여러 패키지가 같은 원문을 참조하면 동일한 원문 번호로 연결합니다. 기존 원문 파일과 출처 inventory는 유지합니다.
+[notice-bundle-manifest.json](notice-bundle-manifest.json)에 원문 구간의 바이트 위치와 길이, 원문 및 포함 구간 SHA-256과 바이트 일치 결과, 구성요소 절의 해시를 기록했습니다. 기존 원문 17개는 그대로 유지하며 공식 안내와 Windows SDK 자료 5개를 추가했습니다. 동일 본문의 별도 출처도 각 출처 및 동일 해시를 추적합니다.
 
-번들 입력 inventory는 커밋 `6d9a02d13a443d245eb7a13d8f7a4c4f29b0e7f5`의 SHA-256 `79daa5d4e52b729a9d31a8fb975b3d363b3d41bfcfaa780290bb26ec033756bd`로 고정했습니다. 현재 inventory의 `distribution_notice_bundle`은 생성된 TXT와 대조 manifest의 출력 해시를 가리킵니다.
+입력 inventory의 정규화 SHA-256은 e09abdef1cc7e244986f1ffb131b8f07da55b016da93e1d6a901ade7ed4ab359입니다. 현재 inventory에서 distribution_notice_bundle 항목만 제외하고 ensure_ascii=False, indent=4, UTF-8, LF 및 마지막 LF로 직렬화하면 재현할 수 있습니다. 이 보완 전 기준은 커밋 8e80057938f9bbc0f67d8cb5236043a8a021a350입니다. 출력 해시와 입력 정규화 해시를 구분해 순환 참조를 피했습니다.
 
-TXT의 내용 대조는 완료했지만, Windows 및 Ubuntu 최종 조립물 포함 확인과 라이선스 적용 검토는 미완료입니다. 공식 .NET 아카이브 자체의 LICENSE와 ThirdPartyNotices도 최종 배포에 별도로 보존해야 합니다. 이 통합 파일은 그 의무를 대체하지 않습니다.
+TXT 내용 및 공식 파일명 매핑은 대조했지만 실제 재배포 의무 이행과 두 OS 최종 조립물 포함은 미완료입니다. 공식 .NET archives 자체 LICENSE/ThirdPartyNotices도 최종 배포에 별도로 보존해야 합니다.
 
 ## 범위와 Zipelo 자체 라이선스
 
@@ -72,49 +72,54 @@ HarfBuzzSharp 관리 패키지에는 LICENSE만 있으며, Linux 네이티브 �
 
 포함 코드 고지에서 참조하는 [Apache License 2.0 공식 전문](notices/apache-2.0/LICENSE-2.0.txt)도 보존했습니다. 이 일반 라이선스 본문은 각 저작권자의 개별 고지나 NOTICE를 대체하지 않습니다.
 
-## Windows round10에서 확인한 구성과 원문
+## Windows round10의 공식 배포 라이선스
 
-앱은 `Microsoft.NETCore.App.Runtime.win-x64/10.0.14`와 `Microsoft.WindowsDesktop.App.Runtime.win-x64/10.0.14`, Worker는 전자만 사용합니다. 이 Windows deps에는 Avalonia, SkiaSharp 또는 HarfBuzzSharp 패키지가 없습니다. Ubuntu 구성요소 목록을 Windows의 포함 목록으로 복사하지 않았습니다.
+앱의 Microsoft.NETCore.App.Runtime.win-x64 및 Microsoft.WindowsDesktop.App.Runtime.win-x64, Worker의 Microsoft.NETCore.App.Runtime.win-x64는 모두 10.0.14입니다. 앱/Worker deps 및 runtimeconfig 네 원문은 export manifest와 기존 600개 파일 inventory의 크기/SHA-256 양쪽과 일치했습니다. 외부 자산 582개(.NETCore 373개, WindowsDesktop 209개)는 정확한 공식 NuGet runtimepack 및 런타임 ZIP 내부 파일 양쪽과 일치합니다. WindowsDesktop 수치에는 실제 동봉 언어 리소스 156개가 포함됩니다.
 
-- .NETCore: 앱 186개와 Worker 187개, 합계 373개 자산을 공식 패키지 및 아카이브와 대조했습니다. `hostfxr.dll`은 아카이브의 `host/fxr/10.0.14/` 원본에 연결했습니다.
-- WindowsDesktop: deps에 나열된 53개와 실제 동봉된 언어 리소스 156개, 합계 209개 자산을 대조했습니다. 리소스가 deps에 개별 나열되지 않았다는 이유로 제외하지 않았습니다.
-- 공개 메타데이터 export manifest의 SHA-256은 `c2964c5cd3e9cababb5191a181a2b75ca5b062de6b6e98c87a395e439b0ed2a4`입니다. 네 원문의 크기와 해시, 소스 snapshot 연결은 inventory에 기록했습니다. 실제 Windows 바이너리를 실행하거나 프로젝트를 재빌드하지 않았습니다.
+### runtime packs도 제품 배포 조건의 대상
 
-### 공식 Windows 런타임 ZIP 원문
+[공식 Product distributions 안내](https://github.com/dotnet/core/blob/8c8e5836c343f854b65437dfedb13598d3aa3707/license-information.md)는 Windows 다운로드와 runtime packs를 함께 제품 배포로 명시합니다. 소스 코드와 일반 라이브러리 패키지의 MIT 설명을 Windows 제품 배포 전체의 라이선스로 확장할 수 없습니다.
 
-Microsoft releases.json에 게시된 `dotnet-runtime-10.0.14-win-x64.zip`의 전체 SHA-512를 확인한 뒤 다음 원문을 그대로 보존했습니다.
+[안내 원문 사본](notices/dotnet-windows-policy/license-information.txt)과 [공식 Windows 파일 안내 사본](notices/dotnet-windows-policy/license-information-windows.txt)을 고정 커밋과 Git blob 해시로 보존했습니다. 두 문서는 스스로 라이선스가 아닌 정보 안내라고 명시합니다. 실제 .NET Library 및 SDK 라이선스 본문도 별도로 포함했습니다.
 
-- [LICENSE.txt 원문](notices/dotnet-runtime-10.0.14-win-x64/LICENSE.txt)
-- [ThirdPartyNotices.txt 원문](notices/dotnet-runtime-10.0.14-win-x64/ThirdPartyNotices.txt)
+### 실제 파일별 적용
 
-이 ZIP의 LICENSE는 `MICROSOFT SOFTWARE LICENSE TERMS / MICROSOFT .NET LIBRARY`입니다. Linux 아카이브의 MIT 본문과 다르므로 MIT로 다시 이름 붙이거나 자체 MIT LICENSE로 대체하지 않았습니다. 재배포에 관한 조건도 원문에 포함되어 있으며 최종 배포 경로에서의 적용 검토가 남아 있습니다.
+[공식 파일 안내](https://github.com/dotnet/core/blob/6c25b9da384e8d8a16fd12c79da8a8aa6bdfc6a1/license-information-windows.md)를 현재 inventory의 파일명에 대조했습니다.
 
-### 정확한 NuGet runtimepack 원문
+- .NET Library 조건 7개: coreclr.dll, worker/coreclr.dll, Microsoft.DiaSymReader.Native.amd64.dll, worker/Microsoft.DiaSymReader.Native.amd64.dll, PresentationNative_cor3.dll, vcruntime140_cor3.dll, wpfgfx_cor3.dll.
+- Windows SDK 조건 1개: D3DCompiler_47_cor3.dll.
+- 나머지 외부 파일 574개: 공식 안내의 나머지 파일에 대한 MIT 규칙으로 연결했습니다. 포함 코드의 별도 고지는 계속 보존합니다.
 
-두 공식 NuGet runtimepack의 nuspec은 MIT를 선언합니다. 선택된 실제 자산은 각 패키지 내부 파일과도 일치합니다. 다음은 그 패키지에서 추출한 원문이며 ZIP의 별도 조건과 구별합니다.
+전체 경로, SHA-256과 파일 버전은 inventory의 windows_licensing 및 파일별 windows_distribution_license에 연결했습니다. NuGet MIT 선언은 원래 메타데이터로 유지하며, 위 개별 파일 조건을 덮어쓰는 선택지로 취급하지 않습니다. Zipelo 자체 MIT는 별도로 유지합니다.
 
-- [Microsoft.NETCore.App.Runtime.win-x64 10.0.14 LICENSE.TXT](notices/microsoft.netcore.app.runtime.win-x64-10.0.14/LICENSE.TXT)
-- [같은 패키지의 THIRD-PARTY-NOTICES.TXT](notices/microsoft.netcore.app.runtime.win-x64-10.0.14/THIRD-PARTY-NOTICES.TXT)
-- [Microsoft.WindowsDesktop.App.Runtime.win-x64 10.0.14 LICENSE](notices/microsoft.windowsdesktop.app.runtime.win-x64-10.0.14/LICENSE)
+### .NET 원문
 
-출처별 원문의 바이트, 이름과 대소문자를 유지했습니다. NuGet의 MIT 선언이 ZIP의 조건이나 모든 동봉 네이티브 코드의 개별 조건을 대체한다고 단정하지 않습니다.
+- [공식 Windows runtime ZIP의 LICENSE.txt](notices/dotnet-runtime-10.0.14-win-x64/LICENSE.txt): Microsoft .NET Library 조건 전문.
+- [같은 ZIP의 ThirdPartyNotices.txt](notices/dotnet-runtime-10.0.14-win-x64/ThirdPartyNotices.txt).
+- [정확한 .NETCore NuGet runtimepack의 LICENSE.TXT](notices/microsoft.netcore.app.runtime.win-x64-10.0.14/LICENSE.TXT) 및 [THIRD-PARTY-NOTICES.TXT](notices/microsoft.netcore.app.runtime.win-x64-10.0.14/THIRD-PARTY-NOTICES.TXT).
+- [정확한 WindowsDesktop NuGet runtimepack의 LICENSE](notices/microsoft.windowsdesktop.app.runtime.win-x64-10.0.14/LICENSE).
+- [공식 dotnet/core MIT 본문](notices/dotnet-windows-policy/LICENSE-MIT.txt). 같은 바이트의 기존 Linux 원문도 원래 출처대로 보존합니다.
+- [고정 빌드 소스 커밋의 WPF LICENSE](notices/windowsdesktop-10.0.14-source/wpf-LICENSE.TXT), [WPF 고지](notices/windowsdesktop-10.0.14-source/wpf-THIRD-PARTY-NOTICES.TXT), [Windows Forms 고지](notices/windowsdesktop-10.0.14-source/winforms-THIRD-PARTY-NOTICES.TXT).
 
-### WindowsDesktop 소스 고지
+공식 WindowsDesktop ZIP에는 별도 고지 파일이 없고 NuGet에는 LICENSE만 있어, nuspec이 지정한 dotnet/dotnet 커밋 0427b9abbead3fa64c6655eb4290c537397131fa의 소스 고지도 유지합니다. SDK 문서를 런타임 아카이브 원문 대신 사용하지 않습니다.
 
-`windowsdesktop-runtime-10.0.14-win-x64.zip`도 Microsoft의 공식 SHA-512와 대조했지만, 해당 ZIP에는 license, licence, notice, copying 이름의 파일이 없었습니다. NuGet WindowsDesktop 패키지에는 위 LICENSE가 있으나 별도 THIRD-PARTY-NOTICES는 없습니다. 이를 SDK 문서로 대신하지 않았습니다.
+### Windows SDK 원문과 D3D 적용
 
-두 nuspec이 가리키는 `dotnet/dotnet` 소스 커밋 `0427b9abbead3fa64c6655eb4290c537397131fa`에서 다음 원문을 확보하고 Git blob 해시를 확인했습니다.
+[Windows SDK license](https://learn.microsoft.com/en-us/legal/windows-sdk/license)와 [REDIST 목록](https://learn.microsoft.com/en-us/legal/windows-sdk/redist)의 공식 서버 Markdown 응답을 전체 보존했습니다. 응답 해시, 게시 소스 커밋 및 갱신 시각은 출처 자료에 기록했습니다. 원문의 표현과 서식을 임의로 고치지 않았습니다.
 
-- [WPF LICENSE.TXT](notices/windowsdesktop-10.0.14-source/wpf-LICENSE.TXT)
-- [WPF THIRD-PARTY-NOTICES.TXT](notices/windowsdesktop-10.0.14-source/wpf-THIRD-PARTY-NOTICES.TXT)
-- [Windows Forms THIRD-PARTY-NOTICES.TXT](notices/windowsdesktop-10.0.14-source/winforms-THIRD-PARTY-NOTICES.TXT)
+- [SDK 라이선스 전문 사본](notices/windows-sdk/LICENSE-MICROSOFT-LEARN.txt).
+- [REDIST 목록 전문 사본](notices/windows-sdk/REDIST-MICROSOFT-LEARN.txt).
 
-이 집계 원문에 등장하는 모든 내부 프로젝트가 각각 별도 파일로 동봉됐다고 주장하지 않습니다. 실제 포함 DLL과의 연결은 inventory의 WindowsDesktop 자산 목록을 기준으로 하며, 내부 코드별 최종 고지 적용 검토는 계속 필요합니다.
+공식 .NET 파일 안내가 D3DCompiler_47_cor3.dll을 SDK 조건에 연결합니다. SDK REDIST에는 x64 d3dcompiler_47.dll이 Classic Windows 앱용으로 나오며 Universal Windows 앱 재배포는 허용 대상에서 제외됩니다. SDK 목록에 _cor3 이름 자체가 있다고 주장하지 않습니다. 현재 DLL은 공식 .NET 패키지 및 ZIP과 해시가 같고 파일 버전은 10.0.26100.7705입니다. 별도 SDK 원본 바이너리 대조나 SDK 취득 권리 확인까지 완료한 것은 아닙니다. 이 DLL은 Ubuntu manifest에는 없습니다.
 
-## 남은 확인 항목
+## 남은 배포 의무 확인
 
-1. Windows ZIP의 Microsoft .NET Library 조건과 MIT를 선언하는 공개 runtimepack의 출처를 구분해 최종 배포 경로에 적용되는 조건을 검토해야 합니다. 특히 실제 동봉된 `D3DCompiler_47_cor3.dll`과 `vcruntime140_cor3.dll`은 각각 deps의 파일 버전 `10.0.26100.7705`, `14.44.35211.0`까지 기록했지만, 모든 네이티브 코드의 재배포 조건이 MIT 선언 하나로 해결됐다고 표시하지 않습니다.
-2. 보존한 Avalonia, SkiaSharp/HarfBuzz, .NET 및 WindowsDesktop의 전체 고지에 있는 내부 코드, 리소스와 생성된 앱 호스트의 출처 및 조건을 최종 배포 구성에서 검토해야 합니다. 참조된 전문이나 소스 제공 의무가 있으면 해당 조건대로 처리해야 하며 완료로 표시하지 않습니다.
-3. Windows와 Ubuntu의 기존 검증 산출물에는 독립 고지 파일이 목록상 누락되어 있습니다. 최종 설치물과 압축 배포물에 적용 원문, 패키지 저작권 정보와 이 inventory가 실제 포함되는지 새 manifest로 확인해야 합니다. 이번 변경은 `legal/` 자료만 준비하며 패키징 코드나 기존 바이너리를 수정하지 않습니다.
+공식 파일별 적용 구분은 확인했으며 다음 의무의 이행은 확인되지 않았습니다.
 
-Windows 메타데이터 미제공 문제는 해소됐습니다. 최종 고지 포함과 위 적용 조건이 검증되기 전에는 이 초안을 출시용 고지 완료본으로 표시하지 않습니다.
+1. .NET Library 3.a의 조건에 따른 목적 코드 배포, 실질적인 주 기능, 배포자 및 외부 최종 사용자의 보호 약정 동의, 프로그램의 유효한 저작권 표시, 면책/방어 의무와 고지/상표/Excluded License 등 제한 준수.
+2. SDK 2.a 및 REDIST의 적법한 취득/권리와 적용 버전, 명시된 변경 없는 목적 코드의 프로그램 동봉, 실질적인 주 기능, 보호 약정 동의, 저작권 표시와 면책 의무 및 배포 제한 준수. Microsoft 운영체제 플랫폼 제한과 D3D의 Classic Windows 전용 조건도 포함합니다.
+3. SDK의 setup 동봉분은 해당 setup을 변경 없이 함께 배포하는 조건 등 해당되는 추가 조건을 확인해야 합니다. .lib 및 Windows Performance Toolkit 전용 조항은 조건부이며, 현재 산출물에 해당 파일들이 동봉됐다고 주장하지 않습니다.
+4. 고지 파일을 복사하는 것만으로 보호 약정 동의나 다른 배포 의무의 이행이 증명되지는 않습니다. 이 변경은 약정 수락이나 제품 UI/패키징 변경을 수행하지 않습니다.
+5. 포함 코드, 리소스 및 생성 apphost의 최종 출처/고지 적용과 실제 두 OS 최종 설치물/압축 배포물에 통합 TXT 및 별도 런타임 원문이 들어갔는지 확인해야 합니다.
+
+Windows 메타데이터 미제공과 runtime packs의 정책 적용 여부라는 이전 불확실성은 해소했습니다. 공개 릴리스 승인이나 법적 보장은 없으며 실제 배포 의무 이행과 최종 조립 확인 전에는 완료로 표시하지 않습니다.

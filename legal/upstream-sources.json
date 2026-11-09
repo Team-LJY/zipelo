@@ -54,5 +54,56 @@
         "sha256": "5a412b38efae0b162dc0893b319023f4cd14a8985a0f9f9ae01ac052b37a36eb",
         "bytes": 1966,
         "origin_type": "pinned_upstream_source"
+    },
+    {
+        "path": "legal/notices/dotnet-windows-policy/license-information.txt",
+        "url": "https://api.github.com/repos/dotnet/core/contents/license-information.md?ref=8c8e5836c343f854b65437dfedb13598d3aa3707",
+        "git_blob_sha": "9bddbe3516a92e1c25fb9b10d84c1bd57bf7ca10",
+        "document_role": "official_informational_guidance_not_license",
+        "origin_type": "pinned_official_source",
+        "sha256": "87f9974735fa705f5ed13367de111b94d09573205c4b90e07cf6d8301081dc10",
+        "bytes": 2256
+    },
+    {
+        "path": "legal/notices/dotnet-windows-policy/license-information-windows.txt",
+        "url": "https://api.github.com/repos/dotnet/core/contents/license-information-windows.md?ref=6c25b9da384e8d8a16fd12c79da8a8aa6bdfc6a1",
+        "git_blob_sha": "bbba73b9a0b553b1dffd2b4299fc5eb203e195fb",
+        "document_role": "official_file_license_guidance_not_license",
+        "origin_type": "pinned_official_source",
+        "sha256": "3bdf7142d570f11780d1a5fcb6cbe47f5cf4a15bc634acf8db93fe3be8837119",
+        "bytes": 1500
+    },
+    {
+        "path": "legal/notices/dotnet-windows-policy/LICENSE-MIT.txt",
+        "url": "https://api.github.com/repos/dotnet/core/contents/LICENSE.TXT?ref=8c8e5836c343f854b65437dfedb13598d3aa3707",
+        "git_blob_sha": "984713a49622a96da110443c15477613bc12656b",
+        "document_role": "license_text",
+        "origin_type": "pinned_official_source",
+        "sha256": "cfc21f5e8bd655ae997eec916138b707b1d290b83272c02a95c9f821b8c87310",
+        "bytes": 1116
+    },
+    {
+        "path": "legal/notices/windows-sdk/LICENSE-MICROSOFT-LEARN.txt",
+        "url": "https://learn.microsoft.com/en-us/legal/windows-sdk/license?accept=text/markdown",
+        "canonical_url": "https://learn.microsoft.com/en-us/legal/windows-sdk/license",
+        "published_source_commit": "2a6eedbea47a744f385794ac3d3e8b2cf721b611",
+        "updated_at": "2024-03-19T22:32:00.0000000Z",
+        "sha256": "0b0f3f06e59fbf03e9b18e9688a90366ea26d9f95c3d82b302f97b1680b1199b",
+        "bytes": 29470,
+        "content_type": "text/markdown; charset=utf-8",
+        "document_role": "license_terms_official_markdown_response",
+        "origin_type": "official_microsoft_learn_snapshot"
+    },
+    {
+        "path": "legal/notices/windows-sdk/REDIST-MICROSOFT-LEARN.txt",
+        "url": "https://learn.microsoft.com/en-us/legal/windows-sdk/redist?accept=text/markdown",
+        "canonical_url": "https://learn.microsoft.com/en-us/legal/windows-sdk/redist",
+        "published_source_commit": "5517c932e1189e1d731dc4a24ae8f6b2fdf38bd4",
+        "updated_at": "2024-10-30T22:28:00.0000000Z",
+        "sha256": "ff4dc82936ef9e8449927a3d06ee1fca801933c1464ceee60fa14003eb656dd0",
+        "bytes": 19214,
+        "content_type": "text/markdown; charset=utf-8",
+        "document_role": "redistribution_list_official_markdown_response",
+        "origin_type": "official_microsoft_learn_snapshot"
     }
 ]
