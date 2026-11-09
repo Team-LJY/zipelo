@@ -1,0 +1,132 @@
+{
+    "schema_version": 1,
+    "source": "자체 생성한 작은 ZIP 샘플이며 디스크 해제를 수행하지 않음",
+    "unix_link_reference": "https://pkware.cachefly.net/webdocs/casestudies/APPNOTE.TXT",
+    "unix_link_section": "4.5.7, 0x000d 링크 메타데이터의 거부 검사. 모든 ZIP 링크 방언을 대표하지 않음",
+    "normal_files": {
+        "hello.txt": {
+            "bytes": 26,
+            "sha256": "bc52abc01915711bf043e6a8169c344d58d43b3f8e64d4ae3ace763e002f1a7e"
+        },
+        "nested/data.bin": {
+            "bytes": 32,
+            "sha256": "630dcd2966c4336691125448bbb25b4ff412a49c732db2c8abc1b8581bd710dd"
+        },
+        "nested/empty.txt": {
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+    },
+    "samples": [
+        {
+            "file": "absolute-drive.zip",
+            "bytes": 150,
+            "sha256": "f34b9e6f8c735ddf809c7d68f656896e16bf360cfd6a9d763c77c6a03dd9dbb8"
+        },
+        {
+            "file": "absolute-posix.zip",
+            "bytes": 146,
+            "sha256": "8db3ea3d316f4474c6802fa5930eff42544697a1a9f51c9791758bd4205e7165"
+        },
+        {
+            "file": "absolute-unc.zip",
+            "bytes": 174,
+            "sha256": "d6abe8b820436780f1abfcf79df9e652804f0082b4e675bf69328f9416f05fff"
+        },
+        {
+            "file": "backslash-traversal.zip",
+            "bytes": 150,
+            "sha256": "7735776dd0001464ba7ea6e076c7c5f6f5190717d9403bcd4f997b7663972274"
+        },
+        {
+            "file": "bad-header-crc.zip",
+            "bytes": 148,
+            "sha256": "aa33807af138ffff9d30455d823b397c4b200d42100ba73bdf7a5b4161829aad"
+        },
+        {
+            "file": "bad-payload-crc.zip",
+            "bytes": 146,
+            "sha256": "5c02bf6c98da1fdfd7b62e8a9a39a51ffe90bb6f4ecd6ac3ee7f101440f3910b"
+        },
+        {
+            "file": "case-distinct.zip",
+            "bytes": 225,
+            "sha256": "15bb0bbce2a786b649e2c929566a39129de1fb6615bddca034c236d3ed6e09ed"
+        },
+        {
+            "file": "child-before-file.zip",
+            "bytes": 208,
+            "sha256": "44e0272c04056f47651fad69301a0f1627400b0bc9d4edc98eef5f5aef9390a8"
+        },
+        {
+            "file": "cumulative.zip",
+            "bytes": 228,
+            "sha256": "271007b76bae9c0728c8ea99186624a3dfb9697b6b9d44e9104bbbe564e9286f"
+        },
+        {
+            "file": "duplicate.zip",
+            "bytes": 212,
+            "sha256": "85313cb8b056bfd0efae98953f2f0b0e56058a6a858791fda9df9a17f0a31dfa"
+        },
+        {
+            "file": "file-before-child.zip",
+            "bytes": 208,
+            "sha256": "7f583dd54a3c37898a3e62c5b4b8a8d536d31c0b75a896a3b15870b3145f68c6"
+        },
+        {
+            "file": "length-larger.zip",
+            "bytes": 148,
+            "sha256": "f558e5604c67d7ffc6ce098017cc6c850e30fff3e2296b6c36b2d51386deb92e"
+        },
+        {
+            "file": "length-smaller.zip",
+            "bytes": 148,
+            "sha256": "325e2dbceb68de1171f335fc4879ff3800200ccf92c75d4ba3ba89388d00918e"
+        },
+        {
+            "file": "linux-names.zip",
+            "bytes": 208,
+            "sha256": "ed03e65f5e4c8e8fc1f08dd95a941dccb9fec8cc27de46620f4255393d4d813a"
+        },
+        {
+            "file": "local-central-length.zip",
+            "bytes": 148,
+            "sha256": "ecada1333b78027897c59ab79e197addcf1ca87dea608be8311bae0de0606649"
+        },
+        {
+            "file": "normal-deflated.zip",
+            "bytes": 486,
+            "sha256": "896a3b5141cf108dfbc3d4545c433d09bb10934284d2d0e479964a936be92200"
+        },
+        {
+            "file": "normal-stored.zip",
+            "bytes": 478,
+            "sha256": "127f9a3e81c3b328dba2adf598f74aff0a81e2b9643b8a3329f7ec3af4016147"
+        },
+        {
+            "file": "special-fifo.zip",
+            "bytes": 106,
+            "sha256": "afbfcdc410d541735aa57569637b3c6a3ba7228bacdcce6b6e6d169cfb1b864f"
+        },
+        {
+            "file": "symlink.zip",
+            "bytes": 121,
+            "sha256": "e9f4b9390dbe47ac88f2b0459bd3b61f45c248abc1221afa80c038ebc97ab5e7"
+        },
+        {
+            "file": "traversal.zip",
+            "bytes": 150,
+            "sha256": "26fd5a4dd0e7b446654de04cfe338bc199d738c07e4b628df1cfd5b5e91b74f3"
+        },
+        {
+            "file": "truncated.zip",
+            "bytes": 136,
+            "sha256": "2062f2807806082c034c4ed457aa908a5f8496a3a32e07368ab8dd90e3ea9056"
+        },
+        {
+            "file": "unix-hardlink.zip",
+            "bytes": 168,
+            "sha256": "6ccd7ac5c36002da86309aacf36d6211e4e9d9c1b7b5431c4a8851d18193f2c6"
+        }
+    ]
+}
