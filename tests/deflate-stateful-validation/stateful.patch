@@ -1,0 +1,640 @@
+--- /dev/null
++++ b/tests/deflate-stateful-validation/Fixtures.cs
+@@ -0,0 +1,186 @@
++using System.Buffers.Binary;
++using System.Security.Cryptography;
++
++internal sealed record Pattern(int Length, Func<int, byte> At)
++{
++    public string Sha256()
++    {
++        using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
++        var chunk = new byte[1024];
++        for (var offset = 0; offset < Length; offset += chunk.Length)
++        {
++            var count = Math.Min(chunk.Length, Length - offset);
++            for (var i = 0; i < count; i++) { chunk[i] = At(offset + i); }
++            hash.AppendData(chunk, 0, count);
++        }
++        return Convert.ToHexString(hash.GetHashAndReset());
++    }
++}
++
++internal enum Envelope { Raw, Zlib, GzipBody }
++internal sealed record Sample(string Name, byte[] Raw, int EndBits, Pattern Output, byte[]? Dictionary = null)
++{
++    public byte[] Wire(Envelope envelope)
++    {
++        if (envelope == Envelope.Raw) { return (byte[])Raw.Clone(); }
++        if (envelope == Envelope.Zlib)
++        {
++            var prefix = Dictionary == null ? 2 : 6;
++            var bytes = new byte[prefix + Raw.Length + 4];
++            bytes[0] = 0x78;
++            bytes[1] = Dictionary == null ? (byte)0x01 : (byte)0x20;
++            if (Dictionary != null)
++            {
++                BinaryPrimitives.WriteUInt32BigEndian(bytes.AsSpan(2), Fixtures.Adler(Dictionary));
++            }
++            Raw.CopyTo(bytes, prefix);
++            BinaryPrimitives.WriteUInt32BigEndian(bytes.AsSpan(prefix + Raw.Length), Fixtures.Adler(Output));
++            return bytes;
++        }
++        var gzip = new byte[10 + Raw.Length + 8];
++        new byte[] { 0x1f, 0x8b, 8, 0, 0, 0, 0, 0, 0, 255 }.CopyTo(gzip, 0);
++        Raw.CopyTo(gzip, 10);
++        BinaryPrimitives.WriteUInt32LittleEndian(gzip.AsSpan(10 + Raw.Length), Fixtures.Crc(Output));
++        BinaryPrimitives.WriteUInt32LittleEndian(gzip.AsSpan(14 + Raw.Length), (uint)Output.Length);
++        return gzip;
++    }
++}
++
++internal static class Fixtures
++{
++    public static readonly byte[] Sentinel = [0xde, 0xad, 0xbe, 0xef, 0x5a, 0xa5, 0xc3, 0x3c];
++    public static Pattern Repeated(int count, byte value) => new(count, _ => value);
++    public static Pattern Sequence(int count) => new(count, i => (byte)((i * 73 + 19) & 255));
++
++    public static Sample Stored(int count)
++    {
++        var output = Sequence(count);
++        var bits = new Bits();
++        bits.Stored(output, true);
++        return new($"stored-{count}", bits.Bytes(), bits.Count, output);
++    }
++
++    public static Sample EmptyFixed() => new("empty-fixed", [3, 0], 10, Repeated(0, 0));
++
++    public static Sample Overlap()
++    {
++        var bits = new Bits();
++        bits.Put(3, 3);
++        bits.Literal(65);
++        bits.Literal(285);
++        bits.Code(0, 5);
++        bits.Literal(256);
++        return new("fixed-overlap-259", bits.Bytes(), 31, Repeated(259, 65));
++    }
++
++    public static Sample StoredFixed()
++    {
++        var bits = new Bits();
++        bits.Stored(new(2, i => (byte)(88 + i)), false);
++        AddXyReference(bits);
++        return new("stored-fixed-xy", bits.Bytes(), 78, new(7, i => (byte)(88 + i % 2)));
++    }
++
++    public static Sample DictionaryXy()
++    {
++        var bits = new Bits();
++        AddXyReference(bits);
++        return new("dictionary-xy", bits.Bytes(), 22, new(5, i => (byte)(88 + i % 2)), [88, 89]);
++    }
++
++    public static Sample DictionaryWindow()
++    {
++        var dictionary = new byte[32769];
++        for (var i = 0; i < dictionary.Length; i++) { dictionary[i] = SequenceByte(i); }
++        var bits = new Bits();
++        bits.Put(3, 3);
++        bits.Literal(257);
++        bits.Code(29, 5);
++        bits.Put(8191, 13);
++        bits.Literal(256);
++        return new("dictionary-window-32769", bits.Bytes(), 35,
++            new(3, i => SequenceByte(i + 1)), dictionary);
++    }
++
++    public static Sample InvalidFirstReference() =>
++        new("first-reference-distance-1", [3, 2, 0], 22, Repeated(3, 0));
++
++    private static byte SequenceByte(int i) => (byte)((i * 73 + 19) & 255);
++
++    private static void AddXyReference(Bits bits)
++    {
++        bits.Put(3, 3);
++        bits.Literal(259);
++        bits.Code(1, 5);
++        bits.Literal(256);
++    }
++
++    public static uint Adler(byte[] bytes) => Adler(new Pattern(bytes.Length, i => bytes[i]));
++
++    public static uint Adler(Pattern pattern)
++    {
++        uint a = 1;
++        uint b = 0;
++        for (var i = 0; i < pattern.Length; i++)
++        {
++            a = (a + pattern.At(i)) % 65521;
++            b = (b + a) % 65521;
++        }
++        return (b << 16) | a;
++    }
++
++    public static uint Crc(Pattern pattern)
++    {
++        uint crc = 0xffffffff;
++        for (var i = 0; i < pattern.Length; i++)
++        {
++            crc ^= pattern.At(i);
++            for (var bit = 0; bit < 8; bit++)
++            {
++                crc = (crc >> 1) ^ ((crc & 1) == 0 ? 0u : 0xedb88320u);
++            }
++        }
++        return ~crc;
++    }
++
++    // 고정 토큰과 stored 표본만 작성함. 디코더나 범용 압축기가 아님.
++    private sealed class Bits
++    {
++        private readonly List<byte> bytes = [];
++        public int Count { get; private set; }
++
++        public void Put(int value, int count)
++        {
++            for (var i = 0; i < count; i++)
++            {
++                if (Count % 8 == 0) { bytes.Add(0); }
++                bytes[^1] |= (byte)(((value >> i) & 1) << (Count % 8));
++                Count++;
++            }
++        }
++
++        public void Code(int value, int count)
++        {
++            for (var i = count - 1; i >= 0; i--) { Put((value >> i) & 1, 1); }
++        }
++
++        public void Literal(int symbol)
++        {
++            if (symbol <= 143) { Code(48 + symbol, 8); }
++            else if (symbol <= 255) { Code(400 + symbol - 144, 9); }
++            else if (symbol <= 279) { Code(symbol - 256, 7); }
++            else { Code(192 + symbol - 280, 8); }
++        }
++
++        public void Stored(Pattern data, bool final)
++        {
++            Put(final ? 1 : 0, 3);
++            while (Count % 8 != 0) { Put(0, 1); }
++            Put(data.Length, 16);
++            Put(data.Length ^ 65535, 16);
++            for (var i = 0; i < data.Length; i++) { Put(data.At(i), 8); }
++        }
++
++        public byte[] Bytes() => bytes.ToArray();
++    }
++}
+--- /dev/null
++++ b/tests/deflate-stateful-validation/HistoryAliases.cs
+@@ -0,0 +1,3 @@
++extern alias history;
++global using Inflater = history::ICSharpCode.SharpZipLib.Zip.Compression.Inflater;
++global using SharpZipBaseException = history::ICSharpCode.SharpZipLib.SharpZipBaseException;
+--- /dev/null
++++ b/tests/deflate-stateful-validation/NuGet.Config
+@@ -0,0 +1,5 @@
++<?xml version="1.0" encoding="utf-8"?>
++<configuration>
++    <packageSources><clear /></packageSources>
++    <fallbackPackageFolders><clear /></fallbackPackageFolders>
++</configuration>
+--- /dev/null
++++ b/tests/deflate-stateful-validation/Program.cs
+@@ -0,0 +1,234 @@
++using System.Buffers.Binary;
++using System.Security.Cryptography;
++
++internal static class Program
++{
++    private static int passed;
++    private static int failed;
++
++    public static int Main(string[] args)
++    {
++        if (args.Length != 0) { return 2; }
++        Run("binding", () =>
++        {
++            Check(typeof(Inflater).Assembly.GetName().Name == "Zipelo.Experimental.SharpZipLibHistoryProbe");
++            Check(typeof(Inflater).Assembly == typeof(SharpZipBaseException).Assembly);
++        });
++        Run("fixture.contract", VerifyFixtures);
++        var xy = Fixtures.DictionaryXy();
++        var window = Fixtures.DictionaryWindow();
++        (Sample Sample, Envelope Envelope)[] valid =
++        [
++            (Fixtures.EmptyFixed(), Envelope.Raw),
++            (Fixtures.Stored(0), Envelope.Raw),
++            (Fixtures.Overlap(), Envelope.Raw),
++            (Fixtures.Stored(257), Envelope.Raw),
++            (Fixtures.Stored(258), Envelope.Raw),
++            (Fixtures.Stored(259), Envelope.Raw),
++            (Fixtures.StoredFixed(), Envelope.Raw),
++            (Fixtures.Overlap(), Envelope.Zlib),
++            (xy, Envelope.Zlib),
++            (window, Envelope.Zlib),
++            (Fixtures.Overlap(), Envelope.GzipBody)
++        ];
++        foreach (var item in valid)
++        {
++            foreach (var feed in new[] { 1, 7, 65536 })
++            {
++                foreach (var size in new[] { 1, 257, 258, 259 })
++                {
++                    Run($"valid.{item.Sample.Name}.{item.Envelope}.{feed}.{size}", () =>
++                    {
++                        var driver = new StateDriver(new Inflater(item.Envelope != Envelope.Zlib));
++                        driver.Run(item.Sample, item.Envelope, feed, size);
++                        Check(driver.Completed != null);
++                    });
++                }
++            }
++        }
++        foreach (var sample in new[] { xy, window })
++        {
++            foreach (var feed in new[] { 1, 7, 65536 })
++            {
++                foreach (var size in new[] { 1, 257, 258, 259 })
++                {
++                    foreach (var envelope in new[] { Envelope.Raw, Envelope.GzipBody })
++                    {
++                        Run($"no-dictionary.{sample.Name}.{envelope}.{feed}.{size}", () =>
++                            Reject(sample, envelope, feed, size, Failure.Decode));
++                    }
++                }
++                Run($"dictionary.wait.{sample.Name}.{feed}", () =>
++                {
++                    var inflater = new Inflater();
++                    var driver = new StateDriver(inflater);
++                    Expect(Failure.DictionaryRequired, () => driver.Run(sample, Envelope.Zlib, feed, 1,
++                        stopAtDictionary: true));
++                    Check(inflater.IsNeedingDictionary && inflater.TotalIn == 6 && inflater.TotalOut == 0);
++                    Check(driver.DictionaryRequests == 1 && driver.Completed == null);
++                });
++                Run($"dictionary.wrong.{sample.Name}.{feed}", () =>
++                {
++                    var wrong = (byte[])sample.Dictionary!.Clone();
++                    wrong[0] ^= 1;
++                    Check(Fixtures.Adler(wrong) != Fixtures.Adler(sample.Dictionary!));
++                    var driver = new StateDriver(new Inflater());
++                    Expect(Failure.DictionaryMismatch, () => driver.Run(sample, Envelope.Zlib, feed, 1,
++                        suppliedDictionary: wrong));
++                    Check(driver.Completed == null && driver.DictionaryRequests == 1);
++                });
++                Run($"dictionary.output-adler.{sample.Name}.{feed}", () =>
++                {
++                    var wire = sample.Wire(Envelope.Zlib);
++                    var dictAdler = Fixtures.Adler(sample.Dictionary!);
++                    Check(dictAdler != Fixtures.Adler(sample.Output));
++                    BinaryPrimitives.WriteUInt32BigEndian(wire.AsSpan(wire.Length - 4), dictAdler);
++                    Reject(sample, Envelope.Zlib, feed, 1, Failure.Decode, wire);
++                });
++            }
++        }
++        foreach (var feed in new[] { 1, 7, 65536 })
++        {
++            Run($"dictionary.full-id.{feed}", () =>
++            {
++                var tail = window.Dictionary![1..];
++                Check(Fixtures.Adler(tail) != Fixtures.Adler(window.Dictionary!));
++                var driver = new StateDriver(new Inflater());
++                Expect(Failure.DictionaryMismatch, () => driver.Run(window, Envelope.Zlib, feed, 1,
++                    suppliedDictionary: tail));
++                Check(driver.Completed == null);
++            });
++        }
++        foreach (var raw in new[] { false, true })
++        {
++            Run($"api.dictionary-without-request.{raw}", () =>
++            {
++                var inflater = new Inflater(raw);
++                try { inflater.SetDictionary([88, 89]); }
++                catch (InvalidOperationException) { return; }
++                throw new Exception("사전 요청 전 API 호출이 수용됨");
++            });
++            Run($"reset.completed.{raw}", () => ResetCompleted(raw, false));
++            Run($"reset.partial.{raw}", () => ResetPartial(raw));
++        }
++        Run("reset.dictionary", () => ResetCompleted(false, true));
++        foreach (var sample in new[] { xy, window })
++        {
++            var wire = sample.Wire(Envelope.Zlib);
++            foreach (var prefix in new[] { 1, 3, 5, wire.Length - 1 })
++            {
++                Run($"truncated.zlib.{sample.Name}.{prefix}", () =>
++                    Reject(sample, Envelope.Zlib, 1, 1, Failure.Truncated, wire[..prefix], false));
++            }
++        }
++        foreach (var prefix in new[] { 0, 1 })
++        {
++            Run($"truncated.raw.empty.{prefix}", () =>
++                Reject(Fixtures.EmptyFixed(), Envelope.Raw, 1, 1, Failure.Truncated,
++                    Fixtures.EmptyFixed().Raw[..prefix], false));
++        }
++        Console.WriteLine($"stateful passed={passed} failed={failed}");
++        return failed == 0 ? 0 : 1;
++    }
++
++    private static void ResetCompleted(bool raw, bool dictionary)
++    {
++        var envelope = raw ? Envelope.Raw : Envelope.Zlib;
++        var inflater = new Inflater(raw);
++        var first = dictionary ? Fixtures.DictionaryWindow() : Fixtures.Overlap();
++        new StateDriver(inflater).Run(first, envelope, 65536, 1);
++        Check(inflater.IsFinished && inflater.RemainingInput == Fixtures.Sentinel.Length);
++        inflater.Reset();
++        ResetState(inflater, raw);
++        new StateDriver(inflater).Run(Fixtures.Stored(3), envelope, 7, 1);
++        Check(inflater.IsFinished && inflater.TotalOut == 3);
++        inflater.Reset();
++        ResetState(inflater, raw);
++        var rejected = new StateDriver(inflater);
++        Expect(Failure.Decode, () => rejected.Run(Fixtures.InvalidFirstReference(), envelope, 65536, 1));
++        Check(rejected.Completed == null && inflater.TotalOut == 0);
++    }
++
++    private static void ResetPartial(bool raw)
++    {
++        var envelope = raw ? Envelope.Raw : Envelope.Zlib;
++        var sample = Fixtures.Stored(32769);
++        var wire = sample.Wire(envelope);
++        var input = wire.Concat(Fixtures.Sentinel).ToArray();
++        var snapshot = SHA256.HashData(input);
++        var inflater = new Inflater(raw);
++        inflater.SetInput(input);
++        var one = new byte[1];
++        Check(inflater.Inflate(one) == 1 && one[0] == sample.Output.At(0));
++        Check(!inflater.IsFinished && inflater.TotalOut == 1);
++        Check(inflater.RemainingInput > Fixtures.Sentinel.Length + (raw ? 0 : 4));
++        Check(inflater.TotalIn + inflater.RemainingInput == input.Length);
++        var consumed = inflater.TotalIn;
++        Check(inflater.Inflate(one) == 1 && one[0] == sample.Output.At(1));
++        Check(inflater.TotalIn == consumed && inflater.TotalOut == 2 && !inflater.IsFinished);
++        inflater.Reset();
++        ResetState(inflater, raw);
++        var next = new StateDriver(inflater);
++        next.Run(Fixtures.Stored(3), envelope, 1, 1);
++        Check(next.Completed is { Length: 3 });
++        Check(SHA256.HashData(input).AsSpan().SequenceEqual(snapshot));
++    }
++
++    private static void ResetState(Inflater inflater, bool raw)
++    {
++        Check(inflater.TotalIn == 0 && inflater.TotalOut == 0 && inflater.RemainingInput == 0);
++        Check(inflater.IsNeedingInput && !inflater.IsFinished && !inflater.IsNeedingDictionary);
++        Check(inflater.Adler == (raw ? 0 : 1));
++    }
++
++    private static void VerifyFixtures()
++    {
++        foreach (var sample in new[] { Fixtures.EmptyFixed(), Fixtures.Stored(0), Fixtures.Overlap(),
++            Fixtures.StoredFixed(), Fixtures.DictionaryXy(), Fixtures.DictionaryWindow() })
++        {
++            Check(sample.Raw.Length == (sample.EndBits + 7) / 8);
++            if (sample.EndBits % 8 != 0)
++            {
++                Check((sample.Raw[^1] >> (sample.EndBits % 8)) == 0);
++            }
++        }
++        Check(Fixtures.Stored(0).Raw.AsSpan().SequenceEqual(new byte[] { 1, 0, 0, 255, 255 }));
++        Check(Fixtures.Overlap().Raw.AsSpan().SequenceEqual(new byte[] { 0x73, 0x1c, 0x05, 0x00 }));
++        Check(Fixtures.DictionaryXy().Raw.AsSpan().SequenceEqual(new byte[] { 0x03, 0x43, 0x00 }));
++        Check(Fixtures.DictionaryWindow().Raw.AsSpan().SequenceEqual(new byte[] { 0x03, 0xde, 0xff, 0x0f, 0x00 }));
++        Check(Fixtures.StoredFixed().Raw.AsSpan().SequenceEqual(new byte[]
++            { 0x00, 0x02, 0x00, 0xfd, 0xff, 0x58, 0x59, 0x03, 0x43, 0x00 }));
++        Check(Fixtures.Adler([88, 89]) == 0x010b00b2);
++        Check(Fixtures.Adler(new Pattern(5, i => (byte)(88 + i % 2))) == 0x053301bb);
++        Check(Fixtures.Adler([]) == 1);
++        Check(Fixtures.Crc(new Pattern(9, i => (byte)(49 + i))) == 0xcbf43926);
++    }
++
++    private static void Reject(Sample sample, Envelope envelope, int feed, int size, Failure expected,
++        byte[]? wire = null, bool sentinel = true)
++    {
++        var driver = new StateDriver(new Inflater(envelope != Envelope.Zlib));
++        Expect(expected, () => driver.Run(sample, envelope, feed, size,
++            wireOverride: wire, addSentinel: sentinel));
++        Check(driver.Completed == null);
++    }
++
++    private static void Expect(Failure expected, Action action)
++    {
++        try { action(); }
++        catch (ProbeFailure failure) when (failure.Kind == expected) { return; }
++        throw new Exception($"예상 거부 없음: {expected}");
++    }
++
++    private static void Run(string name, Action action)
++    {
++        try { action(); passed++; }
++        catch (Exception error)
++        {
++            failed++;
++            Console.WriteLine($"FAIL {name}: {error.GetType().Name} {error.Message}");
++        }
++    }
++
++    private static void Check(bool condition) => StateDriver.Require(condition, "상태 API 회귀");
++}
+--- /dev/null
++++ b/tests/deflate-stateful-validation/StateDriver.cs
+@@ -0,0 +1,174 @@
++using System.Buffers.Binary;
++using System.Diagnostics;
++using System.Security.Cryptography;
++
++internal enum Failure { Decode, DictionaryRequired, DictionaryMismatch, Truncated, NoProgress, Limit, Mismatch }
++internal sealed class ProbeFailure(Failure kind, string detail) : Exception(detail)
++{
++    public Failure Kind { get; } = kind;
++}
++internal sealed record CompletedResult(long Length, string Sha256, long Consumed);
++
++internal sealed class StateDriver(Inflater inflater)
++{
++    public CompletedResult? Completed { get; private set; }
++    public int Calls { get; private set; }
++    public int DictionaryRequests { get; private set; }
++
++    public void Run(Sample sample, Envelope envelope, int feedSize, int outputSize,
++        byte[]? suppliedDictionary = null, bool stopAtDictionary = false,
++        byte[]? wireOverride = null, bool addSentinel = true)
++    {
++        Require(Completed == null && Calls == 0, "driver 재사용 금지");
++        Require(inflater.TotalIn == 0 && inflater.TotalOut == 0 && inflater.RemainingInput == 0,
++            "새 스트림 카운터");
++        Require(feedSize > 0 && outputSize > 0 && outputSize <= 65536, "분할 크기");
++        var wire = wireOverride ?? sample.Wire(envelope);
++        var offset = envelope == Envelope.GzipBody ? 10 : 0;
++        if (envelope == Envelope.GzipBody)
++        {
++            Require(wire.AsSpan(0, 10).SequenceEqual(new byte[] { 31, 139, 8, 0, 0, 0, 0, 0, 0, 255 }),
++                "고정 시험 헤더");
++        }
++        var input = new byte[wire.Length - offset + (addSentinel ? Fixtures.Sentinel.Length : 0)];
++        wire.AsSpan(offset).CopyTo(input);
++        if (addSentinel) { Fixtures.Sentinel.CopyTo(input, wire.Length - offset); }
++        var inputHash = SHA256.HashData(input);
++        var dictionary = suppliedDictionary ?? sample.Dictionary;
++        var dictionaryHash = dictionary == null ? null : SHA256.HashData(dictionary);
++        using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
++        var output = new byte[outputSize + 2];
++        var watch = Stopwatch.StartNew();
++        var offered = 0;
++        long delivered = 0;
++        CompletedResult? pending = null;
++        try
++        {
++            while (!inflater.IsFinished)
++            {
++                if (Calls >= 1000000 || watch.Elapsed >= TimeSpan.FromSeconds(5))
++                {
++                    throw new ProbeFailure(Failure.Limit, "호출/시간 한도");
++                }
++                if (inflater.IsNeedingInput && offered < input.Length)
++                {
++                    var count = Math.Min(feedSize, input.Length - offered);
++                    inflater.SetInput(input, offered, count);
++                    offered += count;
++                    Counters(offered);
++                }
++                Array.Fill(output, (byte)0xa6);
++                var beforeIn = inflater.TotalIn;
++                var beforeOut = inflater.TotalOut;
++                int written;
++                try
++                {
++                    Calls++;
++                    written = inflater.Inflate(output, 1, outputSize);
++                }
++                catch (SharpZipBaseException)
++                {
++                    throw new ProbeFailure(Failure.Decode, "Inflate 거부: 문법/이력/체크섬 세부 원인은 fixture로 구분함");
++                }
++                Require(written >= 0 && written <= outputSize, "반환 출력 길이");
++                Require(output[0] == 0xa6 && output[^1] == 0xa6, "출력 경계 보존");
++                Require(inflater.TotalIn >= beforeIn && inflater.TotalOut - beforeOut == written,
++                    "호출별 카운터");
++                Counters(offered);
++                for (var i = 0; i < written; i++)
++                {
++                    Require(delivered + i < sample.Output.Length &&
++                        output[i + 1] == sample.Output.At((int)delivered + i), "독립 출력 패턴");
++                }
++                hash.AppendData(output, 1, written);
++                delivered += written;
++                Require(delivered == inflater.TotalOut && delivered <= 131072, "누적 출력");
++                if (inflater.IsNeedingDictionary)
++                {
++                    DictionaryRequests++;
++                    Require(envelope == Envelope.Zlib && sample.Dictionary != null && DictionaryRequests == 1,
++                        "zlib 사전 요청");
++                    Require(inflater.TotalIn == 6 && inflater.TotalOut == 0 && delivered == 0,
++                        "FDICT/DICTID 소비량과 사전 출력 제외");
++                    Require(unchecked((uint)inflater.Adler) == Fixtures.Adler(sample.Dictionary!), "DICTID");
++                    if (stopAtDictionary || dictionary == null)
++                    {
++                        throw new ProbeFailure(Failure.DictionaryRequired, "사전 대기 상태");
++                    }
++                    var remaining = inflater.RemainingInput;
++                    try { inflater.SetDictionary(dictionary); }
++                    catch (SharpZipBaseException)
++                    {
++                        throw new ProbeFailure(Failure.DictionaryMismatch, "다른 Adler 사전 거부");
++                    }
++                    Require(!inflater.IsNeedingDictionary && inflater.TotalIn == 6 && inflater.TotalOut == 0 &&
++                        inflater.RemainingInput == remaining && inflater.Adler == 1, "사전 설치 카운터/Adler 초기화");
++                    Counters(offered);
++                    continue;
++                }
++                if (written == 0 && !inflater.IsFinished)
++                {
++                    if (inflater.IsNeedingInput && offered == input.Length)
++                    {
++                        throw new ProbeFailure(Failure.Truncated, "완료 전 입력 소진");
++                    }
++                    if (inflater.TotalIn == beforeIn && !inflater.IsNeedingInput)
++                    {
++                        throw new ProbeFailure(Failure.NoProgress, "소비/출력/요청 없는 호출");
++                    }
++                }
++            }
++            var expectedConsumed = envelope == Envelope.Zlib
++                ? sample.Raw.Length + (sample.Dictionary == null ? 2 : 6) + 4
++                : sample.Raw.Length;
++            Require(inflater.TotalIn == expectedConsumed && delivered == sample.Output.Length,
++                "알려진 종료 위치/길이");
++            var tailLength = (envelope == Envelope.GzipBody ? 8 : 0) + (addSentinel ? Fixtures.Sentinel.Length : 0);
++            Require(input.Length - expectedConsumed == tailLength, "선행 읽기 및 미공급 꼬리");
++            Require(inflater.RemainingInput == offered - expectedConsumed, "미소비 꼬리 길이");
++            if (addSentinel)
++            {
++                Require(input.AsSpan(input.Length - Fixtures.Sentinel.Length).SequenceEqual(Fixtures.Sentinel),
++                    "sentinel 보존");
++            }
++            if (envelope == Envelope.Zlib)
++            {
++                Require(unchecked((uint)inflater.Adler) == Fixtures.Adler(sample.Output), "출력 Adler");
++                Require(DictionaryRequests == (sample.Dictionary == null ? 0 : 1), "사전 요청 횟수");
++            }
++            if (envelope == Envelope.GzipBody)
++            {
++                Require(BinaryPrimitives.ReadUInt32LittleEndian(input.AsSpan(expectedConsumed)) == Fixtures.Crc(sample.Output),
++                    "고정 trailer CRC");
++                Require(BinaryPrimitives.ReadUInt32LittleEndian(input.AsSpan(expectedConsumed + 4)) == sample.Output.Length,
++                    "고정 trailer ISIZE");
++            }
++            var beforeFinishedIn = inflater.TotalIn;
++            var beforeFinishedOut = inflater.TotalOut;
++            var beforeRemaining = inflater.RemainingInput;
++            Require(inflater.Inflate(output, 1, outputSize) == 0 && inflater.IsFinished &&
++                inflater.TotalIn == beforeFinishedIn && inflater.TotalOut == beforeFinishedOut &&
++                inflater.RemainingInput == beforeRemaining, "완료 후 추가 출력 없음");
++            var actualHash = Convert.ToHexString(hash.GetHashAndReset());
++            Require(actualHash == sample.Output.Sha256(), "독립 패턴 SHA256");
++            pending = new(delivered, actualHash, inflater.TotalIn);
++        }
++        finally
++        {
++            Require(SHA256.HashData(input).AsSpan().SequenceEqual(inputHash), "입력 불변");
++            if (dictionary != null)
++            {
++                Require(SHA256.HashData(dictionary).AsSpan().SequenceEqual(dictionaryHash!), "사전 불변");
++            }
++        }
++        Completed = pending;
++    }
++
++    private void Counters(int offered) => Require(inflater.TotalIn >= 0 && inflater.RemainingInput >= 0 &&
++        inflater.TotalIn + inflater.RemainingInput == offered, "소비/미소비/공급 관계");
++
++    public static void Require(bool condition, string detail)
++    {
++        if (!condition) { throw new ProbeFailure(Failure.Mismatch, detail); }
++    }
++}
+--- /dev/null
++++ b/tests/deflate-stateful-validation/Zipelo.StatefulProbe.csproj
+@@ -0,0 +1,20 @@
++<Project Sdk="Microsoft.NET.Sdk">
++    <PropertyGroup>
++        <OutputType>Exe</OutputType>
++        <TargetFramework>net10.0</TargetFramework>
++        <AssemblyName>Zipelo.Experimental.DeflateStatefulValidation</AssemblyName>
++        <IsPackable>false</IsPackable>
++        <Nullable>enable</Nullable>
++        <ImplicitUsings>enable</ImplicitUsings>
++        <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
++        <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
++        <Deterministic>true</Deterministic>
++    </PropertyGroup>
++    <ItemGroup>
++        <ProjectReference Include="../deflate-history-validation-probe/Zipelo.HistoryProbe.csproj" Aliases="history" />
++        <Compile Include="HistoryAliases.cs" />
++        <Compile Include="Fixtures.cs" />
++        <Compile Include="StateDriver.cs" />
++        <Compile Include="Program.cs" />
++    </ItemGroup>
++</Project>

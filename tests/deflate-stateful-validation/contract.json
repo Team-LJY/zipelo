@@ -1,0 +1,177 @@
+{
+    "schemaVersion": 1,
+    "status": "source-prepared; no restore, compilation or execution by author; central validation pending",
+    "scope": "stage 2: public Inflater.Reset, zlib dictionary and partial output APIs; fixed/stored fixtures only",
+    "parent": {
+        "pr": 17,
+        "head": "c47013b9277a2ff91ee6879cc520947d1b754ac3",
+        "preservedFiles": 25,
+        "decoderChange": "none; existing OutputWindow history patch remains unchanged"
+    },
+    "project": "tests/deflate-stateful-validation/Zipelo.StatefulProbe.csproj",
+    "assembly": "Zipelo.Experimental.DeflateStatefulValidation",
+    "binding": "ProjectReference with history alias; both Inflater and SharpZipBaseException resolve to Zipelo.Experimental.SharpZipLibHistoryProbe. No PackageReference; no original package fallback.",
+    "expectations": {
+        "groupedCases": 220,
+        "expectedExit": 0,
+        "invalidCliExit": 2,
+        "actualResult": null,
+        "note": "Source enumeration and normative/API expectations, not observed test results. Do not weaken expectations on mismatch.",
+        "counts": {
+            "identityAndFixture": 2,
+            "validMatrix": 132,
+            "dictionaryFreeRawAndGzipRejections": 48,
+            "dictionaryWaitWrongOutputChecksum": 18,
+            "wholeDictionaryId": 3,
+            "dictionaryApiWithoutRequest": 2,
+            "completedResetIncludingDictionary": 3,
+            "partialReset": 2,
+            "truncatedZlib": 8,
+            "truncatedRaw": 2
+        }
+    },
+    "matrix": {
+        "inputChunks": [
+            1,
+            7,
+            65536
+        ],
+        "inputAll": "65536 exceeds every fixture plus trailer/sentinel",
+        "outputChunks": [
+            1,
+            257,
+            258,
+            259
+        ],
+        "validFixtureEnvelopePairs": 11,
+        "checks": "Every normal-return call checks output sum, TotalOut delta, monotonic TotalIn and TotalIn+RemainingInput=offered. Output buffer guard bytes are preserved. Compare every output byte and final SHA256 to an independent pattern. Drain until IsFinished, not until a zero read or input exhaustion.",
+        "end": "Known byte length, including raw final padding byte, must equal TotalIn. Offered-but-unconsumed bytes plus never-offered bytes form the complete tail. Check sentinel unchanged and not consumed; after finish extra Inflate returns zero with unchanged counters."
+    },
+    "reset": {
+        "completed": "Same actual Inflater decodes a successful stream with sentinel remaining, Reset verifies TotalIn/TotalOut/RemainingInput=0, needs input true, finished/dictionary false, Adler=0 raw or 1 zlib; decode a distinct normal stored stream, reset again, reject first reference distance 1 with TotalOut=0. Discard rejected instance.",
+        "partial": "Separate raw and zlib instances get a final stored block of 32769 bytes plus sentinel. Read one byte, then another without input consumption, proving buffered output. Require actual compressed input still unconsumed, Reset, verify public reset state, decode only new 3-byte stored stream. Old input SHA stays unchanged.",
+        "dictionary": "Completed zlib dictionary-window stream also follows the completed Reset sequence. No private fields or direct OutputWindow calls; no inflater rollback claim."
+    },
+    "dictionary": {
+        "wire": "78 20 + big-endian Adler32(entire dictionary) + raw + big-endian Adler32(output). 0x7820 divisible by 31; CM=8/CINFO=7/FDICT=1. No-dictionary control uses 78 01.",
+        "wait": "After exactly 6 consumed bytes require IsNeedingDictionary, zero output and Adler=DICTID. Missing dictionary is a waiting-state outcome, not malformed Deflate.",
+        "set": "Correct SetDictionary does not alter TotalIn/TotalOut/RemainingInput and resets output Adler to 1. Mismatch of dictionary Adler rejects in SetDictionary; discard instance without retry.",
+        "window": "32769-byte dictionary d[i]=(73*i+19) mod 256. DICTID covers all 32769 bytes; only last 32768 bytes seed history. First length3/distance32768 must produce d[1],d[2],d[3]=92,165,238. Passing d[1..] alone has different DICTID and must reject.",
+        "checksumSeparation": "XY dictionary Adler=0x010b00b2, XYXYX output Adler=0x053301bb. Replacing output trailer with dictionary Adler must reject. Equivalent separation also tested for large dictionary.",
+        "rawApi": "SetDictionary before IsNeedingDictionary throws InvalidOperationException in pinned API, including raw mode. This is an API/experiment restriction, not a universal raw Deflate format prohibition."
+    },
+    "gzipScope": {
+        "header": "Exactly 1f 8b 08 00 00 00 00 00 00 ff; no optional fields",
+        "trailer": "Little-endian independent CRC32(output), ISIZE; follows raw body",
+        "coverage": "Feed body plus trailer and sentinel to raw Inflater with no dictionary. Same dictionary-dependent bodies must reject before successful result; valid overlap control must finish at raw length preserving trailer/sentinel. This is a known-fixture wrapper check, not PR18 strict GZip parser integration.",
+        "exclusions": "No general header parsing, multi-member/EOF policy, new production GZip decoder or files published. PR18 is unchanged."
+    },
+    "independentFixtureBasis": {
+        "bitPacking": "Numeric fields/extras LSB first; canonical Huffman codes MSB first into successive low-to-high byte positions. Final unused bits are zero.",
+        "fixedCodes": "0..143: canonical 48+symbol, 8 bits; 144..255: 400+(symbol-144), 9; 256..279: symbol-256, 7; 280..287: 192+(symbol-280), 8. Distance codes: symbol as 5-bit canonical code.",
+        "hash": "Pattern.Sha256 hashes independently specified expected bytes in 1024-byte chunks without consulting Inflater output. Actual output is separately streamed and compared byte-for-byte before hashing. No full decompressed output buffer.",
+        "adler": "a=1,b=0; for each expected byte a=(a+x)%65521,b=(b+a)%65521; result=(b<<16)|a. Full dictionary and output use distinct inputs.",
+        "crc": "Initial 0xffffffff; reflected polynomial 0xedb88320; final bitwise complement. Anchor: ASCII 123456789 -> cbf43926. Source algorithm independently authored, no target checksum API."
+    },
+    "fixtures": [
+        {
+            "name": "empty-fixed",
+            "rawHex": "03 00",
+            "endBits": 10,
+            "rawBytes": 2,
+            "tokens": "BFINAL=1/BTYPE=01; EOB256 (7 zero bits)",
+            "output": "empty"
+        },
+        {
+            "name": "stored-N",
+            "N": [
+                0,
+                3,
+                257,
+                258,
+                259,
+                32769
+            ],
+            "rawBytes": "5+N",
+            "endBits": "40+8*N",
+            "tokens": "BFINAL=1/BTYPE=00; 5 zero alignment bits; little-endian LEN=N, NLEN=N xor 65535; literal pattern",
+            "output": "N bytes (73*i+19) mod 256; empty raw 01 00 00 FF FF"
+        },
+        {
+            "name": "fixed-overlap-259",
+            "rawHex": "73 1C 05 00",
+            "endBits": 31,
+            "rawBytes": 4,
+            "tokens": "final fixed; literal65 code01110001; length258 symbol285 code11000101; distance1 symbol0 code00000; EOB256",
+            "output": "259 bytes 0x41; 3+8+8+5+7 bits"
+        },
+        {
+            "name": "dictionary-xy",
+            "rawHex": "03 43 00",
+            "endBits": 22,
+            "rawBytes": 3,
+            "tokens": "final fixed; length5 symbol259 code0000011; distance2 symbol1 code00001; EOB256",
+            "output": "with XY dictionary: XYXYX; without history invalid; 3+7+5+7 bits"
+        },
+        {
+            "name": "stored-fixed-xy",
+            "rawHex": "00 02 00 FD FF 58 59 03 43 00",
+            "endBits": 78,
+            "rawBytes": 10,
+            "tokens": "non-final stored XY (56 bits); final fixed length5/distance2/EOB (22 bits)",
+            "output": "XYXYXYX"
+        },
+        {
+            "name": "dictionary-window-32769",
+            "rawHex": "03 DE FF 0F 00",
+            "endBits": 35,
+            "rawBytes": 5,
+            "tokens": "final fixed; length3 symbol257 code0000001; distance symbol29 code11101; extra8191 in13 bits gives24577+8191=32768; EOB256",
+            "output": "dictionary d[1..3]; 3+7+5+13+7 bits"
+        },
+        {
+            "name": "first-reference-distance-1",
+            "rawHex": "03 02 00",
+            "endBits": 22,
+            "rawBytes": 3,
+            "tokens": "final fixed; length3 symbol257; distance1 symbol0 before any output; EOB256",
+            "output": "invalid without prior history; hypothetical zeros used only for a matching checksum envelope, never accepted as expected decoded output"
+        }
+    ],
+    "failureClassification": {
+        "Decode": "SharpZipBaseException during Inflate; native API does not separately classify malformed syntax, history or output checksum, so fixture provenance supplies expected cause; do not parse message strings.",
+        "DictionaryMismatch": "SharpZipBaseException from SetDictionary with a different independently computed Adler.",
+        "DictionaryRequired": "Public waiting state, no successful Completed result; no dictionary supplied in this control.",
+        "Truncated": "Input exhausted, output drained as far as possible, no finish and needs input. Truncated tests omit sentinel to avoid supplying fabricated continuation bytes.",
+        "NoProgress": "No output or input consumption, not finished and not requesting input/dictionary.",
+        "Limit": "One million Inflate calls or five seconds cooperative per driver. Central external 60 seconds per process is required to stop a nonreturning synchronous call.",
+        "Mismatch": "Any invariant, expected bytes/hash, boundary or fixture assertion mismatch. Unexpected rejection is failure, not accepted behavior."
+    },
+    "failureResult": "Completed remains null until finish, boundary, counters, tail, SHA and input/dictionary immutability checks complete. No hash/result printed on failed cases. Each failure discards instance; no retry or Reset recovery.",
+    "execution": {
+        "author": "Source/static checks only; no restore/build/run/VM access.",
+        "centralEnvironment": "Existing verified SDK10.0.403/runtime10.0.14 Windows/Linux; install nothing; isolated caches and build outputs.",
+        "verify": "From repository root: sha256sum -c tests/deflate-stateful-validation/SHA256SUMS before and after.",
+        "restore": "dotnet restore tests/deflate-stateful-validation/Zipelo.StatefulProbe.csproj --configfile tests/deflate-stateful-validation/NuGet.Config --packages <isolated-empty-packages> -p:NuGetAudit=false",
+        "build": "dotnet build tests/deflate-stateful-validation/Zipelo.StatefulProbe.csproj --no-restore -c Release -p:NuGetAudit=false",
+        "run": "dotnet tests/deflate-stateful-validation/bin/Release/net10.0/Zipelo.Experimental.DeflateStatefulValidation.dll",
+        "cli": "No args expected exit0 with 220 passed/0 failed; --invalid expected exit2. Both expectations remain unobserved.",
+        "warnings": "Referenced unchanged history project preserves original SYSLIB0051 warning; do not globally suppress warnings or override its warning policy.",
+        "record": "Exact head, source/assembly SHA, SDK/runtime, offline source/package count0, build warnings/exits, per-OS outcomes, 60-second external limit, no residual processes; preserve source hashes. Do not upload logs, generated fixtures or binaries."
+    },
+    "references": [
+        "https://www.rfc-editor.org/rfc/rfc1950.txt",
+        "https://www.rfc-editor.org/rfc/rfc1951.txt",
+        "https://www.rfc-editor.org/rfc/rfc1952.txt",
+        "https://github.com/icsharpcode/SharpZipLib/blob/33f64eb0f28cdd2b084cb822fcc224c7c5aba553/src/ICSharpCode.SharpZipLib/Zip/Compression/Inflater.cs"
+    ],
+    "exclusions": [
+        "dynamic/HDIST corpus owned by independent task",
+        "decoder changes",
+        "PR15-18 changes",
+        "production adoption/main merge",
+        "performance",
+        "file publication/security certification",
+        "new packages/installations/tracing/release"
+    ]
+}
