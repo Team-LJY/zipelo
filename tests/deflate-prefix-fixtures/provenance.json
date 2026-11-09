@@ -69,6 +69,6 @@
         "원문 emit/log/raw/binary 업로드 없음",
         "생산 채택/main 병합/성능/전체 안전성 검증 아님"
     ],
-    "revisionParent": "9ebd4fd7668e43808d19fe8bfa067921b45257fa",
-    "revisionScope": "두 Reject checkpoint, Inflate/stability 전후 협조적 시간 검사, Driver 제어 회귀16개와 계약/해시만 보강함. 기존7fixture raw 작성 소스와 normative 기대값은 보존함."
+    "revisionParent": "5fb7aa0686c748106c1929ef433f5404e28588e9",
+    "revisionScope": "정상 subtree의 Wait108과 Wait110 사이에 Wait109(output8/consumed109/remaining0)를 추가하고 계약/해시만 갱신함. 기존7fixture raw 작성 소스/끝비트/출력 기대와 모든 기존 gate, 시간 검사와 직접 회귀16개는 보존함."
 }

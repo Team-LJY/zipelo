@@ -165,6 +165,13 @@
                 "remaining": 0
             },
             {
+                "offered": 109,
+                "expected": "Wait",
+                "outputLength": 8,
+                "consumed": 109,
+                "remaining": 0
+            },
+            {
                 "offered": 110,
                 "expected": "Wait",
                 "outputLength": 8,

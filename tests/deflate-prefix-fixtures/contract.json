@@ -9,11 +9,11 @@
         "gated": 24,
         "trueEofControls": 6,
         "totalTrialsPerDecoder": 114,
-        "scheduledCheckpointAssertions": 36,
+        "scheduledCheckpointAssertions": 40,
         "driverRegressions": 16,
-        "recalculation": "7*3*2*2=84, 경계6*2*2=24, 실제EOF3*2=6으로 decoder당114조건은 유지함. 경계 trial 안에 Reject2개를 추가하여 checkpoint 계획은7*4=28에서9*4=36으로 증가함. 직접 실행기 회귀16개는 decoder 비교 수에 합산하지 않음."
+        "recalculation": "7*3*2*2=84, 경계6*2*2=24, 실제EOF3*2=6으로 decoder당114조건은 유지함. 기존7개 checkpoint에 Reject2개와 subtree Wait109를 추가하여 경계 trial의 checkpoint 계획은10*4=40임. 직전5fb7aa06의36개에서4개 증가함. 직접 실행기 회귀16개는 decoder 비교 수에 합산하지 않음."
     },
-    "sourceOnlyStatus": "이 개정의 소스/계약/직접 회귀와 정적 검사만 작성함. 복원/빌드/실행하지 않음. 이전9ebd4fd7의 중앙78통과/36실패 기록은 PR 설명에 보존하며 새 head로 이월하지 않음.",
+    "sourceOnlyStatus": "이번 Wait109 개정은 기대 gate/계약/해시와 정적 검사만 작성함. 복원/빌드/실행하지 않음. 이전9ebd4fd7의 중앙78통과/36실패 기록은 PR 설명에 보존하며 새 head로 이월하지 않음.",
     "normative": {
         "prefix": "동일 canonical prefix에 가능한 완성이 남으면 입력을 기다림. 어떤 완성도 불가능하면 형식화된 Deflate 오류가 필요함.",
         "timing": "RFC1951은 분할 API 오류 시점을 정하지 않음. 이 시험은 byte 단위 API의 공급 경계에서 tail 공급 전 형식화된 거부를 요구함. 비트별 정확한 API 오류 시점 인증이 아님.",
@@ -105,7 +105,7 @@
             "단일거리: 길이259개 중4개가 meta2비트, 나머지255개가1비트임. 71+263=334, 본문8+2+1+2=13, 끝347, raw44임.",
             "빈거리: 길이259개 중3개가 meta2비트, 나머지256개가1비트임. 71+262=333. 정상본문1+2=3/끝336/raw42. 무효본문1+2+2=5/구성끝338/raw43임.",
             "subtree: 길이258개 중9개(값4..9 각1,10 한개,11 두개)가4비트, 나머지249개가3비트임. 71+783=854, 본문10+7+11+11=39, 끝893, raw112임.",
-            "subtree 108바이트에서는 B의10비트가 완성됨. 110바이트에서는 C 시작871 뒤9비트가 남아 아직 부족함. 9비트 중1바이트가 RemainingInput에 포함되어 TotalIn109+Remaining1=110임."
+            "subtree 108바이트에서는 B의10비트가 완성됨. C는854+10+7=871비트에서 시작함. 109바이트=872비트에서는 C의1비트만 남으므로 output8/TotalIn109/Remaining0으로 대기함. 110바이트에서는 C의9비트가 남아 아직 부족하며 TotalIn109+Remaining1=110임. 이후 입력으로 C와 EOB를 완성함."
         ],
         "outputOracle": "빈문자열, A11개, A, B+A7개+C의 직접 패턴을 고정함. 출력 해시는 이 패턴에서 계산하며 대상 decoder의 출력은 사용하지 않음. raw 해시는 emitter의 식별용이며 독립 raw 해시 oracle이라고 주장하지 않음.",
         "invalidEnd": "무효 표본의 EndBitExclusive는 구성 길이이며 성공 EOB 위치가 아님."
@@ -126,7 +126,7 @@
         ],
         "tailValue": 0,
         "matrix": "7*3*2*2=84. 꼬리1바이트는 충분한 조회 비트 대조와 선행 읽기 소비 검사용임. 완료 후 새 입력을 공급하지 않으므로 일부 분할에서는 꼬리가 미공급 상태일 수 있음.",
-        "gated": "checkpoint가 있는6개 표본에2출력*2꼬리를 적용하여24조건임. 기존 Wait/빈거리 Reject/subtree 경계를 보존함. EOB-unused는41 Wait 다음42 Reject, single-distance-unused는43 Wait 다음44 Reject를 검사함. Reject를 판정하기 전 tail을 공급하지 않음. 경계 도달 뒤 출력 배출을 계속하되 형식화된 거부만 통과함. 추가 입력 요구는 MissingImmediateRejection이며 Budget/Timeout/EOF/거짓 완료는 통과가 아님.",
+        "gated": "checkpoint가 있는6개 표본에2출력*2꼬리를 적용하여24조건임. 기존 Wait/빈거리 Reject/subtree 경계를 보존함. EOB-unused는41 Wait 다음42 Reject, single-distance-unused는43 Wait 다음44 Reject를 검사함. Reject를 판정하기 전 tail을 공급하지 않음. 경계 도달 뒤 출력 배출을 계속하되 형식화된 거부만 통과함. 추가 입력 요구는 MissingImmediateRejection이며 Budget/Timeout/EOF/거짓 완료는 통과가 아님. 정상 subtree는 같은 trial에서 Wait108(output1/consumed108/remaining0), Wait109(output8/consumed109/remaining0), Wait110(output8/consumed109/remaining1)을 차례로 검사한 뒤 남은 입력으로 정확히 완료해야 함. 109바이트 전체 공급 후의 byte API 대기 계약이며 bit별 API 시점 인증이 아님.",
         "trueEof": "정상 EOB-only41, 단일거리43, subtree110바이트를 실제 EOF로 끝내는6조건임. IsFinished=false와 고정 출력/소비/잔여를 검사함.",
         "pump": "매번 Inflate로 먼저 출력을 배출함. 미완료/반환0/NeedInput일 때만 SetInput함. 반환0이나 입력 배열 소진만으로 성공하지 않음.",
         "limits": {
