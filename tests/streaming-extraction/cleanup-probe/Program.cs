@@ -17,11 +17,11 @@ internal static class Program
     {
         if (args is ["--list"])
         {
-            Console.WriteLine("cleanup.empty\ncleanup.sync\ncleanup.async");
+            Console.WriteLine("cleanup.empty\ncleanup.sync\ncleanup.async\ncleanup.sequence24");
             return 0;
         }
         if (args is not ["--sandbox-parent", var parent, "--case", var name] ||
-            name is not ("cleanup.empty" or "cleanup.sync" or "cleanup.async") ||
+            name is not ("cleanup.empty" or "cleanup.sync" or "cleanup.async" or "cleanup.sequence24") ||
             !Path.IsPathFullyQualified(parent))
         {
             Console.Error.WriteLine("사용법: --sandbox-parent <기존 시험 폴더의 절대 경로> --case <등록 이름>");
@@ -45,6 +45,8 @@ internal static class Program
             Console.Error.WriteLine("SETUP_FAIL: " + failure.GetType().Name);
             return 2;
         }
+        if (name == "cleanup.sequence24") { return await ObserveSequenceAsync(runtime, parent); }
+
         var state = new ProbeState(runtime, name);
         var cancellation = new CancellationTokenSource();
         var registration = cancellation.Token.Register(() => state.Record("probe.token.cancelled"));
@@ -84,7 +86,7 @@ internal static class Program
         var complete = state.DiagnosticStarted && logStopped && status == 2 && dropped == 0 && result != 124;
         Console.WriteLine($"PROBE case={name}, hostPid={Environment.ProcessId}, job={state.Job:N}, caseExit={result}, " +
             $"taskSettled={settled}, constructionAttempted={state.ConstructionAttempted}, cleanupConfirmed={state.CleanupConfirmed}, abortReturned={state.AbortReturned}, " +
-            $"abortSucceeded={state.AbortSucceeded}, disposeReturned={state.DisposeReturned}, residueChecked=false, stage={state.Stage}");
+            $"abortSucceeded={state.AbortSucceeded}, disposeReturned={state.DisposeReturned}, residueChecked={state.ResidueChecked}, stage={state.Stage}");
         Console.WriteLine($"DIAGNOSTICS stopped={logStopped}, status={status}, dropped={dropped}, logComplete={complete}");
         if (result == 124)
         {
@@ -94,7 +96,8 @@ internal static class Program
         return result == 0 && !complete ? 2 : result;
     }
 
-    private static async Task<int> RunAsync(RuntimeAccess runtime, ProbeState state, string parent, CancellationToken token)
+    private static async Task<int> RunAsync(RuntimeAccess runtime, ProbeState state, string parent,
+        CancellationToken token, bool startDiagnostics = true, int operationIndex = 0)
     {
         object? publication = null;
         string? destination = null;
@@ -111,12 +114,16 @@ internal static class Program
             if (Directory.Exists(runRoot) || File.Exists(runRoot)) { throw new IOException("시험 경로 충돌"); }
             Directory.CreateDirectory(runRoot);
             token.ThrowIfCancellationRequested();
-            var trace = Path.Combine(runRoot, "cleanup-diagnostics.tsv");
-            state.DiagnosticStarted = StreamingExtractionDiagnostics.TryStart(trace);
-            if (!state.DiagnosticStarted) { throw new InvalidOperationException("진단 시작 거절"); }
+            if (startDiagnostics)
+            {
+                var trace = Path.Combine(runRoot, "cleanup-diagnostics.tsv");
+                state.DiagnosticStarted = StreamingExtractionDiagnostics.TryStart(trace);
+                if (!state.DiagnosticStarted) { throw new InvalidOperationException("진단 시작 거절"); }
+            }
             Console.WriteLine("시험 생성 경로: " + runRoot);
             state.Record("probe.process", Environment.ProcessId);
-            state.Record("probe.deadline.scheduled_ms", 15000);
+            if (startDiagnostics) { state.Record("probe.deadline.scheduled_ms", 15000); }
+            if (operationIndex != 0) { state.Record("probe.sequence.index", operationIndex); }
             state.Mark("probe.setup.begin");
             destination = Path.Combine(runRoot, "destination");
             Directory.CreateDirectory(destination);
@@ -221,7 +228,10 @@ internal static class Program
             {
                 state.Mark("probe.cleanup.verify.begin");
                 Require(destination is not null && sentinel is not null);
+                var entries = Directory.GetFileSystemEntries(destination!);
+                Require(entries.Length == 1 && Path.GetFileName(entries[0]) == "sentinel.bin");
                 Require(File.ReadAllBytes(sentinel!).SequenceEqual(bytes));
+                state.ResidueChecked = true;
                 state.CleanupConfirmed = true;
                 state.Mark("probe.cleanup.verify.end");
             }
@@ -234,6 +244,141 @@ internal static class Program
         if (!state.ConstructionAttempted) { state.CleanupConfirmed = true; }
         if (token.IsCancellationRequested && result == 0) { result = 1; }
         return result;
+    }
+
+    private static async Task<int> ObserveSequenceAsync(RuntimeAccess runtime, string parent)
+    {
+        var sequence = new SequenceState();
+        var cancellation = new CancellationTokenSource();
+        cancellation.CancelAfter(TimeSpan.FromSeconds(15));
+        var pending = Task.Run(() => RunSequenceAsync(runtime, sequence, parent, cancellation.Token));
+        var result = 1;
+        var timedOut = false;
+        try { result = await pending.WaitAsync(TimeSpan.FromSeconds(45)); }
+        catch (TimeoutException)
+        {
+            timedOut = true;
+            Console.Error.WriteLine("FAIL: 연속 사례 전체 45초 제한 초과");
+        }
+        catch (Exception failure) { Console.Error.WriteLine("FAIL: " + failure.GetType().Name); }
+
+        // 전체 예산은 한 번만 적용하며 현재 작업과 취소 콜백만 관찰함.
+        var stop = Task.WhenAll(pending, cancellation.CancelAsync());
+        try { await stop.WaitAsync(TimeSpan.FromSeconds(25)); }
+        catch (Exception failure) { Console.Error.WriteLine("STOP_OBSERVATION: " + failure.GetType().Name); }
+        var settled = stop.IsCompleted;
+        var last = sequence.Last;
+        var cleanupConfirmed = last is null ||
+            (last.CleanupConfirmed && last.CancellationSettled && last.CancellationDisposed);
+        if (timedOut || !settled || !cleanupConfirmed) { result = 124; }
+        else if (!stop.IsCompletedSuccessfully && result == 0) { result = 1; }
+        if (settled) { cancellation.Dispose(); }
+        last?.Record("probe.sequence.observer.end", result);
+
+        var logStopped = false;
+        try
+        {
+            await StreamingExtractionDiagnostics.StopAsync().WaitAsync(TimeSpan.FromSeconds(1));
+            logStopped = true;
+        }
+        catch (Exception failure) { Console.Error.WriteLine("DIAGNOSTICS_STOP_UNCONFIRMED: " + failure.GetType().Name); }
+        var status = StreamingExtractionDiagnostics.Status;
+        var dropped = StreamingExtractionDiagnostics.Dropped;
+        var complete = sequence.First?.DiagnosticStarted == true && logStopped &&
+            status == 2 && dropped == 0 && result != 124;
+        Console.WriteLine($"PROBE case=cleanup.sequence24, hostPid={Environment.ProcessId}, planned=24, " +
+            $"started={sequence.Started}, completed={sequence.Completed}, lastType={last?.Name ?? "none"}, " +
+            $"job={last?.Job.ToString("N") ?? "none"}, caseExit={result}, taskSettled={settled}, " +
+            $"cleanupConfirmed={cleanupConfirmed}, abortReturned={last?.AbortReturned == true}, " +
+            $"abortSucceeded={last?.AbortSucceeded == true}, disposeReturned={last?.DisposeReturned == true}, " +
+            $"residueChecked={last?.ResidueChecked == true}, cancellationSettled={last?.CancellationSettled == true}, " +
+            $"ctsDisposed={last?.CancellationDisposed == true}, stage={last?.Stage ?? "probe.not_started"}");
+        Console.WriteLine($"DIAGNOSTICS stopped={logStopped}, status={status}, dropped={dropped}, logComplete={complete}");
+        if (result == 124)
+        {
+            Console.Error.WriteLine("CLEANUP_UNCONFIRMED: 미정리 가능, 다음 실행 전 중앙의 프로세스 종료와 잔류 항목 확인 필요");
+        }
+        if (!complete) { Console.Error.WriteLine("DIAGNOSTICS_INCOMPLETE"); }
+        return result == 0 && !complete ? 2 : result;
+    }
+
+    private static async Task<int> RunSequenceAsync(RuntimeAccess runtime, SequenceState sequence,
+        string parent, CancellationToken token)
+    {
+        string[] order = ["cleanup.empty", "cleanup.sync", "cleanup.async"];
+        for (var index = 0; index < 24; index++)
+        {
+            if (token.IsCancellationRequested) { return 1; }
+            var state = new ProbeState(runtime, order[index % order.Length]);
+            state.DiagnosticStarted = sequence.First?.DiagnosticStarted == true;
+            sequence.First ??= state;
+            sequence.Last = state;
+            sequence.Started = index + 1;
+            var cancellation = new CancellationTokenSource();
+            CancellationTokenRegistration propagation = default;
+            CancellationTokenRegistration registration = default;
+            var result = 1;
+            try
+            {
+                propagation = token.Register(() => cancellation.Cancel());
+                registration = cancellation.Token.Register(() => state.Record("probe.token.cancelled"));
+                var pending = Task.Run(() => RunAsync(runtime, state, parent, cancellation.Token,
+                    startDiagnostics: index == 0, operationIndex: index + 1));
+                result = await pending.ConfigureAwait(false);
+            }
+            catch (Exception failure) { Console.Error.WriteLine("OPERATION_FAIL: " + failure.GetType().Name); }
+            finally
+            {
+                try
+                {
+                    state.Mark("probe.cancellation.drain.begin");
+                    // 부모 전파와 작업 콜백이 모두 끝난 뒤 CTS를 정리함.
+                    await propagation.DisposeAsync().ConfigureAwait(false);
+                    await cancellation.CancelAsync().ConfigureAwait(false);
+                    await registration.DisposeAsync().ConfigureAwait(false);
+                    state.CancellationSettled = true;
+                    state.Mark("probe.cancellation.drain.end");
+                    cancellation.Dispose();
+                    state.CancellationDisposed = true;
+                    state.Mark("probe.cts.dispose.end");
+                }
+                catch (Exception failure)
+                {
+                    result = 1;
+                    Console.Error.WriteLine("CANCELLATION_UNCONFIRMED: " + failure.GetType().Name);
+                }
+            }
+
+            if (!state.CleanupConfirmed || !state.CancellationSettled || !state.CancellationDisposed)
+            {
+                result = 124;
+            }
+            if (result == 0)
+            {
+                Require(state.AbortSucceeded && state.DisposeReturned && state.ResidueChecked);
+                sequence.Completed++;
+                state.Record("probe.sequence.completed", sequence.Completed);
+                if (StreamingExtractionDiagnostics.Status is 3 or 4 || StreamingExtractionDiagnostics.Dropped != 0)
+                {
+                    result = 2;
+                }
+            }
+            Console.WriteLine($"PROBE_OPERATION index={index + 1}, cycle={index / 3 + 1}, type={state.Name}, " +
+                $"job={state.Job:N}, operationExit={result}, completed={sequence.Completed}, " +
+                $"cleanupConfirmed={state.CleanupConfirmed}, residueChecked={state.ResidueChecked}, " +
+                $"cancellationSettled={state.CancellationSettled}, ctsDisposed={state.CancellationDisposed}");
+            if (result != 0) { return result; }
+            if (token.IsCancellationRequested) { return 1; }
+        }
+        return 0;
+    }
+
+    private sealed class SequenceState
+    {
+        internal volatile ProbeState? First;
+        internal volatile ProbeState? Last;
+        internal volatile int Started;
+        internal volatile int Completed;
     }
 
     private static void RequireParent(string parent)
@@ -264,6 +409,9 @@ internal static class Program
         internal volatile bool AbortReturned;
         internal volatile bool AbortSucceeded;
         internal volatile bool DisposeReturned;
+        internal volatile bool ResidueChecked;
+        internal volatile bool CancellationSettled;
+        internal volatile bool CancellationDisposed;
 
         internal void Record(string stage, long value = 0) => runtime.Record(Job, stage, value, 0, "");
         internal void Mark(string stage)

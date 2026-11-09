@@ -405,9 +405,10 @@
         "cases": [
             "cleanup.empty",
             "cleanup.sync",
-            "cleanup.async"
+            "cleanup.async",
+            "cleanup.sequence24"
         ],
         "default_registration": "별도 진단 전용 실행기이며 이 계약의 72개 기본 등록에는 추가하지 않음",
-        "status": "정적 검토만 수행함. 실제 컴파일/재현 미검증"
+        "status": "이번 24작업 사례는 정적 검토만 수행함. 실제 컴파일/실행 미검증이며 146d85a1 단일 3종의 중앙 결과는 별도 계약의 과거 기준으로만 기록함"
     }
 }

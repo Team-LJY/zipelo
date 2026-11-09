@@ -1,6 +1,6 @@
 {
     "schema": 1,
-    "scope": "Windows NTFS의 Runtime 소유 임시 트리 정리를 한 프로세스 한 사례로 분리 관찰함. ZIP/Worker 실행이나 원인 수정 검사가 아니며 세 사례 모두 통과해도 원인 해결을 뜻하지 않음",
+    "scope": "Windows NTFS의 Runtime 소유 임시 트리 정리를 한 프로세스 한 선택 사례로 관찰함. 단일 3종과 같은 프로세스의 고정 24작업 사례가 있으며 ZIP/Worker는 실행하지 않음. 24작업 미재현도 원인 해결이 아니며 이전 ZIP 단독 실행의 정지를 부정하지 않음",
     "product": {
         "pr": "https://github.com/Team-LJY/zipelo/pull/10",
         "head": "06e5d6c17318349ea96efef81a9e7d8f54c1e1a1",
@@ -16,7 +16,7 @@
     },
     "entry": "별도 Zipelo.CleanupProbe.csproj/Program.cs만 사용함. 기존 72개 실행기의 프로젝트/등록 배열/fixture/기대값/시간 제한을 변경하지 않음",
     "build": "ZIPELO_STREAM_DIAGNOSTICS가 없는 새 실행기는 종료 2만 반환하며 파일/Runtime API를 사용하지 않음. 해당 심볼이 있는 실행기와 Runtime 양쪽을 별도 출력/중간 폴더에 빌드해야 함. Runtime IsEnabled=false도 실행 전에 거절함. 기존 기본 프로젝트에는 이 실행기를 포함하지 않음",
-    "selection": "--list 또는 정확히 --sandbox-parent <기존 절대 시험 경로> --case <고정 등록 이름>만 허용함. 사례는 하나만 선택하며 반복/복수 선택/임의 실행파일/임의 reflection 멤버/로그 경로 인수를 받지 않음",
+    "selection": "--list 또는 정확히 --sandbox-parent <기존 절대 시험 경로> --case <고정 등록 이름>만 허용함. 단일 3종 또는 cleanup.sequence24 하나만 선택하며 반복 횟수/복수 선택/임의 실행파일/reflection 멤버/로그 경로 인수를 받지 않음",
     "cases": [
         {
             "name": "cleanup.empty",
@@ -29,37 +29,63 @@
         {
             "name": "cleanup.async",
             "procedure": "cleanup.sync와 같은 데이터/핸들/검사/순서로 RandomAccess.WriteAsync/ReadAsync를 각각 완료까지 await함. 나머지 경로는 동일함"
+        },
+        {
+            "name": "cleanup.sequence24",
+            "procedure": "한 프로세스에서 cleanup.empty -> cleanup.sync -> cleanup.async를 8회, 총 24작업만 순차 실행함. 각 작업의 본문은 단일 사례와 같으며 전체가 하나의 예산/감독/진단 세션을 공유함"
         }
     ],
     "data": "고정 16바이트 [0..15], 고정 자식 probe.bin 하나만 사용함. 시험 부모 아래 새 GUID 실행 루트, destination과 외부 대조 sentinel.bin을 생성함. 기존 사용자 파일은 열거나 수정하지 않음. 로그/시험 루트/sentinel은 검토용으로 보존함",
     "runtime_access": "고정 타입/멤버만 reflection으로 호출함: WindowsFolderPublication(string), Initialize, DiagnosticJobId, Abort; PendingFolderPublication.CreateStreamingEntry; StreamingExtractionDiagnostics.Record. 실제 Runtime 객체를 호출하며 생성/검사/삭제 코드를 복사하지 않음. 필요한 멤버가 없으면 실제 사례 전에 종료 2임. 제품 seam/공개 API 변경 없음",
     "ownership": "CreateStreamingEntry가 반환한 SafeFileHandle은 Runtime에서만 소유함. 시험은 복제/추가 개방/DangerousAddRef/별도 Dispose하지 않음. 모든 비동기 I/O의 완료 또는 취소 예외를 관찰한 뒤 같은 본문의 finally에서 Abort를 한 번 호출함. 자식 뒤 root 정리는 Runtime Abort의 기존 역순에 맡김. Abort가 실제 반환한 경우에만 객체 Dispose로 조상 핸들을 닫음. Abort 정지 또는 예외 시 감독 측 Dispose/재삭제를 시작하지 않고 미정리로 보고함",
     "guards": "기존 시험 부모의 존재/절대 경로/ancestor reparse point 거절 후 새 GUID 경로를 사용함. Runtime의 OpenParent/RequireNtfs/RequirePrivateWriters/Initialize/CreateStreamingEntry/Inspect/Abort 경로를 그대로 호출함. ACL/공유 플래그/ancestry/no-follow/삭제 순서 변경이나 우회 없음. 시험 부모가 소유자 통제하에 실행 중 교체되지 않는 환경을 전제하며 동일 사용자의 경합을 원자적으로 차단한다는 보장은 없음",
-    "verification_difference": "최초 분리 실험에서는 Verify/VerifyChildren/Publish와 별도 디렉터리 열거를 호출하지 않음. Initialize와 CreateStreamingEntry의 실제 생성/소유 등록/Inspect 검사는 유지함. 자식 파일의 바이트 readback과 Abort 성공 및 객체 Dispose 반환 뒤 sentinel 바이트 확인을 유지함. 사후 디렉터리 열거/재삭제는 하지 않으며 실제 잔류 항목은 호스트 종료 후 중앙에서 별도로 확인해야 함. 이 분리 실험이 원래 ZIP 실행의 모든 수명/스케줄링을 그대로 재현한다고 주장하지 않음. 비동기 파일 읽기/쓰기는 모두 await함",
+    "verification_difference": "Verify/VerifyChildren/Publish와 Abort 이전 디렉터리 열거는 호출하지 않음. Initialize/CreateStreamingEntry와 자식 바이트 readback은 유지함. 146d85a1의 사후 검사를 복원하여 Abort 성공 및 객체 Dispose 반환 뒤에만 destination을 열거해 sentinel.bin 하나뿐인지 확인하고 sentinel 바이트를 대조함. 재삭제는 하지 않음. 원래 ZIP 실행의 모든 수명/스케줄링 재현을 주장하지 않으며 비동기 파일 읽기/쓰기는 모두 await함",
     "timeouts": {
         "operation_seconds": 15,
         "case_failure_seconds": 45,
         "shutdown_observation_seconds": 25,
         "diagnostics_stop_seconds": 1,
-        "policy": "Task.Run은 시험 관찰용이며 제품 호출을 성공으로 숨기지 않음. 45초 실패 뒤 늦게 완료돼도 종료 124 유지. 같은 작업과 취소 콜백을 최대 25초 관찰하며 별도 정리 Task나 다음 사례를 시작하지 않음. native 호출의 취소/강제 종료는 보장하지 않음"
+        "policy": "단일 3종은 각각 기존 예산을 유지함. cleanup.sequence24는 24작업 전체에 15초 작업 예산, 45초 실패 기준, 종료 관찰 25초, 로그 종료 1초를 각각 한 번만 적용함. Task.Run은 시험 관찰용이며 native 취소/강제 종료를 보장하지 않음. 45초 실패 뒤 늦게 완료돼도 종료 124를 유지하며 추가 정리 작업이나 다음 작업을 시작하지 않음"
     },
-    "cleanup": "Runtime 객체를 만든 뒤 cleanupConfirmed=true는 Abort 성공 반환, 객체 Dispose 반환 및 sentinel 바이트 보존 확인을 뜻함. 디렉터리를 열거하지 않으므로 잔류 항목 부재나 OS 종료를 증명하지 않으며 residueChecked=false를 함께 보고함. Runtime 생성 호출 전 끝난 준비 실패는 제품 소유 트리가 없음으로 표시함. Abort가 예외로 끝나면 객체 Dispose를 시작하지 않음. 생성 시도 뒤 객체를 받지 못했거나 Abort/Dispose/바이트 확인이 미완료 또는 실패하면 종료 124 및 CLEANUP_UNCONFIRMED로 처리함. 실패한 삭제를 경로 기반 삭제로 재시도하지 않음. 진단 로그 writer 종료는 작업/OS 종료 확인과 구분함",
-    "logging": "단일 Start/Stop, 새 GUID 루트의 cleanup-diagnostics.tsv 고정 파일만 사용함. 고정 stage/단조 ticks/job/시험 PID와 실제 Runtime의 windows.abort/windows.delete 기록을 남김. 내용/암호/사용자 경로/원시 핸들은 TSV에 없음. 시험 stdout에는 생성된 시험 경로와 상태 요약을 보고함. Worker는 실행하지 않으며 전체 작업은 시험 호스트 PID에서 수행됨",
-    "completion": "Status=2, Dropped=0, Stop 대기 완료와 caseExit!=124일 때만 logComplete=true임. 불완전 진단은 성공 0을 종료 2로 바꾸며 실패/차단/124는 보존함. PROBE의 taskSettled/constructionAttempted/cleanupConfirmed/abortReturned/abortSucceeded/disposeReturned, residueChecked=false와 최종 stage를 함께 보고함. 종료 0도 중앙의 OS 종료/잔류 항목 확인을 대신하지 않음. started=false 또는 native 호출 미정리이면 완전한 관찰이 아님",
+    "cleanup": "Runtime 생성 뒤 cleanupConfirmed=true는 Abort 성공 반환, 객체 Dispose 반환, destination에 sentinel.bin 하나만 존재하고 바이트가 보존됨을 뜻하며 residueChecked=true를 함께 보고함. Runtime 생성 시도 전 준비 실패는 제품 소유 트리가 없음으로 표시하며 residueChecked는 false임. 생성 시도 뒤 객체/정리/사후 검사가 없으면 124 및 CLEANUP_UNCONFIRMED임. Abort 예외 시 객체 Dispose를 시작하지 않으며 경로 기반 재삭제도 하지 않음. sequence에서는 작업 및 취소 전파/관찰 콜백 종료와 CTS.Dispose 반환도 다음 작업의 필수 조건임. OS 프로세스 종료 및 진단 writer 종료는 별도임",
+    "logging": "선택 사례 전체에 Start/Stop 한 번만 수행함. sequence의 첫 작업 GUID 루트 안 cleanup-diagnostics.tsv에 모든 작업을 기록하고 이후 작업은 새 로그를 열지 않음. 고정 stage/단조 ticks/job/시험 PID와 Runtime windows.abort/windows.delete 기록, sequence index/completed와 취소 drain/CTS dispose를 남김. TSV에는 내용/암호/사용자 경로/원시 핸들이 없음. 시험 stdout에는 시험 경로와 상태 요약을 출력함. Worker는 실행하지 않으며 기록 한도와 Dropped는 전체 세션 누적임",
+    "completion": "Status=2, Dropped=0, Stop 대기 완료와 caseExit!=124일 때만 logComplete=true임. 불완전 로그는 성공 0을 종료 2로 바꾸며 실패/차단/124는 보존함. 단일 사례의 taskSettled/constructionAttempted/cleanupConfirmed/abortReturned/abortSucceeded/disposeReturned/residueChecked/stage와 sequence의 완료 수 및 마지막 작업 상태를 구분함. 종료 0도 독립 OS 종료/잔류 확인을 대신하지 않음",
     "exit_codes": {
-        "0": "해당 분리 사례와 Runtime 정리 호출/바이트 확인/진단 완료. OS 종료와 잔류 항목은 중앙 확인 필요",
+        "0": "선택 사례의 모든 작업/Abort/Dispose/사후 잔류 및 바이트/진단 확인 완료. sequence는 24작업의 취소 콜백과 CTS 정리도 확인함. OS 종료는 중앙 확인 필요",
         "1": "검사/작업 취소 실패",
         "2": "인수/빌드/준비/진단 실패",
         "3": "Windows 또는 Runtime 플랫폼/보호 조건 차단",
         "124": "45초 초과 또는 작업/정리 종료 미확인"
     },
     "central_execution": "각 명령을 따로 실행하고 시험 호스트 PID의 OS 실제 이미지/명령행과 종료, 잔류 소유 임시 항목을 확인한 뒤 다음 사례를 시작함. 첫 정지/미정리에서는 후속 실행을 중단함. 현재 프로세스의 CTS/본문을 종료했다고 OS 종료를 대신 선언하지 않음. VM 접근/덤프/새 도구/설치/보안 설정 변경은 이 실행기 범위에 없음",
-    "validation": "정적 소스/API/소유권/JSON/XML/분기/예산 검토만 수행함. 로컬 SDK 부재로 새 실행기의 진단/일반 빌드와 3종 실제 실행, 중단/잔류/진단 상한은 중앙 코드 검토 및 실행 필요",
+    "validation": "정적 소스/API/소유권/JSON/XML/분기/예산 검토만 수행함. 로컬 SDK 부재로 이번 24작업 코드의 C# 일반/진단 컴파일, 실제 실행/중단/진단 상한은 중앙 검토 및 실행 필요",
     "commands": [
         "dotnet build tests/streaming-extraction/cleanup-probe/Zipelo.CleanupProbe.csproj -c Release --configfile tests/streaming-extraction/NuGet.Config --artifacts-path tests/streaming-extraction/.work/cleanup-probe-artifacts -o tests/streaming-extraction/.work/cleanup-probe-app -p:UseAppHost=false --disable-build-servers -p:DefineConstants=ZIPELO_STREAM_DIAGNOSTICS",
         "dotnet tests/streaming-extraction/.work/cleanup-probe-app/Zipelo.CleanupProbe.dll --list",
         "dotnet tests/streaming-extraction/.work/cleanup-probe-app/Zipelo.CleanupProbe.dll --sandbox-parent <absolute-existing-tests-sandbox-directory> --case cleanup.empty",
         "dotnet tests/streaming-extraction/.work/cleanup-probe-app/Zipelo.CleanupProbe.dll --sandbox-parent <absolute-existing-tests-sandbox-directory> --case cleanup.sync",
-        "dotnet tests/streaming-extraction/.work/cleanup-probe-app/Zipelo.CleanupProbe.dll --sandbox-parent <absolute-existing-tests-sandbox-directory> --case cleanup.async"
-    ]
+        "dotnet tests/streaming-extraction/.work/cleanup-probe-app/Zipelo.CleanupProbe.dll --sandbox-parent <absolute-existing-tests-sandbox-directory> --case cleanup.async",
+        "dotnet tests/streaming-extraction/.work/cleanup-probe-app/Zipelo.CleanupProbe.dll --sandbox-parent <absolute-existing-tests-sandbox-directory> --case cleanup.sequence24"
+    ],
+    "sequence": {
+        "cycles": 8,
+        "operations": 24,
+        "order": [
+            "cleanup.empty",
+            "cleanup.sync",
+            "cleanup.async"
+        ],
+        "lifetime": "각 작업에 새 ProbeState/job ID/Task/CTS/GUID 시험 루트와 Runtime 소유 root를 사용함. 첫 작업만 진단 파일을 열며 이후 작업도 첫 파일에 기록함. 프로세스가 같아도 같은 스레드 실행을 보장하지 않음",
+        "next_gate": "현재 Task의 Abort 성공, 객체 Dispose 반환, 사후 잔류 검사와 sentinel 바이트 확인이 끝나야 함. 이어 부모 취소 전파 registration.DisposeAsync, 작업 CTS.CancelAsync, 작업 관찰 registration.DisposeAsync를 모두 await하고 CTS.Dispose 반환까지 확인함. 이 게이트와 작업 결과 0을 통과해야 완료 수에 포함하고 다음 작업을 시작함",
+        "cancellation": "전체 CTS만 시작 시 CancelAfter(15초)를 한 번 설정함. 작업 CTS는 전체 토큰의 등록 콜백으로 취소를 전달받으며 작업마다 예산을 재시작하지 않음. 정상 경로에서 Abort 이전에 추가 취소하지 않음. 취소 전파와 관찰 콜백의 등록 해제/완료까지 await하므로 이전 CTS와 다음 CTS가 겹치지 않음",
+        "stopping": "첫 작업 실패/차단/취소/미정리에서 반환함. 확인된 진단 Status 3/4 또는 Dropped>0도 다음 작업을 막음. 초기 Status 0은 writer 미개방으로서 즉시 실패로 취급하지 않고 최종 종료 검사를 적용함. 45초 실패 뒤에는 전체 CTS 취소와 동일한 순차 Task만 25초 관찰하며 추가 작업/Dispose/재삭제를 시작하지 않음",
+        "reporting": "PROBE_OPERATION에 1-based index/cycle/type/job/operationExit/completed/cleanupConfirmed/residueChecked/cancellationSettled/ctsDisposed를 출력함. 최종 PROBE에 planned=24/started/completed/lastType/job/caseExit/taskSettled/마지막 정리 및 취소 상태/stage, DIAGNOSTICS에 stopped/Status/Dropped/logComplete를 출력함. 완료 수는 정리와 취소 수명 종료가 확인된 작업 수이며 진단이나 전체 사례 성공을 뜻하지 않음",
+        "excluded_variables": "제품의 실패 정리 전 취소 시점과 입력/출력 publication 동시 보유는 이번에 추가하지 않음. 삭제 API/공유/ACL/ancestry/no-follow/생성 및 역순 삭제는 기존 Runtime 그대로임"
+    },
+    "historical_validation": {
+        "head": "146d85a1c2c379a2dae3499ffba9fcc51392c4cf",
+        "source": "중앙 round19 보고",
+        "result": "cleanup.empty/sync/async를 각각 새 프로세스로 1회 실행해 exit0, Abort/Dispose/잔류 확인, Status2/Dropped0가 보고됨. default/args 거부와 진단 목록도 보고됨",
+        "limitation": "해당 146 고정 후보의 단회 결과만 해당함. 8a599ca3 또는 이번 sequence24 코드의 실행 검증이 아니며 기존 ZIP 정지는 해결되지 않음"
+    }
 }
