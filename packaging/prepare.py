@@ -61,7 +61,7 @@ def validate(payload, support, verification, platform):
     require(all(verification.get("checks", {}).get(check) is True for check in CHECKS),
             "필수 UI/작업자/게시/취소/원본/라이선스/의존성 검증이 부족함")
     files = inventory(payload)
-    require(not any(name.lower() == "uninstall.exe" or name.lower().startswith("packaging-meta/") for name in files),
+    require(not any(name.lower() in {"uninstall.exe", ".zipelo-install.ini"} or name.lower().startswith("packaging-meta/") for name in files),
             "설치 관리 파일과 게시 산출물의 경로 충돌")
     require(files and files == verification.get("files"), "검증한 전체 파일 목록 또는 SHA-256이 다름")
     require(len({name.casefold() for name in files}) == len(files), "설치 파일 이름의 대소문자 충돌")
@@ -103,37 +103,123 @@ def validate(payload, support, verification, platform):
 
 def windows(output, support, files):
     template = (ROOT / "windows/installer.nsi.in").read_text()
-    install, remove = [], []
+    install, remove, rollback, variables = [], [], [], []
     directories = set()
-    for name in sorted(files):
+    for index, name in enumerate(sorted(files)):
+        path = name.replace("/", "\\")
         parent = str(PurePosixPath(name).parent).replace("/", "\\")
         suffix = "" if parent == "." else "\\" + parent
-        install.extend(['    SetOutPath "$INSTDIR' + suffix + '"',
-                        '    File "payload\\' + name.replace("/", "\\") + '"'])
-        remove.append('    Delete "$INSTDIR\\' + name.replace("/", "\\") + '"')
+        flag = f"PayloadOwned{index}"
+        variables.append("Var " + flag)
+        install.extend(['    ClearErrors', '    SetOutPath "$INSTDIR' + suffix + '"',
+                        '    IfErrors install_failed',
+                        '    IfFileExists "$INSTDIR\\' + path + '" install_failed',
+                        '    StrCpy $' + flag + ' 1', '    ClearErrors',
+                        '    File "payload\\' + path + '"', '    IfErrors install_failed'])
+        rollback.append('        !insertmacro RemoveOwnedFile "$INSTDIR\\' + path + '" ' + flag)
+        remove.append('    Delete "$INSTDIR\\' + path + '"')
         directories.update(str(path).replace("/", "\\") for path in PurePosixPath(name).parents if str(path) != ".")
-    remove.extend('    RMDir "$INSTDIR\\' + directory + '"' for directory in sorted(
-        directories, key=lambda value: (value.count("\\"), value), reverse=True))
-    register, unregister = "", ""
+    create_directories = []
+    ordered_directories = sorted(directories, key=lambda value: (value.count("\\"), value))
+    for index, directory in enumerate(ordered_directories):
+        flag = f"DirectoryOwned{index}"
+        variables.append("Var " + flag)
+        create_directories.extend([
+            """    System::Call 'kernel32::CreateDirectoryW(w "$INSTDIR\\""" + directory + """", p 0) i.r0'""",
+            '    IntCmp $0 0 install_failed',
+            '    StrCpy $' + flag + ' 1',
+        ])
+    install = create_directories + install
+    for index in reversed(range(len(ordered_directories))):
+        directory = ordered_directories[index]
+        flag = f"DirectoryOwned{index}"
+        remove.append('    RMDir "$INSTDIR\\' + directory + '"')
+        rollback.extend([
+            '        ' + "$" + '{If} $' + flag + ' == 1',
+            '            ClearErrors', '            RMDir "$INSTDIR\\' + directory + '"',
+            '            IfErrors 0 +2', '                StrCpy $CleanupFailed 1',
+            '        ' + "$" + '{EndIf}',
+        ])
+
+    uninstall_key = r"Software\Microsoft\Windows\CurrentVersion\Uninstall\Zipelo-Draft"
+    writes = [
+        (uninstall_key, "DisplayName", '"Zipelo 개발 검증 초안"', "UninstallOwned"),
+        (uninstall_key, "DisplayVersion", '"' + support["version"] + '"', "UninstallOwned"),
+        (uninstall_key, "UninstallString", r"""'$\"$INSTDIR\Uninstall.exe$\"'""", "UninstallOwned"),
+    ]
+    owned_roots = [(uninstall_key, "UninstallOwned")]
+    shared, register = [], []
     if support["formats"]:
-        register = r'''
-    WriteRegStr HKCU "Software\Classes\ZipeloDraft.zip" "" "Zipelo ZIP"
-    WriteRegStr HKCU "Software\Classes\ZipeloDraft.zip\shell\open\command" "" '$\"$INSTDIR\Zipelo.exe$\" $\"%1$\"'
-    WriteRegStr HKCU "Software\Classes\.zip\OpenWithProgids" "ZipeloDraft.zip" ""
-    WriteRegStr HKCU "Software\ZipeloDraft\Capabilities" "ApplicationName" "Zipelo Development Draft"
-    WriteRegStr HKCU "Software\ZipeloDraft\Capabilities\FileAssociations" ".zip" "ZipeloDraft.zip"
-    WriteRegStr HKCU "Software\RegisteredApplications" "Zipelo Development Draft" "Software\ZipeloDraft\Capabilities"
-'''
-        unregister = r'''
-    DeleteRegValue HKCU "Software\Classes\.zip\OpenWithProgids" "ZipeloDraft.zip"
-    DeleteRegKey HKCU "Software\Classes\ZipeloDraft.zip"
-    DeleteRegValue HKCU "Software\RegisteredApplications" "Zipelo Development Draft"
-    DeleteRegKey HKCU "Software\ZipeloDraft"
-'''
-    values = {"VERSION": support["version"], "FILES": "\n".join(install),
-              "DELETE": "\n".join(remove), "REGISTER": register, "UNREGISTER": unregister}
+        progid, capabilities = r"Software\Classes\ZipeloDraft.zip", r"Software\ZipeloDraft"
+        owned_roots.extend([(progid, "ProgIdOwned"), (capabilities, "CapabilitiesOwned")])
+        register.extend(['    !insertmacro ReserveKey "' + progid + '" ProgIdOwned',
+                         '    !insertmacro ReserveKey "' + capabilities + '" CapabilitiesOwned'])
+        writes.extend([
+            (progid, "", '"Zipelo ZIP"', "ProgIdOwned"),
+            (progid + r"\shell\open\command", "", r"""'$\"$INSTDIR\Zipelo.exe$\" $\"%1$\"'""", "ProgIdOwned"),
+            (capabilities + r"\Capabilities", "ApplicationName", '"Zipelo Development Draft"', "CapabilitiesOwned"),
+            (capabilities + r"\Capabilities\FileAssociations", ".zip", '"ZipeloDraft.zip"', "CapabilitiesOwned"),
+        ])
+        shared = [
+            (r"Software\Classes\.zip\OpenWithProgids", "ZipeloDraft.zip", '""', "OpenWithOwned"),
+            (r"Software\RegisteredApplications", "Zipelo Development Draft", r'"Software\ZipeloDraft\Capabilities"', "RegisteredAppOwned"),
+        ]
+
+    def checked_write(key, value, data):
+        return ['    ClearErrors', f'    WriteRegStr HKCU "{key}" "{value}" {data}', '    IfErrors install_failed']
+
+    uninstall_register = []
+    for key, value, data, flag in writes:
+        (uninstall_register if flag == "UninstallOwned" else register).extend(checked_write(key, value, data))
+    for key, value, data, flag in shared:
+        register.extend([f'    !insertmacro RequireAbsentValue "{key}" "{value}"',
+                         '    StrCpy $' + flag + ' 1'] + checked_write(key, value, data))
+
+    logic = lambda name: "$" + "{" + name + "}"
+    cleanup, unregister = [], []
+    for key, value, _, flag in reversed(shared + writes):
+        unregister.append(f'    DeleteRegValue HKCU "{key}" "{value}"')
+        cleanup.extend([
+            '    ' + logic("If") + ' $' + flag + ' == 1',
+            '        ClearErrors',
+            f'        DeleteRegValue HKCU "{key}" "{value}"',
+            '        ClearErrors',
+            f"""        System::Call 'advapi32::RegOpenKeyExW(p 0x80000001, w "{key}", i 0, i 0x20119, *p.r1) i.r0'""",
+            '        ' + logic("If") + ' $0 == 0',
+            f"""            System::Call 'advapi32::RegQueryValueExW(p r1, w "{value}", p 0, p 0, p 0, p 0) i.r2'""",
+            """            System::Call 'advapi32::RegCloseKey(p r1) i.r0'""",
+            '            ' + logic("If") + ' $2 != 2',
+            '            ' + logic("OrIf") + ' $0 != 0',
+            '                StrCpy $CleanupFailed 1',
+            '            ' + logic("EndIf"),
+            '        ' + logic("ElseIf") + ' $0 != 2',
+            '            StrCpy $CleanupFailed 1',
+            '        ' + logic("EndIf"),
+            '    ' + logic("EndIf"),
+        ])
+    for root, flag in reversed(owned_roots):
+        keys = {root}
+        for key, _, _, write_flag in writes:
+            if write_flag == flag:
+                while key != root:
+                    keys.add(key)
+                    key = key.rsplit("\\", 1)[0]
+        for key in sorted(keys, key=lambda value: (value.count("\\"), value), reverse=True):
+            unregister.append(f'    DeleteRegKey /ifempty HKCU "{key}"')
+            cleanup.extend(['    ' + logic("If") + ' $' + flag + ' == 1',
+                            '        ClearErrors', f'        DeleteRegKey /ifempty HKCU "{key}"',
+                            '        IfErrors 0 +2', '            StrCpy $CleanupFailed 1',
+                            '    ' + logic("EndIf")])
+    values = {
+        "VERSION": support["version"], "VARS": "\n".join(variables),
+        "FILES": "\n".join(install), "DELETE": "\n".join(remove),
+        "ROLLBACK_FILES": "\n".join(rollback), "ROLLBACK_REGISTER": "\n".join(cleanup),
+        "UNINSTALL_REGISTER": "\n".join(uninstall_register),
+        "REGISTER": "\n".join(register), "UNREGISTER": "\n".join(unregister),
+    }
     for key, value in values.items():
         template = template.replace("@" + key + "@", value)
+    require(not re.search(r"@[A-Z_]+@", template), "NSIS 템플릿 토큰이 남아 있음")
     (output / "installer.nsi").write_text(template, encoding="utf-8-sig")
 
 

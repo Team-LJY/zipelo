@@ -8,6 +8,9 @@ OutFile "Zipelo-@VERSION@-win-x64-draft.exe"
 InstallDir "$LOCALAPPDATA\Programs\Zipelo-Draft"
 RequestExecutionLevel user
 SetCompressor zlib
+SetOverwrite off
+AllowSkipFiles off
+FileErrorText "파일을 쓰지 못했습니다. 여유 공간과 쓰기 권한을 확인한 뒤 재시도하거나 취소하세요." "파일을 쓰지 못했습니다. 여유 공간과 쓰기 권한을 확인한 뒤 재시도하거나 취소하세요."
 ShowInstDetails show
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_INSTFILES
@@ -17,6 +20,56 @@ Page custom FinishCreate
 !insertmacro MUI_LANGUAGE "Korean"
 Var Dialog
 Var SettingsButton
+Var InstallComplete
+Var RootOwned
+Var MenuOwned
+Var UninstallerOwned
+Var MarkerOwned
+Var UninstallOwned
+Var ProgIdOwned
+Var CapabilitiesOwned
+Var OpenWithOwned
+Var RegisteredAppOwned
+Var CleanupDone
+Var CleanupFailed
+Var FailureStep
+Var InstallMutex
+@VARS@
+
+; 기존 키를 열었으면 수정하지 않고 중단함.
+!macro ReserveKey KEY FLAG
+    System::Call 'advapi32::RegCreateKeyExW(p 0x80000001, w "${KEY}", i 0, p 0, i 0, i 0x2011f, p 0, *p.r1, *i.r2) i.r0'
+    IntCmp $0 0 0 install_failed install_failed
+    IntCmp $2 1 0 +2 +2
+        StrCpy $${FLAG} 1
+    System::Call 'advapi32::RegCloseKey(p r1) i.r0'
+    IntCmp $0 0 0 install_failed install_failed
+    StrCmp $${FLAG} 1 0 install_failed
+!macroend
+
+; 공유 값은 형식에 관계없이 존재 여부를 확인함.
+!macro RequireAbsentValue KEY VALUE
+    System::Call 'advapi32::RegOpenKeyExW(p 0x80000001, w "${KEY}", i 0, i 0x20119, *p.r1) i.r0'
+    ${If} $0 == 0
+        System::Call 'advapi32::RegQueryValueExW(p r1, w "${VALUE}", p 0, p 0, p 0, p 0) i.r2'
+        System::Call 'advapi32::RegCloseKey(p r1) i.r0'
+        IntCmp $0 0 0 install_failed install_failed
+        IntCmp $2 2 0 install_failed install_failed
+    ${ElseIf} $0 != 2
+        Goto install_failed
+    ${EndIf}
+!macroend
+
+!macro RemoveOwnedFile PATH FLAG
+    ${If} $${FLAG} == 1
+        ${If} ${FileExists} "${PATH}"
+            ClearErrors
+            Delete "${PATH}"
+            IfErrors 0 +2
+                StrCpy $CleanupFailed 1
+        ${EndIf}
+    ${EndIf}
+!macroend
 
 Function .onInit
     ${IfNot} ${RunningX64}
@@ -25,25 +78,113 @@ Function .onInit
     ${EndIf}
     SetShellVarContext current
     SetRegView 64
+    StrCpy $InstallComplete 0
+    System::Call 'kernel32::SetLastError(i 0)'
+    System::Call 'kernel32::CreateMutexW(p 0, i 0, w "Local\ZipeloDraftInstaller") p.r0 ?e'
+    Pop $1
+    StrCpy $InstallMutex $0
+    ${If} $0 == 0
+    ${OrIf} $1 != 0
+        MessageBox MB_OK "다른 설치/제거를 마친 뒤 다시 실행하세요. 설치 잠금을 만들 수 없을 때도 중단됩니다."
+        Abort
+    ${EndIf}
 FunctionEnd
 
 Section "Zipelo"
     SetShellVarContext current
     SetRegView 64
-    IfFileExists "$INSTDIR\Uninstall.exe" 0 +3
-        MessageBox MB_OK "기존 개발 초안을 먼저 제거하세요. 업데이트 설치는 아직 검증 전입니다."
-        Abort
+    StrCpy $FailureStep "설치 경로 예약: 기존 파일, 폴더 또는 링크가 있거나 쓰기 권한이 없습니다"
+    ; 고정 사용자 경로만 허용하고 기존 대상은 빈 폴더도 거절함.
+    StrCpy $INSTDIR "$LOCALAPPDATA\Programs\Zipelo-Draft"
+    ClearErrors
+    CreateDirectory "$LOCALAPPDATA\Programs"
+    IfErrors install_failed
+    System::Call 'kernel32::CreateDirectoryW(w "$INSTDIR", p 0) i.r0'
+    IntCmp $0 0 install_failed
+    StrCpy $RootOwned 1
+    StrCpy $FailureStep "프로그램 파일 복사: 여유 공간과 쓰기 권한을 확인하세요"
 @FILES@
+    StrCpy $FailureStep "제거 프로그램 만들기"
+    StrCpy $UninstallerOwned 1
+    ClearErrors
     WriteUninstaller "$INSTDIR\Uninstall.exe"
-    CreateDirectory "$SMPROGRAMS\Zipelo-Draft"
+    IfErrors install_failed
+    StrCpy $FailureStep "설치 기록 저장"
+    StrCpy $MarkerOwned 1
+    ClearErrors
+    WriteINIStr "$INSTDIR\.zipelo-install.ini" "Zipelo" "Location" "$INSTDIR"
+    IfErrors install_failed
+    ClearErrors
+    WriteINIStr "$INSTDIR\.zipelo-install.ini" "Zipelo" "Version" "@VERSION@"
+    IfErrors install_failed
+    StrCpy $FailureStep "시작 메뉴 예약: 기존 Zipelo-Draft 항목은 보존됩니다"
+    System::Call 'kernel32::CreateDirectoryW(w "$SMPROGRAMS\Zipelo-Draft", p 0) i.r0'
+    IntCmp $0 0 install_failed
+    StrCpy $MenuOwned 1
+    ClearErrors
     CreateShortcut "$SMPROGRAMS\Zipelo-Draft\Zipelo.lnk" "$INSTDIR\Zipelo.exe"
-    WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\Zipelo-Draft" "DisplayName" "Zipelo 개발 검증 초안"
-    WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\Zipelo-Draft" "DisplayVersion" "@VERSION@"
-    WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\Zipelo-Draft" "UninstallString" '$\"$INSTDIR\Uninstall.exe$\"'
+    IfErrors install_failed
+    StrCpy $FailureStep "프로그램 등록: 기존 등록 또는 접근 권한을 확인하세요"
+    !insertmacro ReserveKey "Software\Microsoft\Windows\CurrentVersion\Uninstall\Zipelo-Draft" UninstallOwned
+@UNINSTALL_REGISTER@
 @REGISTER@
+    StrCpy $InstallComplete 1
+    Goto install_done
+install_failed:
+    Call Rollback
+    SetErrorLevel 1
+    Abort
+install_done:
 SectionEnd
 
+Function Rollback
+    ${If} $InstallComplete == 1
+    ${OrIf} $CleanupDone == 1
+        Return
+    ${EndIf}
+    StrCpy $CleanupDone 1
+    StrCpy $CleanupFailed 0
+@ROLLBACK_REGISTER@
+    ${If} $MenuOwned == 1
+        !insertmacro RemoveOwnedFile "$SMPROGRAMS\Zipelo-Draft\Zipelo.lnk" MenuOwned
+        ClearErrors
+        RMDir "$SMPROGRAMS\Zipelo-Draft"
+        IfErrors 0 +2
+            StrCpy $CleanupFailed 1
+    ${EndIf}
+    ${If} $RootOwned == 1
+        ; 명시한 시도 파일과 빈 디렉터리만 정리함.
+        SetOutPath "$TEMP"
+@ROLLBACK_FILES@
+        !insertmacro RemoveOwnedFile "$INSTDIR\Uninstall.exe" UninstallerOwned
+        !insertmacro RemoveOwnedFile "$INSTDIR\.zipelo-install.ini" MarkerOwned
+        ClearErrors
+        RMDir "$INSTDIR"
+        IfErrors 0 +2
+            StrCpy $CleanupFailed 1
+    ${EndIf}
+    ${If} $CleanupFailed == 1
+        MessageBox MB_OK|MB_ICONSTOP "설치를 완료하지 못했습니다.$\r$\n실패 단계: $FailureStep.$\r$\n일부 항목을 정리하지 못했습니다. 앱을 실행하지 말고 사용 중인 파일을 닫은 뒤 지원 담당자에게 문의하세요. 폴더를 통째로 삭제하지 마세요."
+    ${Else}
+        MessageBox MB_OK|MB_ICONSTOP "설치를 완료하지 못했습니다.$\r$\n실패 단계: $FailureStep.$\r$\n이번 설치 항목은 정리했습니다. 여유 공간과 쓰기 권한을 확인한 뒤 다시 실행하세요. 기존 설치의 덮어쓰기 업데이트는 지원하지 않습니다."
+    ${EndIf}
+FunctionEnd
+
+Function .onInstFailed
+    Call Rollback
+    SetErrorLevel 1
+FunctionEnd
+
+Function .onUserAbort
+    StrCpy $FailureStep "사용자 취소"
+    Call Rollback
+    SetErrorLevel 1
+FunctionEnd
+
 Function FinishCreate
+    ${If} $InstallComplete != 1
+        Abort
+    ${EndIf}
     GetDlgItem $0 $HWNDPARENT 1
     SendMessage $0 ${WM_SETTEXT} 0 "STR:나중에"
     GetDlgItem $0 $HWNDPARENT 3
@@ -63,17 +204,50 @@ FunctionEnd
 
 Function OpenSettings
     Pop $0
+    ${If} $InstallComplete != 1
+        Return
+    ${EndIf}
+    ClearErrors
     ExecShell "open" "ms-settings:defaultapps"
+    IfErrors 0 +2
+        MessageBox MB_OK "설정을 열지 못했습니다. Windows 설정에서 앱 > 기본 앱을 직접 열어주세요."
+FunctionEnd
+
+Function un.onInit
+    SetShellVarContext current
+    SetRegView 64
+    System::Call 'kernel32::SetLastError(i 0)'
+    System::Call 'kernel32::CreateMutexW(p 0, i 0, w "Local\ZipeloDraftInstaller") p.r0 ?e'
+    Pop $1
+    StrCpy $InstallMutex $0
+    ${If} $0 == 0
+    ${OrIf} $1 != 0
+        MessageBox MB_OK "다른 설치 또는 제거를 마친 뒤 다시 실행하세요."
+        Abort
+    ${EndIf}
+    ClearErrors
+    ReadINIStr $0 "$INSTDIR\.zipelo-install.ini" "Zipelo" "Location"
+    IfErrors un_invalid
+    StrCmp $0 $INSTDIR 0 un_invalid
+    ClearErrors
+    ReadINIStr $0 "$INSTDIR\.zipelo-install.ini" "Zipelo" "Version"
+    IfErrors un_invalid
+    StrCmp $0 "@VERSION@" 0 un_invalid
+    Return
+un_invalid:
+    MessageBox MB_OK "이 위치의 설치 기록을 확인하지 못했습니다. 기존 파일은 삭제하지 않습니다. 지원 담당자에게 문의하세요."
+    Abort
 FunctionEnd
 
 Section "Uninstall"
     SetShellVarContext current
     SetRegView 64
 @UNREGISTER@
-    DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\Zipelo-Draft"
     Delete "$SMPROGRAMS\Zipelo-Draft\Zipelo.lnk"
     RMDir "$SMPROGRAMS\Zipelo-Draft"
+    SetOutPath "$TEMP"
 @DELETE@
+    Delete "$INSTDIR\.zipelo-install.ini"
     Delete "$INSTDIR\Uninstall.exe"
     RMDir "$INSTDIR"
 SectionEnd
