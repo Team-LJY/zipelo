@@ -162,15 +162,23 @@ internal static class ExtractionCases
         if (before) { cancellation.Cancel(); }
         var pending = Launch.Client().ExtractToNewFolderAsync(area.Job, source, area.Destination,
             TestArea.Limits, cancellation.Token);
-        if (!before)
+        try
         {
-            await source.Entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
-            cancellation.Cancel();
+            if (!before)
+            {
+                await source.Entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+                cancellation.Cancel();
+            }
+            var result = await pending;
+            area.Rejected(result, ArchiveError.Cancelled);
+            Check.That(result.WorkerExitCode is null, "스냅샷 취소 뒤 Worker 시작");
+            area.Preserved(source);
         }
-        var result = await pending;
-        area.Rejected(result, ArchiveError.Cancelled);
-        Check.That(result.WorkerExitCode is null, "스냅샷 취소 뒤 Worker 시작");
-        area.Preserved(source);
+        finally
+        {
+            await cancellation.CancelAsync();
+            await pending;
+        }
     }
 
     public static async Task Waiting(string root, string mode, bool cancel)

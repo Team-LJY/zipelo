@@ -117,15 +117,15 @@
         "default_peer_payload": 65537,
         "range_budget": "64 KiB 응답 버퍼를 재사용하는 최대 769회 요청, 실제 파일은 66 KiB 미만, 누적 범위 트래픽 48 MiB 경계 시험",
         "io": "호스트 원본 읽기 64 KiB 이내 검사. 전체 입력 초과는 작은 Stream의 선언 Length=16777217만 사용함",
-        "time": "사례별 45초, 작업 15초, 가짜 peer 자체 12초, 장벽 5초. 기한 사례 2초. 사용자 정의 대기 Stream은 토큰에 협조함",
+        "time": "사례 성공 기한 45초 유지, 작업 15초, 가짜 peer 12초, 장벽 5초, 기한 사례 2초. 사례 종료 시 취소 콜백/실제 작업/Worker 종료 확인에 별도 최대 25초만 사용하며 늦은 완료는 시간 초과 실패를 바꾸지 않음",
         "disk": "테스트가 새 GUID 하위 폴더만 생성하고 기존 부모 권한을 바꾸지 않음. Linux 새 폴더를 0700으로 생성함. 모든 결과는 검토용으로 남기며 재귀 삭제하지 않음",
         "fixture_suffix_bytes": 65540
     },
     "validation": {
-        "static": "passed: JSON/XML, 72 unique registrations, previous 67 unchanged, seven explicit C# files, four-file scope, reflection signatures and formatting; not C# compilation",
-        "compile": "not_run for current candidate: local SDK absent; previous 483b9947 candidate had reported CS8752, corrected at 15ab2677",
-        "windows": "not_run",
-        "ubuntu": "not_run",
+        "static": "passed: JSON/XML, 72 unchanged registrations/expectations, unchanged nested fixture, eight explicit C# sources, cancellation forwarding/lifetime control flow, seven-file scope and formatting; not C# compilation",
+        "compile": "not_run for this lifetime candidate: local SDK absent. Manager reported f7ad4ec2 + PR10 069bdef5 compiled on Windows with zero warnings/errors",
+        "windows": "previous f7ad4ec2 + PR10 069bdef5 before candidate: manager reported 4 passed, real.nested timeout at 45 seconds, 67 unexecuted. Current lifetime candidate not_run",
+        "ubuntu": "current lifetime candidate not_run; previous candidate reproduction pending manager",
         "fixture_formula": "passed: Python zlib independently decoded both manually encoded raw Stored block formulas (9/65535 decoded bytes); this did not execute the C# fixture or product"
     },
     "suspected_product_issue": {
@@ -155,7 +155,8 @@
         "tests/streaming-extraction/ExtractionCases.cs",
         "tests/streaming-extraction/Program.cs",
         "tests/streaming-extraction/contract.json",
-        "tests/streaming-extraction/PublicationCases.cs"
+        "tests/streaming-extraction/PublicationCases.cs",
+        "tests/streaming-extraction/CaseLifetime.cs"
     ],
     "deflate_tail_policy": {
         "source": "https://github.com/Team-LJY/zipelo/blob/069bdef56cd4f74294a76cffbd2a4ab4ac16d43b/docs/STREAMING_EXTRACTION.md",
@@ -178,10 +179,50 @@
         "platform": "Windows가 열린 부모 이동 또는 링크 생성을 거절하면 BLOCKED임. 권한 변경 없이 새 GUID 시험 트리 안에서만 이동/링크 생성함",
         "fixture": "1 KiB 파일 1개, 새 시험 부모/이동 부모/외부 sentinel 폴더만 사용함",
         "required_product_fix": {
+            "pr": "https://github.com/Team-LJY/zipelo/pull/13",
             "branch": "fix/linux-parent-identity",
-            "head": null,
-            "status": "backend 작업 head 대기. 현재 고정 제품 후보는 부모 동일성 공백이 있어 거절 사례를 통과로 간주하지 않음"
+            "head": "eb243b6b2a049b95f4f9a74075f3b09aac7c4152",
+            "status": "원격 head 확인, 제품 수정은 테스트 PR에 포함하지 않으며 통합 실행은 중앙 검증에 남음"
         },
         "validation": "not_run: SDK absent; public v1/common phase/OS results pending central validation"
+    },
+    "case_lifetime": {
+        "finding": "기존 WaitAsync(45초)는 대기만 종료하며 default 토큰의 실제 추출 작업을 취소하지 않았음. Main이 반환해도 Worker 종료와 임시 정리는 보장하지 못했음",
+        "action": "사례마다 AsyncLocal 수명 범위를 두고 기존 호출 토큰과 보호 토큰을 연결함. 실제 제품 Task와 작업 ID를 추적함. 공개 v1/공용 게시에도 보호 토큰을 전달함. 사례 본문은 Task.Run으로 호출해 첫 await 이전의 동기 구간도 바깥 대기 범위 안에 둠",
+        "shutdown": "성공/실패/차단/45초 초과 뒤 CancelAsync로 취소하고 사례 본문, 콜백, 등록된 실제 제품 Task를 합계 25초 안에서 기다림. 성공적으로 반환한 제품 결과의 WorkerExitConfirmed를 추가 확인하고 입력/출력 정리 실패와 임시 이름을 보고함",
+        "fail_closed": "45초 초과는 늦게 성공하거나 정리가 끝나도 FAIL/124를 유지함. 작업 또는 Worker 종료가 확인되지 않으면 SHUTDOWN_UNCONFIRMED와 미실행 수를 기록하고 후속 사례를 실행하지 않음. 이 경우 진행 중 작업의 토큰/현재 폴더를 먼저 폐기/복원하지 않음",
+        "cleanup": "테스트가 기존 폴더를 재귀 삭제하거나 임시 트리 정리를 성공으로 꾸미지 않음. 소유 임시 정리는 제품 경로에 맡기며 명시적 정리 실패 사례의 보존 기대값은 유지함. 스냅샷 취소 사례의 장벽 오류도 finally에서 제품 작업을 기다린 뒤 입력 Stream을 닫음",
+        "limits": "취소 요청과 제한된 종료 확인이지 강제 종료 보장이 아님. API가 실제 Task를 반환하지 않거나 취소를 무시하면 Worker PID/handle을 테스트에 노출하지 않아 안전한 강제 종료를 할 수 없음. 전역 프로세스 열거/임의 PID 종료를 하지 않고 중앙 감독자가 해당 실행의 잔류 프로세스를 확인해야 함. WorkerExitConfirmed는 제품 결과 계약의 확인이며 독립 OS 프로세스 열거 증명은 아님",
+        "references": [
+            "https://learn.microsoft.com/en-us/dotnet/api/system.threading.tasks.task.waitasync",
+            "https://learn.microsoft.com/en-us/dotnet/api/system.threading.cancellationtokensource.cancelasync"
+        ],
+        "validation": "not_run: 새 보호 코드 C# 컴파일, 실제 timeout 후 취소/정리/Worker 종료 및 두 OS 실행은 중앙 검증 필요"
+    },
+    "nested_fixture_review": {
+        "names": [
+            "folder/",
+            "folder/a",
+            "b"
+        ],
+        "method": "Stored, UTF-8 flag 0x0800, ZIP32, nonencrypted, no extra fields/data descriptor",
+        "bytes": 285,
+        "output_bytes": 3,
+        "local_offsets": [
+            0,
+            37,
+            77
+        ],
+        "central_offset": 109,
+        "central_bytes": 154,
+        "crc32": [
+            "00000000",
+            "b6cc4292",
+            "4b0bbe37"
+        ],
+        "expected": "디렉터리 1개와 파일 2개, 검증 항목 수 3, 출력 3바이트, 정확한 트리/원본/기존 표식 보존, 정상 Worker 종료/정리 뒤 게시",
+        "evidence": "ZipFixture.Build와 ZipStreamIndex 및 CreateStreamingEntry의 디렉터리 재사용/파일 경계 계약을 정적으로 대조함. C# Stored 생성 공식을 독립 Python struct로 번역한 285바이트를 zipfile로 목록/내용/CRC 검증함. C# fixture 실행을 대체하지 않음",
+        "formula_sha256": "b99d92f199b3e58e52732de1a15b78f72c52db13716b7d73399f25349831616f",
+        "regression": "real.nested fixture/기대값과 제품 기한을 변경하지 않음. 중앙에서 확인한 45초 실패는 그대로 남음"
     }
 }

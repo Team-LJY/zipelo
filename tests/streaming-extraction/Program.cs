@@ -107,6 +107,7 @@ internal static class Program
         TestArea.CreateDirectory(root);
         Console.WriteLine("시험 생성 경로: " + root);
         var originalDirectory = Environment.CurrentDirectory;
+        var restoreDirectory = true;
         try
         {
             _ = Launch.Client();
@@ -128,29 +129,36 @@ internal static class Program
             var blocked = 0;
             foreach (var (name, run) in Cases)
             {
-                try
+                using var lifetime = new CaseLifetime();
+                var pending = Task.Run(() => run(root));
+                Exception? failure = null;
+                try { await pending.WaitAsync(TimeSpan.FromSeconds(45)); }
+                catch (Exception observed) { failure = observed; }
+
+                var stopped = await lifetime.StopAsync(pending, name, failure is not null);
+                if (!stopped || failure is TimeoutException)
                 {
-                    await run(root).WaitAsync(TimeSpan.FromSeconds(45));
-                    Console.WriteLine("PASS " + name);
-                    passed++;
+                    Console.Error.WriteLine($"FAIL {name}: {failure?.Message ?? "작업/Worker 종료 미확인"}");
+                    Console.WriteLine($"등록 {Cases.Length}, 통과 {passed}, 실패 {failed + 1}, 차단 {blocked}, 미실행 {Cases.Length - passed - failed - blocked - 1}");
+                    restoreDirectory = stopped;
+                    return 124;
                 }
-                catch (Blocked reason)
+                Environment.CurrentDirectory = originalDirectory;
+                if (failure is Blocked reason)
                 {
                     Console.WriteLine("BLOCKED " + name + ": " + reason.Message);
                     blocked++;
                 }
-                catch (TimeoutException failure)
-                {
-                    Console.Error.WriteLine("FAIL " + name + ": " + failure.Message);
-                    Console.WriteLine($"등록 {Cases.Length}, 통과 {passed}, 실패 {failed + 1}, 차단 {blocked}, 미실행 {Cases.Length - passed - failed - blocked - 1}");
-                    return 124;
-                }
-                catch (Exception failure)
+                else if (failure is not null)
                 {
                     Console.Error.WriteLine($"FAIL {name}: {failure.GetType().Name}: {failure.Message}");
                     failed++;
                 }
-                finally { Environment.CurrentDirectory = originalDirectory; }
+                else
+                {
+                    Console.WriteLine("PASS " + name);
+                    passed++;
+                }
             }
             Console.WriteLine($"등록 {Cases.Length}, 통과 {passed}, 실패 {failed}, 차단 {blocked}");
             return failed != 0 ? 1 : blocked != 0 ? 3 : 0;
@@ -162,7 +170,7 @@ internal static class Program
         }
         finally
         {
-            Environment.CurrentDirectory = originalDirectory;
+            if (restoreDirectory) { Environment.CurrentDirectory = originalDirectory; }
             Console.WriteLine("시험 경로는 검토를 위해 보존함: " + root);
         }
     }

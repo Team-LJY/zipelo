@@ -19,7 +19,7 @@ internal static class PublicationCases
         {
             ExtractedEntries = [item]
         };
-        var result = await NewFolderPublisher.PublishAsync(model, area.Destination, CancellationToken.None);
+        var result = await NewFolderPublisher.PublishAsync(model, area.Destination, CaseLifetime.Token);
         Check.That(result.Published && result.Error == ArchiveError.None, "v1 공용 게시 정상 대조 실패");
         Check.That(!result.CleanupFailed && result.TemporaryFileName is null, "v1 정상 게시 정리 오류");
         area.VerifyTree([fixture]);
@@ -49,8 +49,8 @@ internal static class PublicationCases
         try
         {
             Invoke(pending, "Initialize");
-            await (Task)Invoke(pending, "WriteAsync", Entry(fixture), CancellationToken.None)!;
-            Invoke(pending, "Verify", CancellationToken.None);
+            await (Task)Invoke(pending, "WriteAsync", Entry(fixture), CaseLifetime.Token)!;
+            Invoke(pending, "Verify", CaseLifetime.Token);
             // v1과 v2가 쓰는 실제 공용 게시 객체의 검증 완료 뒤에만 교체함.
             if (mutation != "none")
             {
@@ -73,7 +73,7 @@ internal static class PublicationCases
             }
             try
             {
-                Invoke(pending, "Publish", "result", CancellationToken.None);
+                Invoke(pending, "Publish", "result", CaseLifetime.Token);
                 published = true;
             }
             catch (Exception failure) when (failure is ArchiveException ||

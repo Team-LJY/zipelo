@@ -9,6 +9,7 @@
     </PropertyGroup>
     <ItemGroup>
         <Compile Include="Program.cs" />
+        <Compile Include="CaseLifetime.cs" />
         <Compile Include="TestArea.cs" />
         <Compile Include="ZipFixture.cs" />
         <Compile Include="FakeWorker.cs" />

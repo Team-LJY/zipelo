@@ -54,11 +54,11 @@ internal static class Launch
         return path;
     }
 
-    public static StreamingZipWorkerClient Client(bool peer = false)
+    public static ObservedWorkerClient Client(bool peer = false)
     {
         var host = Host;
         var name = peer ? "Zipelo.StreamingExtractionTests" : "Zipelo.Worker";
-        return new(Output(name + (host is null ? Suffix : ".dll")), host);
+        return new(new StreamingZipWorkerClient(Output(name + (host is null ? Suffix : ".dll")), host));
     }
 }
 
