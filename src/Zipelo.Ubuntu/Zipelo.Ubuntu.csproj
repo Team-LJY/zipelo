@@ -10,8 +10,12 @@
     <PropertyGroup Condition="'$(ZipeloCreationValidation)' == 'true'">
         <DefineConstants>$(DefineConstants);ZIPELO_CREATION_VALIDATION</DefineConstants>
     </PropertyGroup>
+    <PropertyGroup Condition="'$(ZipeloExtractionValidation)' == 'true'">
+        <DefineConstants>$(DefineConstants);ZIPELO_EXTRACTION_VALIDATION</DefineConstants>
+    </PropertyGroup>
     <ItemGroup>
         <Compile Include="../Zipelo.Desktop/ZipCreationWorkflow.cs" Link="Ui/ZipCreationWorkflow.cs" />
+        <Compile Include="../Zipelo.Desktop/ZipExtractionWorkflow.cs" Link="Ui/ZipExtractionWorkflow.cs" />
         <Compile Include="../Zipelo.Desktop/ArchiveOpenArguments.cs" Link="Ui/ArchiveOpenArguments.cs" />
         <PackageReference Include="Avalonia" Version="11.3.9" />
         <PackageReference Include="Avalonia.Desktop" Version="11.3.9" />

@@ -13,6 +13,9 @@
     <PropertyGroup Condition="'$(ZipeloCreationValidation)' == 'true'">
         <DefineConstants>$(DefineConstants);ZIPELO_CREATION_VALIDATION</DefineConstants>
     </PropertyGroup>
+    <PropertyGroup Condition="'$(ZipeloExtractionValidation)' == 'true'">
+        <DefineConstants>$(DefineConstants);ZIPELO_EXTRACTION_VALIDATION</DefineConstants>
+    </PropertyGroup>
     <ItemGroup>
         <ProjectReference Include="../Zipelo.Core/Zipelo.Core.csproj" />
         <ProjectReference Include="../Zipelo.Runtime/Zipelo.Runtime.csproj" />

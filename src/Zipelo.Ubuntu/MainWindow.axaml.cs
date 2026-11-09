@@ -24,6 +24,10 @@ public partial class MainWindow : Window
     private readonly TextBlock creationSelection;
     private IReadOnlyList<IStorageFile> creationFiles = Array.Empty<IStorageFile>();
     private string? creationFolder;
+    private readonly Button extractButton;
+    private readonly TextBox extractionName;
+    private readonly TextBlock extractionSelection;
+    private SelectedArchive? openedArchive;
     private bool startupHandled;
     private bool busy;
     private bool stopping;
@@ -48,7 +52,14 @@ public partial class MainWindow : Window
         retryCreateButton = this.FindControl<Button>("RetryCreateButton")!;
         creationName = this.FindControl<TextBox>("CreationName")!;
         creationSelection = this.FindControl<TextBlock>("CreationSelection")!;
-        Closed += (_, _) => { foreach (var file in creationFiles) { file.Dispose(); } };
+        extractButton = this.FindControl<Button>("ExtractButton")!;
+        extractionName = this.FindControl<TextBox>("ExtractionName")!;
+        extractionSelection = this.FindControl<TextBlock>("ExtractionSelection")!;
+        Closed += (_, _) =>
+        {
+            foreach (var file in creationFiles) { file.Dispose(); }
+            openedArchive?.Owner?.Dispose();
+        };
         UpdateActions();
     }
 
@@ -146,6 +157,9 @@ public partial class MainWindow : Window
                         VerificationState.Unavailable => "검증 불가",
                         _ => "검증 전"
                     })).ToArray();
+                var previousArchive = openedArchive;
+                openedArchive = selected;
+                previousArchive?.Owner?.Dispose();
                 archiveTitle.Text = selected.Name;
                 emptyState.Text = "이 압축파일에는 표시할 항목이 없습니다.";
                 emptyState.IsVisible = result.Entries.Count == 0;
@@ -175,7 +189,10 @@ public partial class MainWindow : Window
         }
         finally
         {
-            try { selected?.Owner?.Dispose(); }
+            try
+            {
+                if (!ReferenceEquals(selected, openedArchive)) { selected?.Owner?.Dispose(); }
+            }
             catch (Exception) { status.Text = "파일 핸들 정리를 완료하지 못했습니다. 다시 열기 전에 파일 상태를 확인하세요."; }
             activeJob = null;
             activeJobId = null;
@@ -275,6 +292,73 @@ public partial class MainWindow : Window
         }
     }
 
+    private async void ExtractArchive(object? sender, RoutedEventArgs e)
+    {
+        var source = openedArchive;
+        if (busy || source is null || !workspace.CanExtractZip) { return; }
+        busy = true;
+        UpdateActions();
+        try
+        {
+            var name = extractionName.Text ?? "";
+            ZipExtractionWorkflow.ValidateFolderName(name);
+            if (!StorageProvider.CanPickFolder)
+            {
+                status.Text = "저장 위치 선택을 사용할 수 없습니다.";
+                return;
+            }
+            var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+            {
+                Title = "새 결과 폴더를 만들 부모 위치 선택", AllowMultiple = false
+            });
+            if (folders.Count == 0) { return; }
+            using var parent = folders[0];
+            if (!parent.Path.IsFile)
+            {
+                status.Text = "안전한 네이티브 게시에는 사용자가 고른 로컬 부모 폴더가 필요합니다.";
+                return;
+            }
+            var destination = Path.Combine(parent.Path.LocalPath, name);
+            extractionSelection.Text = $"새 결과 폴더: {destination}";
+            using var cancellation = new CancellationTokenSource();
+            var jobId = Guid.NewGuid();
+            activeJobId = jobId;
+            activeJob = cancellation;
+            stopping = false;
+            progress.IsVisible = true;
+            status.Text = "ZIP 무결성과 새 결과 폴더 게시를 확인하고 있습니다.";
+            UpdateActions();
+            var result = await Task.Run(() => workspace.ExtractAsync(jobId, async token =>
+            {
+                token.ThrowIfCancellationRequested();
+                return await source.OpenRead();
+            }, destination, cancellation.Token));
+            if (activeJobId != jobId || result.Job.JobId != jobId)
+            {
+                throw new ArchiveException(ArchiveError.EngineFailure);
+            }
+            status.Text = ZipExtractionWorkflow.Describe(result);
+        }
+        catch (OperationCanceledException)
+        {
+            status.Text = "압축 풀기가 취소되었습니다. 기존 목록과 선택은 유지됩니다.";
+        }
+        catch (ArchiveException error) { status.Text = ErrorMessage(error.Code); }
+        catch (Exception)
+        {
+            status.Text = "압축 풀기를 완료하지 못했습니다. 파일과 새 저장 위치를 확인하세요. 목록과 선택은 유지됩니다.";
+        }
+        finally
+        {
+            activeJob = null;
+            activeJobId = null;
+            progress.IsVisible = false;
+            busy = false;
+            stopping = false;
+            UpdateActions();
+        }
+    }
+
     private void StopJob(object? sender, RoutedEventArgs e) => RequestStop();
 
     private void RequestStop()
@@ -294,6 +378,10 @@ public partial class MainWindow : Window
         createButton.Content = ZipCreationWorkflow.ValidationEnabled ? "ZIP 생성 검증" : "새로 압축하기";
         retryCreateButton.IsEnabled = !busy && workspace.CanCreateZip && creationFiles.Count > 0 && creationFolder is not null;
         creationName.IsEnabled = !busy && workspace.CanCreateZip;
+        extractButton.IsEnabled = !busy && openedArchive is not null && workspace.CanExtractZip;
+        extractButton.Content = ZipExtractionWorkflow.ValidationEnabled ? "압축 풀기 검증" : "압축 풀기";
+        extractButton.SetValue(ToolTip.TipProperty, ZipExtractionWorkflow.ScopeMessage);
+        extractionName.IsEnabled = !busy && workspace.CanExtractZip;
         stopButton.IsEnabled = activeJob is not null && !stopping;
         availability.Text = workspace.AvailabilityMessage;
     }

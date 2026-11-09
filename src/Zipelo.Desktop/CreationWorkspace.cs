@@ -11,18 +11,41 @@ internal sealed class CreationWorkspace(CoreWorkspace listing, ZipWorkerClient c
 {
     public bool IsAvailable => listing.IsAvailable && filesReady();
     public string AvailabilityMessage => listing.AvailabilityMessage +
+        (ZipExtractionWorkflow.ValidationEnabled ? " " + ZipExtractionWorkflow.ScopeMessage : " 일반 압축 풀기는 비활성입니다.") +
         (ZipCreationWorkflow.ValidationEnabled ? " " + ZipCreationWorkflow.ScopeMessage : " 생성 연결은 개발 검증 빌드에서만 사용할 수 있습니다.");
 
     public bool CanExecute(WorkspaceAction action, string format) => IsAvailable &&
         (action == WorkspaceAction.Create
             ? ZipCreationWorkflow.ValidationEnabled && NewZipPublisher.IsSupportedPlatform &&
                 format.Equals("zip", StringComparison.OrdinalIgnoreCase)
-            : listing.CanExecute(action, format));
+            : action == WorkspaceAction.Extract
+                ? ZipExtractionWorkflow.ValidationEnabled && NewFolderPublisher.IsSupportedPlatform &&
+                    client.SupportsMemoryExtraction && format.Equals("zip", StringComparison.OrdinalIgnoreCase)
+                : listing.CanExecute(action, format));
 
     public async Task<WorkspaceResult> ExecuteAsync(WorkspaceRequest request, IProgress<WorkspaceProgress> progress,
         Func<PasswordChallenge, CancellationToken, Task<SecureString?>> requestPassword, CancellationToken token)
     {
         if (!CanExecute(request.Action, request.Format)) { throw new ArchiveException(ArchiveError.UnsupportedOperation); }
+        if (request.Action == WorkspaceAction.Extract)
+        {
+            if (request.Sources.Count != 1 || request.Destination is null ||
+                ArchiveOpenArguments.ValidatePath(request.Sources[0]).Error is not null)
+            {
+                throw new ArchiveException(ArchiveError.UnsupportedOperation);
+            }
+            var extraction = await ZipExtractionWorkflow.RunAsync(client, request.JobId, cancellation =>
+            {
+                cancellation.ThrowIfCancellationRequested();
+                return Task.FromResult<Stream>(new FileStream(request.Sources[0], FileMode.Open,
+                    FileAccess.Read, FileShare.Read, 65536, FileOptions.Asynchronous | FileOptions.SequentialScan));
+            }, request.Destination, token).ConfigureAwait(false);
+            var extracted = CoreWorkspace.MapResult(extraction.Job);
+            var extractionError = extraction.Publication?.Error ?? extraction.Job.Error;
+            var extractionOutcome = ZipExtractionWorkflow.Published(extraction) ? WorkspaceOutcome.Completed
+                : extractionError == ArchiveError.Cancelled ? WorkspaceOutcome.Cancelled : WorkspaceOutcome.Failed;
+            return extracted with { Outcome = extractionOutcome, Error = extractionError, Extraction = extraction };
+        }
         if (request.Action != WorkspaceAction.Create)
         {
             return await listing.ExecuteAsync(request, progress, requestPassword, token).ConfigureAwait(false);

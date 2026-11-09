@@ -54,6 +54,7 @@ public sealed record WorkspaceResult(
     public Guid JobId { get; init; }
     public ArchiveError Error { get; init; }
     public Zipelo.Ui.CreationResult? Creation { get; init; }
+    public Zipelo.Ui.ExtractionResult? Extraction { get; init; }
 }
 
 // UI 측 연결 경계임. 실제 코어 계약과 연결하는 어댑터는 별도 구현함.

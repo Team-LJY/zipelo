@@ -50,6 +50,9 @@
         <StackPanel Grid.Row="4" Margin="0,20,0,0">
             <TextBlock x:Name="Status" Text="작업 대기 중" AutomationProperties.LiveSetting="Polite" />
             <TextBlock x:Name="CreationSelection" TextWrapping="Wrap" Margin="0,8,0,0" />
+            <TextBlock Text="새 결과 폴더 이름 (기존 대상과 병합하지 않음)" Margin="0,8,0,0" />
+            <TextBox x:Name="ExtractionName" Text="압축 푼 파일" AutomationProperties.Name="새 결과 폴더 이름" />
+            <TextBlock x:Name="ExtractionSelection" TextWrapping="Wrap" />
             <TextBlock x:Name="ResultSummary" Margin="0,8,0,0" />
             <ProgressBar x:Name="Progress" Height="8" Margin="0,12,0,16" Minimum="0" Maximum="100"
                 AutomationProperties.Name="작업 진행률" />

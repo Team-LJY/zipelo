@@ -109,17 +109,30 @@ public partial class MainWindow : Window
 
     private async void ExtractArchive(object sender, RoutedEventArgs e)
     {
-        // 실제 해제 저장 계층 검증 전에는 프로그램 호출도 거부함.
-        await SelectAndRun(WorkspaceAction.Extract, () => null);
+        await SelectAndRun(WorkspaceAction.Extract, () =>
+        {
+            if (archivePath is null) { SetStatus("먼저 ZIP 목록을 열어주세요.", true); return null; }
+            var name = ExtractionName.Text;
+            ZipExtractionWorkflow.ValidateFolderName(name);
+            var parent = new OpenFolderDialog
+            {
+                Title = "새 결과 폴더를 만들 부모 위치 선택 (기존 폴더에 병합하지 않음)",
+                Multiselect = false
+            };
+            if (parent.ShowDialog(this) != true) { return null; }
+            var destination = Path.Combine(parent.FolderName, name);
+            ExtractionSelection.Text = $"새 결과 폴더: {destination}";
+            return new WorkspaceRequest(Guid.NewGuid(), WorkspaceAction.Extract, [archivePath], destination);
+        });
     }
 
     private async Task SelectAndRun(WorkspaceAction action, Func<WorkspaceRequest?> select)
     {
         if (phase != ScreenPhase.Idle) { return; }
-        if (!CanExecute(action) || action == WorkspaceAction.Extract)
+        if (!CanExecute(action))
         {
             SetStatus(action == WorkspaceAction.Extract
-                ? "압축 풀기는 안전한 저장 기능의 검증 후 사용할 수 있습니다."
+                ? "일반 압축 풀기는 비활성입니다. 명시적인 개발 검증 빌드와 작업자가 필요합니다."
                 : "이 기능의 작업 프로세스가 연결되지 않았거나 지원하지 않습니다.", true);
             return;
         }
@@ -174,7 +187,12 @@ public partial class MainWindow : Window
         Progress.IsIndeterminate = true;
         ResultSummary.Text = "";
         UpdateActions();
-        SetStatus(request.Action == WorkspaceAction.List ? "파일 목록을 읽고 있습니다." : "파일을 압축하고 있습니다.");
+        SetStatus(request.Action switch
+        {
+            WorkspaceAction.List => "파일 목록을 읽고 있습니다.",
+            WorkspaceAction.Extract => "ZIP 무결성과 새 폴더 게시를 확인하고 있습니다.",
+            _ => "파일을 압축하고 있습니다."
+        });
 
         var progress = new Progress<WorkspaceProgress>(value => ApplyProgress(request.JobId, value));
         try
@@ -183,7 +201,7 @@ public partial class MainWindow : Window
                 request, progress, RequestPasswordAsync, cancellation.Token));
             phase = ScreenPhase.Finishing;
             UpdateActions();
-            if (result.JobId != request.JobId)
+            if (activeJobId != request.JobId || result.JobId != request.JobId)
             {
                 throw new ArchiveException(ArchiveError.EngineFailure);
             }
@@ -261,6 +279,15 @@ public partial class MainWindow : Window
 
     private void PublishResult(WorkspaceRequest request, WorkspaceResult result)
     {
+        if (request.Action == WorkspaceAction.Extract)
+        {
+            var extractionPublished = result.Extraction is not null && ZipExtractionWorkflow.Published(result.Extraction);
+            Progress.Value = extractionPublished ? 100 : 0;
+            ResultSummary.Text = "열린 ZIP 목록과 이름/위치는 유지됩니다. 다른 새 위치는 압축 풀기 검증에서 선택하세요.";
+            SetStatus(result.Extraction is not null ? ZipExtractionWorkflow.Describe(result.Extraction)
+                : "새 결과 폴더의 게시를 확인하지 못했습니다.", !extractionPublished);
+            return;
+        }
         if (request.Action == WorkspaceAction.Create)
         {
             Progress.Value = result.Creation?.Publication?.Published == true ? 100 : 0;
@@ -372,8 +399,10 @@ public partial class MainWindow : Window
         CreateButton.ToolTip = ZipCreationWorkflow.ScopeMessage;
         RetryCreateButton.IsEnabled = ready && CanExecute(WorkspaceAction.Create) &&
             creationSources.Length > 0 && creationDestination is not null;
-        ExtractButton.IsEnabled = false;
-        ExtractButton.ToolTip = "안전한 저장 기능의 Windows 검증 후 사용할 수 있습니다.";
+        ExtractButton.IsEnabled = ready && archivePath is not null && CanExecute(WorkspaceAction.Extract);
+        ExtractButton.Content = ZipExtractionWorkflow.ValidationEnabled ? "압축 풀기 검증" : "압축 풀기";
+        ExtractButton.ToolTip = ZipExtractionWorkflow.ScopeMessage;
+        ExtractionName.IsEnabled = ready && CanExecute(WorkspaceAction.Extract);
         StopButton.IsEnabled = activeJob is not null &&
             phase is ScreenPhase.Running or ScreenPhase.WaitingForPassword;
     }
