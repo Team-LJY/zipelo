@@ -91,6 +91,9 @@ internal static class Program
         Run("header.unterminated-comment", () => Reject([31, 139, 8, 16, 0, 0, 0, 0, 0, 255, 65], Failure.Truncated));
         Run("header.extra-truncated", () => Reject([31, 139, 8, 4, 0, 0, 0, 0, 0, 255, 255, 255, 1], Failure.Truncated));
         Run("deflate.invalid-block", () => Reject(Fixture.Wrap([7], [], 0).Bytes, Failure.Deflate));
+        Run("deflate.invalid-backreference-history", () =>
+            Reject(Fixture.Wrap([0x03, 0x02, 0x00], [0, 0, 0], 0).Bytes, Failure.Deflate));
+        Run("deflate.valid-three-zero-bytes", () => Verify(Fixture.Create([0, 0, 0]), [0, 0, 0], 65536));
         foreach (var suffix in new[] { new byte[] { 0 }, new byte[] { 255 }, new byte[512], basic.Bytes,
             Fixture.Create([]).Bytes, new byte[] { 31, 139 } })
         {

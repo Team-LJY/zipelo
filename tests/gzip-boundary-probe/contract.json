@@ -55,5 +55,15 @@
         ],
         "execution": "중앙의 외부 프로세스 시간 제한 아래 Windows/Linux에서 실행함. 인수 없이 실행하며 성공 0, 실패 1, 잘못된 인수 2임. 실제 사례 수는 실행기의 passed/failed 출력으로 확인함.",
         "limitations": "동기 inflater와 수신기 내부 취소는 협조적임. Task.Run으로 정지를 숨기지 않음. 성능/할당량과 라이브러리 안전성 전체는 검증하지 않음. Windows 정리와 runtime 라이선스/배포 보류는 별개임."
+    },
+    "adoptionBlocker": {
+        "basis": "7cafac4c2c741fd2af390e95b34362b8bfb97787의 정적 검토에서 찾은 경로임. 실제 SharpZipLib 실행 재현은 아직 없음.",
+        "rawDeflateHex": "030200",
+        "trailerCalculatedForHex": "000000",
+        "expectedFailure": "Deflate",
+        "reason": "출력 이력 없이 길이 3, 거리 1을 참조하는 잘못된 Deflate임. SharpZipLib 1.4.2 OutputWindow.Repeat가 초기 0을 복사하면 그 출력에 맞춘 CRC32/ISIZE와 경계 검사를 통과할 수 있음.",
+        "gate": "IsFinished/TotalIn/RemainingInput과 소비 길이만으로 역참조 이력을 검증할 수 없음. 이 문제가 해결되기 전에는 엄격한 GZip 입력 검증기로 채택할 수 없음.",
+        "regression": "deflate.invalid-backreference-history는 Failure.Deflate 거부를 요구함. 검사가 실패해도 성공 기대값이나 건너뛰기로 바꾸지 않음. deflate.valid-three-zero-bytes는 BCL DeflateStream으로 만든 유효한 0 바이트 3개의 별도 정상 대조군임.",
+        "scope": "기존 경계/예산/취소 검사를 유지함. 자체 Deflate 디코더와 라이브러리 내부 패치는 추가하지 않음."
     }
 }
