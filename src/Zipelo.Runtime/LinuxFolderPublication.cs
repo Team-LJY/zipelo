@@ -20,8 +20,8 @@ internal sealed class LinuxFolderPublication : PendingFolderPublication
     {
         var system = new byte[256];
         if (Fstatfs(parent, system) != 0) { ThrowLast(); }
-        // 로컬 ext4, XFS만 초기 구현 대상으로 삼음. FUSE와 네트워크 FS는 거부함.
-        if (BitConverter.ToInt64(system, 0) is not (0xEF53 or 0x58465342))
+        // ext2/3/4의 공통 식별값으로 ext4를 확정할 수 없어 XFS만 허용함.
+        if (BitConverter.ToInt64(system, 0) != 0x58465342)
         {
             throw new ArchiveException(ArchiveError.OutputUnavailable);
         }

@@ -62,4 +62,4 @@ Windows 검증에서는 Worker와 Runtime을 먼저 빌드하고 전체 작업�
 
 ## 메모리 해제 확장
 
-ExtractAsync와 선택적 ExtractedEntries 결과를 추가함. 경로, 타입, 실제 길이와 CRC 검증은 별도 작업자에서 수행하며 기존 List/Create 계약은 유지함. 일반 해제 capability와 SupportsSafeExtraction은 비활성임. 새 폴더 게시 API는 Windows NTFS의 신뢰 가능한 쓰기 ACL, Linux ext4/XFS의 현재 사용자 소유와 외부 쓰기 금지 조건에서만 실행함. 핸들 상대 생성, 전체 바이트 검증, 덮어쓰기 금지 게시와 소유 항목 정리를 구현했으며 실제 C# 실행은 미검증임. 정확한 제한과 검증 대기는 [ZIP_EXTRACTION.md](ZIP_EXTRACTION.md)를 따름.
+ExtractAsync와 선택적 ExtractedEntries 결과를 추가함. 경로, 타입, 실제 길이와 CRC 검증은 별도 작업자에서 수행하며 기존 List/Create 계약은 유지함. 일반 해제 capability와 SupportsSafeExtraction은 비활성임. 새 폴더 게시 API는 Windows NTFS의 신뢰 가능한 쓰기 ACL, Linux XFS의 현재 사용자 소유와 외부 쓰기 금지 조건에서만 실행함. ext2/ext3/ext4는 공통 파일시스템 식별값으로 구분할 수 없어 임시 항목 생성 전에 실패 폐쇄함. ext4 지원에는 확실한 fd 기준 판별과 실제 검증이 필요함. 핸들 상대 생성, 전체 바이트 검증, 덮어쓰기 금지 게시와 소유 항목 정리를 구현했으며 실제 C# 실행은 미검증임. 정확한 제한과 검증 대기는 [ZIP_EXTRACTION.md](ZIP_EXTRACTION.md)를 따름.

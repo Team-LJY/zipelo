@@ -4,7 +4,7 @@
 
 메모리 해제와 Windows/Linux x64 새 폴더 게시 소스를 작성함. NewFolderPublisher의 구현 진입점은 연결했지만 일반 UI의 SupportsSafeExtraction=false와 Extract capability 미노출은 유지함. 로컬 .NET SDK가 없어 이번 C# 컴파일과 실제 게시 실행은 미검증임. 이전 Windows 62개 통과는 단일 ZIP 파일 게시에 관한 보고이며 새 폴더 게시의 증거가 아님.
 
-Windows는 로컬 NTFS와 아래 쓰기 ACL 조건에 한정함. Linux는 ext4/XFS, openat2/statx/renameat2와 아래 소유자/모드 조건에 한정함. Ubuntu 24.04/26.04 LTS의 실제 실행은 각각 별도 검증해야 함. 조건이 확인되지 않으면 OutputUnavailable로 실패하며 다른 경로 API로 우회하지 않음.
+Windows는 로컬 NTFS와 아래 쓰기 ACL 조건에 한정함. Linux는 현재 XFS, openat2/statx/renameat2와 아래 소유자/모드 조건에 한정함. ext2/ext3/ext4는 구분 미완성으로 임시 폴더 생성 전에 거부함. Ubuntu 24.04/26.04 LTS의 실제 실행은 각각 별도 검증해야 함. 조건이 확인되지 않으면 OutputUnavailable로 실패하며 다른 경로 API로 우회하지 않음.
 
 ## UI와 검증 진입점
 
@@ -53,7 +53,9 @@ NTFS는 열린 자식 파일이 있는 디렉터리 rename을 제한하므로 �
 
 ## Linux 게시
 
-openat2(RESOLVE_NO_SYMLINKS)로 부모를 열고 fstatfs로 ext4/XFS를 확인함. 부모 소유자가 현재 euid이고 그룹/기타 쓰기가 없는 경우만 허용함. 다른 계정이 부모 항목을 교체할 수 있는 공용 디렉터리는 거부함. 새 임시 디렉터리는 mkdirat 0700, 파일은 openat2 O_CREAT|O_EXCL 0600으로 생성함. umask는 권한을 줄일 수 있지만 넓히지 않음. 이후 작업은 보유 디렉터리 fd 상대, RESOLVE_BENEATH|NO_SYMLINKS|NO_MAGICLINKS로 수행함.
+openat2(RESOLVE_NO_SYMLINKS)로 부모를 열고 해당 fd의 fstatfs 값이 XFS(0x58465342)인 경우만 허용함. ext2/ext3/ext4는 모두 0xEF53을 사용하므로 이 값으로 ext4라고 판정하지 않음. ext 계열과 그 밖의 파일시스템은 임시 항목 생성 전 OutputUnavailable로 실패 폐쇄함. ext4 지원 목표를 철회한 것이 아니며, 보유 fd에 연결된 신뢰 가능한 판별과 실제 OS 검증이 선행되어야 함. 문자열 경로의 마운트 이름으로 대체 판정하지 않음.
+
+부모 소유자가 현재 euid이고 그룹/기타 쓰기가 없는 경우만 허용함. 다른 계정이 부모 항목을 교체할 수 있는 공용 디렉터리는 거부함. 새 임시 디렉터리는 mkdirat 0700, 파일은 openat2 O_CREAT|O_EXCL 0600으로 생성함. umask는 권한을 줄일 수 있지만 넓히지 않음. 이후 작업은 보유 디렉터리 fd 상대, RESOLVE_BENEATH|NO_SYMLINKS|NO_MAGICLINKS로 수행함.
 
 각 노드의 statx 장치/ inode, 타입, uid/모드와 일반 파일 링크 수 1을 확인함. 쓰기/flush/전체 바이트 재읽기 뒤 getdents64 이름 집합을 비교하고 디렉터리 fsync 후 renameat2(RENAME_NOREPLACE)로 게시함. 루트 이름과 보유 inode의 일치를 게시 직전에 확인함. 파일시스템이 해당 연산을 지원하지 않으면 우회하지 않음.
 
@@ -61,7 +63,7 @@ openat2(RESOLVE_NO_SYMLINKS)로 부모를 열고 fstatfs로 ext4/XFS를 확인�
 
 ## 실제 검증과 남은 조건
 
-이번 변경은 소스 검토 단계임. 실제 C# 컴파일, Windows NTFS에서 자식 핸들 종료 후 rename과 충돌 뒤 재열기 정리, ACL 거부, 링크/경합/취소, Ubuntu 각 LTS ext4/XFS 실행은 미검증임. 테스트 담당자가 기존 실패 폐쇄 상태 검사와 차단된 8개 게시 사례를 새 조건에 맞춰 연결해야 함. 공개 capability나 일반 UI 해제를 활성화하지 않음.
+이번 변경은 소스 검토 단계임. 실제 C# 컴파일, Windows NTFS에서 자식 핸들 종료 후 rename과 충돌 뒤 재열기 정리, ACL 거부, 링크/경합/취소, Ubuntu 각 LTS XFS 게시와 ext 계열 거부 실행은 미검증임. ext4 게시 구현은 위 판별 문제로 차단 상태임. 테스트 담당자가 기존 실패 폐쇄 상태 검사와 차단된 8개 게시 사례를 새 조건에 맞춰 연결해야 함. 공개 capability나 일반 UI 해제를 활성화하지 않음.
 
 강제 종료/전원 손실 시 임시 트리가 남을 수 있음. 게시 후 부모 디렉터리 fsync나 전원 장애 복구 트랜잭션까지 보장하지 않음. 실패 정리에서 모르는 노드, 변경된 ID 또는 OS 오류가 발견되면 기존 자료 보존을 우선해 잔존을 보고함. 네이티브 I/O의 강제 시간 제한과 실제 경합 검증도 남아 있음.
 
@@ -73,4 +75,5 @@ openat2(RESOLVE_NO_SYMLINKS)로 부모를 열고 fstatfs로 ext4/XFS를 확인�
 - [Native rename의 부모 핸들과 덮어쓰기 정책](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ntifs/ns-ntifs-_file_rename_information)
 - [핸들 보안 설명자 읽기](https://learn.microsoft.com/en-us/windows/win32/api/aclapi/nf-aclapi-getsecurityinfo)
 - [Linux openat2 경계](https://man7.org/linux/man-pages/man2/openat2.2.html)
+- [Linux statfs의 ext 공통 식별값과 XFS 식별값](https://man7.org/linux/man-pages/man2/statfs.2.html)
 - [Linux renameat2 덮어쓰기 금지](https://man7.org/linux/man-pages/man2/rename.2.html)
