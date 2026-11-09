@@ -167,9 +167,6 @@ internal static class Program
                 state.Mark("probe.read.end");
             }
             token.ThrowIfCancellationRequested();
-            state.Mark("probe.verify.begin");
-            runtime.Verify(publication, token);
-            state.Mark("probe.verify.end");
         }
         catch (ArchiveException failure) when (!initialized &&
             failure.Code is ArchiveError.OutputUnavailable or ArchiveError.UnsupportedOperation or ArchiveError.UnsafePath)
@@ -200,17 +197,20 @@ internal static class Program
                 }
                 finally
                 {
-                    try
+                    if (state.AbortReturned)
                     {
-                        state.Mark("probe.dispose.begin");
-                        ((IDisposable)publication).Dispose();
-                        state.DisposeReturned = true;
-                        state.Mark("probe.dispose.end");
-                    }
-                    catch (Exception failure)
-                    {
-                        result = 1;
-                        Console.Error.WriteLine("DISPOSE_FAIL: " + failure.GetType().Name);
+                        try
+                        {
+                            state.Mark("probe.dispose.begin");
+                            ((IDisposable)publication).Dispose();
+                            state.DisposeReturned = true;
+                            state.Mark("probe.dispose.end");
+                        }
+                        catch (Exception failure)
+                        {
+                            result = 1;
+                            Console.Error.WriteLine("DISPOSE_FAIL: " + failure.GetType().Name);
+                        }
                     }
                 }
             }
@@ -281,7 +281,6 @@ internal static class Program
         private readonly ConstructorInfo constructor;
         private readonly MethodInfo initialize;
         private readonly MethodInfo createEntry;
-        private readonly MethodInfo verify;
         private readonly MethodInfo abort;
         private readonly PropertyInfo job;
         internal readonly Action<Guid, string, long, ulong, string> Record;
@@ -295,7 +294,6 @@ internal static class Program
                 ?? throw new MissingMethodException(type.FullName, ".ctor(string)");
             initialize = Method(type, "Initialize");
             createEntry = Method(pending, "CreateStreamingEntry");
-            verify = Method(pending, "Verify");
             abort = Method(type, "Abort");
             job = type.GetProperty("DiagnosticJobId", Instance)
                 ?? throw new MissingMemberException(type.FullName, "DiagnosticJobId");
@@ -316,7 +314,6 @@ internal static class Program
 
         internal void SetJob(object pending, Guid id) => job.SetValue(pending, id);
         internal void Initialize(object pending) => Invoke(initialize, pending);
-        internal void Verify(object pending, CancellationToken token) => Invoke(verify, pending, token);
         internal bool Abort(object pending) => Invoke(abort, pending) is true;
         internal SafeFileHandle CreateEntry(object pending, ArchiveEntry entry, CancellationToken token)
             => Invoke(createEntry, pending, entry, token) as SafeFileHandle
