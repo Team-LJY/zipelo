@@ -2,6 +2,16 @@
 
 이 고지 묶음은 **검토 미완료이며 출시용 고지 완료본이 아닙니다.** `dependency-inventory.json`의 `release_ready`는 `false`입니다. Windows 배포 경로별 라이선스 적용 조건과 최종 배포물의 고지 포함 확인이 남아 있습니다.
 
+## 단일 파일 배포 입력
+
+패키징의 단일 `--notices` 입력에는 [THIRD_PARTY_NOTICES.txt](THIRD_PARTY_NOTICES.txt)를 사용합니다. 이 TXT에는 구성요소 18개의 정확한 패키지와 버전, snapshot별 적용 파일 982개 및 확보한 원문 17개 전체가 들어 있습니다. 다른 파일의 상대 링크를 열어야 원문을 읽을 수 있는 구조가 아닙니다.
+
+[notice-bundle-manifest.json](notice-bundle-manifest.json)에 각 원문의 SHA-256, TXT 안의 바이트 시작 위치와 길이, 원문과의 바이트 일치 결과를 기록했습니다. 구성요소별 적용 파일 절의 해시와 범위도 기록했습니다. 원문 구간의 BOM과 줄바꿈까지 그대로 보존했으며, 여러 패키지가 같은 원문을 참조하면 동일한 원문 번호로 연결합니다. 기존 원문 파일과 출처 inventory는 유지합니다.
+
+번들 입력 inventory는 커밋 `6d9a02d13a443d245eb7a13d8f7a4c4f29b0e7f5`의 SHA-256 `79daa5d4e52b729a9d31a8fb975b3d363b3d41bfcfaa780290bb26ec033756bd`로 고정했습니다. 현재 inventory의 `distribution_notice_bundle`은 생성된 TXT와 대조 manifest의 출력 해시를 가리킵니다.
+
+TXT의 내용 대조는 완료했지만, Windows 및 Ubuntu 최종 조립물 포함 확인과 라이선스 적용 검토는 미완료입니다. 공식 .NET 아카이브 자체의 LICENSE와 ThirdPartyNotices도 최종 배포에 별도로 보존해야 합니다. 이 통합 파일은 그 의무를 대체하지 않습니다.
+
 ## 범위와 Zipelo 자체 라이선스
 
 문서 검토의 기준 소스는 `626483e8935aaa03d5a34feebc61be2f9180b80d`입니다. 실제 산출물의 소스 조합은 각 round의 snapshot manifest에 기록된 별도 refs이며 inventory에 그대로 남겼습니다. 이 기준 main에서 산출물을 다시 빌드한 것은 아닙니다. 기존 self-contained 방식의 Windows round10과 Ubuntu round9 산출물만 대상으로 삼았습니다. 공유 런타임 패키징 실험, 후속 스트리밍 기능, 개발 SDK와 운영체제가 제공하는 라이브러리는 이 배포 구성에 포함했다고 간주하지 않았습니다.

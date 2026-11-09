@@ -1,0 +1,503 @@
+{
+    "schema_version": 1,
+    "review_status": "incomplete",
+    "release_ready": false,
+    "bundle_path": "legal/THIRD_PARTY_NOTICES.txt",
+    "bundle_sha256": "f540ca6c4eb692478826815c25fa44103bcbee89e8b2b224905950b2ed9ef091",
+    "bundle_bytes": 577333,
+    "input_inventory": {
+        "path": "legal/dependency-inventory.json",
+        "commit": "6d9a02d13a443d245eb7a13d8f7a4c4f29b0e7f5",
+        "sha256": "79daa5d4e52b729a9d31a8fb975b3d363b3d41bfcfaa780290bb26ec033756bd"
+    },
+    "encoding": "UTF-8; original byte segments preserve original BOM and line endings",
+    "offset_convention": "zero-based byte offsets; byte_length excludes generated delimiters",
+    "deduplication_policy": "Each inventory notice file appears once in full; component references share its section. No original text is replaced with a link.",
+    "original_notice_count": 17,
+    "component_count": 18,
+    "applicable_external_asset_count": 982,
+    "original_sections": [
+        {
+            "notice_id": "N001",
+            "source_path": "legal/notices/avalonia-11.3.9/LICENSE.txt",
+            "source_bytes": 1096,
+            "source_sha256": "213814d306090074d234d760239ff0f67eb9b8d20eefb4d5631bb39dbe0b769b",
+            "byte_offset": 137870,
+            "byte_length": 1096,
+            "embedded_sha256": "213814d306090074d234d760239ff0f67eb9b8d20eefb4d5631bb39dbe0b769b",
+            "byte_equal": true,
+            "related_components": [
+                "Avalonia/11.3.9",
+                "Avalonia.Desktop/11.3.9",
+                "Avalonia.FreeDesktop/11.3.9",
+                "Avalonia.Native/11.3.9",
+                "Avalonia.Remote.Protocol/11.3.9",
+                "Avalonia.Skia/11.3.9",
+                "Avalonia.Themes.Fluent/11.3.9",
+                "Avalonia.Win32/11.3.9",
+                "Avalonia.X11/11.3.9"
+            ]
+        },
+        {
+            "notice_id": "N002",
+            "source_path": "legal/notices/avalonia-11.3.9/NOTICE.txt",
+            "source_bytes": 18076,
+            "source_sha256": "0e1ecea8b94eaacec8ade631994149d678940d05163b21d6f4be3d5dccb0a08d",
+            "byte_offset": 139710,
+            "byte_length": 18076,
+            "embedded_sha256": "0e1ecea8b94eaacec8ade631994149d678940d05163b21d6f4be3d5dccb0a08d",
+            "byte_equal": true,
+            "related_components": [
+                "Avalonia/11.3.9",
+                "Avalonia.Desktop/11.3.9",
+                "Avalonia.FreeDesktop/11.3.9",
+                "Avalonia.Native/11.3.9",
+                "Avalonia.Remote.Protocol/11.3.9",
+                "Avalonia.Skia/11.3.9",
+                "Avalonia.Themes.Fluent/11.3.9",
+                "Avalonia.Win32/11.3.9",
+                "Avalonia.X11/11.3.9"
+            ]
+        },
+        {
+            "notice_id": "N003",
+            "source_path": "legal/notices/tmds.dbus.protocol-0.21.3/COPYING.txt",
+            "source_bytes": 1151,
+            "source_sha256": "aca3b49277abcc7886ccb2f115603a9f5b15fc3f96019a10c00f2974098b210c",
+            "byte_offset": 158335,
+            "byte_length": 1151,
+            "embedded_sha256": "aca3b49277abcc7886ccb2f115603a9f5b15fc3f96019a10c00f2974098b210c",
+            "byte_equal": true,
+            "related_components": [
+                "Tmds.DBus.Protocol/0.21.3"
+            ]
+        },
+        {
+            "notice_id": "N004",
+            "source_path": "legal/notices/microcom.runtime-0.11.0/LICENSE.txt",
+            "source_bytes": 1072,
+            "source_sha256": "6ee769c9ac4dac9abb16b98b1341e9528ff9f4ab685481410d3376d14148f3a9",
+            "byte_offset": 160034,
+            "byte_length": 1072,
+            "embedded_sha256": "6ee769c9ac4dac9abb16b98b1341e9528ff9f4ab685481410d3376d14148f3a9",
+            "byte_equal": true,
+            "related_components": [
+                "MicroCom.Runtime/0.11.0"
+            ]
+        },
+        {
+            "notice_id": "N005",
+            "source_path": "legal/notices/package-texts/89101e35a8c66fd4-LICENSE.txt",
+            "source_bytes": 1129,
+            "source_sha256": "89101e35a8c66fd4d6dffc1763259161d35cb564c169714ec227a768c89f2938",
+            "byte_offset": 162690,
+            "byte_length": 1129,
+            "embedded_sha256": "89101e35a8c66fd4d6dffc1763259161d35cb564c169714ec227a768c89f2938",
+            "byte_equal": true,
+            "related_components": [
+                "HarfBuzzSharp/8.3.1.1",
+                "HarfBuzzSharp.NativeAssets.Linux/8.3.1.1",
+                "SkiaSharp/2.88.9",
+                "SkiaSharp.NativeAssets.Linux/2.88.9"
+            ]
+        },
+        {
+            "notice_id": "N006",
+            "source_path": "legal/notices/package-texts/21504c46c4c58aa6-THIRD-PARTY-NOTICES.txt",
+            "source_bytes": 139775,
+            "source_sha256": "21504c46c4c58aa64c1055bd2dcbc5f9a136b4b8c412ed3cc6740e22c5b127f5",
+            "byte_offset": 165176,
+            "byte_length": 139775,
+            "embedded_sha256": "21504c46c4c58aa64c1055bd2dcbc5f9a136b4b8c412ed3cc6740e22c5b127f5",
+            "byte_equal": true,
+            "related_components": [
+                "HarfBuzzSharp.NativeAssets.Linux/8.3.1.1",
+                "SkiaSharp/2.88.9",
+                "SkiaSharp.NativeAssets.Linux/2.88.9"
+            ]
+        },
+        {
+            "notice_id": "N007",
+            "source_path": "legal/notices/dotnet-runtime-10.0.14-linux-x64/LICENSE.txt",
+            "source_bytes": 1116,
+            "source_sha256": "cfc21f5e8bd655ae997eec916138b707b1d290b83272c02a95c9f821b8c87310",
+            "byte_offset": 305753,
+            "byte_length": 1116,
+            "embedded_sha256": "cfc21f5e8bd655ae997eec916138b707b1d290b83272c02a95c9f821b8c87310",
+            "byte_equal": true,
+            "related_components": [
+                "Microsoft.NETCore.App.Runtime.linux-x64/10.0.14"
+            ]
+        },
+        {
+            "notice_id": "N008",
+            "source_path": "legal/notices/dotnet-runtime-10.0.14-linux-x64/ThirdPartyNotices.txt",
+            "source_bytes": 77436,
+            "source_sha256": "2dc8f8c5a39401e928b5784ab564eb8b3ceb99ead3df8f260e0cab7e0bbecc7a",
+            "byte_offset": 307692,
+            "byte_length": 77436,
+            "embedded_sha256": "2dc8f8c5a39401e928b5784ab564eb8b3ceb99ead3df8f260e0cab7e0bbecc7a",
+            "byte_equal": true,
+            "related_components": [
+                "Microsoft.NETCore.App.Runtime.linux-x64/10.0.14"
+            ]
+        },
+        {
+            "notice_id": "N009",
+            "source_path": "legal/notices/apache-2.0/LICENSE-2.0.txt",
+            "source_bytes": 11358,
+            "source_sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+            "byte_offset": 385714,
+            "byte_length": 11358,
+            "embedded_sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+            "byte_equal": true,
+            "related_components": []
+        },
+        {
+            "notice_id": "N010",
+            "source_path": "legal/notices/windowsdesktop-10.0.14-source/wpf-THIRD-PARTY-NOTICES.TXT",
+            "source_bytes": 2703,
+            "source_sha256": "d23dba2fee20c6b59d8f7088ee9ed372459c952a319b7ca90f3eec370cc76eb9",
+            "byte_offset": 397691,
+            "byte_length": 2703,
+            "embedded_sha256": "d23dba2fee20c6b59d8f7088ee9ed372459c952a319b7ca90f3eec370cc76eb9",
+            "byte_equal": true,
+            "related_components": [
+                "Microsoft.WindowsDesktop.App.Runtime.win-x64/10.0.14"
+            ]
+        },
+        {
+            "notice_id": "N011",
+            "source_path": "legal/notices/windowsdesktop-10.0.14-source/wpf-LICENSE.TXT",
+            "source_bytes": 1115,
+            "source_sha256": "ae48df11a335dc1a615f4f938b69cba73bcf4485c4f97af49b38efb0f216353b",
+            "byte_offset": 400989,
+            "byte_length": 1115,
+            "embedded_sha256": "ae48df11a335dc1a615f4f938b69cba73bcf4485c4f97af49b38efb0f216353b",
+            "byte_equal": true,
+            "related_components": [
+                "Microsoft.WindowsDesktop.App.Runtime.win-x64/10.0.14"
+            ]
+        },
+        {
+            "notice_id": "N012",
+            "source_path": "legal/notices/windowsdesktop-10.0.14-source/winforms-THIRD-PARTY-NOTICES.TXT",
+            "source_bytes": 1966,
+            "source_sha256": "5a412b38efae0b162dc0893b319023f4cd14a8985a0f9f9ae01ac052b37a36eb",
+            "byte_offset": 402733,
+            "byte_length": 1966,
+            "embedded_sha256": "5a412b38efae0b162dc0893b319023f4cd14a8985a0f9f9ae01ac052b37a36eb",
+            "byte_equal": true,
+            "related_components": [
+                "Microsoft.WindowsDesktop.App.Runtime.win-x64/10.0.14"
+            ]
+        },
+        {
+            "notice_id": "N013",
+            "source_path": "legal/notices/dotnet-runtime-10.0.14-win-x64/LICENSE.txt",
+            "source_bytes": 9519,
+            "source_sha256": "7f6839a61ce892b79c6549e2dc5a81fdbd240a0b260f8881216b45b7fda8b45d",
+            "byte_offset": 405490,
+            "byte_length": 9519,
+            "embedded_sha256": "7f6839a61ce892b79c6549e2dc5a81fdbd240a0b260f8881216b45b7fda8b45d",
+            "byte_equal": true,
+            "related_components": [
+                "Microsoft.NETCore.App.Runtime.win-x64/10.0.14"
+            ]
+        },
+        {
+            "notice_id": "N014",
+            "source_path": "legal/notices/dotnet-runtime-10.0.14-win-x64/ThirdPartyNotices.txt",
+            "source_bytes": 78887,
+            "source_sha256": "deb4427a295e1ed474b0d81c5a0d972c1b550b9a715cda939cdfa9236b1b418f",
+            "byte_offset": 415821,
+            "byte_length": 78887,
+            "embedded_sha256": "deb4427a295e1ed474b0d81c5a0d972c1b550b9a715cda939cdfa9236b1b418f",
+            "byte_equal": true,
+            "related_components": [
+                "Microsoft.NETCore.App.Runtime.win-x64/10.0.14"
+            ]
+        },
+        {
+            "notice_id": "N015",
+            "source_path": "legal/notices/microsoft.netcore.app.runtime.win-x64-10.0.14/LICENSE.TXT",
+            "source_bytes": 1139,
+            "source_sha256": "d7a68596ab69b06f51ca278a6545148e4269a9381c26d597c13df5d88e08cf5b",
+            "byte_offset": 495445,
+            "byte_length": 1139,
+            "embedded_sha256": "d7a68596ab69b06f51ca278a6545148e4269a9381c26d597c13df5d88e08cf5b",
+            "byte_equal": true,
+            "related_components": [
+                "Microsoft.NETCore.App.Runtime.win-x64/10.0.14"
+            ]
+        },
+        {
+            "notice_id": "N016",
+            "source_path": "legal/notices/microsoft.netcore.app.runtime.win-x64-10.0.14/THIRD-PARTY-NOTICES.TXT",
+            "source_bytes": 78041,
+            "source_sha256": "6d15e10a101c6bfff2ab4429ed061bf76c456fc4b23ad6b03e0d0f8377148a21",
+            "byte_offset": 497346,
+            "byte_length": 78041,
+            "embedded_sha256": "6d15e10a101c6bfff2ab4429ed061bf76c456fc4b23ad6b03e0d0f8377148a21",
+            "byte_equal": true,
+            "related_components": [
+                "Microsoft.NETCore.App.Runtime.win-x64/10.0.14"
+            ]
+        },
+        {
+            "notice_id": "N017",
+            "source_path": "legal/notices/microsoft.windowsdesktop.app.runtime.win-x64-10.0.14/LICENSE",
+            "source_bytes": 1137,
+            "source_sha256": "a89886665765362eb77e0f8e26602c924520041d1711b2eedc136434fe4d01ab",
+            "byte_offset": 576151,
+            "byte_length": 1137,
+            "embedded_sha256": "a89886665765362eb77e0f8e26602c924520041d1711b2eedc136434fe4d01ab",
+            "byte_equal": true,
+            "related_components": [
+                "Microsoft.WindowsDesktop.App.Runtime.win-x64/10.0.14"
+            ]
+        }
+    ],
+    "component_sections": [
+        {
+            "component": "Avalonia/11.3.9",
+            "asset_count": 11,
+            "notice_ids": [
+                "N001",
+                "N002"
+            ],
+            "byte_offset": 2113,
+            "byte_length": 1986,
+            "section_sha256": "cfd33bb136b9899cc5b28703acb05e300b0d131e78ea0e09580d8b2f61520985"
+        },
+        {
+            "component": "Avalonia.Desktop/11.3.9",
+            "asset_count": 1,
+            "notice_ids": [
+                "N001",
+                "N002"
+            ],
+            "byte_offset": 4099,
+            "byte_length": 971,
+            "section_sha256": "6c322295fd3aa1ec28603175da945bc8f7558b1efef33c86e6cebed3c16ad204"
+        },
+        {
+            "component": "Avalonia.FreeDesktop/11.3.9",
+            "asset_count": 1,
+            "notice_ids": [
+                "N001",
+                "N002"
+            ],
+            "byte_offset": 5070,
+            "byte_length": 987,
+            "section_sha256": "ceb7929804d7762ff3e142c583fa66f160a396a390ccf05bea0942feaed561b5"
+        },
+        {
+            "component": "Avalonia.Native/11.3.9",
+            "asset_count": 1,
+            "notice_ids": [
+                "N001",
+                "N002"
+            ],
+            "byte_offset": 6057,
+            "byte_length": 967,
+            "section_sha256": "887d3b0b87ea696c3814408fb8eac8883387c308c3bc99990b1cd172f1e42d6c"
+        },
+        {
+            "component": "Avalonia.Remote.Protocol/11.3.9",
+            "asset_count": 1,
+            "notice_ids": [
+                "N001",
+                "N002"
+            ],
+            "byte_offset": 7024,
+            "byte_length": 1003,
+            "section_sha256": "2f04e0b18cbe31154b3115018c8aa8b999d49e71bceb907fd5bbeff140d9cbda"
+        },
+        {
+            "component": "Avalonia.Skia/11.3.9",
+            "asset_count": 1,
+            "notice_ids": [
+                "N001",
+                "N002"
+            ],
+            "byte_offset": 8027,
+            "byte_length": 959,
+            "section_sha256": "ab4a6638945347b3d8b012d3a023d1e0ec83bcf8484f4b1dc9529cd114ff47ec"
+        },
+        {
+            "component": "Avalonia.Themes.Fluent/11.3.9",
+            "asset_count": 1,
+            "notice_ids": [
+                "N001",
+                "N002"
+            ],
+            "byte_offset": 8986,
+            "byte_length": 995,
+            "section_sha256": "9752a01c421566b884935c8ab8f431a637e7b172d0c39f90a15f372dce36e424"
+        },
+        {
+            "component": "Avalonia.Win32/11.3.9",
+            "asset_count": 2,
+            "notice_ids": [
+                "N001",
+                "N002"
+            ],
+            "byte_offset": 9981,
+            "byte_length": 1076,
+            "section_sha256": "b25c8ace83b2a967a8f89a9d39634e5217a51bc5b991f75740bbcf51e3bd5ea1"
+        },
+        {
+            "component": "Avalonia.X11/11.3.9",
+            "asset_count": 1,
+            "notice_ids": [
+                "N001",
+                "N002"
+            ],
+            "byte_offset": 11057,
+            "byte_length": 955,
+            "section_sha256": "9ada9afe57239cacba6bda99f8eb61625cc5931fc5e515d929cfd91cf4c61a5f"
+        },
+        {
+            "component": "HarfBuzzSharp/8.3.1.1",
+            "asset_count": 1,
+            "notice_ids": [
+                "N005"
+            ],
+            "byte_offset": 12012,
+            "byte_length": 994,
+            "section_sha256": "a4e3f012adb2b78c497959d587478003c6c3d91065a4067650643bcf46430560"
+        },
+        {
+            "component": "HarfBuzzSharp.NativeAssets.Linux/8.3.1.1",
+            "asset_count": 1,
+            "notice_ids": [
+                "N006",
+                "N005"
+            ],
+            "byte_offset": 13006,
+            "byte_length": 1059,
+            "section_sha256": "b6760727ee6ff7abd770b8ccbe11f3d3ac25a1892448ec32d1b27a70cfac477d"
+        },
+        {
+            "component": "MicroCom.Runtime/0.11.0",
+            "asset_count": 1,
+            "notice_ids": [
+                "N004"
+            ],
+            "byte_offset": 14065,
+            "byte_length": 1071,
+            "section_sha256": "a4283009a00decedaf2de0c74e49fc92bdc0f41c2ac030be22eaeadccb3c477c"
+        },
+        {
+            "component": "SkiaSharp/2.88.9",
+            "asset_count": 1,
+            "notice_ids": [
+                "N005",
+                "N006"
+            ],
+            "byte_offset": 15136,
+            "byte_length": 966,
+            "section_sha256": "8dd9aac352e5bb46ab15343496c84d2ad9bd3b53f950fbde1d9daca73ec3a373"
+        },
+        {
+            "component": "SkiaSharp.NativeAssets.Linux/2.88.9",
+            "asset_count": 1,
+            "notice_ids": [
+                "N005",
+                "N006"
+            ],
+            "byte_offset": 16102,
+            "byte_length": 1025,
+            "section_sha256": "e5141ee9af4898953fa58883e8eda866b9aea23213d006f4f832cbae686fc6a7"
+        },
+        {
+            "component": "Tmds.DBus.Protocol/0.21.3",
+            "asset_count": 1,
+            "notice_ids": [
+                "N003"
+            ],
+            "byte_offset": 17127,
+            "byte_length": 973,
+            "section_sha256": "a3164ca89ff73f2bf0ba2fc93a8ce4009fbebc8f2826cc5d7f241d351f193780"
+        },
+        {
+            "component": "Microsoft.NETCore.App.Runtime.linux-x64/10.0.14",
+            "asset_count": 374,
+            "notice_ids": [
+                "N007",
+                "N008"
+            ],
+            "byte_offset": 18100,
+            "byte_length": 43891,
+            "section_sha256": "b7649f2bb02b1afe34d2c661f8b50e140a9469a4f2ddaeecc3dd3f562b166ba6"
+        },
+        {
+            "component": "Microsoft.NETCore.App.Runtime.win-x64/10.0.14",
+            "asset_count": 373,
+            "notice_ids": [
+                "N013",
+                "N014",
+                "N015",
+                "N016"
+            ],
+            "byte_offset": 61991,
+            "byte_length": 44980,
+            "section_sha256": "96c2c0ef55135829697082bd0e3e5f0acecd72946b27ad19169503538081d491"
+        },
+        {
+            "component": "Microsoft.WindowsDesktop.App.Runtime.win-x64/10.0.14",
+            "asset_count": 209,
+            "notice_ids": [
+                "N017",
+                "N010",
+                "N011",
+                "N012"
+            ],
+            "byte_offset": 106971,
+            "byte_length": 26538,
+            "section_sha256": "d893d5f93ff27372bed5bcb11194aedf5e1fbf1457b651a66d5be659a43694c9"
+        }
+    ],
+    "generated_apphosts": [
+        {
+            "snapshot": "ubuntu_round9",
+            "path": "Zipelo.Ubuntu",
+            "sha256": "76bc91dcd86737ce1eb400932facff3981a36b092b1e60eaf63a9135dd2a36dd"
+        },
+        {
+            "snapshot": "ubuntu_round9",
+            "path": "worker/Zipelo.Worker",
+            "sha256": "8c855b4f5cad1a6a1e368b0ad6949ef249682524ede4dfd4a972cdfff7423c82"
+        },
+        {
+            "snapshot": "windows_round10",
+            "path": "createdump.exe",
+            "sha256": "da50d230f70332385b86c44f9dc3f571b60340f8b603bc0e2f201b5a19240acd"
+        },
+        {
+            "snapshot": "windows_round10",
+            "path": "worker/createdump.exe",
+            "sha256": "da50d230f70332385b86c44f9dc3f571b60340f8b603bc0e2f201b5a19240acd"
+        },
+        {
+            "snapshot": "windows_round10",
+            "path": "worker/Zipelo.Worker.exe",
+            "sha256": "06a96f5e3472cfc3029ca3ddb34fbc284b8381e03ca14de9ed395f7f329a0a07"
+        },
+        {
+            "snapshot": "windows_round10",
+            "path": "Zipelo.exe",
+            "sha256": "5c2370b8f70c91479f5235d3cc3c9e4106e935dec6a745591e6d994455e48fa4"
+        }
+    ],
+    "verification": {
+        "all_original_segments_byte_equal": true,
+        "all_original_sha256_verified": true,
+        "all_external_asset_bindings_included": true,
+        "standalone_original_texts_embedded": true,
+        "final_windows_package_inclusion_verified": false,
+        "final_ubuntu_package_inclusion_verified": false,
+        "runtime_archive_notice_files_still_required_separately": true
+    }
+}

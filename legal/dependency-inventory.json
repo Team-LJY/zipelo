@@ -16569,5 +16569,21 @@
             "id": "windows-metadata-missing",
             "resolution": "Four round10 metadata originals match export manifest and original 600-file inventory. Exact Core/Desktop runtimepack versions and asset bindings are verified."
         }
-    ]
+    ],
+    "distribution_notice_bundle": {
+        "path": "legal/THIRD_PARTY_NOTICES.txt",
+        "sha256": "f540ca6c4eb692478826815c25fa44103bcbee89e8b2b224905950b2ed9ef091",
+        "bytes": 577333,
+        "verification_manifest_path": "legal/notice-bundle-manifest.json",
+        "verification_manifest_sha256": "7e170770b274997a0e0f6c9a8c5c9566bb872ff1dbba449451fcc401b938a031",
+        "original_notice_count": 17,
+        "component_count": 18,
+        "applicable_external_asset_count": 982,
+        "source_inventory_commit": "6d9a02d13a443d245eb7a13d8f7a4c4f29b0e7f5",
+        "source_inventory_sha256": "79daa5d4e52b729a9d31a8fb975b3d363b3d41bfcfaa780290bb26ec033756bd",
+        "review_status": "content_verified; license applicability and final package inclusion pending",
+        "final_windows_package_inclusion_verified": false,
+        "final_ubuntu_package_inclusion_verified": false,
+        "runtime_archive_notice_files_still_required_separately": true
+    }
 }
