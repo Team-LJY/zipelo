@@ -1,0 +1,22 @@
+{
+    "schema": 1,
+    "baseHead": "678456dfb3d66e67168d43a1fd331f66cd5e37fc",
+    "dependencyPr": "https://github.com/Team-LJY/zipelo/pull/21",
+    "author": "HoshinoHinata-dev",
+    "sourceScope": "tests/ubuntu-ui-harness/ only",
+    "productionChanges": false,
+    "apiVersion": "Avalonia 11.3.9",
+    "apiNotes": [
+        "IStorageProviderFactory는 public Unstable API임. IStorageProvider/IStorageFile은 NotClientImplementable 표식이 있으므로 이 고정 버전의 test-only 구현이며 생산 확장/호환 보장을 주장하지 않음. 관련 경고를 숨기지 않음.",
+        "AppBuilder.With/SetupWithoutStarting과 공개 이벤트/속성만 사용. AvaloniaLocator 직접 사용/private reflection 없음."
+    ],
+    "apiSources": [
+        "https://github.com/AvaloniaUI/Avalonia/blob/11.3.9/src/Avalonia.Controls/AppBuilder.cs",
+        "https://github.com/AvaloniaUI/Avalonia/blob/11.3.9/src/Avalonia.Controls/TopLevel.cs",
+        "https://github.com/AvaloniaUI/Avalonia/blob/11.3.9/src/Avalonia.Controls/Platform/Dialogs/IStorageProviderFactory.cs",
+        "https://github.com/AvaloniaUI/Avalonia/blob/11.3.9/src/Avalonia.Base/Platform/Storage/IStorageProvider.cs",
+        "https://github.com/AvaloniaUI/Avalonia/blob/11.3.9/src/Avalonia.Base/Platform/Storage/IStorageFile.cs"
+    ],
+    "implementationStatus": "source_authored_static_review_only",
+    "executed": false
+}

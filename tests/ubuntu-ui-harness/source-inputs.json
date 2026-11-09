@@ -1,0 +1,10 @@
+{
+    "src/Zipelo.Ubuntu/App.axaml": "f4b59b8214fb8284ed74b6d1ba0e21d8a6c8227b021d3e065af80dd71fc5de8d",
+    "src/Zipelo.Ubuntu/App.axaml.cs": "aea4caff6a7e57e43abed8d1792436372117c27d5fe3c9425ed7481af35bc73f",
+    "src/Zipelo.Ubuntu/MainWindow.axaml": "b254222bd01fd0a7450c61343054954bc8f349eac4c674c50f0b8b54d820336a",
+    "src/Zipelo.Ubuntu/MainWindow.axaml.cs": "3b2f895a647ae4170be3598d023613247b843d5a66a9292c67ff7d00c291c012",
+    "src/Zipelo.Ubuntu/UbuntuWorkspace.cs": "16888895d31d7c0e4c699d2055f1a2aeb7d5c1af632fd8760b9a862c1bf0dc1a",
+    "src/Zipelo.Ubuntu/Zipelo.Ubuntu.csproj": "ecdaffe7d56a89c612711eba3db09f69197648e956fe20bf188be7595a42e5db",
+    "src/Zipelo.Desktop/ArchiveOpenArguments.cs": "4af91816717482f4e7bdec7908b5d76c55e7f654915202cc0e761e96d1659139",
+    "src/Zipelo.Core/ArchiveContracts.cs": "8dcfa7ac7287b326abf2b755352fbc4e2f494326a6557688a87a6dc6874987a5"
+}
