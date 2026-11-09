@@ -84,15 +84,31 @@ internal static class Program
     public static async Task<int> Main(string[] args)
     {
         if (args is ["--extract-stream-v2"]) { return await FakeWorker.Run(); }
-        if (args is ["--list"])
+        var list = args.Length > 0 && args[0] == "--list";
+        var parent = !list && args.Length >= 2 && args[0] == "--sandbox-parent" ? args[1] : null;
+        if (!list && parent is null)
         {
-            foreach (var item in Cases) { Console.WriteLine(item.Name); }
-            Console.WriteLine($"등록 {Cases.Length}");
+            Console.Error.WriteLine("사용법: --list [--case <등록 이름>] 또는 --sandbox-parent <기존 시험 폴더의 절대 경로> [--case <등록 이름>]");
+            return 2;
+        }
+        (string Name, Func<string, Task> Run)[] selectedCases;
+        try { selectedCases = SelectCases(args, list ? 1 : 2); }
+        catch (ArgumentException failure)
+        {
+            Console.Error.WriteLine("SETUP_FAIL: " + failure.Message);
+            return 2;
+        }
+        var countLabel = selectedCases.Length == Cases.Length ? $"등록 {Cases.Length}" :
+            $"등록 {Cases.Length}, 선택 {selectedCases.Length}, 제외 {Cases.Length - selectedCases.Length}";
+        if (list)
+        {
+            foreach (var item in selectedCases) { Console.WriteLine(item.Name); }
+            Console.WriteLine(countLabel);
             return 0;
         }
-        if (args is not ["--sandbox-parent", var parent] || !Path.IsPathFullyQualified(parent) || !Directory.Exists(parent))
+        if (parent is null || !Path.IsPathFullyQualified(parent) || !Directory.Exists(parent))
         {
-            Console.Error.WriteLine("사용법: --sandbox-parent <기존 시험 폴더의 절대 경로>");
+            Console.Error.WriteLine("시험 부모는 기존 시험 폴더의 절대 경로여야 함");
             return 2;
         }
         for (DirectoryInfo? current = new(Path.GetFullPath(parent)); current is not null; current = current.Parent)
@@ -121,13 +137,13 @@ internal static class Program
             if (!platform.Published || platform.CleanupFailed)
             {
                 Console.Error.WriteLine($"BLOCKED 플랫폼 사전검사: {platform.Error}, POSIX={platform.PosixError}");
-                Console.WriteLine($"등록 {Cases.Length}, 실행 0, 차단 {Cases.Length}");
+                Console.WriteLine($"{countLabel}, 실행 0, 차단 {selectedCases.Length}");
                 return 3;
             }
             var passed = 0;
             var failed = 0;
             var blocked = 0;
-            foreach (var (name, run) in Cases)
+            foreach (var (name, run) in selectedCases)
             {
                 using var lifetime = new CaseLifetime();
                 var pending = Task.Run(() => run(root));
@@ -139,7 +155,7 @@ internal static class Program
                 if (!stopped || failure is TimeoutException)
                 {
                     Console.Error.WriteLine($"FAIL {name}: {failure?.Message ?? "작업/Worker 종료 미확인"}");
-                    Console.WriteLine($"등록 {Cases.Length}, 통과 {passed}, 실패 {failed + 1}, 차단 {blocked}, 미실행 {Cases.Length - passed - failed - blocked - 1}");
+                    Console.WriteLine($"{countLabel}, 통과 {passed}, 실패 {failed + 1}, 차단 {blocked}, 미실행 {selectedCases.Length - passed - failed - blocked - 1}");
                     restoreDirectory = stopped;
                     return 124;
                 }
@@ -160,7 +176,7 @@ internal static class Program
                     passed++;
                 }
             }
-            Console.WriteLine($"등록 {Cases.Length}, 통과 {passed}, 실패 {failed}, 차단 {blocked}");
+            Console.WriteLine($"{countLabel}, 통과 {passed}, 실패 {failed}, 차단 {blocked}");
             return failed != 0 ? 1 : blocked != 0 ? 3 : 0;
         }
         catch (Exception failure)
@@ -173,5 +189,24 @@ internal static class Program
             if (restoreDirectory) { Environment.CurrentDirectory = originalDirectory; }
             Console.WriteLine("시험 경로는 검토를 위해 보존함: " + root);
         }
+    }
+
+    private static (string Name, Func<string, Task> Run)[] SelectCases(string[] args, int start)
+    {
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        for (var index = start; index < args.Length; index += 2)
+        {
+            if (args[index] != "--case" || index + 1 >= args.Length)
+            {
+                throw new ArgumentException("--case <등록 이름> 쌍만 허용함");
+            }
+            var name = args[index + 1];
+            if (!Cases.Any(item => string.Equals(item.Name, name, StringComparison.Ordinal)))
+            {
+                throw new ArgumentException("등록되지 않은 사례 이름임");
+            }
+            if (!names.Add(name)) { throw new ArgumentException("중복 사례 선택을 허용하지 않음"); }
+        }
+        return names.Count == 0 ? Cases : Cases.Where(item => names.Contains(item.Name)).ToArray();
     }
 }

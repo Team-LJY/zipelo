@@ -100,7 +100,12 @@
         "build_worker": "dotnet build src/Zipelo.Worker/Zipelo.Worker.csproj -c Release --configfile tests/streaming-extraction/NuGet.Config --artifacts-path tests/streaming-extraction/.work/worker-artifacts -o tests/streaming-extraction/.work/app -p:UseAppHost=false --disable-build-servers",
         "list": "dotnet tests/streaming-extraction/.work/app/Zipelo.StreamingExtractionTests.dll --list",
         "run": "dotnet tests/streaming-extraction/.work/app/Zipelo.StreamingExtractionTests.dll --sandbox-parent <absolute-existing-tests-sandbox-directory>",
-        "self_contained": "중앙 SDK에서 테스트와 Worker를 동일 RID/Configuration/런타임의 별도 출력으로 게시하고 동일 이름 공유 파일의 해시 일치를 확인한 뒤 시험 app 출력에 Worker 산출물을 조립함. OS 앱호스트를 직접 실행하며 PATH에서 실행파일을 탐색하지 않음. Linux는 기존 실행 권한이 필요함"
+        "self_contained": "중앙 SDK에서 테스트와 Worker를 동일 RID/Configuration/런타임의 별도 출력으로 게시하고 동일 이름 공유 파일의 해시 일치를 확인한 뒤 시험 app 출력에 Worker 산출물을 조립함. OS 앱호스트를 직접 실행하며 PATH에서 실행파일을 탐색하지 않음. Linux는 기존 실행 권한이 필요함",
+        "run_stored": "dotnet tests/streaming-extraction/.work/app/Zipelo.StreamingExtractionTests.dll --sandbox-parent <absolute-existing-tests-sandbox-directory> --case real.stored",
+        "run_nested": "dotnet tests/streaming-extraction/.work/app/Zipelo.StreamingExtractionTests.dll --sandbox-parent <absolute-existing-tests-sandbox-directory> --case real.nested",
+        "run_deflate_tail": "dotnet tests/streaming-extraction/.work/app/Zipelo.StreamingExtractionTests.dll --sandbox-parent <absolute-existing-tests-sandbox-directory> --case zip.deflate_tail_garbage_small",
+        "run_selected": "dotnet tests/streaming-extraction/.work/app/Zipelo.StreamingExtractionTests.dll --sandbox-parent <absolute-existing-tests-sandbox-directory> --case real.stored --case real.nested --case zip.deflate_tail_garbage_small",
+        "list_selected": "dotnet tests/streaming-extraction/.work/app/Zipelo.StreamingExtractionTests.dll --list --case zip.deflate_tail_garbage_small --case real.nested --case real.stored"
     },
     "assertions": [
         "완료는 Published=true, Error=None, 정상 Worker 종료 0, 정확한 항목 내용/목록, 입력/출력 정리 성공이 모두 필요함",
@@ -122,16 +127,16 @@
         "fixture_suffix_bytes": 65540
     },
     "validation": {
-        "static": "passed: JSON/XML, 72 unchanged registrations/expectations, unchanged nested fixture, eight explicit C# sources, cancellation forwarding/lifetime control flow, seven-file scope and formatting; not C# compilation",
-        "compile": "not_run for this lifetime candidate: local SDK absent. Manager reported f7ad4ec2 + PR10 069bdef5 compiled on Windows with zero warnings/errors",
-        "windows": "previous f7ad4ec2 + PR10 069bdef5 before candidate: manager reported 4 passed, real.nested timeout at 45 seconds, 67 unexecuted. Current lifetime candidate not_run",
-        "ubuntu": "current lifetime candidate not_run; previous candidate reproduction pending manager",
+        "static": "passed: JSON/XML, unchanged 72 registrations/order/fixtures/expectations, exact allowlist selection and selected counts, unchanged 15/45/25 second limits and shutdown control flow; not C# compilation",
+        "compile": "not_run for current selection candidate: local SDK absent. Manager reported previous f7ad4ec2 + PR10 069bdef5 compiled on Windows with zero warnings/errors",
+        "windows": "manager reported original f7ad4ec2 before candidate: 4 passed, real.nested timeout, 67 unexecuted; another run passed real.nested then timed out at zip.deflate_tail_garbage_small (18 passed, 1 failed, 53 unexecuted). Current selection/lifetime candidate not_run",
+        "ubuntu": "read original round14-before log: 68 passed, 4 parent identity failures, 0 blocked; real.nested passed. Current selection/lifetime candidate not_run",
         "fixture_formula": "passed: Python zlib independently decoded both manually encoded raw Stored block formulas (9/65535 decoded bytes); this did not execute the C# fixture or product"
     },
     "suspected_product_issue": {
         "case": "path.parent_replacement",
         "evidence": "고정 PR #10의 LinuxFolderPublication은 열린 부모 fd의 identity만 확인하고 최종 게시 때 원래 목적지 경로가 그 fd에 계속 연결되는지 재확인하지 않음. 부모 이동 후 같은 경로를 교체하면 이동된 디렉터리로 게시하면서 Published=true를 반환할 가능성이 있음",
-        "status": "static_risk_not_executed",
+        "status": "reproduced in original round14-before Ubuntu26 log: streaming parent replacement and three common publication parent cases failed because publication was accepted",
         "expected": "교체가 성공한 경우 실패하고 양쪽 부모의 기존 표식을 보존함",
         "owner": "backend"
     },
@@ -224,5 +229,134 @@
         "evidence": "ZipFixture.Build와 ZipStreamIndex 및 CreateStreamingEntry의 디렉터리 재사용/파일 경계 계약을 정적으로 대조함. C# Stored 생성 공식을 독립 Python struct로 번역한 285바이트를 zipfile로 목록/내용/CRC 검증함. C# fixture 실행을 대체하지 않음",
         "formula_sha256": "b99d92f199b3e58e52732de1a15b78f72c52db13716b7d73399f25349831616f",
         "regression": "real.nested fixture/기대값과 제품 기한을 변경하지 않음. 중앙에서 확인한 45초 실패는 그대로 남음"
+    },
+    "selection": {
+        "syntax": "--case <정확한 등록 이름>을 반복할 수 있음. --list와 --sandbox-parent 실행에 같은 선택 규칙을 적용함",
+        "default": "--case가 없으면 기존 Cases의 72개를 기존 등록 순서 그대로 실행함",
+        "allowlist": "기존 Cases 배열에 StringComparison.Ordinal로 정확히 일치하는 이름만 허용함. wildcard/정규식/임의 코드/추가 실행파일/경로 선택은 없음",
+        "order": "선택 인수의 입력 순서와 무관하게 기존 Cases 배열 순서를 유지함. 중복과 미등록 이름, 잘못된 인수 쌍은 종료 2로 거절함",
+        "isolation": "선택 검사는 별도 프로세스 호출마다 새 GUID 시험 루트를 생성함. 잘못된 선택과 --list는 시험 루트 생성/플랫폼 사전검사/Worker 실행 전에 끝남",
+        "counts": "전체 등록 수, 선택 수, 제외 수를 구분하고 미실행 수는 선택된 사례 중 실행하지 못한 수만 셈",
+        "deadlines": "기존 15초 작업 예산, 45초 사례 실패 기준과 최대 25초 취소/종료 확인을 보존함",
+        "stop": "종료 미확인 또는 시간 초과이면 124로 종료하며 다음 선택 사례를 실행하지 않음. 별도 호출도 중앙 감독자가 이전 실제 Worker 종료를 확인하기 전에는 시작하지 않아야 함",
+        "diagnostics": "backend PR #10의 진단 계약 확정 대기. 임의 환경 변수/로그 경로/빌드 스위치를 추정해 만들지 않음. 진단 구현을 테스트 PR에 복사하지 않음",
+        "validation": "정적 등록/순서/수명 제어 대조만 수행함. SDK 부재로 새 선택 파서의 C# 컴파일과 실행은 중앙 검증 필요",
+        "central_checks": [
+            {
+                "args": [
+                    "--list"
+                ],
+                "exit": 0,
+                "count": 72
+            },
+            {
+                "args": [
+                    "--list",
+                    "--case",
+                    "real.stored"
+                ],
+                "exit": 0,
+                "cases": [
+                    "real.stored"
+                ]
+            },
+            {
+                "args": [
+                    "--list",
+                    "--case",
+                    "real.nested"
+                ],
+                "exit": 0,
+                "cases": [
+                    "real.nested"
+                ]
+            },
+            {
+                "args": [
+                    "--list",
+                    "--case",
+                    "zip.deflate_tail_garbage_small"
+                ],
+                "exit": 0,
+                "cases": [
+                    "zip.deflate_tail_garbage_small"
+                ]
+            },
+            {
+                "args": [
+                    "--list",
+                    "--case",
+                    "zip.deflate_tail_garbage_small",
+                    "--case",
+                    "real.nested",
+                    "--case",
+                    "real.stored"
+                ],
+                "exit": 0,
+                "cases": [
+                    "real.stored",
+                    "real.nested",
+                    "zip.deflate_tail_garbage_small"
+                ]
+            },
+            {
+                "args": [
+                    "--list",
+                    "--case"
+                ],
+                "exit": 2
+            },
+            {
+                "args": [
+                    "--list",
+                    "--case",
+                    "real.*"
+                ],
+                "exit": 2
+            },
+            {
+                "args": [
+                    "--list",
+                    "--case",
+                    "Real.nested"
+                ],
+                "exit": 2
+            },
+            {
+                "args": [
+                    "--list",
+                    "--case",
+                    "../real.nested"
+                ],
+                "exit": 2
+            },
+            {
+                "args": [
+                    "--list",
+                    "--case",
+                    "real.nested",
+                    "--case",
+                    "real.nested"
+                ],
+                "exit": 2
+            },
+            {
+                "args": [
+                    "--list",
+                    "--worker",
+                    "arbitrary-program"
+                ],
+                "exit": 2
+            },
+            {
+                "args": [
+                    "--list",
+                    "--case",
+                    "real.nested",
+                    "unexpected"
+                ],
+                "exit": 2
+            }
+        ]
     }
 }
