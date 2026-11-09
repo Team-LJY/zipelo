@@ -93,9 +93,12 @@ internal static class ExtractionWire
         var buffer = new byte[ChunkBytes];
         ulong sequence = 0;
         long bytesServed = 0;
+        StreamingExtractionDiagnostics.Record(id, "range.request.begin", sequence: sequence);
         while (await requests.ReadAsync(header.AsMemory(0, 1), token).ConfigureAwait(false) != 0)
         {
+            StreamingExtractionDiagnostics.Record(id, "range.header.begin", sequence: sequence);
             await requests.ReadExactlyAsync(header.AsMemory(1), token).ConfigureAwait(false);
+            StreamingExtractionDiagnostics.Record(id, "range.header.end", sequence: sequence);
             var offset = BinaryPrimitives.ReadInt64LittleEndian(header.AsSpan(32));
             var count = BinaryPrimitives.ReadInt32LittleEndian(header.AsSpan(40));
             if (sequence >= MaxRangeRequests ||
@@ -110,6 +113,7 @@ internal static class ExtractionWire
             }
             if (count > MaxRangeBytes - bytesServed) { throw new ArchiveException(ArchiveError.BudgetExceeded); }
             budget.ChargeProcessed(count, token);
+            StreamingExtractionDiagnostics.Record(id, "range.snapshot.begin", count, sequence);
             var read = 0;
             while (read < count)
             {
@@ -118,12 +122,19 @@ internal static class ExtractionWire
                 if (got == 0) { throw new ArchiveException(ArchiveError.IntegrityFailure); }
                 read += got;
             }
+            StreamingExtractionDiagnostics.Record(id, "range.snapshot.end", count, sequence);
             bytesServed += count;
             sequence++;
+            StreamingExtractionDiagnostics.Record(id, "range.response.begin", count, sequence - 1);
             await replies.WriteAsync(header, token).ConfigureAwait(false);
+            StreamingExtractionDiagnostics.Record(id, "range.response.header", count, sequence - 1);
             await replies.WriteAsync(buffer.AsMemory(0, count), token).ConfigureAwait(false);
             await replies.FlushAsync(token).ConfigureAwait(false);
+            StreamingExtractionDiagnostics.Record(id, "range.response.end", count, sequence - 1);
+            StreamingExtractionDiagnostics.Record(id, "range.request.begin", sequence: sequence);
         }
+        StreamingExtractionDiagnostics.Record(id, "range.request.eof", sequence: sequence);
         budget.Check(token);
+        StreamingExtractionDiagnostics.Record(id, "range.service.end");
     }
 }

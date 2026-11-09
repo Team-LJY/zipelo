@@ -58,10 +58,16 @@ public sealed class StreamingZipWorkerClient
         PublicationNativeFailure? nativeFailure = null;
         var error = ArchiveError.None;
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token);
+#if ZIPELO_STREAM_DIAGNOSTICS
+        var observation = deadline.Token.UnsafeRegister(_ =>
+            StreamingExtractionDiagnostics.Record(jobId, "operation.cancelled", token.IsCancellationRequested ? 1 : 0), null);
+#endif
+        StreamingExtractionDiagnostics.Record(jobId, "operation.start");
         try
         {
             var effective = ExtractionWire.Limit(limits);
             deadline.CancelAfter(effective.MaxDuration);
+            StreamingExtractionDiagnostics.Record(jobId, "deadline.scheduled_ms", (long)effective.MaxDuration.TotalMilliseconds);
             var operationToken = deadline.Token;
             budget = new JobBudget(effective);
             budget.Check(operationToken);
@@ -71,18 +77,26 @@ public sealed class StreamingZipWorkerClient
             }
             if (!NewFolderPublisher.IsSupportedPlatform) { throw new ArchiveException(ArchiveError.OutputUnavailable); }
             var (parent, leaf) = Destination(destinationPath);
+            StreamingExtractionDiagnostics.Record(jobId, "input.create.begin");
             input = Pending(parent);
             input.Initialize();
+            StreamingExtractionDiagnostics.Record(jobId, "input.create.end");
             var snapshot = input.CreateStreamingEntry(new("snapshot", "input.zip", EntryKind.File, 0), operationToken)!;
-            var length = await SnapshotAsync(source, snapshot, budget, operationToken).ConfigureAwait(false);
+            StreamingExtractionDiagnostics.Record(jobId, "snapshot.begin");
+            var length = await SnapshotAsync(source, snapshot, budget, operationToken, jobId).ConfigureAwait(false);
+            StreamingExtractionDiagnostics.Record(jobId, "snapshot.end");
             using var readSnapshot = new HandleReadStream(snapshot, length);
+            StreamingExtractionDiagnostics.Record(jobId, "index.begin");
             var items = ZipStreamIndex.Read(readSnapshot, budget, operationToken);
+            StreamingExtractionDiagnostics.Record(jobId, "index.end", items.Length);
             if (items.Sum(item => item.Entry.DeclaredSize!.Value) > effective.MaxOutputBytes)
             {
                 throw new ArchiveException(ArchiveError.BudgetExceeded);
             }
+            StreamingExtractionDiagnostics.Record(jobId, "output.create.begin");
             output = Pending(parent);
             output.Initialize();
+            StreamingExtractionDiagnostics.Record(jobId, "output.create.end");
             var dll = workerPath.EndsWith(".dll", StringComparison.OrdinalIgnoreCase);
             if (!File.Exists(workerPath) || (dll && (dotnetHostPath is null || !File.Exists(dotnetHostPath))))
             {
@@ -100,13 +114,17 @@ public sealed class StreamingZipWorkerClient
             if (dll) { start.ArgumentList.Add(workerPath); }
             start.ArgumentList.Add(ExtractionWire.Mode);
             process = new Process { StartInfo = start };
+            StreamingExtractionDiagnostics.Record(jobId, "process.start.begin");
             if (!process.Start()) { throw new ArchiveException(ArchiveError.EngineUnavailable); }
             started = true;
+            StreamingExtractionDiagnostics.ProcessStarted(jobId, process.Id, start.FileName, workerPath);
             exited = false;
 
+            StreamingExtractionDiagnostics.Record(jobId, "config.write.begin");
             await process.StandardInput.BaseStream.WriteAsync(ExtractionWire.Config(jobId, length, effective),
                 operationToken).ConfigureAwait(false);
             await process.StandardInput.BaseStream.FlushAsync(operationToken).ConfigureAwait(false);
+            StreamingExtractionDiagnostics.Record(jobId, "config.write.end");
             async Task Serve()
             {
                 try
@@ -116,27 +134,31 @@ public sealed class StreamingZipWorkerClient
                 }
                 catch
                 {
+                    StreamingExtractionDiagnostics.Record(jobId, "range.fault");
                     deadline.Cancel();
                     throw;
                 }
             }
+            StreamingExtractionDiagnostics.Record(jobId, "range.service.begin");
             ranges = Serve();
             using (var reader = new WorkerStreamChannel(process.StandardOutput.BaseStream,
                 WorkerStreamDirection.Read, jobId, ExtractionWire.ChannelLimits(effective)))
             {
-                var begin = await RequiredAsync(reader, operationToken).ConfigureAwait(false);
+                var begin = await RequiredAsync(reader, operationToken, jobId).ConfigureAwait(false);
                 Require(begin.Header.Kind == WorkerStreamFrameKind.BeginJob);
                 foreach (var item in items)
                 {
-                    var frame = await RequiredAsync(reader, operationToken).ConfigureAwait(false);
+                    var frame = await RequiredAsync(reader, operationToken, jobId).ConfigureAwait(false);
                     Require(frame.Header.Kind == WorkerStreamFrameKind.BeginItem && frame.Header.ItemId == item.Id &&
                         BinaryPrimitives.ReadUInt64LittleEndian(frame.Payload.Span) == (ulong)item.Entry.DeclaredSize!.Value);
+                    StreamingExtractionDiagnostics.Record(jobId, "entry.create.begin", verifiedEntries);
                     var file = output.CreateStreamingEntry(item.Entry, operationToken);
+                    StreamingExtractionDiagnostics.Record(jobId, "entry.create.end", verifiedEntries);
                     long actual = 0;
                     var crc = uint.MaxValue;
                     while (true)
                     {
-                        frame = await RequiredAsync(reader, operationToken).ConfigureAwait(false);
+                        frame = await RequiredAsync(reader, operationToken, jobId).ConfigureAwait(false);
                         if (frame.Header.Kind == WorkerStreamFrameKind.EndItem) { break; }
                         Require(frame.Header.Kind == WorkerStreamFrameKind.Data && file is not null);
                         var count = frame.Payload.Length;
@@ -147,7 +169,9 @@ public sealed class StreamingZipWorkerClient
                         budget.ChargeProcessed(count, operationToken);
                         budget.ReserveOutput(count, operationToken);
                         crc = ZipExtraction.UpdateCrc(crc, frame.Payload.Span);
+                        StreamingExtractionDiagnostics.Record(jobId, "output.write.begin", count);
                         await RandomAccess.WriteAsync(file!, frame.Payload, actual, operationToken).ConfigureAwait(false);
+                        StreamingExtractionDiagnostics.Record(jobId, "output.write.end", count);
                         actual += count;
                     }
                     if (actual != item.Entry.DeclaredSize || ~crc != item.Crc)
@@ -156,31 +180,48 @@ public sealed class StreamingZipWorkerClient
                     }
                     if (file is not null)
                     {
-                        await PendingFolderPublication.VerifyStreamingFileAsync(file, actual, item.Crc, budget, operationToken)
+                        await PendingFolderPublication.VerifyStreamingFileAsync(file, actual, item.Crc, budget, operationToken, jobId)
                             .ConfigureAwait(false);
                     }
                     verifiedEntries++;
                 }
-                var end = await RequiredAsync(reader, operationToken).ConfigureAwait(false);
+                StreamingExtractionDiagnostics.Record(jobId, "endjob.read.begin");
+                var end = await RequiredAsync(reader, operationToken, jobId).ConfigureAwait(false);
                 Require(end.Header.Kind == WorkerStreamFrameKind.EndJob &&
                     reader.TerminalStatus == WorkerStreamTerminalStatus.Completed);
+                StreamingExtractionDiagnostics.Record(jobId, "endjob.validated");
+                StreamingExtractionDiagnostics.Record(jobId, "stdout.eof.begin");
                 Require(await reader.ReadAsync(operationToken).ConfigureAwait(false) is null &&
                     reader.Phase == WorkerStreamPhase.InputCompleted);
+                StreamingExtractionDiagnostics.Record(jobId, "stdout.eof.end");
             }
+            StreamingExtractionDiagnostics.Record(jobId, "process.exit.begin");
             await process.WaitForExitAsync(operationToken).ConfigureAwait(false);
             exited = true;
             exitCode = process.ExitCode;
+            StreamingExtractionDiagnostics.Record(jobId, "process.exit.end", exitCode.Value);
+            StreamingExtractionDiagnostics.Record(jobId, "range.await.begin");
             await ranges.ConfigureAwait(false);
+            StreamingExtractionDiagnostics.Record(jobId, "range.await.end");
             Require(exitCode == 0);
             budget.Check(operationToken);
 
             inputCleanupAttempted = true;
-            try { inputCleanupFailed = !input.Abort(); }
+            try
+            {
+                StreamingExtractionDiagnostics.Record(jobId, "input.cleanup.begin");
+                inputCleanupFailed = !input.Abort();
+                StreamingExtractionDiagnostics.Record(jobId, "input.cleanup.end", inputCleanupFailed ? 1 : 0);
+            }
             catch { inputCleanupFailed = true; throw; }
             if (inputCleanupFailed) { throw new ArchiveException(ArchiveError.OutputUnavailable); }
+            StreamingExtractionDiagnostics.Record(jobId, "output.verify.begin");
             output.Verify(operationToken);
+            StreamingExtractionDiagnostics.Record(jobId, "output.verify.end");
             budget.Check(operationToken);
+            StreamingExtractionDiagnostics.Record(jobId, "output.publish.begin");
             output.Publish(leaf, operationToken);
+            StreamingExtractionDiagnostics.Record(jobId, "output.publish.end");
             published = true;
         }
         catch (OperationCanceledException)
@@ -193,13 +234,20 @@ public sealed class StreamingZipWorkerClient
         catch (Exception failure) { error = Error(failure); }
         finally
         {
+            StreamingExtractionDiagnostics.Record(jobId, "cleanup.begin");
+            StreamingExtractionDiagnostics.Record(jobId, "cleanup.cancel.begin");
             deadline.Cancel();
+            StreamingExtractionDiagnostics.Record(jobId, "cleanup.cancel.end");
             if (started && process is not null)
             {
                 try
                 {
+                    StreamingExtractionDiagnostics.Record(jobId, "cleanup.kill.begin");
                     if (!process.HasExited) { process.Kill(entireProcessTree: true); }
+                    StreamingExtractionDiagnostics.Record(jobId, "cleanup.kill.end");
+                    StreamingExtractionDiagnostics.Record(jobId, "cleanup.exit.begin");
                     await process.WaitForExitAsync(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(10)).ConfigureAwait(false);
+                    StreamingExtractionDiagnostics.Record(jobId, "cleanup.exit.end");
                     exited = true;
                     exitCode = process.ExitCode;
                 }
@@ -207,7 +255,12 @@ public sealed class StreamingZipWorkerClient
             }
             if (ranges is not null)
             {
-                try { await ranges.WaitAsync(TimeSpan.FromSeconds(10)).ConfigureAwait(false); }
+                try
+                {
+                    StreamingExtractionDiagnostics.Record(jobId, "cleanup.range.begin");
+                    await ranges.WaitAsync(TimeSpan.FromSeconds(10)).ConfigureAwait(false);
+                    StreamingExtractionDiagnostics.Record(jobId, "cleanup.range.end");
+                }
                 catch { ioStopped = ranges.IsCompleted; }
             }
             if (!published && !token.IsCancellationRequested &&
@@ -222,7 +275,12 @@ public sealed class StreamingZipWorkerClient
             {
                 if (exited && ioStopped)
                 {
-                    try { inputCleanupFailed = !input.Abort(); }
+                    try
+                    {
+                        StreamingExtractionDiagnostics.Record(jobId, "input.abort.begin");
+                        inputCleanupFailed = !input.Abort();
+                        StreamingExtractionDiagnostics.Record(jobId, "input.abort.end", inputCleanupFailed ? 1 : 0);
+                    }
                     catch { inputCleanupFailed = true; }
                 }
                 else { inputCleanupFailed = true; }
@@ -231,17 +289,30 @@ public sealed class StreamingZipWorkerClient
             {
                 if (exited && ioStopped)
                 {
-                    try { outputCleanupFailed = !output.Abort(); }
+                    try
+                    {
+                        StreamingExtractionDiagnostics.Record(jobId, "output.abort.begin");
+                        outputCleanupFailed = !output.Abort();
+                        StreamingExtractionDiagnostics.Record(jobId, "output.abort.end", outputCleanupFailed ? 1 : 0);
+                    }
                     catch { outputCleanupFailed = true; }
                 }
                 else { outputCleanupFailed = true; }
             }
             if (ioStopped)
             {
+                StreamingExtractionDiagnostics.Record(jobId, "owned.dispose.begin");
                 input?.Dispose();
                 output?.Dispose();
+                StreamingExtractionDiagnostics.Record(jobId, "owned.dispose.end");
             }
+            StreamingExtractionDiagnostics.Record(jobId, "process.dispose.begin");
             process?.Dispose();
+            StreamingExtractionDiagnostics.Record(jobId, "process.dispose.end");
+            StreamingExtractionDiagnostics.Record(jobId, "cleanup.end", (long)error);
+#if ZIPELO_STREAM_DIAGNOSTICS
+            observation.Unregister();
+#endif
         }
         return new(jobId, new(published, error, outputCleanupFailed,
             outputCleanupFailed ? output?.TemporaryName : null)
@@ -259,7 +330,7 @@ public sealed class StreamingZipWorkerClient
     }
 
     private static async Task<long> SnapshotAsync(Stream source, SafeFileHandle snapshot,
-        JobBudget budget, CancellationToken token)
+        JobBudget budget, CancellationToken token, Guid jobId)
     {
         var start = source.Position;
         var originalLength = source.Length;
@@ -284,7 +355,9 @@ public sealed class StreamingZipWorkerClient
                 offset += count;
             }
             var expectedHash = hash.GetHashAndReset();
+            StreamingExtractionDiagnostics.Record(jobId, "snapshot.flush.begin");
             RandomAccess.FlushToDisk(snapshot);
+            StreamingExtractionDiagnostics.Record(jobId, "snapshot.flush.end");
             if (RandomAccess.GetLength(snapshot) != length || source.Length != originalLength)
             {
                 throw new ArchiveException(ArchiveError.IntegrityFailure);
@@ -339,8 +412,13 @@ public sealed class StreamingZipWorkerClient
         return (parent, leaf);
     }
 
-    private static async ValueTask<WorkerStreamFrame> RequiredAsync(WorkerStreamChannel reader, CancellationToken token)
-        => await reader.ReadAsync(token).ConfigureAwait(false) ?? throw new ArchiveException(ArchiveError.EngineFailure);
+    private static async ValueTask<WorkerStreamFrame> RequiredAsync(WorkerStreamChannel reader, CancellationToken token, Guid jobId)
+    {
+        StreamingExtractionDiagnostics.Record(jobId, "frame.read.begin");
+        var frame = await reader.ReadAsync(token).ConfigureAwait(false) ?? throw new ArchiveException(ArchiveError.EngineFailure);
+        StreamingExtractionDiagnostics.Record(jobId, "frame.received", (long)frame.Header.Kind, frame.Header.Sequence);
+        return frame;
+    }
 
     private static void Require(bool valid)
     {

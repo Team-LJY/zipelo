@@ -1,5 +1,6 @@
 using Microsoft.Win32.SafeHandles;
 using Zipelo.Core;
+using Zipelo.Runtime.Streaming;
 
 namespace Zipelo.Runtime;
 
@@ -32,10 +33,13 @@ internal abstract partial class PendingFolderPublication
     }
 
     internal static async Task VerifyStreamingFileAsync(SafeFileHandle handle, long length, uint expectedCrc,
-        JobBudget budget, CancellationToken token)
+        JobBudget budget, CancellationToken token, Guid jobId)
     {
         token.ThrowIfCancellationRequested();
+        StreamingExtractionDiagnostics.Record(jobId, "file.verify.begin");
+        StreamingExtractionDiagnostics.Record(jobId, "file.flush.begin");
         RandomAccess.FlushToDisk(handle);
+        StreamingExtractionDiagnostics.Record(jobId, "file.flush.end");
         if (RandomAccess.GetLength(handle) != length) { throw new ArchiveException(ArchiveError.IntegrityFailure); }
         var buffer = new byte[65536];
         var crc = uint.MaxValue;
@@ -51,5 +55,6 @@ internal abstract partial class PendingFolderPublication
         }
         if (~crc != expectedCrc) { throw new ArchiveException(ArchiveError.IntegrityFailure); }
         budget.Check(token);
+        StreamingExtractionDiagnostics.Record(jobId, "file.verify.end");
     }
 }
