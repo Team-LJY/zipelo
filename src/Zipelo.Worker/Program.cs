@@ -3,6 +3,10 @@ using Zipelo.Runtime;
 using Zipelo.Worker;
 
 // 요청 한 건을 처리하고 종료함. 경로나 암호를 명령행으로 받지 않음.
+if (args.Length == 1 && args[0] == Zipelo.Runtime.Streaming.ExtractionWire.Mode)
+{
+    return await StreamingZipExtractor.RunAsync();
+}
 if (args.Length != 0) { return 2; }
 AppContext.SetSwitch("System.IO.Compression.UseStrictValidation", true);
 using var lifetime = new CancellationTokenSource(TimeSpan.FromMinutes(5));

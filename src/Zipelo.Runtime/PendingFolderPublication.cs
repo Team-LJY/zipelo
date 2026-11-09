@@ -3,7 +3,7 @@ using Zipelo.Core;
 
 namespace Zipelo.Runtime;
 
-internal abstract class PendingFolderPublication : IDisposable
+internal abstract partial class PendingFolderPublication : IDisposable
 {
     protected sealed class Node(string name, Node? parent, SafeFileHandle handle, bool directory, string identity)
     {
