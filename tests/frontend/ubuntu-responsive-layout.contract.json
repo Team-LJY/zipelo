@@ -47,7 +47,8 @@
             "빈상태",
             "정상 ZIP 목록과 긴 한글 파일명",
             "긴 ArchiveTitle/Availability/선택 안내",
-            "여러 줄 한글 Status와 진행 중 StopButton"
+            "여러 줄 한글 Status와 진행 중 StopButton",
+            "ListBoxItem의 실제 가용 너비와 세 열 wrapping, 선택 강조 및 방향키 이동"
         ],
         "keyboard": [
             "Tab/Shift+Tab으로 모든 활성 명령과 이름 입력, 목록, 두 스크롤 영역 접근",
@@ -75,5 +76,30 @@
         "screenshot/log/binary 업로드 없음",
         "Windows/Core/설치기 PR #5 및 기존 feature 변경 없음",
         "공개배포/라이선스/main 병합 보류 유지"
+    ],
+    "apiCompatibility": {
+        "avaloniaVersion": "11.3.9",
+        "propertyOwner": "ListBoxItem은 ContentControl을 상속함. ContentControl이 HorizontalContentAlignment를 선언함.",
+        "scope": "Files ListBox.Styles의 ListBoxItem setter만 Stretch를 적용함. ListBox 자체 속성/테마/선택/키보드 로직을 바꾸지 않음.",
+        "sources": [
+            "https://github.com/AvaloniaUI/Avalonia/blob/11.3.9/src/Avalonia.Controls/ListBoxItem.cs",
+            "https://github.com/AvaloniaUI/Avalonia/blob/11.3.9/src/Avalonia.Controls/ContentControl.cs",
+            "https://github.com/AvaloniaUI/Avalonia/blob/11.3.9/src/Avalonia.Themes.Fluent/Controls/ListBoxItem.xaml"
+        ],
+        "staticLimit": "이 구조 회귀는 알려진 속성 배치 오류만 검사함. Avalonia XAML 컴파일/API 전체 및 GUI 가독성 검증을 대신하지 않음."
+    },
+    "historicalValidation": [
+        {
+            "head": "4d66e6e7077d03727605dd4abcb8eb2212e088dd",
+            "reportedBy": "중앙 검증 담당",
+            "sdk": "10.0.403",
+            "avalonia": "11.3.9",
+            "offlineRestore": "passed",
+            "compile": "failed",
+            "gui": "not_run",
+            "error": "MainWindow.axaml(44,14) AVLN2000: ListBox의 HorizontalContentAlignment 속성을 해석할 수 없음",
+            "staticTests": "기존 4/4 통과는 API 유효성을 증명하지 못했음",
+            "inputs": "중앙은 정확한 source/기존 offline 캐시/별도 고정 packaging overlay 사용을 확인함. 새 다운로드/입력 오류로 분류하지 않음"
+        }
     ]
 }

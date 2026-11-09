@@ -57,6 +57,20 @@ class UbuntuResponsiveLayoutTests(unittest.TestCase):
                          ["{Binding Name}", "{Binding Size}", "{Binding Verification}"])
         self.assertTrue(all(node.get("TextWrapping") == "Wrap" for node in template))
 
+    def test_stretch_is_scoped_to_listbox_item_containers(self):
+        listing = self.controls["Files"]
+        self.assertNotIn("HorizontalContentAlignment", listing.attrib)
+        self.assertEqual(listing.get("ScrollViewer.HorizontalScrollBarVisibility"), "Disabled")
+        styles = listing.find(UI + "ListBox.Styles")
+        self.assertIsNotNone(styles)
+        self.assertEqual(len(styles), 1)
+        self.assertEqual(styles[0].get("Selector"), "ListBoxItem")
+        setters = list(styles[0])
+        self.assertEqual(len(setters), 1)
+        self.assertEqual(setters[0].get("Property"), "HorizontalContentAlignment")
+        self.assertEqual(setters[0].get("Value"), "Stretch")
+        self.assertIsNone(listing.find(UI + "ListBox.ItemContainerTheme"))
+
     def test_commands_initial_gates_and_accessible_names_are_preserved(self):
         clicks = {"OpenButton": "OpenArchive", "CreateButton": "CreateArchive",
                   "RetryCreateButton": "RetryCreation", "ExtractButton": "ExtractArchive",

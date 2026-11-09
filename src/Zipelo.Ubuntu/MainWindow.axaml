@@ -42,7 +42,12 @@
         </ScrollViewer>
         <Grid Grid.Row="1" Background="White">
             <ListBox x:Name="Files" AutomationProperties.Name="압축파일 안의 파일 목록"
-                HorizontalContentAlignment="Stretch" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                <ListBox.Styles>
+                    <Style Selector="ListBoxItem">
+                        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                    </Style>
+                </ListBox.Styles>
                 <ListBox.ItemTemplate>
                     <DataTemplate>
                         <Grid ColumnDefinitions="3*,*,*" Margin="8,10">
