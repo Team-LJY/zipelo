@@ -1,7 +1,7 @@
 # 설치 패키지 준비 초안
 
 현재 파일은 개발 검증 설치 초안이다. 설치 가능한 출시 파일을 만들거나 게시한 결과가 아니다.
-`src/`와 `tests/`는 수정하지 않았다. 공유 브랜치 `docs/initial-project-plan`을 유지했다.
+최초 초안에서는 `src/`와 `tests/`를 수정하지 않았다. 후속 직접 회귀는 아래에 구분한다. 공유 브랜치 `docs/initial-project-plan`을 유지했다.
 최신 Windows 게시 재검증과 실제 UI 결과를 이 초안에서 대신 인증하지 않는다.
 
 ## 입력과 중단 조건
@@ -230,3 +230,47 @@ Uninstall.exe를 다시 실행할 수 있다.
   마지막 폴더만 남은 미완료를 프로그램까지 남은 부분 제거와 같은 상태로 표시하지 않는다.
 
 이번에는 NSIS 도구 설치/컴파일, 실제 설치/제거/레지스트리 변경 및 실패 주입을 하지 않았다.
+
+## MUI2 중단 콜백 충돌 수정
+
+중앙은 고정 `784e2d271a90effcecb1e7330eb10201cddf8a99` renderer에 합성 비실행
+파일 하나와 빈 formats를 전달한 스크립트를 공식 NSIS 3.10으로 컴파일했고,
+`Function named ".onUserAbort" already exists` 오류를 보고했다. 설치기 실행이나
+VM 설치/제거 시험 결과가 아니다.
+
+MUI2가 소유하는 .onUserAbort를 직접 정의하지 않고, 페이지 매크로보다 앞에
+`MUI_CUSTOMFUNCTION_ABORT ZipeloUserAbort`를 정의한다. 기존 함수는
+ZipeloUserAbort로 이름만 바꾸며 취소 단계 기록, Rollback 호출과 실패 종료 코드를 유지한다.
+공식 MUI2/Interface.nsh의 MUI_FUNCTION_ABORTWARNING은 경고 처리 뒤 이 hook을 호출한다.
+추가 중단 콜백이나 .onGUIEnd 정리는 만들지 않는다.
+
+소스 기준 경로는 다음과 같다.
+
+- 환영 페이지에서 취소하면 아직 소유 플래그가 없으므로 설치 파일/등록을 삭제하지 않는다.
+  기존 취소 안내는 유지한다.
+- 설치 도중 취소가 hook에 전달되면 이번 시도에서 소유한 항목만 정리한다. 파일 복사 오류,
+  취소 버튼 허용 시점과 실제 Windows 콜백 순서는 별도 실행 검증이 필요하다.
+- install_failed의 선행 Rollback 뒤 .onInstFailed 또는 취소 hook이 다시 호출되어도
+  CleanupDone=1이 두 번째 정리를 막는다. 정리 실패를 성공으로 바꾸지 않는다.
+- InstallComplete=1 이후 취소 hook이 호출되어도 Rollback은 즉시 반환한다. 정상 종료와
+  기본 앱 안내는 정리를 호출하지 않는다. 기존 정상 설치물을 취소 후 되돌리는 기능이 아니다.
+- RootOwned/MenuOwned 및 개별 파일/등록 소유 플래그와 비재귀 삭제는 그대로다.
+  이는 기존 경로 보존 정책이며 악성 경합이나 사용자 덮어쓰기 파일 구분을 새로 보장하지 않는다.
+
+직접 회귀 명령은 `python3 -B -m unittest discover -s tests/packaging -p 'test_nsis_abort.py' -v`다.
+4개 시험 메서드가 원본 템플릿과 빈 형식/ZIP 등록의 실제 renderer 출력을 확인한다.
+테스트 임시 파일은 이 프로젝트 루트의 tests/packaging/ 아래에서만 만들며 NSIS/설치기를
+실행하지 않는다. 원래 템플릿에서 hook 검사가 실패하는 것을 먼저 확인하고 최소 수정 후 재검사한다.
+소스 검사로 Win32 정리 동작을 실행 검증했다고 표시하지 않는다.
+
+중앙 컴파일 재현은 tests/ 아래 새 합성 stage에서만 수행한다. 비실행 텍스트
+payload/synthetic.txt 하나를 만들고 windows(stage, {version: "0.1.0", formats: []},
+["synthetic.txt"])에 해당하는 renderer 호출로 installer.nsi를 생성한다. NSIS 3.10에서
+stage를 작업 폴더로 `makensis installer.nsi`를 수행해 콜백 중복 오류가 사라지는지 확인한다.
+ZIP 등록 대조도 별도 stage에서 수행한다. 합성 설치기 자체는 실행하거나 업로드하지 않는다.
+이는 renderer 컴파일 시험이며 prepare 입력 검증을 통과한 제품 설치파일이 아니다.
+
+prepare.py와 self-contained/검증 기록/라이선스 gate는 변경하지 않는다. 공유 런타임 후보는
+이 self-contained 입력 계약에 맞지 않으며, 중앙이 확인한 round10 self-contained의
+notice_files_found=[] 상태도 실제 설치 입력 완료의 근거가 아니다. 제품 설치/제거,
+실패 주입, NSIS 재컴파일은 후속 중앙 검증으로 남긴다. 공개배포/라이선스와 main 병합 보류를 유지한다.

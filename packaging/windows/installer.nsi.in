@@ -12,6 +12,7 @@ SetOverwrite off
 AllowSkipFiles off
 FileErrorText "파일을 쓰지 못했습니다. 여유 공간과 쓰기 권한을 확인한 뒤 재시도하거나 취소하세요." "파일을 쓰지 못했습니다. 여유 공간과 쓰기 권한을 확인한 뒤 재시도하거나 취소하세요."
 ShowInstDetails show
+!define MUI_CUSTOMFUNCTION_ABORT ZipeloUserAbort
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_INSTFILES
 Page custom FinishCreate
@@ -175,7 +176,7 @@ Function .onInstFailed
     SetErrorLevel 1
 FunctionEnd
 
-Function .onUserAbort
+Function ZipeloUserAbort
     StrCpy $FailureStep "사용자 취소"
     Call Rollback
     SetErrorLevel 1
