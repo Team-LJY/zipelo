@@ -35,7 +35,7 @@
     "runtime_access": "고정 타입/멤버만 reflection으로 호출함: WindowsFolderPublication(string), Initialize, DiagnosticJobId, Abort; PendingFolderPublication.CreateStreamingEntry; StreamingExtractionDiagnostics.Record. 실제 Runtime 객체를 호출하며 생성/검사/삭제 코드를 복사하지 않음. 필요한 멤버가 없으면 실제 사례 전에 종료 2임. 제품 seam/공개 API 변경 없음",
     "ownership": "CreateStreamingEntry가 반환한 SafeFileHandle은 Runtime에서만 소유함. 시험은 복제/추가 개방/DangerousAddRef/별도 Dispose하지 않음. 모든 비동기 I/O의 완료 또는 취소 예외를 관찰한 뒤 같은 본문의 finally에서 Abort를 한 번 호출함. 자식 뒤 root 정리는 Runtime Abort의 기존 역순에 맡김. Abort가 실제 반환한 경우에만 객체 Dispose로 조상 핸들을 닫음. Abort 정지 또는 예외 시 감독 측 Dispose/재삭제를 시작하지 않고 미정리로 보고함",
     "guards": "기존 시험 부모의 존재/절대 경로/ancestor reparse point 거절 후 새 GUID 경로를 사용함. Runtime의 OpenParent/RequireNtfs/RequirePrivateWriters/Initialize/CreateStreamingEntry/Inspect/Abort 경로를 그대로 호출함. ACL/공유 플래그/ancestry/no-follow/삭제 순서 변경이나 우회 없음. 시험 부모가 소유자 통제하에 실행 중 교체되지 않는 환경을 전제하며 동일 사용자의 경합을 원자적으로 차단한다는 보장은 없음",
-    "verification_difference": "최초 분리 실험에서는 Abort 전에 Verify/VerifyChildren의 디렉터리 열거 또는 Publish를 호출하지 않음. Initialize와 CreateStreamingEntry의 실제 생성/소유 등록/Inspect 검사는 유지함. Abort 성공 및 객체 Dispose 반환 뒤에만 destination을 열거해 sentinel만 남고 내용이 보존됐는지 확인하며 이 사후 검사를 삭제와 병행하지 않음. 이 분리 실험이 원래 ZIP 실행의 모든 수명/스케줄링을 그대로 재현한다고 주장하지 않음. 비동기 파일 읽기/쓰기는 모두 await함",
+    "verification_difference": "최초 분리 실험에서는 Verify/VerifyChildren/Publish와 별도 디렉터리 열거를 호출하지 않음. Initialize와 CreateStreamingEntry의 실제 생성/소유 등록/Inspect 검사는 유지함. 자식 파일의 바이트 readback과 Abort 성공 및 객체 Dispose 반환 뒤 sentinel 바이트 확인을 유지함. 사후 디렉터리 열거/재삭제는 하지 않으며 실제 잔류 항목은 호스트 종료 후 중앙에서 별도로 확인해야 함. 이 분리 실험이 원래 ZIP 실행의 모든 수명/스케줄링을 그대로 재현한다고 주장하지 않음. 비동기 파일 읽기/쓰기는 모두 await함",
     "timeouts": {
         "operation_seconds": 15,
         "case_failure_seconds": 45,
@@ -43,11 +43,11 @@
         "diagnostics_stop_seconds": 1,
         "policy": "Task.Run은 시험 관찰용이며 제품 호출을 성공으로 숨기지 않음. 45초 실패 뒤 늦게 완료돼도 종료 124 유지. 같은 작업과 취소 콜백을 최대 25초 관찰하며 별도 정리 Task나 다음 사례를 시작하지 않음. native 호출의 취소/강제 종료는 보장하지 않음"
     },
-    "cleanup": "Runtime 객체를 만든 뒤에는 Abort 성공, Dispose 반환과 destination에 sentinel만 남고 바이트가 보존된 경우에만 cleanupConfirmed=true임. Runtime 생성 호출 전 끝난 준비 실패는 제품 소유 트리가 없음으로 표시함. Abort가 예외로 끝나면 객체 Dispose를 시작하지 않음. 생성 시도 뒤 객체를 받지 못했거나 실제 정리/후속 검사가 미완료 또는 잔류하면 종료 124 및 CLEANUP_UNCONFIRMED로 보수적으로 처리함. 실패한 삭제를 경로 기반 삭제로 재시도하지 않음. 진단 로그 writer 종료는 작업/OS 종료 확인과 구분함",
+    "cleanup": "Runtime 객체를 만든 뒤 cleanupConfirmed=true는 Abort 성공 반환, 객체 Dispose 반환 및 sentinel 바이트 보존 확인을 뜻함. 디렉터리를 열거하지 않으므로 잔류 항목 부재나 OS 종료를 증명하지 않으며 residueChecked=false를 함께 보고함. Runtime 생성 호출 전 끝난 준비 실패는 제품 소유 트리가 없음으로 표시함. Abort가 예외로 끝나면 객체 Dispose를 시작하지 않음. 생성 시도 뒤 객체를 받지 못했거나 Abort/Dispose/바이트 확인이 미완료 또는 실패하면 종료 124 및 CLEANUP_UNCONFIRMED로 처리함. 실패한 삭제를 경로 기반 삭제로 재시도하지 않음. 진단 로그 writer 종료는 작업/OS 종료 확인과 구분함",
     "logging": "단일 Start/Stop, 새 GUID 루트의 cleanup-diagnostics.tsv 고정 파일만 사용함. 고정 stage/단조 ticks/job/시험 PID와 실제 Runtime의 windows.abort/windows.delete 기록을 남김. 내용/암호/사용자 경로/원시 핸들은 TSV에 없음. 시험 stdout에는 생성된 시험 경로와 상태 요약을 보고함. Worker는 실행하지 않으며 전체 작업은 시험 호스트 PID에서 수행됨",
-    "completion": "Status=2, Dropped=0, Stop 대기 완료와 caseExit!=124일 때만 logComplete=true임. 불완전 진단은 성공 0을 종료 2로 바꾸며 실패/차단/124는 보존함. PROBE의 taskSettled/constructionAttempted/cleanupConfirmed/abortReturned/abortSucceeded/disposeReturned와 최종 stage를 함께 보고함. started=false 또는 native 호출 미정리이면 완전한 관찰이 아님",
+    "completion": "Status=2, Dropped=0, Stop 대기 완료와 caseExit!=124일 때만 logComplete=true임. 불완전 진단은 성공 0을 종료 2로 바꾸며 실패/차단/124는 보존함. PROBE의 taskSettled/constructionAttempted/cleanupConfirmed/abortReturned/abortSucceeded/disposeReturned, residueChecked=false와 최종 stage를 함께 보고함. 종료 0도 중앙의 OS 종료/잔류 항목 확인을 대신하지 않음. started=false 또는 native 호출 미정리이면 완전한 관찰이 아님",
     "exit_codes": {
-        "0": "해당 분리 사례와 정리/진단 완료",
+        "0": "해당 분리 사례와 Runtime 정리 호출/바이트 확인/진단 완료. OS 종료와 잔류 항목은 중앙 확인 필요",
         "1": "검사/작업 취소 실패",
         "2": "인수/빌드/준비/진단 실패",
         "3": "Windows 또는 Runtime 플랫폼/보호 조건 차단",

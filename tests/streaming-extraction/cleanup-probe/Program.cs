@@ -84,7 +84,7 @@ internal static class Program
         var complete = state.DiagnosticStarted && logStopped && status == 2 && dropped == 0 && result != 124;
         Console.WriteLine($"PROBE case={name}, hostPid={Environment.ProcessId}, job={state.Job:N}, caseExit={result}, " +
             $"taskSettled={settled}, constructionAttempted={state.ConstructionAttempted}, cleanupConfirmed={state.CleanupConfirmed}, abortReturned={state.AbortReturned}, " +
-            $"abortSucceeded={state.AbortSucceeded}, disposeReturned={state.DisposeReturned}, stage={state.Stage}");
+            $"abortSucceeded={state.AbortSucceeded}, disposeReturned={state.DisposeReturned}, residueChecked=false, stage={state.Stage}");
         Console.WriteLine($"DIAGNOSTICS stopped={logStopped}, status={status}, dropped={dropped}, logComplete={complete}");
         if (result == 124)
         {
@@ -221,8 +221,6 @@ internal static class Program
             {
                 state.Mark("probe.cleanup.verify.begin");
                 Require(destination is not null && sentinel is not null);
-                var entries = Directory.GetFileSystemEntries(destination!);
-                Require(entries.Length == 1 && Path.GetFileName(entries[0]) == "sentinel.bin");
                 Require(File.ReadAllBytes(sentinel!).SequenceEqual(bytes));
                 state.CleanupConfirmed = true;
                 state.Mark("probe.cleanup.verify.end");
