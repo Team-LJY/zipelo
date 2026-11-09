@@ -1,5 +1,7 @@
+using System.Diagnostics;
 using Zipelo.Core;
 using Zipelo.Runtime;
+using Zipelo.Runtime.Streaming;
 
 namespace Zipelo.StreamingExtractionTests;
 
@@ -88,11 +90,12 @@ internal static class Program
         var parent = !list && args.Length >= 2 && args[0] == "--sandbox-parent" ? args[1] : null;
         if (!list && parent is null)
         {
-            Console.Error.WriteLine("사용법: --list [--case <등록 이름>] 또는 --sandbox-parent <기존 시험 폴더의 절대 경로> [--case <등록 이름>]");
+            Console.Error.WriteLine("사용법: --list [--case <등록 이름>] 또는 --sandbox-parent <기존 시험 폴더의 절대 경로> [--case <등록 이름>] [--diagnostics]");
             return 2;
         }
         (string Name, Func<string, Task> Run)[] selectedCases;
-        try { selectedCases = SelectCases(args, list ? 1 : 2); }
+        bool diagnostics;
+        try { selectedCases = SelectCases(args, list ? 1 : 2, out diagnostics); }
         catch (ArgumentException failure)
         {
             Console.Error.WriteLine("SETUP_FAIL: " + failure.Message);
@@ -100,11 +103,21 @@ internal static class Program
         }
         var countLabel = selectedCases.Length == Cases.Length ? $"등록 {Cases.Length}" :
             $"등록 {Cases.Length}, 선택 {selectedCases.Length}, 제외 {Cases.Length - selectedCases.Length}";
+        if (list && diagnostics)
+        {
+            Console.Error.WriteLine("목록 조회에 진단 옵션을 사용할 수 없음");
+            return 2;
+        }
         if (list)
         {
             foreach (var item in selectedCases) { Console.WriteLine(item.Name); }
             Console.WriteLine(countLabel);
             return 0;
+        }
+        if (diagnostics && !StreamingExtractionDiagnostics.IsEnabled)
+        {
+            Console.Error.WriteLine("진단 Runtime 빌드가 필요함: ZIPELO_STREAM_DIAGNOSTICS");
+            return 2;
         }
         if (parent is null || !Path.IsPathFullyQualified(parent) || !Directory.Exists(parent))
         {
@@ -122,6 +135,53 @@ internal static class Program
         var root = Path.Combine(parent, "streaming-" + Guid.NewGuid().ToString("N"));
         TestArea.CreateDirectory(root);
         Console.WriteLine("시험 생성 경로: " + root);
+        if (!diagnostics) { return await RunCasesAsync(root, selectedCases, countLabel, false); }
+
+        var result = 2;
+        var logComplete = false;
+        try
+        {
+            var path = Path.Combine(root, "stream-diagnostics.tsv");
+            Console.WriteLine("진단 파일: " + path);
+            if (!StreamingExtractionDiagnostics.TryStart(path))
+            {
+                Console.Error.WriteLine("DIAGNOSTICS_START_FAILED");
+            }
+            else { result = await RunCasesAsync(root, selectedCases, countLabel, true); }
+        }
+        catch (Exception failure)
+        {
+            Console.Error.WriteLine("DIAGNOSTICS_RUN_FAILED: " + failure.GetType().Name);
+        }
+        finally { logComplete = await StopDiagnosticsAsync(result); }
+
+        // 진단 실패가 제품 실패나 45초 시간 초과를 성공으로 바꾸지 않음.
+        return result == 0 && !logComplete ? 2 : result;
+    }
+
+    private static async Task<bool> StopDiagnosticsAsync(int caseExitCode)
+    {
+        var stopped = false;
+        try
+        {
+            await StreamingExtractionDiagnostics.StopAsync().WaitAsync(TimeSpan.FromSeconds(1));
+            stopped = true;
+        }
+        catch (Exception failure)
+        {
+            Console.Error.WriteLine("DIAGNOSTICS_STOP_UNCONFIRMED: " + failure.GetType().Name);
+        }
+        var status = StreamingExtractionDiagnostics.Status;
+        var dropped = StreamingExtractionDiagnostics.Dropped;
+        var complete = caseExitCode != 124 && stopped && status == 2 && dropped == 0;
+        Console.WriteLine($"DIAGNOSTICS stopped={stopped}, status={status}, dropped={dropped}, logComplete={complete}, caseExit={caseExitCode}");
+        if (!complete) { Console.Error.WriteLine("DIAGNOSTICS_INCOMPLETE"); }
+        return complete;
+    }
+
+    private static async Task<int> RunCasesAsync(string root,
+        (string Name, Func<string, Task> Run)[] selectedCases, string countLabel, bool diagnostics)
+    {
         var originalDirectory = Environment.CurrentDirectory;
         var restoreDirectory = true;
         try
@@ -145,6 +205,7 @@ internal static class Program
             var blocked = 0;
             foreach (var (name, run) in selectedCases)
             {
+                if (diagnostics) { Console.WriteLine($"DIAGNOSTIC_CASE_BEGIN {name}: ticks={Stopwatch.GetTimestamp()}"); }
                 using var lifetime = new CaseLifetime();
                 var pending = Task.Run(() => run(root));
                 Exception? failure = null;
@@ -152,6 +213,10 @@ internal static class Program
                 catch (Exception observed) { failure = observed; }
 
                 var stopped = await lifetime.StopAsync(pending, name, failure is not null);
+                if (diagnostics)
+                {
+                    Console.WriteLine($"DIAGNOSTIC_CASE_END {name}: ticks={Stopwatch.GetTimestamp()}, workerStopConfirmed={stopped}");
+                }
                 if (!stopped || failure is TimeoutException)
                 {
                     Console.Error.WriteLine($"FAIL {name}: {failure?.Message ?? "작업/Worker 종료 미확인"}");
@@ -191,16 +256,23 @@ internal static class Program
         }
     }
 
-    private static (string Name, Func<string, Task> Run)[] SelectCases(string[] args, int start)
+    private static (string Name, Func<string, Task> Run)[] SelectCases(string[] args, int start, out bool diagnostics)
     {
         var names = new HashSet<string>(StringComparer.Ordinal);
-        for (var index = start; index < args.Length; index += 2)
+        diagnostics = false;
+        for (var index = start; index < args.Length; index++)
         {
+            if (args[index] == "--diagnostics")
+            {
+                if (diagnostics) { throw new ArgumentException("중복 진단 옵션을 허용하지 않음"); }
+                diagnostics = true;
+                continue;
+            }
             if (args[index] != "--case" || index + 1 >= args.Length)
             {
-                throw new ArgumentException("--case <등록 이름> 쌍만 허용함");
+                throw new ArgumentException("--case <등록 이름> 쌍과 --diagnostics만 허용함");
             }
-            var name = args[index + 1];
+            var name = args[++index];
             if (!Cases.Any(item => string.Equals(item.Name, name, StringComparison.Ordinal)))
             {
                 throw new ArgumentException("등록되지 않은 사례 이름임");

@@ -3,21 +3,23 @@
     "base_commit": "626483e8935aaa03d5a34feebc61be2f9180b80d",
     "dependency": {
         "pr": "https://github.com/Team-LJY/zipelo/pull/10",
-        "head": "624be260489b0be96f5f9a2132c3ae36d2a27b3f",
+        "head": "4736301ff80e85c5d555b2c4a582ea38ca2411be",
         "files": {
             "src/Zipelo.Runtime/Streaming/ZipStreamIndex.cs": "981bcdecc754f68aca0bcb39fc6f6db1e779c72798a58bcb9d83a96963a96468",
-            "src/Zipelo.Runtime/Streaming/ExtractionWire.cs": "969192298e55ec342be0da3e363af208b91bbf17e7d42f0f566eb1199eb1846b",
+            "src/Zipelo.Runtime/Streaming/ExtractionWire.cs": "f64c47add55bf7499227ce65921e1e4241cd51425336052f402b9381c086129f",
             "src/Zipelo.Runtime/Streaming/HandleReadStream.cs": "1ec38e3698b87d0caf60c474d3d2632dd232d53f9b00bea434861aa627bcda1b",
-            "src/Zipelo.Runtime/PendingFolderPublication.Streaming.cs": "4c77d95fa92ba63edad174f921ceb032bed19c2ecc990dca360b67783b4184b4",
+            "src/Zipelo.Runtime/PendingFolderPublication.Streaming.cs": "9ba2e3441560ee40997b3c42f10ef9a1670c8058a834637d51a11ba28bc3d0f9",
             "src/Zipelo.Worker/RemoteSnapshotStream.cs": "b21e6705e1345bbf15b3d8c88b81beeadf6382b08e45b2b78b78b53641d7d5dd",
             "src/Zipelo.Worker/StreamingZipExtractor.cs": "a0a2600e5c1255fac7de39023d9e9efdf24c4be47e55a544af0abd418f221bac",
-            "src/Zipelo.Runtime/Streaming/StreamingZipWorkerClient.cs": "33e878b14d716b384283c8ad2dd030510d29cdbcd449ab2255df86091c9ad2b7",
+            "src/Zipelo.Runtime/Streaming/StreamingZipWorkerClient.cs": "3241b683edfc8b5d4e5d7d718fe7e3ecc29f164dc45a16ee006b051df8797821",
             "src/Zipelo.Runtime/PendingFolderPublication.cs": "2701cfbea1d5d26f25ddb5c8af2555f6a9812d4cc602a7d3c4385ad1a18c8647",
             "src/Zipelo.Worker/Program.cs": "adb9f68a77a86f57399462f4a6cbc3c591e41cb0e4964dec66a1fe0441f72fec",
-            "docs/STREAMING_EXTRACTION.md": "1f5c7c42b2632f454cab1e2241ae5920bcbf46488223a6a25ee816e70ac44cfb"
+            "docs/STREAMING_EXTRACTION.md": "c19abfce34453850a5819acf14ada4c24db0731b1eb078719ac01d34e3424d7a",
+            "src/Zipelo.Runtime/Streaming/StreamingExtractionDiagnostics.cs": "52e3b492c49f802b6f0839f4d9f33ddbf4c8b958049978c6147c45b1ce1e1b4c"
         },
         "policy_head": "069bdef56cd4f74294a76cffbd2a4ab4ac16d43b",
-        "policy_document_git_blob": "8e4bdb057942a9edffa0073e57b5a49cfad0ff05"
+        "policy_document_git_blob": "8e4bdb057942a9edffa0073e57b5a49cfad0ff05",
+        "previous_code_head": "624be260489b0be96f5f9a2132c3ae36d2a27b3f"
     },
     "api": "StreamingZipWorkerClient.ExtractToNewFolderAsync / --extract-stream-v2",
     "count": 72,
@@ -105,7 +107,14 @@
         "run_nested": "dotnet tests/streaming-extraction/.work/app/Zipelo.StreamingExtractionTests.dll --sandbox-parent <absolute-existing-tests-sandbox-directory> --case real.nested",
         "run_deflate_tail": "dotnet tests/streaming-extraction/.work/app/Zipelo.StreamingExtractionTests.dll --sandbox-parent <absolute-existing-tests-sandbox-directory> --case zip.deflate_tail_garbage_small",
         "run_selected": "dotnet tests/streaming-extraction/.work/app/Zipelo.StreamingExtractionTests.dll --sandbox-parent <absolute-existing-tests-sandbox-directory> --case real.stored --case real.nested --case zip.deflate_tail_garbage_small",
-        "list_selected": "dotnet tests/streaming-extraction/.work/app/Zipelo.StreamingExtractionTests.dll --list --case zip.deflate_tail_garbage_small --case real.nested --case real.stored"
+        "list_selected": "dotnet tests/streaming-extraction/.work/app/Zipelo.StreamingExtractionTests.dll --list --case zip.deflate_tail_garbage_small --case real.nested --case real.stored",
+        "build_tests_diagnostics": "dotnet build tests/streaming-extraction/Zipelo.StreamingExtractionTests.csproj -c Release --configfile tests/streaming-extraction/NuGet.Config --artifacts-path tests/streaming-extraction/.work/diagnostic-test-artifacts -o tests/streaming-extraction/.work/diagnostic-app -p:UseAppHost=false --disable-build-servers -p:DefineConstants=ZIPELO_STREAM_DIAGNOSTICS",
+        "build_worker_diagnostics": "dotnet build src/Zipelo.Worker/Zipelo.Worker.csproj -c Release --configfile tests/streaming-extraction/NuGet.Config --artifacts-path tests/streaming-extraction/.work/diagnostic-worker-artifacts -o tests/streaming-extraction/.work/diagnostic-app -p:UseAppHost=false --disable-build-servers -p:DefineConstants=ZIPELO_STREAM_DIAGNOSTICS",
+        "run_diagnostics": "dotnet tests/streaming-extraction/.work/diagnostic-app/Zipelo.StreamingExtractionTests.dll --sandbox-parent <absolute-existing-tests-sandbox-directory> --diagnostics",
+        "run_stored_diagnostics": "dotnet tests/streaming-extraction/.work/diagnostic-app/Zipelo.StreamingExtractionTests.dll --sandbox-parent <absolute-existing-tests-sandbox-directory> --case real.stored --diagnostics",
+        "run_nested_diagnostics": "dotnet tests/streaming-extraction/.work/diagnostic-app/Zipelo.StreamingExtractionTests.dll --sandbox-parent <absolute-existing-tests-sandbox-directory> --case real.nested --diagnostics",
+        "run_deflate_tail_diagnostics": "dotnet tests/streaming-extraction/.work/diagnostic-app/Zipelo.StreamingExtractionTests.dll --sandbox-parent <absolute-existing-tests-sandbox-directory> --case zip.deflate_tail_garbage_small --diagnostics",
+        "run_selected_diagnostics": "dotnet tests/streaming-extraction/.work/diagnostic-app/Zipelo.StreamingExtractionTests.dll --sandbox-parent <absolute-existing-tests-sandbox-directory> --case real.stored --case real.nested --case zip.deflate_tail_garbage_small --diagnostics"
     },
     "assertions": [
         "완료는 Published=true, Error=None, 정상 Worker 종료 0, 정확한 항목 내용/목록, 입력/출력 정리 성공이 모두 필요함",
@@ -127,8 +136,8 @@
         "fixture_suffix_bytes": 65540
     },
     "validation": {
-        "static": "passed: JSON/XML, unchanged 72 registrations/order/fixtures/expectations, exact allowlist selection and selected counts, unchanged 15/45/25 second limits and shutdown control flow; not C# compilation",
-        "compile": "not_run for current selection candidate: local SDK absent. Manager reported previous f7ad4ec2 + PR10 069bdef5 compiled on Windows with zero warnings/errors",
+        "static": "passed: JSON/XML, unchanged 72 registrations/order/fixtures/expectations and 15/45/25 second limits, default runner equivalence, diagnostic API/opt-in/fixed file/1 second stop/status/drop handling and two-file scope; not C# compilation",
+        "compile": "not_run for current diagnostics integration: local SDK absent; historical f7ad4ec2 Windows compilation does not validate this candidate",
         "windows": "manager reported original f7ad4ec2 before candidate: 4 passed, real.nested timeout, 67 unexecuted; another run passed real.nested then timed out at zip.deflate_tail_garbage_small (18 passed, 1 failed, 53 unexecuted). Current selection/lifetime candidate not_run",
         "ubuntu": "read original round14-before log: 68 passed, 4 parent identity failures, 0 blocked; real.nested passed. Current selection/lifetime candidate not_run",
         "fixture_formula": "passed: Python zlib independently decoded both manually encoded raw Stored block formulas (9/65535 decoded bytes); this did not execute the C# fixture or product"
@@ -165,7 +174,7 @@
     ],
     "deflate_tail_policy": {
         "source": "https://github.com/Team-LJY/zipelo/blob/069bdef56cd4f74294a76cffbd2a4ab4ac16d43b/docs/STREAMING_EXTRACTION.md",
-        "dependency_note": "제품 코드 기준 head 624be260과 정책 head 069bdef5 사이에는 문서 1개만 변경됨. 코드 SHA-256은 기존 dependency.files를 유지하며 정책 문서는 별도 고정 blob으로 식별함",
+        "dependency_note": "Deflate 정책은 069bdef5로 고정함. 현재 dependency.head 4736301f는 기본 비활성 진단을 추가했으며 최신 구현 해시는 dependency.files에 기록함",
         "expected": "packed 범위 안 첫 raw Deflate 출력만 게시함. 후행 garbage/두 번째 스트림 자체는 허용하되 다음 정상 ZIP 항목의 내용/범위, 원본, 길이/CRC와 게시 조건을 보존해야 함",
         "fixtures": "garbage 7/65537바이트와 독립 최종 Stored Deflate 스트림 14/65540바이트를 첫 Deflate 뒤에 추가함. local/central packed 길이와 후속 레코드 오프셋을 함께 계산하고 실행 전 경계를 확인함",
         "read_ahead": "작은 후행 데이터와 64 KiB 초과 후행 데이터를 구분함. 실제 내부 버퍼 크기/소비량은 관측하지 않으며 Stream.Position으로 정확한 Deflate 소비를 증명하지 않음",
@@ -233,13 +242,13 @@
     "selection": {
         "syntax": "--case <정확한 등록 이름>을 반복할 수 있음. --list와 --sandbox-parent 실행에 같은 선택 규칙을 적용함",
         "default": "--case가 없으면 기존 Cases의 72개를 기존 등록 순서 그대로 실행함",
-        "allowlist": "기존 Cases 배열에 StringComparison.Ordinal로 정확히 일치하는 이름만 허용함. wildcard/정규식/임의 코드/추가 실행파일/경로 선택은 없음",
+        "allowlist": "기존 Cases 배열에 StringComparison.Ordinal로 정확히 일치하는 이름만 허용함. wildcard/정규식/임의 코드/추가 실행파일/경로 선택은 없음. --diagnostics는 별도의 무값 진단 플래그임",
         "order": "선택 인수의 입력 순서와 무관하게 기존 Cases 배열 순서를 유지함. 중복과 미등록 이름, 잘못된 인수 쌍은 종료 2로 거절함",
         "isolation": "선택 검사는 별도 프로세스 호출마다 새 GUID 시험 루트를 생성함. 잘못된 선택과 --list는 시험 루트 생성/플랫폼 사전검사/Worker 실행 전에 끝남",
         "counts": "전체 등록 수, 선택 수, 제외 수를 구분하고 미실행 수는 선택된 사례 중 실행하지 못한 수만 셈",
         "deadlines": "기존 15초 작업 예산, 45초 사례 실패 기준과 최대 25초 취소/종료 확인을 보존함",
         "stop": "종료 미확인 또는 시간 초과이면 124로 종료하며 다음 선택 사례를 실행하지 않음. 별도 호출도 중앙 감독자가 이전 실제 Worker 종료를 확인하기 전에는 시작하지 않아야 함",
-        "diagnostics": "backend PR #10의 진단 계약 확정 대기. 임의 환경 변수/로그 경로/빌드 스위치를 추정해 만들지 않음. 진단 구현을 테스트 PR에 복사하지 않음",
+        "diagnostics": "--diagnostics를 명시할 때만 PR #10 head 4736301f의 공개 진단 API를 호출함. --list와 조합하거나 중복 지정하면 종료 2임. 로그 경로나 실행 코드를 인수로 받지 않음",
         "validation": "정적 등록/순서/수명 제어 대조만 수행함. SDK 부재로 새 선택 파서의 C# 컴파일과 실행은 중앙 검증 필요",
         "central_checks": [
             {
@@ -357,6 +366,30 @@
                 ],
                 "exit": 2
             }
+        ]
+    },
+    "diagnostics": {
+        "product_head": "4736301ff80e85c5d555b2c4a582ea38ca2411be",
+        "product_contract": "https://github.com/Team-LJY/zipelo/pull/10",
+        "compile": "Runtime을 포함한 테스트/Worker 양쪽 검증 빌드에 -p:DefineConstants=ZIPELO_STREAM_DIAGNOSTICS를 전달함. 일반 출력과 별도 diagnostic 출력/중간 폴더를 사용함. 프로젝트 기본 설정은 바꾸지 않음",
+        "opt_in": "명시적 --diagnostics 없이는 진단 API 시작/종료를 호출하지 않고 파일도 만들지 않음. 일반 Runtime 빌드에서 이 플래그를 쓰면 IsEnabled=false를 확인해 시험 루트 생성/Worker 실행 전에 종료 2임",
+        "file": "기존 링크 검사와 새 GUID 시험 루트 생성 후 해당 루트의 고정 stream-diagnostics.tsv만 지정함. 임의 로그 경로 옵션/환경 변수가 없음. 부모가 시험 소유이고 실행 중 교체되지 않는 환경이 필요하며 동일 사용자에 의한 부모 이동까지 원자적으로 막는다는 보장은 없음",
+        "start": "StreamingExtractionDiagnostics.TryStart(path)는 프로세스당 한 번만 호출함. true는 시작 요청 수락일 뿐 파일 개방 성공이 아님. false이면 사례를 실행하지 않고 종료 2임",
+        "correlation": "진단 모드에서만 시험 stdout에 등록 사례 이름과 Stopwatch.GetTimestamp()의 BEGIN/END를 남김. Runtime TSV의 단조 ticks/job ID와 대응할 수 있음. Worker stdout/stderr에는 텍스트를 추가하지 않으며 가짜 Worker 모드의 조기 분기를 유지함",
+        "stop": "실행 종료 또는 실패 후 finally에서 StopAsync().WaitAsync(TimeSpan.FromSeconds(1))로 최대 1초만 기다림. 이는 15초 작업/45초 사례/25초 종료 확인 예산과 분리됨. Status와 Dropped를 항상 시험 stdout에 보고하며 대기 예외는 타입만 기록함",
+        "integrity": "완료 대기 성공, Status=2, Dropped=0인 경우만 logComplete=true임. 사례 종료 124는 닫힌 로그도 보수적으로 불완전 표시함. 값은 종료 시점의 상태 관찰이며 독립 OS Worker 종료나 누락 없는 전체 실행 증명이 아님",
+        "exit": "사례 결과가 성공 0인데 진단이 불완전하면 전체 종료 2로 보고함. 기존 실패 1/설정 실패 2/차단 3/시간 초과 또는 종료 미확인 124는 보존함. 진단 실패로 제품 실패를 성공 처리하지 않음",
+        "bounds": "제품 계약: 큐 1024건, 프로세스 전체 기록 시도 16384건, 한 줄 512바이트, 파일 4 MiB. 포화/쓰기 실패는 상태와 Dropped로 관찰함. background 쓰기 스레드의 강제 중단은 하지 않으며 멈춘 파일시스템에서 잔류할 수 있음",
+        "validation": "정적 API/시그니처/분기/예산/파일 범위 대조만 수행함. 기본/진단 C# 컴파일, 실제 Status/Dropped/1초 제한/Windows 정지 재현은 중앙 검증 필요",
+        "central_checks": [
+            "일반 빌드 + 진단 옵션 없음: 기본 72개/선택 실행과 동일하며 진단 파일 없음",
+            "일반 빌드 + --diagnostics: 종료 2, 새 시험 루트/Worker 없음",
+            "진단 빌드 + 진단 옵션 없음: 진단 파일 없음",
+            "진단 빌드 + 각 단일 사례 + --diagnostics: 새 GUID 아래 고정 파일, 사례 BEGIN/END, 실제 process.started PID, Status/Dropped 확인",
+            "--list --diagnostics 및 --diagnostics 중복: 종료 2, 새 시험 루트/Worker 없음",
+            "--diagnostics <임의 경로>: 종료 2, 임의 경로 접근/실행 없음",
+            "전체 진단 실행: 기존 72개 순서/기대값/15초/45초 보존, 한도 도달 시 불완전 표시",
+            "시간 초과/Worker 종료 미확인: 124 보존, 후속 선택 사례 미실행, 로그 종료 최대 1초와 불완전 표시 확인"
         ]
     }
 }
