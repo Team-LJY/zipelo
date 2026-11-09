@@ -1,0 +1,59 @@
+{
+    "schemaVersion": 1,
+    "baseCommit": "018e7593ecb2b3a7ae0bc17a440ecf2c0de8b4dd",
+    "status": "실행 전 실험임. 생산 코드와 패키지 의존성에 연결하지 않음.",
+    "dependency": {
+        "id": "SharpZipLib",
+        "versionRange": "[1.4.2]",
+        "restorePerformed": false,
+        "source": "https://github.com/icsharpcode/SharpZipLib/blob/v1.4.2/src/ICSharpCode.SharpZipLib/Zip/Compression/Inflater.cs",
+        "gate": "중앙에서 실제 패키지 고지와 무결성 및 필요한 다운로드 범위를 확인한 뒤 승인된 원본으로 복원함. 선언은 배포 라이선스 확정을 뜻하지 않음."
+    },
+    "scope": [
+        "모든 소스는 tests/gzip-boundary-probe 안의 독립 콘솔 프로젝트임. Worker/Core/UI, ZIP/USTAR, TAR.GZ, 파일 게시 및 공개 지원 표시에 연결하지 않음.",
+        "단일 member는 실험 범위임. GZip 규격 자체는 연결 member를 허용함. 이 실험은 유효 trailer 뒤 모든 바이트를 거부함.",
+        "불변 메모리 입력을 호출자가 소유함. 입력을 파일로 읽거나 네트워크에서 받지 않음. 입력 크기 제한은 파싱 전 검사함.",
+        "자체 Deflate 디코더 없이 raw Inflater(true)만 사용함. GZip 고수준 읽기와 라이브러리 파일 추출 API는 호출하지 않음."
+    ],
+    "boundaryContract": [
+        "magic, CM=8, 예약 비트, FEXTRA 길이, FNAME/FCOMMENT 종료와 FHCRC를 검증함. FTEXT/MTIME/XFL/OS는 경로 또는 복원 속성으로 사용하지 않음.",
+        "FNAME/FCOMMENT를 문자열로 보관하지 않고 헤더 CRC와 메타데이터 예산에 포함함. FHCRC는 해당 두 바이트 이전 헤더 CRC32의 하위 16비트임.",
+        "입력 공급은 최대 65536바이트임. IsNeedingInput일 때만 SetInput함. 출력 버퍼도 65536바이트이며 전체 해제 버퍼를 만들지 않음.",
+        "각 Inflate 반환 후 TotalIn 증가 단조성, TotalIn = 누적 공급량 - RemainingInput, TotalOut = 누적 실제 반환 바이트를 대조함.",
+        "IsFinished가 확인된 뒤 headerBytes + TotalIn을 실제 Deflate 끝으로 사용함. 물리적으로 읽은 위치와 차이가 RemainingInput이어야 함.",
+        "원본 메모리에서 미소비 꼬리를 읽어 정확한 8바이트 trailer의 CRC32/ISIZE를 검증하고 EOF를 요구함. ISIZE는 실제 길이 modulo 2^32이며 CRC는 인증을 뜻하지 않음.",
+        "EOF인데 IsFinished가 아니면 잘림임. 입력도 출력도 진전이 없고 추가 입력도 요구하지 않으면 NoProgress임. 내부 동기 호출 자체의 무한 루프를 강제로 끊는 계약은 아님."
+    ],
+    "sinkContract": [
+        "selected=false도 본문 전체, CRC와 크기, trailer 및 EOF를 검사함. 선택하지 않은 출력도 처리량 예산에 포함함.",
+        "selected=true는 재사용 메모리 청크를 전달함. 수신기는 즉시 소비해야 하며 보관하지 않음. 모든 바이트는 Read 성공 반환 전까지 임시 결과임.",
+        "테스트 HashSink는 SHA256 상태만 유지하고 성공 반환 결과로 Complete한 뒤에만 해시를 확정함. 손상, 취소, 수신기 실패에서 해시를 확정하지 않음.",
+        "ReadOnlyMemory는 backing array 불변을 강제하지 않음. 호출자가 읽는 동안 변경하면 계약 위반임. 파일 게시와 동시 변경 방어는 이 실험 범위에 없음."
+    ],
+    "limits": {
+        "inputPerPass": 16777216,
+        "processedCumulative": 134217728,
+        "selectedOutputCumulative": 16777216,
+        "metadataCumulative": 1048576,
+        "durationSeconds": 300,
+        "chunkBytes": 65536,
+        "rule": "호출자 제한과 상한 중 작은 값을 적용함. 동일 ProbeBudget을 재사용하면 재순회도 누적함. 처리량은 실제 선행 읽기 입력과 모든 해제 바이트의 합임. 미소비 꼬리 재독해는 입력을 중복 과금하지 않음. 메타데이터는 FHCRC를 포함한 원시 헤더 바이트 수이며 trailer는 제외함. 힙/OS 메모리 제한을 뜻하지 않음."
+    },
+    "verification": [
+        "BCL DeflateStream으로 생성한 정상 표본, 정적 fixed/stored 빈 블록, 32개 플래그 조합, 독립 CRC32 구현과 123456789의 알려진 기대값을 사용함.",
+        "입력 공급 1/2/3/7/8/9/31/512/65536바이트, 64KiB 경계 전후 stored 표본, 직접 Inflater의 1바이트 출력과 미소비 sentinel을 검사함.",
+        "CRC/ISIZE 각 바이트 변조, FHCRC/이름 변조, 헤더/본문/trailer 모든 prefix 절단, 예약 비트, 선택 필드 잘림, 연결/빈 연결 member 및 후행 0/쓰레기를 거부함.",
+        "작은 호출자 제한, 상한 clamp, 입력/메타데이터 실제 상한, 누적 처리/선택출력/메타데이터, 비선택 팽창, deadline과 수신시간을 검사함.",
+        "호출 전 취소, 수신 중 취소, 비선택 Inflate 반환 직후 취소, 수신기 예외를 검사함. NoProgress와 소비 계약 위반은 테스트 어댑터로 주입하며 실제 라이브러리 결함 재현으로 주장하지 않음."
+    ],
+    "validation": {
+        "local": "SDK/컴파일러 부재로 정적 검토만 수행함. 패키지 복원/컴파일/실행은 하지 않음.",
+        "commandsAfterCentralApproval": [
+            "dotnet restore tests/gzip-boundary-probe/Zipelo.GzipBoundaryProbe.csproj --source <approved-local-feed> --packages <isolated-package-cache>",
+            "dotnet build tests/gzip-boundary-probe/Zipelo.GzipBoundaryProbe.csproj -c Release --no-restore",
+            "dotnet run --project tests/gzip-boundary-probe/Zipelo.GzipBoundaryProbe.csproj -c Release --no-build"
+        ],
+        "execution": "중앙의 외부 프로세스 시간 제한 아래 Windows/Linux에서 실행함. 인수 없이 실행하며 성공 0, 실패 1, 잘못된 인수 2임. 실제 사례 수는 실행기의 passed/failed 출력으로 확인함.",
+        "limitations": "동기 inflater와 수신기 내부 취소는 협조적임. Task.Run으로 정지를 숨기지 않음. 성능/할당량과 라이브러리 안전성 전체는 검증하지 않음. Windows 정리와 runtime 라이선스/배포 보류는 별개임."
+    }
+}
