@@ -19,6 +19,7 @@
         <Compile Include="HistoryAliases.cs" />
         <Compile Include="IntegrationProgram.cs" />
         <Compile Include="BudgetRegression.cs" />
+        <Compile Include="FinalizationRegression.cs" />
         <Compile Include="PendingValidation.cs" />
     </ItemGroup>
 </Project>

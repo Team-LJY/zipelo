@@ -10,7 +10,8 @@ internal sealed class PendingValidation
 
     public void Execute(ReadOnlyMemory<byte> input, ProbeBudget budget, bool selected,
         CancellationToken token = default, int feedSize = ProbeBudget.ChunkSize,
-        Action? afterChunk = null, Action? beforeCommit = null, IRawInflater? inflater = null)
+        Action? afterChunk = null, Action? beforeCommit = null, IRawInflater? inflater = null,
+        Action? onSinkDispose = null)
     {
         if (used)
         {
@@ -19,7 +20,7 @@ internal sealed class PendingValidation
         used = true;
         BoundaryResult result;
         string? pendingHash = null;
-        using (var sink = new HashSink())
+        using (var sink = new TemporarySink(onSinkDispose))
         {
             result = BoundaryProbe.Read(input, budget, selected, bytes =>
             {
@@ -43,4 +44,20 @@ internal sealed class PendingValidation
         CommittedHash = pendingHash;
         CommitCount = 1;
     }
+
+    // 실제 해시 자원을 정리한 뒤 Dispose 내부에서 시험 오류를 주입함.
+    private sealed class TemporarySink(Action? onDispose) : IDisposable
+    {
+        private readonly HashSink inner = new();
+        public string? CommittedHash => inner.CommittedHash;
+        public void Append(ReadOnlyMemory<byte> bytes) => inner.Append(bytes);
+        public void Complete(BoundaryResult result) => inner.Complete(result);
+
+        public void Dispose()
+        {
+            inner.Dispose();
+            onDispose?.Invoke();
+        }
+    }
+
 }

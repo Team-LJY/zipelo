@@ -16,13 +16,13 @@
             "exit": 1,
             "failure": "deflate.invalid-backreference-history"
         },
-        "rerunThisCandidateBranch": "not executed; run baseline in its own process; preserve exit 1 and refusal expectation"
+        "rerunThisCandidateBranch": "See historicalCentralResults for the exact tested head. New source head is not executed."
     },
     "candidate": {
         "project": "tests/gzip-history-integration-probe/Zipelo.GzipHistoryIntegrationProbe.csproj",
         "assembly": "Zipelo.Experimental.GzipHistoryIntegrationProbe",
         "inheritedRegressionCases": 184,
-        "additionalGroupedCases": 136,
+        "additionalGroupedCases": 162,
         "expectedExit": 0,
         "actualResult": null,
         "invalidArgumentsExit": 2,
@@ -51,7 +51,9 @@
         "failure": "exception propagates; no committed boundary/hash; one-use wrapper cannot retry; local default inflater is abandoned, no reset/reuse",
         "selectedFalse": "full parse/decode/CRC/ISIZE/budget/EOF checks; no sink output, no selected hash; successful boundary only",
         "publication": "no filesystem output, temp archive, rename, ValidatedArchive, or product file publication is implemented",
-        "rollback": "no inflater rollback claim; only final result withholding"
+        "rollback": "no inflater rollback claim; only final result withholding",
+        "disposeSeam": "Optional onSinkDispose action executes inside TemporarySink.Dispose after disposing the original HashSink. This injects an actual wrapper Dispose exception, not a beforeCommit exception; it does not induce a failure in the BCL IncrementalHash implementation. Null hook preserves the existing operation order.",
+        "errorPrecedence": "Current C# using semantics: a throwing Dispose replaces an active body Budget/cancellation exception and prevents beforeCommit/final Check. If Dispose succeeds, an active body exception propagates. If both cancellation and deadline become pending inside successful Dispose, final Check reports cancellation. No exception aggregation or new recovery behavior is introduced."
     },
     "budgets": {
         "chunkSize": 65536,
@@ -59,7 +61,8 @@
         "time": "same start and TimeProvider through parse, hashing, disposal and final check; cooperative checks cannot interrupt synchronous decoder call",
         "externalLimitSecondsPerProcess": 60,
         "failedOutput": "TotalOut measures bytes copied into the caller output buffer, including bytes copied by a call that subsequently throws. It does not expose bytes still held only inside OutputWindow. No decoder internals are modified.",
-        "overLimit": "Record actual bounded output delta even when it exceeds ProcessedLimit; then throw Budget. Processed may exceed the configured limit by at most 65536 and remains recorded. Check rejects later attempts. A valid delta that exceeds the budget takes precedence over an Inflate exception; invalid negative/oversized delta produces Boundary. Otherwise preserve Deflate/cancellation/original exception."
+        "overLimit": "Record actual bounded output delta even when it exceeds ProcessedLimit; then throw Budget. Processed may exceed the configured limit by at most 65536 and remains recorded. Check rejects later attempts. A valid delta that exceeds the budget takes precedence over an Inflate exception; invalid negative/oversized delta produces Boundary. Otherwise preserve Deflate/cancellation/original exception.",
+        "invalidCounter": "Negative or >65536 TotalOut delta is Boundary in finally before ChargeDecoded or post-call Check, including when cancellation/deadline is pending. Invalid deltas are not charged or trusted. Existing valid-delta over-limit Budget precedence is unchanged."
     },
     "coverage": [
         "all original baseline negative expectations unchanged",
@@ -69,7 +72,8 @@
         "consumed/remaining, read-ahead and exact trailer position, output counters",
         "input/processed/output/metadata limits and cancellation inherited unchanged",
         "new final cancellation/deadline after sink disposal, same-budget repeated attempts, input immutability, fresh inflater after rejection",
-        "10 additional groups: selected true/false actual stored-A then reserved-block failure, over-limit failure, return-time cancellation/deadline/other exception; verify retained TotalOut cost, no sink output or committed result, and same-budget retry refusal before another Inflate call"
+        "10 additional groups: selected true/false actual stored-A then reserved-block failure, over-limit failure, return-time cancellation/deadline/other exception; verify retained TotalOut cost, no sink output or committed result, and same-budget retry refusal before another Inflate call",
+        "26 new groups: 10 Dispose groups (5 scenarios x selected false/true, each with nonthrowing control and throwing wrapper); 16 invalid TotalOut groups (delta -1/65537 x no overlap/cancellation/deadline/both x selected false/true). Assert no public committed boundary/hash/count on failure, actual disposal, final-hook reachability, retained input accounting, and competing Check outcome. No decoder or baseline edits."
     ],
     "exclusions": [
         "product adoption or main merge",
@@ -106,5 +110,75 @@
     "priorCandidate": {
         "head": "4ada9f9e8c693288127792c925bc88a5ebc4a9fe",
         "status": "unexecuted candidate with failure-path output accounting omission identified by static review; not a validated baseline"
+    },
+    "historicalCentralResults": [
+        {
+            "head": "2d2ef7f472673d386fed2ef7fe98cc7522ef56f6",
+            "source": "coordinator-reported central execution; not rerun by author",
+            "buildHost": "Windows",
+            "sdk": "10.0.403",
+            "runtime": "10.0.14",
+            "platforms": [
+                "Windows build 26300",
+                "Ubuntu 26.04.1"
+            ],
+            "restoreExit": {
+                "baseline": 0,
+                "candidate": 0
+            },
+            "buildExit": {
+                "baseline": 0,
+                "candidate": 0
+            },
+            "candidateWarnings": [
+                "one original SharpZipBaseException.cs SYSLIB0051"
+            ],
+            "errors": 0,
+            "perPlatform": {
+                "baseline": {
+                    "passed": 183,
+                    "failed": 1,
+                    "exit": 1,
+                    "onlyFailure": "deflate.invalid-backreference-history"
+                },
+                "candidate": {
+                    "inheritedPassed": 184,
+                    "inheritedTotal": 184,
+                    "additionalPassed": 136,
+                    "additionalTotal": 136,
+                    "exit": 0
+                },
+                "invalidCliExit": {
+                    "baseline": 2,
+                    "candidate": 2
+                }
+            },
+            "samePortableAssembly": true,
+            "externalSecondsPerProcess": 60,
+            "timeouts": 0,
+            "residualProcesses": 0,
+            "unchangedHashes": {
+                "sourceFiles": 41,
+                "dllCopies": 6,
+                "offlineNupkg": true
+            },
+            "candidateDllSha256": "cb2c7821f4c68b5b54acca8827a9e42e39c0932b0edd9d364a62148a7a53fe5f",
+            "limits": "Finite synthetic cases only. Does not validate subsequent heads, file publication, general decoder safety, stages 2/3 or product adoption."
+        }
+    ],
+    "finalizationRegression": {
+        "file": "FinalizationRegression.cs",
+        "addedGroupedCases": 26,
+        "disposeScenarios": [
+            "successful parse",
+            "body deadline Budget",
+            "body cancellation",
+            "body deadline and cancellation",
+            "deadline and cancellation inside Dispose"
+        ],
+        "disposeAssertions": "Same injected IOException instance, exactly one Dispose, beforeCommit never reached when disposal throws, no public committed boundary/hash and count zero. Nonthrowing controls prove success or original failure priority. Both selected paths allocate/dispose the sink, but selected=false neither appends nor completes a hash.",
+        "counterFixture": "Valid stored-A raw 01 01 00 FE FF 41, actual patched inflater output 1. Adapter changes only observed TotalOut after return to -1 or 65537. This is a contract-violation mock, not malformed Deflate input.",
+        "counterAssertions": "Boundary before final Check, one Inflate, actual output 1 but output delivery 0, processed input only, Dispose once, beforeCommit zero, committed boundary/hash absent and count zero. Separate Check demonstrates pending cancellation/Budget condition.",
+        "execution": "Source enumeration only; new head compilation and execution pending central validation."
     }
 }

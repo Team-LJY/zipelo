@@ -169,6 +169,7 @@
     "newFilePaths": [
         "tests/gzip-history-integration-probe/BoundaryProbe.cs",
         "tests/gzip-history-integration-probe/BudgetRegression.cs",
+        "tests/gzip-history-integration-probe/FinalizationRegression.cs",
         "tests/gzip-history-integration-probe/HistoryAliases.cs",
         "tests/gzip-history-integration-probe/IntegrationProgram.cs",
         "tests/gzip-history-integration-probe/NuGet.Config",
@@ -185,11 +186,12 @@
     "authoredSourceSha256": {
         "BoundaryProbe.cs": "73c251e2370b24b724dd0719e09fff4d26c780d8d81b09b054ff4b69bbb96933",
         "BudgetRegression.cs": "3fad50415e8847f48e4aaa646379b663662de106dc6e9df080bd1c86d8a85997",
+        "FinalizationRegression.cs": "cdf260b8183ab30c38cec3c081efe95c2f80cf8eaf1095c31a6035eee2493624",
         "HistoryAliases.cs": "86075bfe12d2dfc5e37b178dfa429dc49d1dee882609fdc29e9ccef1210133eb",
-        "IntegrationProgram.cs": "cb5f72b7849d70da42594f78efb8a82f5d8fca18a2b4ca7e0497c15c5261d752",
+        "IntegrationProgram.cs": "bc106c5a1bd652d1067976c243507664987d38710737b3ce04c8444a4d36087a",
         "NuGet.Config": "026d16a16d2935475ad6b679752acd549757d489cdca32c1a919acccbbc35920",
-        "PendingValidation.cs": "40587701e6699d9bb93123cf323aa045dfcd2c9939a575361f58736135789294",
-        "Zipelo.GzipHistoryIntegrationProbe.csproj": "fd1d5cf5f6b98ae3f1d5f317103851d4abbe6a343ef14a151ff7a36f975e5fee"
+        "PendingValidation.cs": "7142648c4257854298a1fb71b0a1779f09bd1667bab4ff262a0d47ab48f805e2",
+        "Zipelo.GzipHistoryIntegrationProbe.csproj": "41f0e6b90743f3a3ed9db08e919e75ab159cdaa6f5921c9bdc876ce00fa55512"
     },
     "candidateParser": {
         "sourceHead": "174d9d87d90ed973d9baa06ca1d8de401eba591b",
@@ -198,5 +200,9 @@
         "candidatePath": "tests/gzip-history-integration-probe/BoundaryProbe.cs",
         "candidateSha256": "73c251e2370b24b724dd0719e09fff4d26c780d8d81b09b054ff4b69bbb96933",
         "reason": "Preserve frozen baseline while accounting observable output in finally on exception/cancellation and retaining over-limit usage."
+    },
+    "revision": {
+        "parentHead": "2d2ef7f472673d386fed2ef7fe98cc7522ef56f6",
+        "changes": "Add two missing regression families and optional TemporarySink.Dispose hook; register 26 groups. Candidate parser, baseline, upstream and existing expected values unchanged. Historical central result remains attached only to parent head."
     }
 }
