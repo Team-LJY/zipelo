@@ -79,6 +79,9 @@ public sealed class StreamingZipWorkerClient
             var (parent, leaf) = Destination(destinationPath);
             StreamingExtractionDiagnostics.Record(jobId, "input.create.begin");
             input = Pending(parent);
+#if ZIPELO_STREAM_DIAGNOSTICS
+            if (input is WindowsFolderPublication windowsInput) { windowsInput.DiagnosticJobId = jobId; }
+#endif
             input.Initialize();
             StreamingExtractionDiagnostics.Record(jobId, "input.create.end");
             var snapshot = input.CreateStreamingEntry(new("snapshot", "input.zip", EntryKind.File, 0), operationToken)!;
@@ -95,6 +98,9 @@ public sealed class StreamingZipWorkerClient
             }
             StreamingExtractionDiagnostics.Record(jobId, "output.create.begin");
             output = Pending(parent);
+#if ZIPELO_STREAM_DIAGNOSTICS
+            if (output is WindowsFolderPublication windowsOutput) { windowsOutput.DiagnosticJobId = jobId; }
+#endif
             output.Initialize();
             StreamingExtractionDiagnostics.Record(jobId, "output.create.end");
             var dll = workerPath.EndsWith(".dll", StringComparison.OrdinalIgnoreCase);

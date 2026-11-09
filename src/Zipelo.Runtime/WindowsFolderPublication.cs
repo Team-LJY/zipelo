@@ -7,6 +7,20 @@ internal sealed class WindowsFolderPublication(string parent) : PendingFolderPub
 {
     private readonly List<SafeFileHandle> ancestors = WindowsPublication.OpenParent(parent, readSecurity: true);
 
+#if ZIPELO_STREAM_DIAGNOSTICS
+    internal Guid DiagnosticJobId { get; set; }
+
+    // v2가 지정한 작업만 관찰하며 파일 이름과 핸들 값은 기록하지 않음.
+    private void ObserveAbort(string stage, int index)
+    {
+        if (DiagnosticJobId == Guid.Empty) { return; }
+        var node = Owned[index];
+        var state = (node.Directory ? 1 : 0) | (node.Handle.IsClosed ? 2 : 0) |
+            (node.Handle.IsInvalid ? 4 : 0);
+        Streaming.StreamingExtractionDiagnostics.Record(DiagnosticJobId, stage, state, (ulong)index);
+    }
+#endif
+
     internal override void Initialize()
     {
         WindowsFolderGuard.RequireNtfs(ancestors[^1]);
@@ -59,7 +73,22 @@ internal sealed class WindowsFolderPublication(string parent) : PendingFolderPub
         {
             try
             {
+#if ZIPELO_STREAM_DIAGNOSTICS
+                ObserveAbort("windows.abort.reopen.begin", index);
+                var cleanupHandle = Reopen(Owned[index]);
+                ObserveAbort("windows.abort.reopen.end", index);
+                ObserveAbort("windows.abort.delete.begin", index);
+                var deleted = WindowsPublication.DeleteOwned(cleanupHandle, out var failure);
+                ObserveAbort("windows.abort.delete.end", index);
+                if (DiagnosticJobId != Guid.Empty)
+                {
+                    Streaming.StreamingExtractionDiagnostics.Record(DiagnosticJobId,
+                        "windows.abort.delete.result", deleted ? 1 : 0, (ulong)index);
+                }
+                if (!deleted)
+#else
                 if (!WindowsPublication.DeleteOwned(Reopen(Owned[index]), out var failure))
+#endif
                 {
                     success = false;
                     CleanupNativeFailure ??= failure;
@@ -67,7 +96,16 @@ internal sealed class WindowsFolderPublication(string parent) : PendingFolderPub
             }
             catch (PublicationNativeException failure) { success = false; CleanupNativeFailure ??= failure.Failure; }
             catch { success = false; }
-            finally { Owned[index].Handle.Dispose(); }
+            finally
+            {
+#if ZIPELO_STREAM_DIAGNOSTICS
+                ObserveAbort("windows.abort.dispose.begin", index);
+#endif
+                Owned[index].Handle.Dispose();
+#if ZIPELO_STREAM_DIAGNOSTICS
+                ObserveAbort("windows.abort.dispose.end", index);
+#endif
+            }
         }
         return success;
     }
