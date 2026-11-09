@@ -378,7 +378,7 @@ Ubuntu 24.04 LTS와 26.04 LTS는 후속 확장 후보가 아닌 정식 지원 �
 - 새 ZIP 파일 게시와 Windows 수정: `NewZipPublisher` 및 OS별 게시 구현과 `tests/runtime/PublicationTests.cs`를 연동한다. 신규 게시 기능은 `features/*`, 그 위의 독립 결함 수정은 `fix/*`로 구분하는 안이며 기준 커밋이 먼저 필요하다.
 - Windows UI와 Ubuntu UI: 각 프로젝트를 구분하되 Ubuntu가 링크하는 `ZipCreationWorkflow.cs` 및 시작 인수 계약은 선행 공통 UI 변경으로 묶거나 소유자 간 반영 순서를 합의한다. 검증 빌드 설정을 일반 배포 설정으로 바꾸지 않는다.
 - 시작 인수 및 설치 초안: `docs/LOCAL_ARCHIVE_OPEN.md`와 UI 인수 처리, `packaging/`의 진입 명령 및 manifest가 같은 계약을 사용해야 한다. 설치 초안은 실제 설치/연결 검증과 구분한다.
-- 비암호화 ZIP 메모리 해제와 새 폴더 게시: 공유 Runtime/Worker 변경 및 `tests/extraction/`을 기존 검증된 게시 범위와 구분한다. 현재 새 폴더 게시의 실패 폐쇄와 미실행 검사를 유지한다.
+- 비암호화 ZIP 메모리 해제와 새 폴더 게시: 공유 Runtime/Worker 변경 및 `tests/extraction/`을 기존 단일 ZIP 게시 검증과 구분한다. 후속 폴더 게시 구현은 OS/파일시스템/권한 조건 미충족 시 실패 폐쇄하며 실제 실행 검증 전 일반 해제 UI를 활성화하지 않는다.
 - 계획과 플랫폼 상태: `docs/PLANS.md`, `docs/PLATFORM_SUPPORT.md`는 `docs/*` 작업 후보로 묶는다. 다른 담당자의 기술 문서는 해당 구현 변경과 함께 소유자가 확인한다. README와 다운로드 자산은 UI/안내 소유 범위를 보존한다.
 
 테스트는 해당 기능 또는 결함 수정과 함께 루트 `tests/` 안의 파일만 포함한다. 근거 없는 tests/* 접두어를 만들지 않는다. 파일 해시와 선행 계약을 고정해 검토하며, 이 문서 브랜치에는 `docs/PLANS.md`, `docs/PLATFORM_SUPPORT.md`, `LICENSE`만 추가한다. 다른 구현과 검증 파일은 해당 브랜치의 의존 산출물로 별도 관리한다.
@@ -392,7 +392,7 @@ Ubuntu 24.04 LTS와 26.04 LTS는 후속 확장 후보가 아닌 정식 지원 �
 - Windows Desktop은 .NET 10 WPF이며 Core/Runtime 어댑터와 작업자 기반 ZIP 목록, 생성 및 단일 새 파일 게시 연결이 작성됐다. Ubuntu UI도 별도 프로젝트에 작성됐지만 실제 LTS 빌드와 실행 검증은 남아 있다.
 - 두 UI가 공유하는 생성 워크플로는 bounded read 후 `writable:false` 스트림을 전달하도록 수정됐다. 이번에 읽은 `ZipCreationWorkflow.cs` SHA-256은 `1529b854f31bfb321bbdfeff97cdb1e5d69ac00281873ce881ffea3dc013789f`로 전달된 수정 파일과 일치한다. 파일 일치는 전체 최신 UI 재검증을 뜻하지 않는다. 일반 Debug/Release 생성은 비활성이고 명시적 개발 검증 빌드에서만 허용한다.
 - Core/Runtime/Worker에는 OS별 파일명과 대소문자 정책, 작업자 실행 경계, 예산 및 단일 새 ZIP 게시 API가 있다. 최신 Windows 게시 관련 실행 근거는 아래 round5 결과로 갱신한다. Ubuntu 안전 게시 검증은 별도다.
-- 비암호화 ZIP의 작업자 메모리 해제와 경로/타입/중복, 실제 해제량, CRC/길이 대조 코드가 추가됐다. 해제 계약 (`docs/ZIP_EXTRACTION.md`, 별도 구현/검증 브랜치)의 소스 존재와 실행 검증을 구분한다. `NewFolderPublisher.IsSupportedPlatform=false`이며 Windows/Linux 모두 공개 폴더 게시가 실패 폐쇄 상태다. 일반 UI 해제 capability도 비활성이다.
+- 비암호화 ZIP 메모리 해제와 경로/타입/중복, 실제 해제량, CRC/길이 대조 및 후속 핸들 기반 새 폴더 게시 코드가 작성됐다. round6 고정 소스의 양쪽 OS 게시 차단과 후속 구현을 아래에서 분리한다. 해제 계약 (`docs/ZIP_EXTRACTION.md`, 별도 구현/검증 브랜치)은 Windows NTFS 및 Linux XFS의 제한 조건을 정의하지만 실행 통과 기록은 아니다. 일반 해제 capability/UI는 여전히 비활성이다.
 - `packaging/`에 Windows 사용자 범위 설치와 Ubuntu .deb/desktop/MIME 초안 및 manifest 기반 차단 검사가 작성됐다. 실제 설치 패키지 생성, 설치/업데이트/제거, 서명이나 공개 결과가 아니다. 시작 인수 처리도 소스가 작성됐으나 실제 OS 검증 전에는 연결 등록 차단을 유지한다.
 - README는 설치 파일 없음과 다운로드 준비 표시이며 실제 다운로드 링크가 아니다. 외부 엔진 채택과 전체 형식/암호/복구 요구는 미완료로 유지한다.
 
@@ -409,15 +409,27 @@ Ubuntu 24.04 LTS와 26.04 LTS는 후속 확장 후보가 아닌 정식 지원 �
 
 2026-11-09T14:44:04.604469Z의 src/tests 102개 독립 스냅샷에 대한 후속 보고다. Desktop/Core/Runtime/Worker 빌드는 경고 0, 오류 0이며 Core 41개는 통과했다. RuntimeTests는 당시 `tests/runtime/ExtractionPublicationTests.cs(125,22)`의 CS0266, `FileSystemInfo`를 `DirectoryInfo`로 암시 변환할 수 없는 오류로 컴파일에 실패했다. 따라서 Runtime 56개는 전부 미실행이다.
 
-이는 round5의 기존 62개 통과를 소급 취소하는 결과도, 신규 97개 전체의 통과도 아니다. 해당 타입 오류를 최소 수정한 뒤 같은 고정 스냅샷에서 재실행해야 한다. 원본에서 병행 중인 새 폴더 게시 구현을 이 결과에 섞지 않는다. 이후 패치나 재실행 결과가 확인되기 전에는 성공으로 갱신하지 않는다.
+round6 고정 소스에서는 `NewFolderPublisher.IsSupportedPlatform=false`였으며 Windows/Linux 모두 게시 진입이 차단돼 있었다. 당시 폴더 게시 수용 검사 8개는 이 구현 게이트에 걸리는 사례로 기록됐으나 Runtime 컴파일 실패로 실제 실행된 것은 아니다. 이를 현재 원본의 구현 상태로 사용하지 않는다.
+
+round6 결과는 round5의 기존 62개 통과를 소급 취소하는 결과도, 신규 97개 전체의 통과도 아니다. 타입 오류의 최소 수정은 보고됐으나 수정 후 동일 스냅샷의 재실행 성공 근거는 아직 없다. 후속 원본의 폴더 게시 변경을 이 과거 결과에 섞지 않는다.
+
+### round6 이후의 폴더 게시 구현(미검증)
+
+2026-11-10 KST에 확인한 ZIP 엔진 커밋 `9f36e037bc5f1b2f1e67caa3528a3a344ec1107b`와 대응 원본에는 핸들 기준 생성, 내용 재검증, 덮어쓰기 금지 게시 및 소유 항목 정리가 연결돼 있다. `NewFolderPublisher.IsSupportedPlatform`은 Windows/Linux x64에서 구현 진입 가능성을 나타내며, 파일시스템/권한 조건 충족이나 실제 실행 통과를 뜻하지 않는다.
+
+- Windows는 로컬 NTFS와 제한된 쓰기 ACL/소유자 조건에서만 게시를 시도하는 구현이다. 현재 사용자, SYSTEM, Administrators 외 계정의 쓰기 허용, reparse 및 해석할 수 없는 보안 조건은 거부한다.
+- Linux는 XFS와 필요한 openat2/statx/renameat2 기능, 부모가 현재 euid 소유이며 그룹/기타 쓰기가 없는 조건으로 제한한다. ext2/ext3/ext4는 공통 식별값만으로 구분할 수 없어 임시 항목 생성 전에 거부한다. ext4 게시나 Ubuntu 기본 파일시스템에서의 저장 완료를 약속하지 않는다.
+- 위 조건이 확인되지 않으면 실패 폐쇄하며 경로 기반 우회나 기존 결과와의 병합/덮어쓰기를 허용하지 않는다. 같은 사용자 권한의 악성 프로그램이나 관리자에 의한 임시 트리 변조까지 방어한다고 주장하지 않는다.
+
+이 후속 구현의 C# 컴파일과 실제 Windows NTFS 및 Linux XFS 게시/취소/경합/정리는 미검증이다. 일반 해제 능력 `SupportsSafeExtraction=false`와 일반 UI 비활성은 유지한다. 소스의 구현 진입점, OS별 제한 조건, 실행 통과 및 사용자 기능 활성화를 각각 구분한다.
 
 ### 새 해제 및 Ubuntu와 배포 미검증
 
-- 검증 담당자의 해제 검사 기록 (`tests/extraction/coverage.json`, 별도 구현/검증 브랜치)은 기존 62개에 새 해제 검사 35개를 더해 총 97개 등록을 기록한다. 새 35개의 C# 컴파일과 실행은 로컬 SDK 부재로 미실행이다. 폴더 게시의 수용 검사 8개는 현재 기능 게이트로 차단돼 있으며 통과로 계산하지 않는다. Windows 62개 통과가 신규 97개 통과라는 뜻은 아니다.
+- round6 당시의 해제 검사 기록 (`tests/extraction/coverage.json`, 별도 구현/검증 브랜치)은 기존 62개에 새 검사 35개를 더한 총 97개 등록을 기록한다. 이후 폴더 게시 계약과 수용 검사는 검증 담당자가 조정 중이며 현재 등록 수나 skip/pass 상태를 이 과거 기록으로 확정하지 않는다. Windows 기존 62개 통과를 신규 검사 전체 또는 후속 폴더 게시 통과로 계산하지 않는다.
 - 같은 로컬 기록의 Python 33개 통과는 샘플과 정적 검사 범위이며 C# 해제, 실제 OS 저장이나 UI 실행의 대체 근거가 아니다. 이번 기획 작업에서 제품 검사를 재실행하지 않았다.
 - Ubuntu 24.04 LTS x64와 26.04 LTS x64의 UI, 실제 기능, 네이티브 안전 게시 및 설치 검증은 미완료다. 현재 호스트가 Ubuntu 26.04.1 LTS인 사실과 전달된 GNOME Wayland/XWayland 정보는 앱 실행 증거가 아니다. 다른 아키텍처도 미검증이다.
 
-[플랫폼 지원 계획](PLATFORM_SUPPORT.md), OS별 테스트 행렬 (`tests/security/platform_matrix.json`, 별도 구현/검증 브랜치) 및 담당 기술 기록을 함께 읽는다. 단일 ZIP 저장의 Windows 실행 성공과 새 폴더로의 안전한 해제 저장은 다른 범위다. 후자는 외부 항목 삽입과 경로 교체/정리 조건 및 실제 OS 검증이 해결될 때까지 실패 폐쇄를 유지한다. 일반 사용자용 생성 활성화, SDK 없는 설치와 업데이트/제거, 기본 연결 및 전체 제품 요구는 별도 조건이다. 개발 검증 통과가 일반 배포 완료나 공개 승인으로 바뀌지는 않는다.
+[플랫폼 지원 계획](PLATFORM_SUPPORT.md), OS별 테스트 행렬 (`tests/security/platform_matrix.json`, 별도 구현/검증 브랜치) 및 담당 기술 기록을 함께 읽는다. 단일 ZIP 저장의 Windows 실행 성공과 새 폴더로의 안전한 해제 저장은 다른 범위다. 후자는 제한된 OS/파일시스템/권한에서 내부 API가 연결됐으나 그 조건과 실제 게시/정리 결과는 미검증이다. 조건 미충족 시 실패 폐쇄하며 일반 UI 활성화는 실제 OS 검증 후 별도로 판단한다. 일반 사용자용 생성 활성화, SDK 없는 설치와 업데이트/제거, 기본 연결 및 전체 제품 요구는 별도 조건이다. 개발 검증 통과가 일반 배포 완료나 공개 승인으로 바뀌지는 않는다.
 
 ## 15. 공개 배포 전 확인과 승인
 

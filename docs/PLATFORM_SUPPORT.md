@@ -31,11 +31,23 @@ Runtime/Worker에는 비암호화 ZIP 목록과 메모리 생성, 입력/프레�
 
 ### round6의 컴파일 및 실행 한계
 
-2026-11-09T14:44:04.604469Z의 src/tests 102개 독립 스냅샷에서 Desktop/Core/Runtime/Worker 빌드는 경고 0, 오류 0이며 Core 41개는 통과했다고 보고됐다. RuntimeTests는 당시 `tests/runtime/ExtractionPublicationTests.cs(125,22)`의 CS0266으로 컴파일부터 실패해 56개 전부 미실행이다. `FileSystemInfo`와 `DirectoryInfo` 타입 오류의 최소 수정 및 동일 스냅샷 재실행이 필요하다. 이후 패치와 원본의 새 폴더 게시 구현은 확인 전까지 이 결과에 포함하지 않는다.
+2026-11-09T14:44:04.604469Z의 src/tests 102개 독립 스냅샷에서 Desktop/Core/Runtime/Worker 빌드는 경고 0, 오류 0이며 Core 41개는 통과했다고 보고됐다. RuntimeTests는 당시 `tests/runtime/ExtractionPublicationTests.cs(125,22)`의 CS0266으로 컴파일부터 실패해 56개 전부 미실행이다. 타입 오류의 최소 수정은 보고됐지만 수정 후 동일 스냅샷의 재실행 성공 근거는 아직 없다.
+
+round6 고정 소스에서는 `NewFolderPublisher.IsSupportedPlatform=false`였으며 Windows/Linux 모두 게시 진입이 차단돼 있었다. 당시 폴더 게시 수용 검사 8개는 구현 게이트에 걸리는 사례였으나 실제 실행되지 않았다. 이 과거 소스/검사 상태를 후속 원본의 현재 상태로 사용하지 않는다.
+
+### round6 이후의 폴더 게시 구현(미검증)
+
+2026-11-10 KST에 확인한 ZIP 엔진 커밋 `9f36e037bc5f1b2f1e67caa3528a3a344ec1107b`와 대응 원본에는 핸들 기준 생성, 내용 재검증, 덮어쓰기 금지 게시 및 소유 항목 정리가 연결돼 있다. `NewFolderPublisher.IsSupportedPlatform`은 Windows/Linux x64에서 구현 진입 가능성을 나타내며, 파일시스템/권한 조건 충족이나 실제 실행 통과를 뜻하지 않는다.
+
+- Windows는 로컬 NTFS와 제한된 쓰기 ACL/소유자 조건에서만 게시를 시도하는 구현이다. 현재 사용자, SYSTEM, Administrators 외 계정의 쓰기 허용, reparse 및 해석할 수 없는 보안 조건은 거부한다.
+- Linux는 XFS와 필요한 openat2/statx/renameat2 기능, 부모가 현재 euid 소유이며 그룹/기타 쓰기가 없는 조건으로 제한한다. ext2/ext3/ext4는 공통 식별값만으로 구분할 수 없어 임시 항목 생성 전에 거부한다. ext4 게시나 Ubuntu 기본 파일시스템에서의 저장 완료를 약속하지 않는다.
+- 위 조건이 확인되지 않으면 실패 폐쇄하며 경로 기반 우회나 기존 결과와의 병합/덮어쓰기를 허용하지 않는다. 같은 사용자 권한의 악성 프로그램이나 관리자에 의한 임시 트리 변조까지 방어한다고 주장하지 않는다.
+
+이 후속 구현의 C# 컴파일과 실제 Windows NTFS 및 Linux XFS 게시/취소/경합/정리는 미검증이다. 일반 해제 능력 `SupportsSafeExtraction=false`와 일반 UI 비활성은 유지한다. 소스의 구현 진입점, OS별 제한 조건, 실행 통과 및 사용자 기능 활성화를 각각 구분한다.
 
 ### 새 해제와 Ubuntu 및 일반 배포 상태
 
-작업자 메모리 ZIP 해제 코드와 검증 샘플이 추가됐으나 실제 새 C# 실행은 미완료다. 해제 검증 기록 (`tests/extraction/coverage.json`, 별도 구현/검증 브랜치)은 기존 62개와 신규 35개를 합쳐 97개 등록, Python 33개 통과 및 새 C# 컴파일/실행 미실행을 구분한다. 공개 `NewFolderPublisher.IsSupportedPlatform=false`이며 Windows/Linux 모두 새 결과 폴더 게시가 실패 폐쇄 상태다. 폴더 게시 수용 검사 8개는 현재 게이트로 차단돼 있고 통과로 계산하지 않는다. 해제 계약 (`docs/ZIP_EXTRACTION.md`, 별도 구현/검증 브랜치)의 원본/기존 대상 보존과 임시 트리 안전 조건은 실제 OS별 구현과 검증이 필요하다.
+작업자 메모리 ZIP 해제와 후속 폴더 게시 코드는 소스 작성 및 검토 단계이며 실제 새 C# 실행은 미완료다. round6 당시 검사 기록 (`tests/extraction/coverage.json`, 별도 구현/검증 브랜치)의 97개 등록 및 Python 33개 통과를 현재 후속 코드의 실행 결과로 사용하지 않는다. 폴더 게시의 새 플랫폼 계약과 수용 검사는 검증 담당자가 조정 중이므로 현재 사례 수와 skip/pass 상태는 실제 최신 검사 및 OS 실행 결과로 확인해야 한다. 해제 계약 (`docs/ZIP_EXTRACTION.md`, 별도 구현/검증 브랜치)의 원본/기존 대상 보존과 임시 트리 안전 조건도 별도 OS 검증이 필요하다.
 
 Ubuntu UI 및 OS 정책이 작성돼도 두 LTS의 빌드/GUI/기능/안전 게시/설치 검증은 미완료다. 현재 호스트 Ubuntu 26.04.1 LTS와 GNOME Wayland/XWayland 전달 정보는 앱 실행 근거가 아니며 24.04 검증 환경도 미확인이다. Windows round5나 개발 검증 UI 성공을 Ubuntu 통과로 계산하지 않는다.
 
@@ -89,7 +101,7 @@ Windows의 단일 새 ZIP 게시와 일부 생성 UI 흐름이 통과했어도 S
 
 사용자가 명시적으로 고른 새 목적지에 완성된 메모리 ZIP을 게시하는 API는 기존 파일 무덮어쓰기와 원본 보존을 검증한다. 임시 파일의 생성 소유권, 실패/취소 후 정리, 게시 직전 목적지 충돌과 게시 후 늦은 취소의 결과를 정의한다. 디스크 부족, 권한 오류와 대상 경로 교체에서도 기존 파일 및 목적지 밖 파일을 바꾸지 않아야 한다. 정리에 실패하면 이를 숨겨 성공으로 표시하지 않는다.
 
-이 API가 통과해도 임의 압축 항목을 해제하는 안전 저장 계층이 완성된 것은 아니다. 해제는 문자열 경로 검사만으로 활성화하지 않으며 OS별 보호와 실기 검증 전에는 실패 폐쇄 상태를 유지한다.
+단일 ZIP 게시 API 통과가 여러 항목을 새 폴더에 게시하는 해제 저장 계층의 완료를 뜻하지 않는다. 후속 폴더 게시 내부 API는 제한된 OS 조건에서만 진입하며 조건 미충족 시 실패 폐쇄한다. 일반 해제 capability/UI는 문자열 검사나 구현 진입 가능 값만으로 활성화하지 않고 실제 OS 검증 전까지 비활성으로 유지한다.
 
 - Windows: 링크, reparse point/junction, 대상 핸들 및 파일 정체성 확인, 경로 교체, 드라이브/장치/UNC/ADS, 대소문자와 이름 정규화 충돌을 구분해 검증한다.
 - Ubuntu: 기존 및 끊어진 symlink, 상위 디렉터리 symlink, 경로 교체, 원본과 같은 파일을 가리키는 경로/하드 링크, 권한 및 대소문자 충돌을 검증한다. 문자열 검사로 symlink 경쟁 방어가 완료됐다고 안내하지 않는다.
