@@ -1,0 +1,274 @@
+{
+    "schema": 1,
+    "kind": "manual-failure-specification",
+    "executionStatus": "not_run",
+    "sourceMain": "626483e8935aaa03d5a34feebc61be2f9180b80d",
+    "packagingHead": "de0d7ccd53f156bb857e4f4cc58d436b557330b9",
+    "noticesHead": "8e80057938f9bbc0f67d8cb5236043a8a021a350",
+    "newerNoticesNotReassembled": "c1fcde75d180de325981ee14916685e882d3148c",
+    "releaseReady": false,
+    "prerequisites": [
+        "원본 전체 manifest/해시 확인",
+        "사례별 새 일반 파일 사본만 사용하고 링크/입력 중첩 거부",
+        "환경 값은 자식 프로세스에만 지정",
+        "정상 사본의 UI/Worker 대조를 먼저 기록",
+        "실패 사본의 manifest/영수증을 성공처럼 다시 쓰지 않음"
+    ],
+    "resultFields": [
+        "caseId",
+        "rid",
+        "candidateManifestSha256",
+        "planSha256",
+        "copyPath",
+        "changedRelativePaths",
+        "command",
+        "childEnvironment",
+        "exitCode",
+        "error",
+        "hostTrace",
+        "sentinelBeforeAfter",
+        "sourceHashesBeforeAfter",
+        "verdict"
+    ],
+    "verdicts": [
+        "pass",
+        "fail",
+        "inconclusive"
+    ],
+    "timeoutPolicy": "시간 초과/미실행 경로는 pass가 아님. 검사 담당이 생성한 자식 PID만 회수함.",
+    "cases": [
+        {
+            "id": "missing-coreclr-linux",
+            "rids": [
+                "linux-x64"
+            ],
+            "copyOnlyChange": [
+                "runtime/shared/Microsoft.NETCore.App/10.0.14/libcoreclr.so 파일을 사본에서 제외"
+            ],
+            "action": [
+                "UI와 Worker를 각각 무관한 CWD에서 실행",
+                "유효한 외부 DOTNET_ROOT와 host trace를 자식 환경으로 제공"
+            ],
+            "acceptance": [
+                "두 프로세스가 해당 Core 런타임 초기화에서 실패",
+                "전역/외부 coreclr로 대체 실행하지 않음",
+                "원본 후보와 테스트 원본 ZIP 보존"
+            ],
+            "status": "not_run"
+        },
+        {
+            "id": "missing-coreclr-windows",
+            "rids": [
+                "win-x64"
+            ],
+            "copyOnlyChange": [
+                "runtime/shared/Microsoft.NETCore.App/10.0.14/coreclr.dll 파일을 사본에서 제외"
+            ],
+            "action": [
+                "UI와 Worker를 각각 실행",
+                "유효한 외부 DOTNET_ROOT/PATH와 host trace를 자식 환경으로 제공"
+            ],
+            "acceptance": [
+                "두 프로세스가 해당 Core 런타임 초기화에서 실패",
+                "대화상자/종료 코드/trace를 함께 기록하고 timeout만으로 통과하지 않음",
+                "외부 coreclr 대체 실행 및 원본 변경 없음"
+            ],
+            "status": "not_run"
+        },
+        {
+            "id": "missing-desktop-managed",
+            "rids": [
+                "win-x64"
+            ],
+            "copyOnlyChange": [
+                "runtime/shared/Microsoft.WindowsDesktop.App/10.0.14/PresentationFramework.dll 파일을 사본에서 제외"
+            ],
+            "action": [
+                "WPF UI 시작 경로 실행",
+                "같은 사본 Worker의 정상 목록 명령을 별도 대조"
+            ],
+            "acceptance": [
+                "UI가 필요한 프레임워크 로드에서 실패하고 완료를 표시하지 않음",
+                "Worker 정상 대조를 UI 실패와 별도로 기록",
+                "전역 Desktop 대체 로드 없음"
+            ],
+            "status": "not_run"
+        },
+        {
+            "id": "missing-desktop-native",
+            "rids": [
+                "win-x64"
+            ],
+            "copyOnlyChange": [
+                "runtime/shared/Microsoft.WindowsDesktop.App/10.0.14/wpfgfx_cor3.dll 파일을 사본에서 제외"
+            ],
+            "action": [
+                "정상 사본에서 해당 native DLL이 실제 로드되는 렌더링 경로를 먼저 확정",
+                "부정 사본에서 같은 WPF 경로 실행",
+                "Worker 정상 목록 대조"
+            ],
+            "acceptance": [
+                "확정한 로드 지점에서 명확한 오류 및 외부 DLL 대체 로드 없음",
+                "지점 미도달은 inconclusive이며 단순 창 생성은 pass가 아님",
+                "Worker 및 원본 후보 보존"
+            ],
+            "status": "not_run"
+        },
+        {
+            "id": "netcore-version-mismatch",
+            "rids": [
+                "win-x64",
+                "linux-x64"
+            ],
+            "copyOnlyChange": [
+                "사본의 shared/Microsoft.NETCore.App/10.0.14를 부재한 10.0.13 이름으로만 배치",
+                "앱/Worker runtimeconfig의 10.0.14와 RollForward=Disable은 보존"
+            ],
+            "action": [
+                "유효한 외부 10.0.14 DOTNET_ROOT를 자식에게만 제공하고 UI/Worker 실행"
+            ],
+            "acceptance": [
+                "두 프로세스가 정확한 프레임워크 버전 부재로 실패",
+                "10.0.13 또는 외부 10.0.14로 대체 실행 없음",
+                "기존 이름 충돌이 있으면 사본 준비 중 거부"
+            ],
+            "status": "not_run"
+        },
+        {
+            "id": "desktop-version-mismatch",
+            "rids": [
+                "win-x64"
+            ],
+            "copyOnlyChange": [
+                "사본의 shared/Microsoft.WindowsDesktop.App/10.0.14를 부재한 10.0.13 이름으로만 배치"
+            ],
+            "action": [
+                "정확한 10.0.14/Disable UI 실행",
+                "Core가 온전한 Worker 정상 목록 대조"
+            ],
+            "acceptance": [
+                "UI Desktop 버전 해석 실패 및 전역 대체 없음",
+                "Worker 정상 대조를 별도 기록",
+                "기존 원본 버전 디렉터리는 변경하지 않음"
+            ],
+            "status": "not_run"
+        },
+        {
+            "id": "interrupted-publish-no-receipt",
+            "rids": [
+                "win-x64",
+                "linux-x64"
+            ],
+            "copyOnlyChange": [
+                "새 results 사본에 publish-receipt.json을 포함하지 않음"
+            ],
+            "action": [
+                "고정 준비 번들/계획 해시로 handoff finalize 실행"
+            ],
+            "acceptance": [
+                "완료 영수증 누락으로 실패",
+                "새 최종 후보 없음",
+                "기존 정상 후보와 입력 보존"
+            ],
+            "status": "not_run"
+        },
+        {
+            "id": "partial-publish-output",
+            "rids": [
+                "win-x64",
+                "linux-x64"
+            ],
+            "copyOnlyChange": [
+                "새 results 사본에 Worker runtimeconfig 또는 DLL 하나를 제외",
+                "원래 완료 영수증은 그대로 유지"
+            ],
+            "action": [
+                "해당 준비 번들 및 계획 해시로 finalize 실행"
+            ],
+            "acceptance": [
+                "전체 해시/필수 파일 불일치로 실패",
+                "새 후보 없음",
+                "기존 정상본 해시 불변"
+            ],
+            "status": "not_run"
+        },
+        {
+            "id": "truncated-publish-output",
+            "rids": [
+                "win-x64",
+                "linux-x64"
+            ],
+            "copyOnlyChange": [
+                "새 results 사본의 UI apphost를 잘린 파일로 생성",
+                "원래 완료 영수증은 그대로 유지"
+            ],
+            "action": [
+                "finalize 실행"
+            ],
+            "acceptance": [
+                "해시/크기 불일치로 실패",
+                "실행 가능한 후보를 성공으로 표시하지 않음",
+                "원본 apphost 보존"
+            ],
+            "status": "not_run"
+        },
+        {
+            "id": "stale-plan-result",
+            "rids": [
+                "win-x64",
+                "linux-x64"
+            ],
+            "copyOnlyChange": [
+                "원본 사본 파일은 수정하지 않고 다른 준비 계획 SHA-256을 finalize 인수로 제공"
+            ],
+            "action": [
+                "두 계획의 RID/ID/해시를 기록하고 finalize 실행"
+            ],
+            "acceptance": [
+                "준비 계획 또는 영수증 연결 불일치로 실패",
+                "기존 결과 재사용 성공 없음",
+                "새 후보 및 원본 변경 없음"
+            ],
+            "status": "not_run"
+        },
+        {
+            "id": "existing-output-preserved",
+            "rids": [
+                "win-x64",
+                "linux-x64"
+            ],
+            "copyOnlyChange": [
+                "테스트 루트에 기존 출력 폴더와 표식을 별도로 생성"
+            ],
+            "action": [
+                "해당 기존 폴더를 finalize 출력으로 지정"
+            ],
+            "acceptance": [
+                "기존 출력 거부",
+                "표식/전체 기존 출력 해시 보존",
+                "원본 후보/입력 보존 및 자동 삭제 없음"
+            ],
+            "status": "not_run"
+        },
+        {
+            "id": "interrupted-candidate-transfer",
+            "rids": [
+                "win-x64",
+                "linux-x64"
+            ],
+            "copyOnlyChange": [
+                "새 후보 사본의 manifest는 유지하되 runtime 또는 Worker 파일 일부를 제외해 중단된 전송을 모델링"
+            ],
+            "action": [
+                "manifest의 전체 파일/크기/해시 대조를 중앙 검증에서 수행",
+                "불완전 후보는 UI/Worker를 실행하지 않음"
+            ],
+            "acceptance": [
+                "후보가 불완전하다고 판정되어 실행/승격되지 않음",
+                "기존 정상 후보 및 사용자 표식 보존",
+                "자동 업데이트/롤백 구현의 통과 근거로 사용하지 않음"
+            ],
+            "status": "not_run"
+        }
+    ]
+}

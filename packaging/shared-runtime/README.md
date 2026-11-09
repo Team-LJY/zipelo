@@ -93,8 +93,33 @@ python3 packaging/shared-runtime/handoff.py --validation finalize --bundle /appr
 
 각 제품 DLL에 해당 계획 해시와 ZipeloPublishPlan 메타데이터 문자열이 있어야 하므로 기존 계획의 낡은 결과를 영수증만 새로 써서 통과시킬 수 없음. 이 검사는 신뢰하는 SDK 게시기의 작업 연결 및 변조 탐지이며 악성 게시기에 대한 암호학적 빌드 증명은 아님. 게시기와 전달 매체는 검증 담당이 신뢰할 수 있어야 함. 최종화는 runtimeconfig/deps/RID/필수 파일 및 기존 고지 요구도 다시 확인함. Windows 교차 게시의 Linux 실행 권한은 입력을 바꾸지 않고 새 후보에서 계획에 기록한 공식 apphost 모드 0755로 배치함.
 
-최종 후보는 준비/게시/계획 해시와 전체 파일 해시를 기록하며 actualExecutionValidated=false, releaseReady=false임. 기본 self-contained 배포와 installer PR #5는 전환하지 않음. 두 OS의 실제 준비/PowerShell/오프라인 복원/게시/최종화와 기능/크기는 아직 미검증임. 새 설치, 다운로드, VM 실행은 작성 범위에 포함하지 않음.
+최종 후보는 준비/게시/계획 해시와 전체 파일 해시를 기록하며 actualExecutionValidated=false, releaseReady=false임. 기본 self-contained 배포와 installer PR #5는 전환하지 않음. 작성 시점에는 두 OS의 실제 준비/PowerShell/오프라인 복원/게시/최종화와 기능/크기가 미검증이었음. 이후 중앙 검증 결과와 남은 제한은 아래 고정 후보 기록을 적용함. 새 설치, 다운로드, VM 실행은 작성 범위에 포함하지 않음.
 
 검사 명령은 `python3 -B -m unittest discover -s tests/shared-runtime -p 'test_*.py' -v`임. 기존 경로 19개와 분리 게시 대역 검사를 구분함. 대역 ELF/어셈블리는 tests/ 임시 루트의 작은 비실행 파일이며 실제 SDK 게시나 실제 바이너리 통과의 근거가 아님. PowerShell 구문/실행은 기존 Windows 환경의 별도 검증이 필요함.
 
 HostWriter 근거: https://github.com/dotnet/runtime/blob/v10.0.0/src/installer/managed/Microsoft.NET.HostModel/AppHost/HostWriter.cs . Windows PE 리소스는 SDK가 변경할 수 있으므로 실행파일 전체를 원본 template의 해시와 같다고 요구하지 않음.
+
+## 중앙 검증의 고정 후보 기록
+
+2026-11-09 중앙 검증 담당의 보고 기준은 main `626483e8935aaa03d5a34feebc61be2f9180b80d` + PR #9 `de0d7ccd53f156bb857e4f4cc58d436b557330b9` + 고지 PR #11 `8e80057938f9bbc0f67d8cb5236043a8a021a350`임. 각 RID에서 Python prepare, 기존 Windows SDK의 오프라인 publish, Linux finalize가 성공한 것으로 보고됨. 아래 파일 수와 바이트 합은 담당자가 실제 실행한 결과와 구분하여 이번 문서 담당도 후보 manifest를 읽기 전용으로 대조함. 원본 후보의 파일 또는 manifest는 변경하지 않음.
+
+- Linux 후보: `/home/user/zipelo-validation/shared-runtime-candidate-linux-8e800579`. 자체 manifest 제외 239파일, 103,348,032바이트. planId `20c758d58fae491eb03868fe82e004ee`, plan SHA-256 `4d467bfed03682a6f79a72ab71cabc8407ec02afcf8298f90581ea5f00662231`. 후보 manifest SHA-256 `42ae42bf60ad6c37163db0bc22afd61e30e4afb3f276f6338535641f90609d39`.
+- Windows 후보: `/home/user/zipelo-validation/shared-runtime-candidate-win-8e800579`. 자체 manifest 제외 500파일, 181,041,888바이트. planId `44e7096ae03f454b82989a334b19e671`, plan SHA-256 `7a91b8e4fa797fc7e6d99fdf429bdcaa8aeccba1a1b672dd88ca764dad6ac124`. 후보 manifest SHA-256 `be8c23fd42080b2e3deafecc698220f4d6ce078142e232b260e30501dcfeb6cc`.
+
+이 값은 파일의 논리적 길이 합계이며 다운로드 크기, 파일시스템의 실제 디스크 점유, 실행 속도나 메모리 수치가 아님. 기존 후보와의 기능/법적 조건이 같다고 가정해 절감률로 일반화하지 않음.
+
+중앙 보고에서 거짓 DOTNET_ROOT/PATH에서도 동봉 runtime의 hostfxr/coreclr/hostpolicy를 사용함. Windows ZIP 목록/해제 결과 해시와 Ubuntu Worker 목록/메모리 해제가 맞았음. 별도 사본에서 runtime 전체를 제거한 검사는 유효한 DOTNET_ROOT를 제공해도 양 OS의 UI/Worker가 실패한 것으로 보고됨. 이 기록은 문서 담당의 재실행 결과가 아님.
+
+Ubuntu GUI는 기존 0x0 화면으로 미검증임. Windows 검증 VM에는 SDK가 설치되어 있어 SDK가 전혀 없는 Windows 환경의 실제 실행 증거로 확대하지 않음. 개별 coreclr/Desktop 파일 누락, 버전 불일치 및 중단/불완전 결과 검사는 아직 실행하지 않았음. 최신 고지 `c1fcde75d180de325981ee14916685e882d3148c`를 반영해 재조립한 후보도 아님.
+
+Windows 런타임의 별도 라이선스 조건에 대한 사용자 확인과 배포 의무 검토가 남아 있음. 자체 Zipelo MIT와 제3자 조건을 분리하며 releaseReady=false, 기본 self-contained 배포 및 PR #9의 main 미병합 상태를 유지함. 조립 시 기록된 actualExecutionValidated=false를 이 문서 업데이트로 수정하지 않으며 중앙 실행 기록은 별도 근거로 구분함. 공개 업로드나 릴리스 승인을 의미하지 않음.
+
+## 남은 실패 검사 인계
+
+`tests/shared-runtime/failure-cases.json`은 아직 실행하지 않은 12개 실패 사례의 명세임. 자동 실행기나 업데이트 구현을 추가한 것이 아님. 중앙 담당이 다른 검증을 마친 뒤 사례별 독립된 새 사본에서 실행함. 원본 후보/입력/사용자 파일은 읽기 전용이고 전역 PATH, DOTNET_ROOT, 레지스트리, 권한은 변경하지 않음. 환경 오염 값은 해당 자식 프로세스에만 전달함.
+
+사본 준비 전 원본 manifest와 모든 파일 해시, 해당 RID/계획을 대조하고, symlink/reparse point/hardlink가 없는 별도 테스트 루트에 일반 파일 복사를 만듦. 사례 사이 사본을 재사용하지 않음. 제외/이름 변경은 사본을 만들 때 지정하며 원본에서는 삭제/이동하지 않음. 기존 데이터 보존 표식도 테스트 루트 안에만 둠. 부정 사본의 manifest는 성공처럼 다시 쓰지 않음.
+
+각 결과에 고정 후보/manifest/계획 해시, 사본 전체 변경 목록, 명령/프로세스별 환경, 종료 코드/오류/host trace, 파일 해시와 보존 표식 전후를 남김. 원본 후보 전체가 변하지 않았는지도 재대조함. 제한 시간 초과나 오류 대화상자만으로 실패 폐쇄를 통과 처리하지 않으며 필요한 실제 경로가 실행되지 않았으면 inconclusive로 기록함. 검증 담당이 시작한 PID만 종료/회수할 수 있고 다른 프로세스는 건드리지 않음.
+
+Desktop 전용 파일 누락은 Worker가 Core 런타임으로 계속 정상 동작하는 대조와 구분함. native 파일이 아직 로드되지 않은 화면을 표시했다는 이유로 검사를 통과시키지 않음. 업데이트는 현재 미구현이므로 중단 사례는 새 후보/게시 영수증의 검증 및 기존 정상본 보존을 검사하는 것이며 자동 업데이트/롤백 지원을 선언하지 않음. 최신 고지를 적용한 별도 재조립과 라이선스 확인, 미검증 Ubuntu 화면은 후속 검증 조건으로 유지함.
