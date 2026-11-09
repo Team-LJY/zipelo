@@ -20,5 +20,10 @@
         <PackageReference Include="Tmds.DBus.Protocol" Version="[0.21.3]" />
         <ProjectReference Include="../Zipelo.Core/Zipelo.Core.csproj" />
         <ProjectReference Include="../Zipelo.Runtime/Zipelo.Runtime.csproj" />
+        <ProjectReference Include="../Zipelo.Worker/Zipelo.Worker.csproj"
+            ReferenceOutputAssembly="false" Private="false"
+            GlobalPropertiesToRemove="PublishProfile;PublishProfileFullPath;PublishDir;PublishUrl;OutputPath;OutDir;BaseOutputPath;BaseIntermediateOutputPath;IntermediateOutputPath;TargetDir;PublishSingleFile;PublishTrimmed;PublishAot"
+            AdditionalProperties="Configuration=$(Configuration);RuntimeIdentifier=$(RuntimeIdentifier);SelfContained=$(SelfContained);UseAppHost=true;PublishSingleFile=false;PublishTrimmed=false;PublishAot=false" />
     </ItemGroup>
+    <Import Project="WorkerDeployment.targets" />
 </Project>
