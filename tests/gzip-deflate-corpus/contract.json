@@ -1,0 +1,75 @@
+{
+    "schemaVersion": 1,
+    "baseCommit": "018e7593ecb2b3a7ae0bc17a440ecf2c0de8b4dd",
+    "scope": "tests/gzip-deflate-corpus의 BCL-only 합성 표본 도구임. PR #15, 생산 코드, 의존성, inflater 채택과 배포를 변경하지 않음.",
+    "sources": [
+        "https://www.rfc-editor.org/rfc/rfc1951.html#section-3.1.1",
+        "https://www.rfc-editor.org/rfc/rfc1951.html#section-3.2.3",
+        "https://www.rfc-editor.org/rfc/rfc1951.html#section-3.2.4",
+        "https://www.rfc-editor.org/rfc/rfc1951.html#section-3.2.5",
+        "https://www.rfc-editor.org/rfc/rfc1951.html#section-3.2.6",
+        "https://www.rfc-editor.org/rfc/rfc1951.html#section-3.2.7",
+        "https://www.rfc-editor.org/rfc/rfc1952.html#section-2.3.1"
+    ],
+    "corpus": {
+        "count": 22,
+        "valid": 19,
+        "invalid": 3,
+        "validity": "사전 사전(dictionary)이 없는 raw Deflate/GZip 문맥임. 참조 직전 생성 이력 P에 대해 1 <= distance <= min(P,32768)이 필요함. 미전달 출력과 이전 블록 출력도 이력에 포함하며 겹침 복사는 유효함.",
+        "writer": "fixed/stored 표본 전용 작성기임. 길이 3/5/258과 거리 1/2/32768만 작성하며 범용 압축기나 decoder가 아님. 일반 필드는 LSB-first, Huffman 코드는 canonical code의 MSB-first로 전송함.",
+        "patterns": "0, A 반복, XY 반복과 seed(i)=(37*i+13*(i>>8)+71*(i>>15))&255를 사용함. window 표본의 suffix는 seed(index-distance), 출력 경계 표본 suffix는 마지막 prefix 바이트 3회임. raw 해제 없이 별도 수식으로 기대 출력을 계산함.",
+        "hashes": "expectations.json의 SHA-256/CRC32/길이는 별도 합성 계산으로 고정했으며 어떤 decoder 결과도 사용하지 않음. C#은 4096바이트 청크의 패턴으로 재계산하여 고정값과 비교함. 로컬 계산은 C# 컴파일이나 실제 해제 실행 검증을 뜻하지 않음.",
+        "endPosition": "EndBitExclusive는 마지막 EOB 또는 최종 stored 본문 끝 다음의 0기준 bit offset임. RawLength=ceil(EndBitExclusive/8)이며 마지막 바이트의 남는 비트는 본 표본에서 0임. 무효 표본의 위치는 작성된 명목상 끝이며 decoder 정상 종료를 뜻하지 않음. faultBitOffset은 첫 잘못된 length/distance 쌍의 length 코드 시작임.",
+        "tokens": "--emit의 tokens는 시작 bit, 길이, 필드/토큰과 값 또는 반복 패턴 수식을 기록함. stored 데이터는 구간과 seed 인덱스로 압축 기록하며 65535바이트를 넘으면 여러 stored 블록으로 나눔. rawHex와 rawSha256로 고정 바이트를 식별함.",
+        "dynamic": "dynamic.literal-only.a만 포함함. BFINAL=1, BTYPE=2, HLIT=0, HDIST=0, HCLEN=14임. 18개 code-length 길이 중 심벌 0/1만 길이 1임. LL 심벌 65/256만 길이 1, distance 길이 0이며 A=0, EOB=1임. 331비트와 42바이트로 고정함.",
+        "deferred": [
+            "단일 거리 심벌을 사용하는 동적 트리",
+            "일반 동적 트리 생성",
+            "예약 코드와 잘림 corpus",
+            "GZip 헤더/trailer/연결 member",
+            "예산/취소/게시 어댑터"
+        ]
+    },
+    "reuse": {
+        "output": "--emit은 검증된 고정 명세와 rawHex, 토큰 구성, 출력 패턴을 fixture별 JSON 한 줄로 표준 출력에 기록함. 자체 파일 쓰기나 네트워크 전송은 없음. 중앙은 필요할 때 tests/ 아래 격리 경로로 저장함.",
+        "adapter": "대안은 같은 raw 바이트를 사용하고 기대 유효성을 변경하지 않음. 유효 표본은 알려진 패턴/길이/해시와 정확한 소비량/완료 상태를 대조함. 무효 표본은 Deflate.InvalidBackreferenceHistory에 해당하는 구조적 거부가 필요하며 다른 단계 오류나 단순 출력 불일치로 대체하지 않음.",
+        "reset": "window.prefix-65537 성공 -> history.before-first.invalid 거부 -> empty.fixed 성공 -> overlap.xy.length5.distance2 성공 순서를 검사함. 각 독립 스트림은 빈 이력으로 시작해야 함. BCL 관찰기는 매번 새 DeflateStream을 사용하며 라이브러리별 Reset API의 정확성을 증명하지 않음.",
+        "gzipWrapper": "무효 표본도 완전한 헤더, raw, 8바이트 trailer와 EOF를 구성함. InvalidWrapperTrailerOnly는 정상 출력 기대값이 아니라 초기 0을 허용하는 decoder가 만들 수 있는 0의 반복에 맞춘 CRC32/ISIZE 대조값임. 세 무효 표본의 대조 길이는 3/4/32770임. CRC/ISIZE는 little-endian으로 기록함. 래퍼 오류나 CRC 불일치는 역참조 거부 성공으로 세지 않으며 다른 잘못된 출력을 내는 후보도 반드시 Deflate 단계에서 거부해야 함.",
+        "finalization": "실패 전 출력은 항상 임시 상태임. 이 도구의 성공은 corpus 명세 일치 또는 특정 BCL 관찰 통과이며 제품 출력, ValidatedArchive, 파일 게시를 승인하지 않음."
+    },
+    "modes": {
+        "spec": "인수 없음: 22개 생성 표본을 고정 기대값과 대조함. decoder를 실행하지 않음. exit 0은 명세 대조 통과임.",
+        "emit": "--emit: 먼저 같은 명세 대조를 수행한 뒤 22개 JSON 행을 출력함.",
+        "bcl": "--verify-bcl: 명세 대조 후 input chunk 1/7/65536, output chunk 1/258/65536 조합으로 22개 표본 및 독립 스트림 순서 4개를 관찰함. 총 234회이며 모든 무효 표본은 decoder.Read의 InvalidDataException을 요구함. 다른 예외, 출력 상한 초과, 잘못된 출력 또는 정상 표본 거부는 실패임. 실패해도 기대값을 완화하지 않음.",
+        "bclLimits": "BCL Read==0은 정상 Deflate 완료나 정확한 소비량의 증거가 아님. Position, 내부 API, AppContext switch를 사용하지 않음. BCL 관찰은 역참조 거부/정상 출력의 제한된 회귀이며 모든 경계나 문법의 인증이 아님. 출력 해시는 읽기 완료 후에만 검사하며 무효 출력의 해시를 정상 결과로 기록하지 않음.",
+        "exitCodes": {
+            "0": "요청 모드의 한정된 검사 통과",
+            "1": "명세 불일치 또는 관찰 실패",
+            "2": "잘못된 인수"
+        }
+    },
+    "limits": {
+        "rawBytesPerFixture": 70000,
+        "outputBytesPerFixture": 66000,
+        "hashChunkBytes": 4096,
+        "maxReadChunkBytes": 65536,
+        "bclCooperativeSeconds": 30,
+        "centralExternalProcessSeconds": 60,
+        "memory": "표본을 순차 생성하며 raw와 제한된 토큰 목록만 보관함. 전체 해제 결과는 보관하지 않음. 합성 raw와 rawHex는 70,000바이트 상한을 기준으로 제한됨. OS 메모리 강제 상한을 뜻하지 않음.",
+        "timeout": "30초 예산은 BCL 읽기 사이와 표본 사이에 확인함. 단일 동기 Read 내부 정지는 끊지 못하므로 중앙의 60초 외부 프로세스 제한이 별도로 필요함. 시간초과를 통과로 처리하지 않음."
+    },
+    "validation": {
+        "local": "별도 합성 해시 계산과 소스 정적 확인만 수행함. SDK 부재로 C# 컴파일/실행과 패키지 복원은 수행하지 않음.",
+        "centralPrerequisite": "이미 설치된 .NET 10 SDK와 참조 팩을 사용함. NuGet.Config에서 packageSources를 비웠으며 패키지/ProjectReference가 없음. 필요한 SDK/참조 팩이 없다면 설치나 다운로드로 보완하지 말고 중단함.",
+        "centralCommands": [
+            "dotnet restore tests/gzip-deflate-corpus/Zipelo.DeflateCorpus.csproj --configfile tests/gzip-deflate-corpus/NuGet.Config --packages <isolated-cache>",
+            "dotnet build tests/gzip-deflate-corpus/Zipelo.DeflateCorpus.csproj -c Release --no-restore",
+            "dotnet run --project tests/gzip-deflate-corpus/Zipelo.DeflateCorpus.csproj -c Release --no-build",
+            "dotnet run --project tests/gzip-deflate-corpus/Zipelo.DeflateCorpus.csproj -c Release --no-build -- --emit",
+            "dotnet run --project tests/gzip-deflate-corpus/Zipelo.DeflateCorpus.csproj -c Release --no-build -- --verify-bcl",
+            "dotnet run --project tests/gzip-deflate-corpus/Zipelo.DeflateCorpus.csproj -c Release --no-build -- --invalid"
+        ],
+        "acceptance": "Windows/Linux의 고정 head에서 명세 22개와 출력 JSON 일치, BCL 관찰의 실제 passed/failed, 잘못된 인수 exit 2를 각각 기록함. SDK/runtime 버전, 소스 해시와 종료 코드를 남김. 중앙 실행 전에는 통과를 선언하지 않음.",
+        "holds": "PR #15 고정, inflater 채택, Windows 정리, 설치/WPR 추적, 공개 배포와 라이선스 승인 대기를 변경하지 않음."
+    }
+}
