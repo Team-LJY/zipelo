@@ -1,0 +1,224 @@
+{
+    "schema_version": 1,
+    "reviewed_at_utc": "2026-11-09T15:13:13.685294+00:00",
+    "scope": "현재 새 폴더 게시의 독립 소스 검토와 수용 검사 연결 확인. 실제 C# 및 네이티브 실행 증거가 아님",
+    "branch": "docs/initial-project-plan",
+    "frozen_windows_snapshot": {
+        "at": "2026-11-09T14:44:04.604469Z",
+        "source_message": "0af7d7e8-9895-4939-8b29-02fcdecd8b61",
+        "registered_cases": 97,
+        "result": "총괄 round6 보고: Core41 통과, Runtime56 CS0266 컴파일 실패로 전부 미실행"
+    },
+    "source_sha256": {
+        "src/Zipelo.Runtime/NewFolderPublisher.cs": "fe77406a2f7716f740fe52f4296b8639043806060a75983b759fec674eb2169e",
+        "src/Zipelo.Runtime/PendingFolderPublication.cs": "55315417e5b78d7114e3e856f66194cb59fcb6d981b95168004d5a10e39fd03a",
+        "src/Zipelo.Runtime/WindowsFolderPublication.cs": "9e3b8727bbe486c5b7d8614ec65872b8169f361ef1c2ea56f835e1e170a297aa",
+        "src/Zipelo.Runtime/WindowsFolderGuard.cs": "8924c914edbf246a4335c89bdecea0f099c7d76701c1430192a6a51066112df7",
+        "src/Zipelo.Runtime/LinuxFolderPublication.cs": "6840730b865afa73bf1cbd1494c936b56f9cc3b2b74f958694785c02ee61f2d8"
+    },
+    "findings": [
+        {
+            "id": "linux-mkdir-open-cleanup-gap",
+            "status": "source_followup_addressed_runtime_unverified",
+            "source": "src/Zipelo.Runtime/LinuxFolderPublication.cs:31",
+            "condition": "mkdirat 성공 후 openat2가 EMFILE 또는 I/O 오류로 실패하는 경우",
+            "observed": "Create가 핸들을 반환하기 전에 예외가 발생해 PendingFolderPublication.Owned에 생성 디렉터리가 등록되지 않음. 기존 Abort는 이 이름을 처리하지 않음",
+            "required": "생성 후 핸들 획득 실패의 소유권과 정리 결과를 명시적으로 추적해야 함. 안전한 정리를 증명 못하면 CleanupFailed와 잔류 임시 이름을 반환해야 하며 정리 성공으로 표시하면 안 됨",
+            "verification": "결정적 네이티브 실패 주입으로 mkdir 성공/open 실패 순서를 증명하고 외부 sentinel 보존 및 정리 진단 확인 필요. 실제 실행 미실행",
+            "followup": "후속 소스에서 unboundCreation을 mkdirat 직후 기록하고 Abort 성공 여부에 반영함. 이 조건의 실제 실패 주입과 잔류 이름 반환은 미실행임"
+        },
+        {
+            "id": "windows-close-before-rename-boundary",
+            "status": "documented_boundary_native_unverified",
+            "source": "src/Zipelo.Runtime/WindowsFolderPublication.cs:25",
+            "observed": "게시 직전 자식 핸들을 닫고 실패 시 파일 ID를 비교해 재개방한 뒤 핸들 삭제함. 닫힌 구간의 변조 방어는 개인 쓰기 ACL과 신뢰 주체 경계에 의존함",
+            "required": "관리자/실행 계정 장악 방어로 확대 설명하지 않음. 일반 동시 작업의 최종 이름 충돌은 원자적 덮어쓰기 금지로 분리 검증함. ACL 조회 결과만으로 임의 동시 권한 변경까지 차단한다고 주장하지 않음",
+            "verification": "실제 NTFS 자식 핸들 종료 후 rename 및 충돌 후 재개방/정리, ACL 거부, 정리 실패 검증 미실행"
+        },
+        {
+            "id": "linux-unlink-name-boundary",
+            "status": "documented_boundary_native_unverified",
+            "source": "src/Zipelo.Runtime/LinuxFolderPublication.cs:115",
+            "observed": "RequireName 후 unlinkat는 별도 호출임. 같은 UID 또는 권한 있는 주체의 동시 이름 교체를 원자적으로 막는 조건부 삭제가 아님",
+            "required": "소유 UID와 타 계정 쓰기 금지를 위협 범위의 전제조건으로 명시함. 전제조건 없는 공유 쓰기 디렉터리에서 안전하다고 표시하지 않음",
+            "verification": "타 계정 ACL/마운트/이름 교체 경합은 미실행. 열린 dirfd만으로 정리 경쟁을 증명했다고 표시하지 않음"
+        },
+        {
+            "id": "preserved-platform-contract-conflict",
+            "status": "source_test_contract_updated_runtime_unverified",
+            "source": "tests/runtime/ExtractionPublicationTests.cs:21",
+            "observed": "NewFolderPublisher.IsSupportedPlatform이 Windows/Linux x64에서 true로 바뀜. 기존 folder.platform_contract는 false와 OutputUnavailable을 요구하므로 소스상 충돌함",
+            "required": "9a5765b1-02d8-4b15-a4cb-dfa90b643cae 지시에 따라 안전 기대값을 유지하고 폐기된 전체 false 검사만 최신 저장 조건으로 조정함",
+            "verification": "실행 실패 보고가 아니라 소스 비교로 확인한 예상 실패임",
+            "followup": "Windows/Linux x64 구현 진입 여부와 일반 UI 비활성을 별도로 검사함. 테스트 생성 부모의 Windows 로컬 NTFS/쓰기 ACL 또는 Linux mount ID/장치/유형 ext4 또는 xfs/현재 UID/그룹 및 기타 쓰기 금지를 독립 조회함. 알려진 미지원 조건은 실제 API의 정확한 실패 오류와 원본/기존 대상/잔류 항목 보존을 검사함. 지원 조건에서는 실제 게시/해시 성공이 필수임 새 폴더 생성/충돌/최종 링크/동시 게시의 저장 전제조건이 조회상 미충족이면 해당 수용 사례는 SKIP임. 제품 PublishAsync 실패를 이유로 SKIP하지 않음. 사전 취소/내용 변조/실패한 해제/부모 symlink 거부는 저장 파일시스템 미지원과 분리함. SKIP은 PASS에 합산하지 않음"
+        },
+        {
+            "id": "linux-ext-family-not-distinguished",
+            "status": "source_followup_mount_identity_added_runtime_unverified",
+            "source": "src/Zipelo.Runtime/LinuxFolderPublication.cs:24",
+            "observed": "fstatfs의 0xEF53 값은 ext2/ext3/ext4가 공유함. 이 값만 허용하면서 ext4만 확인했다고 설명할 수 없음",
+            "required": "허용 대상의 정확한 판별 또는 계약/실패 폐쇄 범위를 backend에서 정리해야 함. 미검증 ext2/ext3를 검증된 ext4라고 처리하지 않음",
+            "reference": "https://man7.org/linux/man-pages/man2/statfs.2.html",
+            "verification": "공식 상수와 소스 비교. ext2/ext3 마운트 생성이나 실제 실행 없음",
+            "followup": "XFS만 허용한 임시 수정 뒤 최신 소스는 부모 fd statx mount ID/장치 번호와 procfs task mountinfo를 대조함. ext magic만으로 허용하지 않고 유형 ext4 또는 xfs 일치, 조회 전후 ID/장치/inode/magic 확인을 요구함. ext2/ext3 유형과 확인 불가 조건은 생성 전 실패 폐쇄임. 실제 C# 검증 아님"
+        }
+    ],
+    "acceptance_binding": {
+        "status": "기존 8개와 동시 게시 1개의 PublishAsync 연결 유지. 성공과 정확한 오류/보존 기준을 유지하면서 저장 조건 관찰을 추가함",
+        "existing_eight": [
+            "folder.new_folder_contents_hashes_and_source",
+            "folder.existing_folder_preserved_and_temporary_cleanup",
+            "folder.existing_source_file_preserved_and_temporary_cleanup",
+            "folder.precancel_preserves_originals",
+            "folder.tampered_bytes_not_published",
+            "folder.failed_extraction_not_published",
+            "folder.reject_parent_symlink",
+            "folder.reject_leaf_symlink"
+        ],
+        "general_gate": "Windows/Linux x64 구현 진입 여부와 일반 UI 비활성을 별도로 검사함. 테스트 생성 부모의 Windows 로컬 NTFS/쓰기 ACL 또는 Linux mount ID/장치/유형 ext4 또는 xfs/현재 UID/그룹 및 기타 쓰기 금지를 독립 조회함. 알려진 미지원 조건은 실제 API의 정확한 실패 오류와 원본/기존 대상/잔류 항목 보존을 검사함. 지원 조건에서는 실제 게시/해시 성공이 필수임",
+        "filesystem_preconditions": "Windows 로컬 NTFS/쓰기 ACL, Linux mount ID/장치/유형 ext4 또는 xfs/현재 UID/그룹 및 기타 쓰기 금지. openat2/statx/renameat2/procfs 지원도 필요하며 실제 호출 실패를 통과로 처리하지 않음",
+        "skip_policy": "새 폴더 생성/충돌/최종 링크/동시 게시의 저장 전제조건이 조회상 미충족이면 해당 수용 사례는 SKIP임. 제품 PublishAsync 실패를 이유로 SKIP하지 않음. 사전 취소/내용 변조/실패한 해제/부모 symlink 거부는 저장 파일시스템 미지원과 분리함. SKIP은 PASS에 합산하지 않음"
+    },
+    "execution_separation": {
+        "source_review": "위 파일의 현재 읽은 내용만 검토함",
+        "csharp_compile": "not_run: local dotnet absent",
+        "windows_native": "not_run by this reviewer",
+        "ubuntu_24_native": "not_run",
+        "ubuntu_26_native": "not_run",
+        "python": {
+            "command": "python3 -B tests/run_checks.py",
+            "passed": 33,
+            "failed": 0,
+            "meaning": "샘플/기존 정적/실행기 검사. 새 C# 검사나 네이티브 게시의 성공 증거가 아님"
+        }
+    },
+    "pending_conditions": [
+        "동시 게시 검사 소스를 준비했으나 실제 실행은 남아 있음. 정확한 네이티브 경합을 강제하지는 않음",
+        "파일 쓰기 진입이 확인된 뒤의 취소와 게시 완료 뒤의 늦은 취소를 분리함. 타이머나 사전 취소로 대체하지 않음",
+        "부모/자식 교체, 실제 junction/hardlink와 외부 항목 삽입 경합은 별도 실행 증거가 필요함",
+        "권한 변경이나 SDK 설치 없이 재현할 수 없는 검사는 미실행으로 남김"
+    ],
+    "references": [
+        "https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ntifs/ns-ntifs-_file_rename_information",
+        "https://learn.microsoft.com/en-us/windows/win32/api/aclapi/nf-aclapi-getsecurityinfo",
+        "https://man7.org/linux/man-pages/man2/unlink.2.html",
+        "https://man7.org/linux/man-pages/man2/rename.2.html",
+        "https://man7.org/linux/man-pages/man2/statfs.2.html"
+    ],
+    "initial_review_source_sha256": {
+        "src/Zipelo.Runtime/NewFolderPublisher.cs": "5add3511d888461d8bc649333c2fe9f3d5ff695411714228632f237c1844da30",
+        "src/Zipelo.Runtime/PendingFolderPublication.cs": "0c691d0eccd89b34b409655695ffe640d09372acf60f8c89f6e6e8aa0df27117",
+        "src/Zipelo.Runtime/WindowsFolderPublication.cs": "04ea141450f062d8c100d28bf2d9dd1266a87f1456e2375d487cdd313e1dabaa",
+        "src/Zipelo.Runtime/WindowsFolderGuard.cs": "c1f832dc955531e3e8654feb10232e68bfdf921f1d50b0b51f5c0566b36a70b9",
+        "src/Zipelo.Runtime/LinuxFolderPublication.cs": "6fb8f3aa9c111155d727a5031dfb08c1f8cd74a5b2d23f5945c1a16503c12a19"
+    },
+    "new_test": {
+        "id": "folder.concurrent_same_name_one_winner",
+        "source": "tests/runtime/FolderConcurrencyTests.cs",
+        "binding": "NewFolderPublisher.PublishAsync",
+        "cases_added": 1,
+        "total_registered": 98,
+        "acceptance": "같은 최종 이름으로 두 요청을 시작해 정확히 한 Published/None과 한 OutputConflict, 패자 임시 정리, 승자 전체 트리/파일 SHA-256, 원본 및 부모 밖 표식 보존을 검사함",
+        "limit": "같은 시작 장벽은 사용하지만 네이티브 rename 호출의 정확한 겹침을 강제하지 않음. 경로 교체 경합이나 쓰기 중 취소의 증거가 아님",
+        "execution": "not_run"
+    },
+    "round6_report": {
+        "source_message": "8e7a3d5d-3ce8-4067-9814-c834baaa79bf",
+        "snapshot": "2026-11-09T14:44:04.604469Z",
+        "files": 102,
+        "build": "총괄 보고: Desktop/Core/Runtime/Worker 경고 0 오류 0",
+        "core": {
+            "passed": 41,
+            "failed": 0
+        },
+        "runtime": {
+            "registered": 56,
+            "executed": 0,
+            "compile_error": "CS0266 ExtractionPublicationTests.cs(125,22)"
+        },
+        "scope": "97개 등록 스냅샷의 역사적 결과이며 최신 98개 또는 새 폴더 네이티브 구현 검증 결과가 아님"
+    },
+    "isolated_compile_fix": {
+        "file": "tests/runtime/ExtractionPublicationTests.cs",
+        "change": "DirectoryInfo info; -> FileSystemInfo info; 한 줄 타입 수정",
+        "before_sha256": "4aca9bcddafc7d0b79030766b24e6171ed5e9e7bedf8d2a9d018c4dfb2135062",
+        "isolated_patch_sha256": "3e2eab3a0a61de4aa967f79a87240e5eae067e81cbe5708575a8f59524049ab5",
+        "scope": "6498a73c-b12c-4d6f-847e-75cf5e8c8a25 메시지로 별도 패치 전달 완료. 현재 파일에는 후속 플랫폼 계약 검사 변경도 포함됨",
+        "csharp_retest": "not_run by this reviewer"
+    },
+    "historical_test_baseline_sha256": {
+        "tests/runtime/ExtractionPublicationTests.cs": "4aca9bcddafc7d0b79030766b24e6171ed5e9e7bedf8d2a9d018c4dfb2135062",
+        "tests/runtime/ExtractionTests.cs": "9b3c91b2b68694c94e43e80f885f204d7b7d1530a3a7ee8665af2a79382dc3b4",
+        "tests/runtime/Program.cs": "01594a5604de8c257573721b316356baed987050f54778b5db804fa158bc5798",
+        "tests/runtime/ProtocolPeer.cs": "2281458b3459cc205a3b7f3b3484208a7b8ce2595b803d22b48182c21df019b0",
+        "tests/runtime/PublicationTests.cs": "8282b1e0ba19ab67d3a782eb6f41f09a399d2ad20e7982a1bef7dc4bf63fe18f",
+        "tests/runtime/RuntimeTests.cs": "280a394b92c3ccd73f7165c9754cc4e6a3340ada38db59f1c264d9676b1079c9",
+        "tests/security/CoreRegressions.cs": "ec057028990ffc697c665c825a19de5a8893a245877a355217ccb67483663429",
+        "tests/security/CoreTests.cs": "07edd94d65c37b065dc38bcad2e260de54075a74a583419d8d64afadd731295a",
+        "tests/security/PlatformRegressions.cs": "35764df1a192d82b8b264f01f61d2c3e7871341c032111997ec93b1473a95c6b",
+        "tests/security/Program.cs": "3dde4c8bb2c59a115530481474e70d4763eef03f10d6007d6dce323e2e82fc4f",
+        "tests/security/TestSupport.cs": "4ac81f742e1eab9a45c0e045b23309f09d68c7b82759060ddf4362ac4b854a3f"
+    },
+    "current_folder_test_sha256": {
+        "tests/runtime/ExtractionPublicationTests.cs": "fa3c1996279e0cd43380139281510f860942d8ab207c92aa48f842f8ed163922",
+        "tests/runtime/FolderEnvironment.cs": "2315a49ad2f20531138cb8a639111a0ae40bb3bc3eb39b92c6cbfd54938c2aeb",
+        "tests/runtime/FolderConcurrencyTests.cs": "0e1015734fb0766a26f9db623d99f7e675a92c83ede5b0e35609d9476083cbe6",
+        "tests/runtime/Zipelo.RuntimeTests.csproj": "2a9f75f3d4365ce92e6a92f015a1dc7eec4cd0568b135b8c062a29a3190443ce"
+    },
+    "mount_contract_scenarios": {
+        "engine_pr": 4,
+        "engine_head": "6d585ada65ba4eb35620d70309f3dfacf4dade95",
+        "executable_tests_head": "c19f1c5b472aa23c624b1ae69d0e4660988d9fc5",
+        "registered_total": 98,
+        "new_executable_cases_added": 0,
+        "observed_environment": {
+            "method": "read-only statx and /proc/thread-self/mountinfo",
+            "mount_id": 33,
+            "device": "259:1",
+            "filesystem": "ext4",
+            "parent_uid": 1000,
+            "effective_uid": 1000,
+            "existing_ext2_ext3_mounts": 0,
+            "meaning": "환경 관찰이며 C# 또는 실제 게시 실행 증거가 아님"
+        },
+        "cases": [
+            {
+                "condition": "ext4, 일치하는 mount ID/장치/유형 및 소유권 조건",
+                "binding": [
+                    "folder.platform_contract",
+                    "folder.new_folder_contents_hashes_and_source",
+                    "folder.concurrent_same_name_one_winner"
+                ],
+                "expected": "Published/None, 전체 트리와 해시 일치, 원본/외부 표식 보존, 잔류 임시 항목 없음",
+                "status": "bound_to_product_api_not_executed"
+            },
+            {
+                "condition": "ext2 또는 ext3로 보고된 마운트 유형",
+                "binding": "folder.platform_contract는 이 환경을 관찰하면 OutputUnavailable과 기존 파일/폴더 보존을 요구함",
+                "expected": "임시 생성 전 OutputUnavailable, mkdirat 호출 0회, 원본/기존 대상/외부 표식 불변",
+                "status": "not_executed_no_existing_mount_fixture"
+            },
+            {
+                "condition": "STATX_MNT_ID 누락 또는 0, mountinfo 해당 레코드 누락",
+                "expected": "임시 생성 전 OutputUnavailable, mkdirat 호출 0회, 기존 자료 불변",
+                "status": "blocked_no_native_observation_injection_seam"
+            },
+            {
+                "condition": "mount ID의 장치 번호 또는 유형 불일치, 중복 레코드, 조회 전후 mount ID/장치/inode/magic 변경",
+                "expected": "임시 생성 전 OutputUnavailable, mkdirat 호출 0회, 기존 자료 불변",
+                "status": "blocked_no_native_observation_injection_seam"
+            }
+        ],
+        "before_creation_evidence": "LinuxFolderPublication.Initialize에서 RequireFileSystem과 Inspect가 AddRoot(Create(...))보다 먼저 실행되는 소스 순서를 확인함. 실제 mkdirat 호출 수는 관찰하지 않았음. 최종 항목 부재 검사로 생성 후 정리를 생성 전 차단으로 오인하지 않음",
+        "blocked_conditions": "현재 공개 API는 실제 procfs와 statx 결과만 읽고 입력 대체 지점이 없음. 이번 범위는 새 마운트/namespace/권한 변경과 제품 소스 변경을 허용하지 않으므로 강제 오류 주입을 수행하지 않음",
+        "next_validation": "현재 98개를 먼저 고정 소스와 실행기 수정에 맞춰 실제 두 OS에서 실행함. 부정 조건은 이후 격리된 검증 환경 또는 소유자가 검토한 내부 의존 주입 경계를 마련한 뒤 수행함. 제품에 사용자 지정 mountinfo나 우회 플래그를 추가하지 않음",
+        "counting": "시나리오 기록은 자동 실행 사례가 아니며 PASS/SKIP 수에 추가하지 않음. 모든 미관찰 분기는 미검증으로 유지함"
+    },
+    "frozen_ubuntu_report": {
+        "source_message": "8f83790b-1ca6-4761-bdfe-e0c3076cf146",
+        "scope": "round6 + CS0266 단독 타입 수정 고정 스냅샷, 최신 98개 아님",
+        "core": "Ubuntu26 self-contained 41/41 통과로 총괄 보고됨",
+        "runtime": "9 통과/39 실패/8 blocked로 보고됐으나 Environment.ProcessPath를 dotnet muxer로 가정한 테스트 실행기 오류이므로 제품 결함 수로 계산하지 않음",
+        "followup": "self-contained와 DLL-host 실행기 분리 수정 및 실제 재실행은 별도 요청으로 남아 있음. 이번 mount 계약 검토에서 실행기 소스를 변경하지 않음"
+    }
+}

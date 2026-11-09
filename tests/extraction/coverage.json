@@ -1,0 +1,154 @@
+{
+    "schema_version": 1,
+    "date": "2026-11-09",
+    "previous_windows_report": {
+        "source_message": "64900540-164a-463a-ab79-61c1f8a763c0",
+        "result": "총괄이 Windows C# 62개 전부 통과 및 Desktop/Core/Runtime/Worker 빌드 경고 0 오류 0으로 보고함",
+        "scope": "기존 게시 검사까지의 결과이며 이번 해제 검사 35개나 Ubuntu 네이티브 실행의 근거가 아님",
+        "snapshot": "이 메시지에는 새 스냅샷 시각과 해시가 제공되지 않음"
+    },
+    "current_checks": {
+        "python": {
+            "passed": 33,
+            "failed": 0,
+            "command": "python3 -B tests/run_checks.py",
+            "environment": "Ubuntu 26.04.1 LTS x86_64, Python 3.14.4"
+        },
+        "csharp": {
+            "core": 41,
+            "existing_runtime": 21,
+            "new_extraction_memory": 26,
+            "new_folder_publication": 10,
+            "total": 98,
+            "compile": "not_run: local .NET SDK absent",
+            "unit_or_worker_execution": "not_run",
+            "windows_native_execution": "not_run for current 98 cases; round6 Core41 passed, Runtime56 compile failed and not executed (manager report)",
+            "ubuntu_24_native_execution": "not_run",
+            "ubuntu_26_native_execution": "not_run"
+        },
+        "meaning": "Python 검사는 샘플 구조, 재현성 및 기존 정적/실행기 검사임. C# 또는 실제 저장 검증 통과가 아님"
+    },
+    "api_bindings": {
+        "worker": "ZipWorkerClient.ExtractAsync(Guid, Stream, JobLimits, CancellationToken)",
+        "memory_result": "ZipWorkerResult.ExtractedEntries, ZipExtractedEntry(ArchiveEntry, byte[], uint Crc32)",
+        "publisher": "NewFolderPublisher.PublishAsync(ZipWorkerResult, string destinationPath, CancellationToken)",
+        "status": "메모리 성공은 Completed/None 및 모든 항목 Staged/Passed, 디스크 게시 완료와 구분함",
+        "general_ui": "SupportsSafeExtraction=false 유지 검사",
+        "publisher_gate": "Windows/Linux x64에서 구현 진입 가능. 대상 파일시스템과 쓰기 경계는 호출 때 검사함. 일반 UI 해제는 계속 비활성임"
+    },
+    "fixtures": {
+        "count": 22,
+        "total_bytes": 4292,
+        "maximum_per_file": 4096,
+        "manifest": "tests/extraction/fixtures.json",
+        "generator": "python3 -B tests/extraction/fixture_factory.py",
+        "source": "자체 생성. 외부 압축파일이나 실제 파일시스템 링크가 아님",
+        "unix_link_reference": "https://pkware.cachefly.net/webdocs/casestudies/APPNOTE.TXT",
+        "unix_link_section": "4.5.7 (0x000d), 링크 메타데이터 한 종류의 거부를 검사함"
+    },
+    "acceptance": {
+        "normal": "Stored/Deflate, 파일별 SHA-256과 길이, 빈 파일과 디렉터리, 원본 해시 보존",
+        "paths": "../, POSIX 절대 경로 및 // 경로 거부. Windows 역슬래시/드라이브 경로 거부. Linux에서는 해당 문자열의 합법적 이름을 그대로 보존",
+        "collisions": "정확한 중복, 파일 뒤 자식, 자식 뒤 파일은 OutputConflict",
+        "case": "Windows Readme/README 충돌, Linux 두 이름과 바이트 보존",
+        "links": "symlink 타입, UNIX 0x000d 링크 메타데이터, FIFO는 UnsupportedEntry",
+        "integrity": "payload CRC, 양쪽 헤더 CRC 손상, 양쪽 헤더 길이 과소/과대, local/central 길이 불일치 및 EOCD 절단은 IntegrityFailure",
+        "budgets": "입력 바이트와 실제 해제 바이트 누적, 출력 합계와 항목 수의 정확한 경계 성공 및 초과 실패, 실패 시 부분 결과 없음",
+        "cancel": "메모리 해제 시작 전 및 입력 읽기 진입 후 결정적 취소. 폴더 게시 시작 전 취소. 기존 파일/원본 보존",
+        "publication": "새 폴더의 실제 파일/해시 일치. 기존 폴더/입력 파일 충돌은 OutputConflict, 병합/덮어쓰기 금지. 충돌 전 임시 결과가 작성되는 구현에서 정리 후 최상위 항목 집합 일치",
+        "failure": "메모리 내용 변조는 IntegrityFailure, 실패한 해제 결과는 EngineFailure로 게시 거부. 임시 이름/정리 실패 없음",
+        "filesystem_links": "부모 symlink는 UnsafePath, 최종 symlink는 지원 저장 조건에서 OutputConflict. 기존 링크와 대상 표식 보존. 생성 권한 부재 또는 최종 링크의 저장 전제조건 미충족은 SKIP이며 성공으로 계산하지 않음",
+        "closed_gate": "Windows/Linux x64 구현 진입 여부와 일반 UI 비활성을 별도로 검사함. 테스트 생성 부모의 Windows 로컬 NTFS/쓰기 ACL 또는 Linux mount ID/장치/유형 ext4 또는 xfs/현재 UID/그룹 및 기타 쓰기 금지를 독립 조회함. 알려진 미지원 조건은 실제 API의 정확한 실패 오류와 원본/기존 대상/잔류 항목 보존을 검사함. 지원 조건에서는 실제 게시/해시 성공이 필수임",
+        "concurrent_publication": "두 작업의 같은 최종 이름 경쟁에서 한 작업만 성공, 패자 OutputConflict와 임시 정리, 원본/외부 표식 보존 및 승자 트리/해시를 검사함. 소스만 준비했으며 정확한 native 호출 겹침은 강제하지 않음",
+        "environment_skips": "새 폴더 생성/충돌/최종 링크/동시 게시의 저장 전제조건이 조회상 미충족이면 해당 수용 사례는 SKIP임. 제품 PublishAsync 실패를 이유로 SKIP하지 않음. 사전 취소/내용 변조/실패한 해제/부모 symlink 거부는 저장 파일시스템 미지원과 분리함. SKIP은 PASS에 합산하지 않음"
+    },
+    "platforms": {
+        "windows-x64": {
+            "memory": 26,
+            "publication": "실제 API에 8개 기존 수용 검사와 동시 게시 1개가 연결됨. OS/파일시스템/쓰기 경계 조건 아래 실행이 필요함",
+            "current_execution": "not_run",
+            "positive_publication_cases": "실제 성공/충돌/무결성/보존 오류 기대값 유지. 새 폴더 저장 전제조건을 독립 조회하며 미충족 수용 검사는 SKIP으로 구분함"
+        },
+        "ubuntu-24.04-lts-x64": {
+            "memory": 26,
+            "publication": "실제 API에 8개 기존 수용 검사와 동시 게시 1개가 연결됨. OS/파일시스템/쓰기 경계 조건 아래 실행이 필요함",
+            "positive_publication_cases": "실제 성공/충돌/무결성/보존 오류 기대값 유지. 새 폴더 저장 전제조건을 독립 조회하며 미충족 수용 검사는 SKIP으로 구분함",
+            "current_execution": "not_run"
+        },
+        "ubuntu-26.04-lts-x64": {
+            "memory": 26,
+            "publication": "실제 API에 8개 기존 수용 검사와 동시 게시 1개가 연결됨. OS/파일시스템/쓰기 경계 조건 아래 실행이 필요함",
+            "positive_publication_cases": "실제 성공/충돌/무결성/보존 오류 기대값 유지. 새 폴더 저장 전제조건을 독립 조회하며 미충족 수용 검사는 SKIP으로 구분함",
+            "current_execution": "Python 샘플 검사만 실행. C# 미실행"
+        }
+    },
+    "not_covered": [
+        "최신 98개와 새 네이티브 폴더 게시의 C# 컴파일 및 실제 실행. 이전 97개 고정 스냅샷은 Runtime 컴파일 실패 보고임",
+        "Windows junction 및 실제 부모/최종 경로 교체 경합",
+        "실제 파일시스템 hardlink 및 다른 ZIP 링크 메타데이터 방언",
+        "쓰기 도중 취소, 게시 직후 늦은 취소, 정리 실패 주입, 강제 프로세스 종료 후 잔류 결과",
+        "마운트 교체, 네트워크 파일시스템 및 Windows NTFS 외 파일시스템",
+        "Ubuntu 두 LTS와 Windows의 새 폴더 게시 실제 실행 및 환경별 지원 조건 검증",
+        "ZIP64, 암호화, 분할 및 복구, 데이터 descriptor 변형과 Deflate 내부 이상을 포괄하는 검증",
+        "프로세스 OS 메모리/CPU 제한 및 대용량 성능",
+        "권한을 변경하거나 마운트를 새로 만들지 않아 모든 ACL/소유자/미지원 파일시스템 조합을 강제 실행하지 못함. 한 실행에서 관찰되지 않은 플랫폼 계약 분기는 미검증임",
+        "FolderEnvironment의 경로 기반 관찰은 테스트 환경 분류용이며 제품 핸들 경계나 procfs 대체 방어의 증명이 아님. procfs 검증 실패/마운트 교체의 결정적 주입이 남음"
+    ],
+    "source_review": "ZipExtractor는 별도 작업자에서 CRC를 직접 계산하고 실제 해제 길이와 대조함. .NET이 자동 검증한다고 가정하지 않음. 이 기록은 실행 증거가 아님",
+    "reviewed_source_sha256": {
+        "src/Zipelo.Runtime/ZipExtraction.cs": "a7fcbd766dc0df71483ceb19bbf6fc02c4964d3ae290e368a92bb64ddfac3625",
+        "src/Zipelo.Runtime/ZipWorkerClient.cs": "5df676f75957cf081237671585ce6ad2098c6f8c8ed1392efece28960a3ebbd0",
+        "src/Zipelo.Runtime/NewFolderPublisher.cs": "fe77406a2f7716f740fe52f4296b8639043806060a75983b759fec674eb2169e",
+        "src/Zipelo.Runtime/WindowsFolderPublication.cs": "9e3b8727bbe486c5b7d8614ec65872b8169f361ef1c2ea56f835e1e170a297aa",
+        "src/Zipelo.Worker/ZipExtractor.cs": "f25abc6ceb49af9e63d71cd5def28530057734d73d9618f316d41d31fe30da61",
+        "src/Zipelo.Runtime/PendingFolderPublication.cs": "55315417e5b78d7114e3e856f66194cb59fcb6d981b95168004d5a10e39fd03a",
+        "src/Zipelo.Runtime/WindowsFolderGuard.cs": "8924c914edbf246a4335c89bdecea0f099c7d76701c1430192a6a51066112df7",
+        "src/Zipelo.Runtime/LinuxFolderPublication.cs": "6840730b865afa73bf1cbd1494c936b56f9cc3b2b74f958694785c02ee61f2d8"
+    },
+    "existing_62_preserved": "기존 Core/RuntimeTests/PublicationTests의 기대값을 변경하지 않음. 새 해제 테스트만 추가하고 folder.platform_contract의 폐기된 전체 false 기대값을 명시적으로 변경된 저장 계약에 맞춤",
+    "latest_folder_review": "tests/extraction/folder_publication_review.json",
+    "round6_report": {
+        "source_message": "8e7a3d5d-3ce8-4067-9814-c834baaa79bf",
+        "snapshot": "2026-11-09T14:44:04.604469Z",
+        "files": 102,
+        "build": "총괄 보고: Desktop/Core/Runtime/Worker 경고 0 오류 0",
+        "core": {
+            "passed": 41,
+            "failed": 0
+        },
+        "runtime": {
+            "registered": 56,
+            "executed": 0,
+            "compile_error": "CS0266 ExtractionPublicationTests.cs(125,22)"
+        },
+        "scope": "97개 등록 스냅샷의 역사적 결과이며 최신 98개 또는 새 폴더 네이티브 구현 검증 결과가 아님"
+    },
+    "isolated_compile_fix": {
+        "file": "tests/runtime/ExtractionPublicationTests.cs",
+        "change": "DirectoryInfo info; -> FileSystemInfo info; 한 줄 타입 수정",
+        "before_sha256": "4aca9bcddafc7d0b79030766b24e6171ed5e9e7bedf8d2a9d018c4dfb2135062",
+        "isolated_patch_sha256": "3e2eab3a0a61de4aa967f79a87240e5eae067e81cbe5708575a8f59524049ab5",
+        "scope": "6498a73c-b12c-4d6f-847e-75cf5e8c8a25 메시지로 별도 패치 전달 완료. 현재 파일에는 후속 플랫폼 계약 검사 변경도 포함됨",
+        "csharp_retest": "not_run by this reviewer"
+    },
+    "mount_contract_acceptance": "tests/extraction/folder_publication_review.json의 mount_contract_scenarios 참조. 정상 ext4 API 연결과 미실행 부정 조건을 별도로 기록함",
+    "runner_portability_fix": {
+        "source_message": "8f83790b-1ca6-4761-bdfe-e0c3076cf146",
+        "baseline_head": "2fb087de2e2467db0fea9bce85aade5ac23fd2c1",
+        "implementation": "TestWorkerLaunch가 현재 프로세스의 dotnet/dotnet.exe와 고정 테스트 앱호스트를 구분함. DLL 모드는 현재 muxer와 고정 출력 DLL을 사용하고 앱호스트 모드는 출력 폴더의 Worker 및 자기 앱을 무인수로 직접 실행함",
+        "output_layout": "AppContext.BaseDirectory 바로 아래 Zipelo.RuntimeTests 및 Zipelo.Worker 파일과 필요한 deps/runtimeconfig/런타임 파일. 앱호스트 이름은 Windows에서만 .exe 확장자임. self-contained 검증 스냅샷에 Worker 게시 산출물을 함께 배치해야 함",
+        "fail_closed": "누락 파일, 실행파일 링크 및 예상하지 못한 호스트는 오류임. PATH, 입력 ZIP 위치 또는 현재 작업 디렉터리에서 실행파일을 탐색하지 않음. SKIP이나 PASS로 치환하지 않음",
+        "expectations": "기존 98개 등록과 제품 성공/실패/취소/보존 기대값을 유지함",
+        "local_csharp": "not_run: local .NET SDK absent",
+        "required_execution": [
+            "Windows DLL + dotnet host: 실제 Worker 목록/생성/해제 및 무인수 peer 오류/취소/종료 경계",
+            "Linux self-contained apphost: 실제 Worker 목록/생성/해제 및 무인수 peer 오류/취소/종료 경계"
+        ],
+        "historical_ubuntu_report": "round6 + 타입 수정: 총괄 보고 Core41 통과, Runtime9 통과/39 실패/8 blocked. 앱호스트에 DLL 인수를 붙인 실행기 오류가 포함되어 39개를 제품 결함으로 계산하지 않음",
+        "references": [
+            "https://learn.microsoft.com/en-us/dotnet/api/system.environment.processpath?view=net-10.0",
+            "https://learn.microsoft.com/en-us/dotnet/core/deploying/",
+            "https://learn.microsoft.com/en-us/dotnet/api/system.appcontext.basedirectory?view=net-10.0"
+        ]
+    }
+}
