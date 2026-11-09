@@ -106,20 +106,58 @@ internal sealed class WindowsPublication : PendingPublication
     internal override bool Abort() => DeleteOwned(file, out cleanupNativeFailure);
 
     internal static bool DeleteOwned(SafeFileHandle file, out PublicationNativeFailure? failure)
+#if ZIPELO_STREAM_DIAGNOSTICS
+        => DeleteOwned(file, out failure, Guid.Empty, -1);
+
+    internal static bool DeleteOwned(SafeFileHandle file, out PublicationNativeFailure? failure,
+        Guid diagnosticJobId, int diagnosticNode)
+#endif
     {
         failure = null;
+#if ZIPELO_STREAM_DIAGNOSTICS
+        ObserveDelete(diagnosticJobId, diagnosticNode, "windows.delete.allocate.begin");
+#endif
         var buffer = Marshal.AllocHGlobal(1);
+#if ZIPELO_STREAM_DIAGNOSTICS
+        ObserveDelete(diagnosticJobId, diagnosticNode, "windows.delete.allocate.end");
+#endif
         try
         {
             // 작업 소유 핸들에 삭제를 표시함. 경로를 다시 열거나 삭제하지 않음.
             Marshal.WriteByte(buffer, 1);
+#if ZIPELO_STREAM_DIAGNOSTICS
+            ObserveDelete(diagnosticJobId, diagnosticNode, "windows.delete.native.begin");
+            var deleted = SetFileInformation(file, 4, buffer, 1);
+            // 진단 호출 전에 실패 코드를 보존함.
+            var error = deleted ? 0u : unchecked((uint)Marshal.GetLastPInvokeError());
+            ObserveDelete(diagnosticJobId, diagnosticNode, "windows.delete.native.end", error);
+            if (deleted) { return true; }
+#else
             if (SetFileInformation(file, 4, buffer, 1)) { return true; }
             var error = unchecked((uint)Marshal.GetLastPInvokeError());
+#endif
             failure = new("SetFileInformationByHandle.FileDispositionInfo", error);
             return false;
         }
-        finally { Marshal.FreeHGlobal(buffer); }
+        finally
+        {
+#if ZIPELO_STREAM_DIAGNOSTICS
+            ObserveDelete(diagnosticJobId, diagnosticNode, "windows.delete.free.begin");
+#endif
+            Marshal.FreeHGlobal(buffer);
+#if ZIPELO_STREAM_DIAGNOSTICS
+            ObserveDelete(diagnosticJobId, diagnosticNode, "windows.delete.free.end");
+#endif
+        }
     }
+
+#if ZIPELO_STREAM_DIAGNOSTICS
+    private static void ObserveDelete(Guid jobId, int node, string stage, uint error = 0)
+    {
+        if (jobId == Guid.Empty) { return; }
+        Streaming.StreamingExtractionDiagnostics.Record(jobId, stage, error, (ulong)node);
+    }
+#endif
 
     public override void Dispose()
     {

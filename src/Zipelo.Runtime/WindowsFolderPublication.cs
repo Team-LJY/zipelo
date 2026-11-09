@@ -78,7 +78,7 @@ internal sealed class WindowsFolderPublication(string parent) : PendingFolderPub
                 var cleanupHandle = Reopen(Owned[index]);
                 ObserveAbort("windows.abort.reopen.end", index);
                 ObserveAbort("windows.abort.delete.begin", index);
-                var deleted = WindowsPublication.DeleteOwned(cleanupHandle, out var failure);
+                var deleted = WindowsPublication.DeleteOwned(cleanupHandle, out var failure, DiagnosticJobId, index);
                 ObserveAbort("windows.abort.delete.end", index);
                 if (DiagnosticJobId != Guid.Empty)
                 {
