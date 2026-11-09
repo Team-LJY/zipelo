@@ -108,6 +108,53 @@ Worker 또한 실제 해제량과 CRC를 검사함.
 이후 소유 핸들/이름/자식 검사를 거쳐 기존 덮어쓰기 금지 게시를 한 번 수행함.
 CRC는 ZIP 무결성 검사이며 악의적 작성자의 진위 또는 암호학적 인증을 보장하지 않음.
 
+## Deflate 종료 뒤 바이트 정책
+
+이번 명시적 스트리밍 경로는 선언된 packed 범위 안의 첫 raw Deflate 스트림만 해제함.
+그 종료 뒤 garbage 또는 두 번째 Deflate 스트림이 남아 있어도 그 이유만으로 거절하지 않음.
+첫 스트림의 해제 길이/CRC 및 나머지 게시 조건이 맞으면 수용하는 정책임.
+후행 바이트를 다른 항목으로 만들거나 두 번째 스트림을 이어 해제하지 않음.
+Stored는 선언 packed/unpacked 길이가 같고 전체를 읽으므로 이 예외가 적용되지 않음.
+
+기존 문서의 압축 데이터 범위 중첩/간격 검사는 ZIP 레코드가 선언한 범위의 배치 검사임.
+Deflate 종료 비트가 선언 packed 범위의 끝과 일치한다는 보장은 아니었으며,
+그 차이를 명시하지 않은 계약 공백을 이 절에서 보완함.
+현재 구현에는 실제 압축 소비량 또는 후행 바이트 존재를 보고하는 API도 없음.
+
+근거는 [.NET 10.0.14 DeflateStream.ReadCore/InflatorIsFinished](
+https://github.com/dotnet/runtime/blob/v10.0.14/src/libraries/System.IO.Compression/src/System/IO/Compression/DeflateZLib/DeflateStream.cs)
+및 [Inflater.ReadOutput](
+https://github.com/dotnet/runtime/blob/v10.0.14/src/libraries/System.IO.Compression/src/System/IO/Compression/DeflateZLib/Inflater.cs)임.
+raw Deflate의 종료를 만나면 반환하며, 연결된 스트림 처리는 GZip 분기에 한정됨.
+내부 입력 버퍼에 남은 바이트는 공개 DeflateStream API로 소비량과 구분할 수 없음.
+UseStrictValidation의 잘림 검사는 후행 바이트 거부 검사가 아님.
+PackedEntryStream.Position은 디코더에 공급한 양이므로 Length와 같아도 정확한 소비를 증명하지 못함.
+단순 Position 비교나 남은 입력을 끝까지 읽는 처리를 엄격한 검증으로 추가하지 않음.
+이는 공식 소스에 근거한 분석이며 현재 제품 바이너리의 실행 재현 결과는 아님.
+
+이 정책의 안전 범위와 제한은 다음과 같음.
+
+- 전체 입력 16 MiB 제한과 스냅샷 복사/재읽기 예산에는 후행 바이트도 포함됨.
+  범위 응답 예산에는 실제 전달량, 출력 예산에는 실제 해제량을 계산함.
+- PackedEntryStream은 선언된 항목 범위를 넘어 읽지 않음.
+  ZipStreamIndex의 로컬/중앙 길이, descriptor, 범위 중첩/간격 검사는 유지함.
+  따라서 다음 항목이나 중앙 디렉터리를 packed 범위에 침범시키는 입력은 별도로 거절함.
+- 해제 결과는 첫 스트림의 길이/CRC와 호스트 목록을 만족해야 하며,
+  추가 출력, 잘못된 경로, 예산 초과, 비정상 Worker 종료를 허용하지 않음.
+- 후행 데이터의 의미/무결성을 검증하지 않으므로 숨은 데이터가 있어도 성공할 수 있음.
+  다른 ZIP 도구/검사기와 해석이 달라질 수 있으며 CRC는 원본 전체 인증이 아님.
+  게시 성공을 ZIP 전체의 엄격한 형식 인증이나 보안 정규화로 사용하면 안 됨.
+- 엄격한 소비량 검증은 소비 바이트/비트와 종료 상태를 제공하는 디코더 또는
+  별도의 검증된 Deflate 구조 파서가 필요한 후속 범위임.
+  이번에는 신규 엔진, 라이브러리, 자체 Deflate 파서나 v1 동작 변경을 도입하지 않음.
+
+독립 검사에서는 packed 길이와 뒤 레코드 오프셋을 일관되게 갱신한
+첫 스트림+garbage 및 첫 스트림+두 번째 스트림을 각각 구성해야 함.
+정책 기대값은 첫 출력만 게시되고 원본과 후속 정상 항목이 보존되는 성공임.
+후행 바이트가 선행 읽기 버퍼 안/밖에 놓이는 경우를 구분해야 함.
+반대로 길이/CRC 불일치, 다음 레코드 침범, 입력/출력 예산 초과는 거절해야 함.
+C# 실행 결과가 이 정책과 다르면 기대값을 바꾸지 않고 구현/런타임 차이로 보고해야 함.
+
 ## 독립 예산과 취소
 
 - 입력 데이터 최대 16 MiB, 해제 출력 전체 최대 16 MiB임.
