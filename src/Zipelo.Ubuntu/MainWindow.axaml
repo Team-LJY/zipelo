@@ -5,47 +5,63 @@
     Background="#F3F6FA" Foreground="#17263C"
     FontFamily="Noto Sans CJK KR, Ubuntu, sans-serif" FontSize="16"
     Closing="OnClosing">
-    <Grid Margin="28" RowDefinitions="Auto,Auto,Auto,*,Auto">
-        <StackPanel Margin="0,0,0,24" Spacing="8">
-            <TextBlock Text="Zipelo" FontSize="36" FontWeight="Bold" />
-            <TextBlock Text="파일을 열고, 간편하게 풀어보세요." />
-        </StackPanel>
-        <WrapPanel Grid.Row="1" Margin="0,0,0,16">
-            <Button x:Name="OpenButton" Content="압축파일 열기" Click="OpenArchive"
-                Background="#185ABD" Foreground="White" Margin="0,0,12,8" />
-            <Button x:Name="CreateButton" Content="새로 압축하기" Click="CreateArchive" IsEnabled="False" Margin="0,0,12,8"
-                ToolTip.Tip="새 파일 저장 기능 연결과 검증을 준비하고 있습니다." />
-            <Button x:Name="RetryCreateButton" Content="생성 다시 시도" Click="RetryCreation" IsEnabled="False" Margin="0,0,12,8" />
-            <Button x:Name="ExtractButton" Content="압축 풀기" Click="ExtractArchive" IsEnabled="False" Margin="0,0,12,8"
-                ToolTip.Tip="안전한 압축 해제를 검증한 뒤 사용할 수 있습니다." />
-        </WrapPanel>
-        <StackPanel Grid.Row="2" Spacing="8" Margin="0,0,0,16">
-            <TextBlock x:Name="ArchiveTitle" Text="아직 열린 압축파일이 없습니다." FontSize="20" FontWeight="SemiBold" />
-            <TextBlock x:Name="Availability" TextWrapping="Wrap" />
-            <TextBlock Text="새 ZIP 이름 (기존 파일은 덮어쓰지 않습니다.)" />
-            <TextBox x:Name="CreationName" Text="새 압축파일.zip" AutomationProperties.Name="새 ZIP 파일 이름" />
-            <TextBlock x:Name="CreationSelection" TextWrapping="Wrap" />
-            <TextBlock Text="새 결과 폴더 이름 (기존 대상과 병합하지 않음)" />
-            <TextBox x:Name="ExtractionName" Text="압축 푼 파일" AutomationProperties.Name="새 결과 폴더 이름" />
-            <TextBlock x:Name="ExtractionSelection" TextWrapping="Wrap" />
-        </StackPanel>
-        <Grid Grid.Row="3" Background="White">
-            <ListBox x:Name="Files" AutomationProperties.Name="압축파일 안의 파일 목록">
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="3*" />
+            <RowDefinition Height="2*" MinHeight="168" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+        <ScrollViewer Grid.Row="0" Margin="0,0,0,12"
+            HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto"
+            Focusable="True" AutomationProperties.Name="압축 작업 설정과 명령">
+            <StackPanel Spacing="12">
+                <StackPanel Margin="0,0,0,4" Spacing="8">
+                    <TextBlock Text="Zipelo" FontSize="32" FontWeight="Bold" />
+                    <TextBlock Text="파일을 열고, 간편하게 풀어보세요." TextWrapping="Wrap" />
+                </StackPanel>
+                <WrapPanel>
+                    <Button x:Name="OpenButton" Content="압축파일 열기" Click="OpenArchive"
+                        Background="#185ABD" Foreground="White" Margin="0,0,12,8" />
+                    <Button x:Name="CreateButton" Content="새로 압축하기" Click="CreateArchive" IsEnabled="False" Margin="0,0,12,8"
+                        ToolTip.Tip="새 파일 저장 기능 연결과 검증을 준비하고 있습니다." />
+                    <Button x:Name="RetryCreateButton" Content="생성 다시 시도" Click="RetryCreation" IsEnabled="False" Margin="0,0,12,8" />
+                    <Button x:Name="ExtractButton" Content="압축 풀기" Click="ExtractArchive" IsEnabled="False" Margin="0,0,12,8"
+                        ToolTip.Tip="안전한 압축 해제를 검증한 뒤 사용할 수 있습니다." />
+                </WrapPanel>
+                <StackPanel Spacing="8">
+                    <TextBlock x:Name="ArchiveTitle" Text="아직 열린 압축파일이 없습니다." FontSize="20" FontWeight="SemiBold" TextWrapping="Wrap" />
+                    <TextBlock x:Name="Availability" TextWrapping="Wrap" />
+                    <TextBlock Text="새 ZIP 이름 (기존 파일은 덮어쓰지 않습니다.)" TextWrapping="Wrap" />
+                    <TextBox x:Name="CreationName" Text="새 압축파일.zip" AutomationProperties.Name="새 ZIP 파일 이름" />
+                    <TextBlock x:Name="CreationSelection" TextWrapping="Wrap" />
+                    <TextBlock Text="새 결과 폴더 이름 (기존 대상과 병합하지 않음)" TextWrapping="Wrap" />
+                    <TextBox x:Name="ExtractionName" Text="압축 푼 파일" AutomationProperties.Name="새 결과 폴더 이름" />
+                    <TextBlock x:Name="ExtractionSelection" TextWrapping="Wrap" />
+                </StackPanel>
+            </StackPanel>
+        </ScrollViewer>
+        <Grid Grid.Row="1" Background="White">
+            <ListBox x:Name="Files" AutomationProperties.Name="압축파일 안의 파일 목록"
+                HorizontalContentAlignment="Stretch" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                 <ListBox.ItemTemplate>
                     <DataTemplate>
-                        <Grid ColumnDefinitions="*,140,140" Margin="8,10">
-                            <TextBlock Text="{Binding Name}" />
-                            <TextBlock Grid.Column="1" Text="{Binding Size}" Margin="12,0" />
-                            <TextBlock Grid.Column="2" Text="{Binding Verification}" />
+                        <Grid ColumnDefinitions="3*,*,*" Margin="8,10">
+                            <TextBlock Text="{Binding Name}" TextWrapping="Wrap" />
+                            <TextBlock Grid.Column="1" Text="{Binding Size}" Margin="12,0" TextWrapping="Wrap" />
+                            <TextBlock Grid.Column="2" Text="{Binding Verification}" TextWrapping="Wrap" />
                         </Grid>
                     </DataTemplate>
                 </ListBox.ItemTemplate>
             </ListBox>
             <TextBlock x:Name="EmptyState" Text="압축파일을 열면 여기에 파일 목록이 표시됩니다."
-                HorizontalAlignment="Center" VerticalAlignment="Center" Margin="24" IsHitTestVisible="False" />
+                HorizontalAlignment="Stretch" VerticalAlignment="Center" Margin="16"
+                TextWrapping="Wrap" TextAlignment="Center" IsHitTestVisible="False" />
         </Grid>
-        <StackPanel Grid.Row="4" Margin="0,20,0,0" Spacing="12">
-            <TextBlock x:Name="Status" Text="작업 대기 중" TextWrapping="Wrap" AutomationProperties.Name="작업 상태" />
+        <StackPanel Grid.Row="2" Margin="0,12,0,0" Spacing="8">
+            <ScrollViewer MaxHeight="96" HorizontalScrollBarVisibility="Disabled"
+                VerticalScrollBarVisibility="Auto" Focusable="True" AutomationProperties.Name="작업 상태 전체 읽기">
+                <TextBlock x:Name="Status" Text="작업 대기 중" TextWrapping="Wrap" AutomationProperties.Name="작업 상태" />
+            </ScrollViewer>
             <ProgressBar x:Name="Progress" IsVisible="False" IsIndeterminate="True" Height="8"
                 AutomationProperties.Name="파일 목록 읽기 진행 중" />
             <Button x:Name="StopButton" Content="작업 중지" Click="StopJob" IsEnabled="False"
