@@ -131,5 +131,24 @@
         "scope": "6498a73c-b12c-4d6f-847e-75cf5e8c8a25 메시지로 별도 패치 전달 완료. 현재 파일에는 후속 플랫폼 계약 검사 변경도 포함됨",
         "csharp_retest": "not_run by this reviewer"
     },
-    "mount_contract_acceptance": "tests/extraction/folder_publication_review.json의 mount_contract_scenarios 참조. 정상 ext4 API 연결과 미실행 부정 조건을 별도로 기록함"
+    "mount_contract_acceptance": "tests/extraction/folder_publication_review.json의 mount_contract_scenarios 참조. 정상 ext4 API 연결과 미실행 부정 조건을 별도로 기록함",
+    "runner_portability_fix": {
+        "source_message": "8f83790b-1ca6-4761-bdfe-e0c3076cf146",
+        "baseline_head": "2fb087de2e2467db0fea9bce85aade5ac23fd2c1",
+        "implementation": "TestWorkerLaunch가 현재 프로세스의 dotnet/dotnet.exe와 고정 테스트 앱호스트를 구분함. DLL 모드는 현재 muxer와 고정 출력 DLL을 사용하고 앱호스트 모드는 출력 폴더의 Worker 및 자기 앱을 무인수로 직접 실행함",
+        "output_layout": "AppContext.BaseDirectory 바로 아래 Zipelo.RuntimeTests 및 Zipelo.Worker 파일과 필요한 deps/runtimeconfig/런타임 파일. 앱호스트 이름은 Windows에서만 .exe 확장자임. self-contained 검증 스냅샷에 Worker 게시 산출물을 함께 배치해야 함",
+        "fail_closed": "누락 파일, 실행파일 링크 및 예상하지 못한 호스트는 오류임. PATH, 입력 ZIP 위치 또는 현재 작업 디렉터리에서 실행파일을 탐색하지 않음. SKIP이나 PASS로 치환하지 않음",
+        "expectations": "기존 98개 등록과 제품 성공/실패/취소/보존 기대값을 유지함",
+        "local_csharp": "not_run: local .NET SDK absent",
+        "required_execution": [
+            "Windows DLL + dotnet host: 실제 Worker 목록/생성/해제 및 무인수 peer 오류/취소/종료 경계",
+            "Linux self-contained apphost: 실제 Worker 목록/생성/해제 및 무인수 peer 오류/취소/종료 경계"
+        ],
+        "historical_ubuntu_report": "round6 + 타입 수정: 총괄 보고 Core41 통과, Runtime9 통과/39 실패/8 blocked. 앱호스트에 DLL 인수를 붙인 실행기 오류가 포함되어 39개를 제품 결함으로 계산하지 않음",
+        "references": [
+            "https://learn.microsoft.com/en-us/dotnet/api/system.environment.processpath?view=net-10.0",
+            "https://learn.microsoft.com/en-us/dotnet/core/deploying/",
+            "https://learn.microsoft.com/en-us/dotnet/api/system.appcontext.basedirectory?view=net-10.0"
+        ]
+    }
 }

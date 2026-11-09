@@ -10,8 +10,7 @@ namespace Zipelo.RuntimeTests;
 internal sealed partial class ExtractionTests(string root, string sandbox)
 {
     private static JobLimits Limits => new(32, 1024 * 1024, 1024 * 1024, TimeSpan.FromSeconds(15), 3);
-    private static ZipWorkerClient Worker => new(Path.Combine(AppContext.BaseDirectory, "Zipelo.Worker.dll"),
-        Environment.ProcessPath ?? throw new InvalidOperationException());
+    private static ZipWorkerClient Worker => TestWorkerLaunch.Worker;
 
     public IEnumerable<(string Name, Func<Task> Run)> Cases()
     {

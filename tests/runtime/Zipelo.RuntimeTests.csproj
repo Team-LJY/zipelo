@@ -10,6 +10,7 @@
     <ItemGroup>
         <Compile Include="Program.cs" />
         <Compile Include="RuntimeTests.cs" />
+        <Compile Include="TestWorkerLaunch.cs" />
         <Compile Include="PublicationTests.cs" />
         <Compile Include="ExtractionTests.cs" />
         <Compile Include="ExtractionPublicationTests.cs" />

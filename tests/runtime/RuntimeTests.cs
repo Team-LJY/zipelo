@@ -11,9 +11,8 @@ namespace Zipelo.RuntimeTests;
 internal sealed partial class RuntimeTests(string root, string sandbox)
 {
     private static JobLimits Limits => new(32, 1024 * 1024, 1024 * 1024, TimeSpan.FromSeconds(15), 3);
-    private static string Host => Environment.ProcessPath ?? throw new InvalidOperationException();
-    private static ZipWorkerClient Worker => new(Path.Combine(AppContext.BaseDirectory, "Zipelo.Worker.dll"), Host);
-    private static ZipWorkerClient Peer => new(typeof(Program).Assembly.Location, Host);
+    private static ZipWorkerClient Worker => TestWorkerLaunch.Worker;
+    private static ZipWorkerClient Peer => TestWorkerLaunch.Peer;
 
     public IEnumerable<(string Name, Func<Task> Run)> Cases()
     {
@@ -62,7 +61,7 @@ internal sealed partial class RuntimeTests(string root, string sandbox)
         Check.Throws<ArgumentException>(() => WorkerPlatform.GetWorkerPath("relative"));
         var expected = OperatingSystem.IsWindows() ? "Zipelo.Worker.exe" : "Zipelo.Worker";
         Check.Equal(Path.Combine(sandbox, "worker", expected), WorkerPlatform.GetWorkerPath(sandbox));
-        var missing = new ZipWorkerClient(Path.Combine(sandbox, "absent-worker.dll"), Host);
+        var missing = new ZipWorkerClient(Path.Combine(sandbox, "absent-worker.dll"), TestWorkerLaunch.DotnetHost);
         Check.That(!missing.IsAvailable && missing.Capabilities.Count == 0, "없는 작업자를 사용 가능으로 표시함");
         Check.That(!Worker.SupportsSafeExtraction && !Worker.SupportsEncryption && !Worker.SupportsSplitVolumes,
             "미구현 기능을 사용 가능으로 표시함");
