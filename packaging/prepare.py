@@ -104,6 +104,7 @@ def validate(payload, support, verification, platform):
 def windows(output, support, files):
     template = (ROOT / "windows/installer.nsi.in").read_text()
     install, remove, rollback, variables = [], [], [], []
+    uninstall_directories = []
     directories = set()
     for index, name in enumerate(sorted(files)):
         path = name.replace("/", "\\")
@@ -117,7 +118,7 @@ def windows(output, support, files):
                         '    StrCpy $' + flag + ' 1', '    ClearErrors',
                         '    File "payload\\' + path + '"', '    IfErrors install_failed'])
         rollback.append('        !insertmacro RemoveOwnedFile "$INSTDIR\\' + path + '" ' + flag)
-        remove.append('    Delete "$INSTDIR\\' + path + '"')
+        remove.append('    !insertmacro UninstallFile "$INSTDIR\\' + path + '" "' + name + '"')
         directories.update(str(path).replace("/", "\\") for path in PurePosixPath(name).parents if str(path) != ".")
     create_directories = []
     ordered_directories = sorted(directories, key=lambda value: (value.count("\\"), value))
@@ -133,7 +134,7 @@ def windows(output, support, files):
     for index in reversed(range(len(ordered_directories))):
         directory = ordered_directories[index]
         flag = f"DirectoryOwned{index}"
-        remove.append('    RMDir "$INSTDIR\\' + directory + '"')
+        uninstall_directories.append('    !insertmacro UninstallDirectory "$INSTDIR\\' + directory + '"')
         rollback.extend([
             '        ' + "$" + '{If} $' + flag + ' == 1',
             '            ClearErrors', '            RMDir "$INSTDIR\\' + directory + '"',
@@ -176,9 +177,10 @@ def windows(output, support, files):
                          '    StrCpy $' + flag + ' 1'] + checked_write(key, value, data))
 
     logic = lambda name: "$" + "{" + name + "}"
-    cleanup, unregister = [], []
+    cleanup, unregister, remove_entry, restore_entry = [], [], [], []
     for key, value, _, flag in reversed(shared + writes):
-        unregister.append(f'    DeleteRegValue HKCU "{key}" "{value}"')
+        target = remove_entry if flag == "UninstallOwned" else unregister
+        target.append(f'    !insertmacro UninstallValue "{key}" "{value}"')
         cleanup.extend([
             '    ' + logic("If") + ' $' + flag + ' == 1',
             '        ClearErrors',
@@ -205,17 +207,28 @@ def windows(output, support, files):
                     keys.add(key)
                     key = key.rsplit("\\", 1)[0]
         for key in sorted(keys, key=lambda value: (value.count("\\"), value), reverse=True):
-            unregister.append(f'    DeleteRegKey /ifempty HKCU "{key}"')
+            target = remove_entry if flag == "UninstallOwned" else unregister
+            target.append(f'    !insertmacro UninstallEmptyKey "{key}"')
             cleanup.extend(['    ' + logic("If") + ' $' + flag + ' == 1',
                             '        ClearErrors', f'        DeleteRegKey /ifempty HKCU "{key}"',
                             '        IfErrors 0 +2', '            StrCpy $CleanupFailed 1',
                             '    ' + logic("EndIf")])
+    for key, value, data, flag in writes:
+        if flag == "UninstallOwned":
+            restore_entry.extend([
+                '    StrCpy $UninstallItem "제거 등록 복원: ' + value + '"',
+                '    ClearErrors', f'    WriteRegStr HKCU "{key}" "{value}" {data}',
+                '    IfErrors 0 +2', '        Call un.RecordFailure',
+            ])
     values = {
         "VERSION": support["version"], "VARS": "\n".join(variables),
         "FILES": "\n".join(install), "DELETE": "\n".join(remove),
         "ROLLBACK_FILES": "\n".join(rollback), "ROLLBACK_REGISTER": "\n".join(cleanup),
         "UNINSTALL_REGISTER": "\n".join(uninstall_register),
         "REGISTER": "\n".join(register), "UNREGISTER": "\n".join(unregister),
+        "REMOVE_UNINSTALL_ENTRY": "\n".join(remove_entry),
+        "RESTORE_UNINSTALL_ENTRY": "\n".join(restore_entry),
+        "UNINSTALL_DIRECTORIES": "\n".join(uninstall_directories),
     }
     for key, value in values.items():
         template = template.replace("@" + key + "@", value)

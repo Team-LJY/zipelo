@@ -213,6 +213,109 @@ Function OpenSettings
         MessageBox MB_OK "설정을 열지 못했습니다. Windows 설정에서 앱 > 기본 앱을 직접 열어주세요."
 FunctionEnd
 
+
+Var UninstallErrors
+Var UninstallItem
+Var UninstallFirstFailure
+Var UninstallComplete
+Var UninstallRetained
+
+Function un.RecordFailure
+    IntOp $UninstallErrors $UninstallErrors + 1
+    StrCmp $UninstallFirstFailure "" 0 +2
+        StrCpy $UninstallFirstFailure $UninstallItem
+    DetailPrint "제거 실패: $UninstallItem"
+FunctionEnd
+
+!macro UninstallFile PATH ITEM
+    StrCpy $UninstallItem "${ITEM}"
+    System::Call 'kernel32::DeleteFileW(w "${PATH}") i.r0 ?e'
+    Pop $1
+    ${If} $0 == 0
+    ${AndIf} $1 != 2
+    ${AndIf} $1 != 3
+        DetailPrint "파일 삭제 시스템 오류: $1"
+        Call un.RecordFailure
+    ${EndIf}
+!macroend
+
+; 없는 값은 재시도 성공으로 처리하되 접근 거부는 누적함.
+!macro UninstallValue KEY VALUE
+    StrCpy $UninstallItem "등록: ${KEY} [${VALUE}]"
+    System::Call 'advapi32::RegOpenKeyExW(p 0x80000001, w "${KEY}", i 0, i 0x20103, *p.r1) i.r0'
+    ${If} $0 == 0
+        System::Call 'advapi32::RegDeleteValueW(p r1, w "${VALUE}") i.r2'
+        System::Call 'advapi32::RegCloseKey(p r1) i.r0'
+        ${If} $2 != 0
+        ${AndIf} $2 != 2
+            Call un.RecordFailure
+        ${EndIf}
+        ${If} $0 != 0
+            Call un.RecordFailure
+        ${EndIf}
+    ${ElseIf} $0 != 2
+        Call un.RecordFailure
+    ${EndIf}
+!macroend
+
+; 알 수 없는 하위 값과 키는 삭제하지 않고 남김.
+!macro UninstallEmptyKey KEY
+    StrCpy $UninstallItem "빈 등록 키: ${KEY}"
+    System::Call 'advapi32::RegOpenKeyExW(p 0x80000001, w "${KEY}", i 0, i 0x20119, *p.r1) i.r0'
+    ${If} $0 == 0
+        System::Call 'advapi32::RegQueryInfoKeyW(p r1, p 0, p 0, p 0, *i.r2, p 0, p 0, *i.r3, p 0, p 0, p 0, p 0) i.r4'
+        System::Call 'advapi32::RegCloseKey(p r1) i.r0'
+        ${If} $4 != 0
+        ${OrIf} $0 != 0
+            Call un.RecordFailure
+        ${ElseIf} $2 != 0
+        ${OrIf} $3 != 0
+            StrCpy $UninstallRetained 1
+        ${Else}
+            System::Call 'advapi32::RegDeleteKeyExW(p 0x80000001, w "${KEY}", i 0x100, i 0) i.r0'
+            ${If} $0 != 0
+            ${AndIf} $0 != 2
+                Call un.RecordFailure
+            ${EndIf}
+        ${EndIf}
+    ${ElseIf} $0 != 2
+        Call un.RecordFailure
+    ${EndIf}
+!macroend
+
+!macro UninstallDirectory PATH
+    StrCpy $UninstallItem "빈 폴더: ${PATH}"
+    System::Call 'kernel32::RemoveDirectoryW(w "${PATH}") i.r0 ?e'
+    Pop $1
+    ${If} $0 == 0
+        ${If} $1 == 145
+            StrCpy $UninstallRetained 1
+        ${ElseIf} $1 != 2
+        ${AndIf} $1 != 3
+            Call un.RecordFailure
+        ${EndIf}
+    ${EndIf}
+!macroend
+
+Function un.RestoreEntry
+@RESTORE_UNINSTALL_ENTRY@
+FunctionEnd
+
+Function un.Failed
+    SetErrorLevel 1
+    MessageBox MB_OK|MB_ICONSTOP "제거를 완료하지 못했습니다. 실패 $UninstallErrors건.$\r$\n첫 실패: $UninstallFirstFailure.$\r$\n남은 항목은 상세 보기를 확인하세요. Zipelo와 작업자를 닫고 권한을 확인한 뒤 같은 폴더의 Uninstall.exe를 다시 실행하세요. 프로그램 폴더를 통째로 삭제하지 마세요."
+FunctionEnd
+
+Function un.onUninstFailed
+    SetErrorLevel 1
+FunctionEnd
+
+Function un.onUninstSuccess
+    ${If} $UninstallComplete != 1
+        SetErrorLevel 1
+    ${EndIf}
+FunctionEnd
+
 Function un.onInit
     SetShellVarContext current
     SetRegView 64
@@ -225,14 +328,26 @@ Function un.onInit
         MessageBox MB_OK "다른 설치 또는 제거를 마친 뒤 다시 실행하세요."
         Abort
     ${EndIf}
+    StrCmp $INSTDIR "$LOCALAPPDATA\Programs\Zipelo-Draft" 0 un_invalid
     ClearErrors
     ReadINIStr $0 "$INSTDIR\.zipelo-install.ini" "Zipelo" "Location"
-    IfErrors un_invalid
+    IfErrors un_registry_fallback
     StrCmp $0 $INSTDIR 0 un_invalid
     ClearErrors
     ReadINIStr $0 "$INSTDIR\.zipelo-install.ini" "Zipelo" "Version"
     IfErrors un_invalid
     StrCmp $0 "@VERSION@" 0 un_invalid
+    Return
+un_registry_fallback:
+    ; 표식 복원에 실패한 재시도는 고정 경로의 정확한 자기 등록만 허용함.
+    ClearErrors
+    ReadRegStr $0 HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\Zipelo-Draft" "DisplayVersion"
+    IfErrors un_invalid
+    StrCmp $0 "@VERSION@" 0 un_invalid
+    ClearErrors
+    ReadRegStr $0 HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\Zipelo-Draft" "UninstallString"
+    IfErrors un_invalid
+    StrCmp $0 '$\"$INSTDIR\Uninstall.exe$\"' 0 un_invalid
     Return
 un_invalid:
     MessageBox MB_OK "이 위치의 설치 기록을 확인하지 못했습니다. 기존 파일은 삭제하지 않습니다. 지원 담당자에게 문의하세요."
@@ -242,12 +357,67 @@ FunctionEnd
 Section "Uninstall"
     SetShellVarContext current
     SetRegView 64
-@UNREGISTER@
-    Delete "$SMPROGRAMS\Zipelo-Draft\Zipelo.lnk"
-    RMDir "$SMPROGRAMS\Zipelo-Draft"
+    StrCpy $UninstallErrors 0
+    StrCpy $UninstallComplete 0
+    StrCpy $UninstallRetained 0
+    StrCpy $UninstallFirstFailure ""
+    StrCpy $UninstallItem "제거 작업 폴더 준비"
+    ClearErrors
     SetOutPath "$TEMP"
+    IfErrors 0 +3
+        Call un.RecordFailure
+        Goto un_failed
+    ; 앱 파일만 먼저 제거하고 실패 시 복구 정보를 보존함.
 @DELETE@
-    Delete "$INSTDIR\.zipelo-install.ini"
-    Delete "$INSTDIR\Uninstall.exe"
-    RMDir "$INSTDIR"
+    ${If} $UninstallErrors != 0
+        Goto un_failed
+    ${EndIf}
+    !insertmacro UninstallFile "$SMPROGRAMS\Zipelo-Draft\Zipelo.lnk" "시작 메뉴 바로가기"
+@UNINSTALL_DIRECTORIES@
+    !insertmacro UninstallDirectory "$SMPROGRAMS\Zipelo-Draft"
+@UNREGISTER@
+    ${If} $UninstallErrors != 0
+        Goto un_failed
+    ${EndIf}
+    ; 필수 파일과 연결 후보 정리가 끝난 뒤 제거 등록을 정리함.
+@REMOVE_UNINSTALL_ENTRY@
+    ${If} $UninstallErrors != 0
+        Call un.RestoreEntry
+        Goto un_failed
+    ${EndIf}
+    !insertmacro UninstallFile "$INSTDIR\.zipelo-install.ini" "설치표식 삭제"
+    IntCmp $UninstallErrors 0 un_delete_self
+        Call un.RestoreEntry
+        Goto un_failed
+un_delete_self:
+    !insertmacro UninstallFile "$INSTDIR\Uninstall.exe" "제거 실행파일 삭제"
+    IntCmp $UninstallErrors 0 un_cleanup_directories
+        ; 자기 삭제가 실패하면 실행파일이 남으므로 표식과 등록을 복원함.
+        ClearErrors
+        WriteINIStr "$INSTDIR\.zipelo-install.ini" "Zipelo" "Location" "$INSTDIR"
+        IfErrors 0 +2
+            Call un.RecordFailure
+        ClearErrors
+        WriteINIStr "$INSTDIR\.zipelo-install.ini" "Zipelo" "Version" "@VERSION@"
+        IfErrors 0 +2
+            Call un.RecordFailure
+        Call un.RestoreEntry
+        Goto un_failed
+un_cleanup_directories:
+    !insertmacro UninstallDirectory "$INSTDIR"
+    ${If} $UninstallErrors != 0
+        SetErrorLevel 1
+        MessageBox MB_OK|MB_ICONSTOP "프로그램 파일과 등록은 제거했지만 빈 설치 폴더 정리를 완료하지 못했습니다. 상세 보기의 폴더를 확인하고 지원 담당자에게 문의하세요. 사용자 자료를 통째로 삭제하지 마세요."
+        Abort "빈 설치 폴더 정리 미완료"
+    ${EndIf}
+    StrCpy $UninstallComplete 1
+    SetErrorLevel 0
+    ${If} $UninstallRetained == 1
+        MessageBox MB_OK "Zipelo 프로그램 항목을 제거했습니다. 비어 있지 않거나 정리할 수 없는 빈 키/폴더는 남겼습니다. 사용자 파일은 삭제하지 않았습니다. 상세 보기를 확인하세요."
+    ${EndIf}
+    Goto un_done
+un_failed:
+    Call un.Failed
+    Abort "제거 미완료: 상세 보기의 실패 항목을 확인하고 다시 시도하세요."
+un_done:
 SectionEnd
