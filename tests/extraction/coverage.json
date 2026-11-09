@@ -130,5 +130,6 @@
         "isolated_patch_sha256": "3e2eab3a0a61de4aa967f79a87240e5eae067e81cbe5708575a8f59524049ab5",
         "scope": "6498a73c-b12c-4d6f-847e-75cf5e8c8a25 메시지로 별도 패치 전달 완료. 현재 파일에는 후속 플랫폼 계약 검사 변경도 포함됨",
         "csharp_retest": "not_run by this reviewer"
-    }
+    },
+    "mount_contract_acceptance": "tests/extraction/folder_publication_review.json의 mount_contract_scenarios 참조. 정상 ext4 API 연결과 미실행 부정 조건을 별도로 기록함"
 }
