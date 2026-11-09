@@ -131,15 +131,33 @@ def publish(dotnet, project, output, apphost, rid, relative, ui, extraction):
     subprocess.run(args, cwd=ROOT, check=True)
 
 
-def assemble(args):
-    require(args.validation, "--validation으로 개발 검증을 명시해야 함")
-    require(args.dotnet.is_absolute() and args.dotnet.is_file() and not args.dotnet.is_symlink(),
+def validate_paths(output, archives, dotnet, root=ROOT):
+    require(dotnet.is_absolute() and dotnet.is_file() and not dotnet.is_symlink(),
             "검증된 SDK dotnet 호스트의 절대 경로 필요")
-    for path in [ROOT, args.dotnet, args.archives, args.output]:
+    require(output.name not in {"", ".", ".."} and not os.path.lexists(output),
+            "기존 출력 또는 잘못된 출력 이름 거부")
+    # 기존 부모를 엄격히 해석한 뒤 새 마지막 이름만 결합함.
+    normalized_output = output.parent.resolve(strict=True) / output.name
+    normalized_archives = archives.resolve(strict=True)
+    normalized_dotnet = dotnet.resolve(strict=True)
+    normalized_root = root.resolve(strict=True)
+    require(normalized_output.parent.is_dir() and normalized_archives.is_dir()
+            and normalized_root.is_dir(), "기존 소스/입력/출력 부모 디렉터리 필요")
+    require(not os.path.lexists(normalized_output), "기존 출력은 변경하지 않음")
+    for protected in [normalized_root, normalized_archives, normalized_dotnet.parent]:
+        require(not normalized_output.is_relative_to(protected)
+                and not protected.is_relative_to(normalized_output),
+                "소스 또는 입력과 출력의 중첩 거부")
+    for path in [root, output, archives, dotnet, normalized_root, normalized_output,
+                 normalized_archives, normalized_dotnet]:
         require(not any(character in str(path) for character in ";,%$\n\r"),
                 "MSBuild 속성 해석 문자가 포함된 경로 거부")
-    require(not args.output.exists() and args.output.parent.is_dir(), "기존 출력은 변경하지 않음")
-    require(not args.output.is_relative_to(ROOT / "src"), "소스 폴더 아래 출력 거부")
+    return normalized_output, normalized_archives, normalized_dotnet
+
+
+def assemble(args):
+    require(args.validation, "--validation으로 개발 검증을 명시해야 함")
+    args.output, args.archives, args.dotnet = validate_paths(args.output, args.archives, args.dotnet)
     config = json.loads((HERE / "inputs.json").read_text())
     require(config["version"] == VERSION, "입력 manifest 버전 불일치")
     inputs = config["platforms"][args.rid]
@@ -209,6 +227,8 @@ def assemble(args):
                    "inputs": inputs, "apphostSourceSha256": digest(apphost), "files": files}
         (payload / "shared-runtime-candidate.json").write_text(json.dumps(receipt, indent=4) + "\n")
         # 기존 출력과 병합하지 않고 새 폴더를 예약한 뒤 완성된 후보만 이동함.
+        checked_output, _, _ = validate_paths(args.output, args.archives, args.dotnet)
+        require(checked_output == args.output, "검증 후 출력 부모 경로가 변경됨")
         args.output.mkdir()
         try:
             for path in payload.iterdir():
@@ -227,7 +247,6 @@ def main():
     parser.add_argument("--dotnet", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
-    args.output = args.output.absolute()
     try:
         assemble(args)
     except (ValueError, OSError, subprocess.CalledProcessError, tarfile.TarError, zipfile.BadZipFile) as error:
