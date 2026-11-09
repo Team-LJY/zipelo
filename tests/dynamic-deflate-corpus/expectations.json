@@ -1,0 +1,306 @@
+[
+    {
+        "id": "dynamic.overlap.a258",
+        "valid": true,
+        "rawLength": 46,
+        "endBitExclusive": 368,
+        "outputLength": 259,
+        "outputSha256": "BD29F5B5043BA9D48F0CD6FDA241BB24D8C274987ED0C1697008DC73C0F37DC2",
+        "expectedFailure": null,
+        "faultBitOffset": null,
+        "control": null,
+        "treeProfiles": [
+            "meta012",
+            "ll-a258",
+            "distance-one"
+        ],
+        "bitProof": "17 + 54 + (287 + 4) + (1+2+1+2) = 368. A then length258/distance1 then EOB; output A repeated259."
+    },
+    {
+        "id": "stored-dynamic.xy",
+        "valid": true,
+        "rawLength": 49,
+        "endBitExclusive": 392,
+        "outputLength": 7,
+        "outputSha256": "59864F63A41456B3D83264E42975D4E943DA9A75FC9AF9E8491E617B2FB24958",
+        "expectedFailure": null,
+        "faultBitOffset": null,
+        "control": null,
+        "treeProfiles": [
+            "meta01",
+            "ll-stored-match",
+            "distance-two"
+        ],
+        "bitProof": "stored: 3+5+16+16+16=56. dynamic: 17+54+262+3=336. total392. XY then length5/distance2 then EOB; output XYXYXYX."
+    },
+    {
+        "id": "dynamic.literal-only.a",
+        "valid": true,
+        "rawLength": 42,
+        "endBitExclusive": 331,
+        "outputLength": 1,
+        "outputSha256": "559AEAD08264D5795D3909718CDD05ABD49572E84FE55590EEF31A88A08FDFFD",
+        "expectedFailure": null,
+        "faultBitOffset": null,
+        "control": null,
+        "treeProfiles": [
+            "meta01",
+            "ll-a",
+            "distance-empty"
+        ],
+        "bitProof": "17+54+258+2=331. Identical legacy PR16 literal-only raw SHA is checked independently."
+    },
+    {
+        "id": "dynamic.before-first.invalid",
+        "valid": false,
+        "rawLength": 46,
+        "endBitExclusive": 367,
+        "outputLength": null,
+        "outputSha256": null,
+        "expectedFailure": "Deflate.InvalidBackreferenceHistory",
+        "faultBitOffset": 362,
+        "control": "dynamic.overlap.a258",
+        "treeProfiles": [
+            "meta012",
+            "ll-a258",
+            "distance-one"
+        ],
+        "bitProof": "Same header362 bits, body length258(2)+distance1(1)+EOB(2)=5. No preceding literal; P=0 < distance1. Nominal end367."
+    },
+    {
+        "id": "dynamic.hdist-30.valid",
+        "valid": true,
+        "rawLength": 45,
+        "endBitExclusive": 360,
+        "outputLength": 1,
+        "outputSha256": "559AEAD08264D5795D3909718CDD05ABD49572E84FE55590EEF31A88A08FDFFD",
+        "expectedFailure": null,
+        "faultBitOffset": null,
+        "control": null,
+        "treeProfiles": [
+            "meta01",
+            "ll-a",
+            "distance-30"
+        ],
+        "bitProof": "17+54+257+30+2=360. HDIST=29; distance0/1 lengths1, all trailing lengths0. Symbols30/31, if declared, are absent from tree and never used. Expected success is normative, not decoder dependent."
+    },
+    {
+        "id": "dynamic.hdist-31.valid",
+        "valid": true,
+        "rawLength": 46,
+        "endBitExclusive": 361,
+        "outputLength": 1,
+        "outputSha256": "559AEAD08264D5795D3909718CDD05ABD49572E84FE55590EEF31A88A08FDFFD",
+        "expectedFailure": null,
+        "faultBitOffset": null,
+        "control": "dynamic.hdist-30.valid",
+        "treeProfiles": [
+            "meta01",
+            "ll-a",
+            "distance-31"
+        ],
+        "bitProof": "17+54+257+31+2=361. HDIST=30; distance0/1 lengths1, all trailing lengths0. Symbols30/31, if declared, are absent from tree and never used. Expected success is normative, not decoder dependent."
+    },
+    {
+        "id": "dynamic.hdist-32.valid",
+        "valid": true,
+        "rawLength": 46,
+        "endBitExclusive": 362,
+        "outputLength": 1,
+        "outputSha256": "559AEAD08264D5795D3909718CDD05ABD49572E84FE55590EEF31A88A08FDFFD",
+        "expectedFailure": null,
+        "faultBitOffset": null,
+        "control": "dynamic.hdist-30.valid",
+        "treeProfiles": [
+            "meta01",
+            "ll-a",
+            "distance-32"
+        ],
+        "bitProof": "17+54+257+32+2=362. HDIST=31; distance0/1 lengths1, all trailing lengths0. Symbols30/31, if declared, are absent from tree and never used. Expected success is normative, not decoder dependent."
+    },
+    {
+        "id": "dynamic.alphabet.valid",
+        "valid": true,
+        "rawLength": 43,
+        "endBitExclusive": 337,
+        "outputLength": 2,
+        "outputSha256": "38164FBD17603D73F696B8B4D72664D735BB6A7C88577687FD2AE33FD6964153",
+        "expectedFailure": null,
+        "faultBitOffset": null,
+        "control": null,
+        "treeProfiles": [
+            "meta012",
+            "ll-ab",
+            "distance-empty"
+        ],
+        "bitProof": "17+54+(258+3)+(1+2+2)=337. LL A=0, B=10, EOB=11. Output AB."
+    },
+    {
+        "id": "dynamic.alphabet.missing-eob",
+        "valid": false,
+        "rawLength": 43,
+        "endBitExclusive": 337,
+        "outputLength": null,
+        "outputSha256": null,
+        "expectedFailure": "Deflate.MissingEndOfBlock",
+        "faultBitOffset": 330,
+        "control": "dynamic.alphabet.valid",
+        "treeProfiles": [
+            "meta012",
+            "ll-abc-no-eob",
+            "distance-empty"
+        ],
+        "bitProof": "Same complete LL shape1/2/2, but third symbol67 replaces256. LL256 length0 begins at 71+256+3=330. The written ABC suffix is not an EOB; nominal construction end337."
+    },
+    {
+        "id": "dynamic.repeat16.valid",
+        "valid": true,
+        "rawLength": 42,
+        "endBitExclusive": 334,
+        "outputLength": 1,
+        "outputSha256": "559AEAD08264D5795D3909718CDD05ABD49572E84FE55590EEF31A88A08FDFFD",
+        "expectedFailure": null,
+        "faultBitOffset": null,
+        "control": null,
+        "treeProfiles": [
+            "meta016",
+            "ll-a",
+            "distance-empty"
+        ],
+        "bitProof": "header71. length0(1), repeat16(2)+extra0(2) covering three zeros, then254 direct lengths with two nonzero values(256 bits): 261. body2. total334."
+    },
+    {
+        "id": "dynamic.repeat16-first.invalid",
+        "valid": false,
+        "rawLength": 42,
+        "endBitExclusive": 334,
+        "outputLength": null,
+        "outputSha256": null,
+        "expectedFailure": "Deflate.RepeatWithoutPreviousLength",
+        "faultBitOffset": 71,
+        "control": "dynamic.repeat16.valid",
+        "treeProfiles": [
+            "meta016",
+            "ll-a-intended-only",
+            "distance-empty-intended-only"
+        ],
+        "bitProof": "Swap first length0 and repeat16, preserving total334 construction bits. First token16 at71 has no previous length. Intended arrays are NOT a valid expansion of this malformed stream."
+    },
+    {
+        "id": "dynamic.repeat18.valid",
+        "valid": true,
+        "rawLength": 14,
+        "endBitExclusive": 105,
+        "outputLength": 1,
+        "outputSha256": "559AEAD08264D5795D3909718CDD05ABD49572E84FE55590EEF31A88A08FDFFD",
+        "expectedFailure": null,
+        "faultBitOffset": null,
+        "control": null,
+        "treeProfiles": [
+            "meta018",
+            "ll-a",
+            "distance-empty"
+        ],
+        "bitProof": "header71. lengths: zero65(9),1(2),zero138(9),zero52(9),1(2),0(1) =32 bits, expands65+1+138+52+1+1=258. body2. total105."
+    },
+    {
+        "id": "dynamic.repeat18-overflow.invalid",
+        "valid": false,
+        "rawLength": 15,
+        "endBitExclusive": 113,
+        "outputLength": null,
+        "outputSha256": null,
+        "expectedFailure": "Deflate.CodeLengthRepeatOverflow",
+        "faultBitOffset": 102,
+        "control": "dynamic.repeat18.valid",
+        "treeProfiles": [
+            "meta018",
+            "ll-a-intended-only",
+            "distance-empty-intended-only"
+        ],
+        "bitProof": "After257 lengths, replace final zero(1 bit) with repeat18 extra0(9 bits), requesting11 zeros in one remaining slot. Fault begins71+9+2+9+9+2=102. Nominal length105+8=113."
+    },
+    {
+        "id": "dynamic.alphabet.overfull-literal",
+        "valid": false,
+        "rawLength": 43,
+        "endBitExclusive": 337,
+        "outputLength": null,
+        "outputSha256": null,
+        "expectedFailure": "Deflate.OverSubscribedLiteralTree",
+        "faultBitOffset": 329,
+        "control": "dynamic.alphabet.valid",
+        "treeProfiles": [
+            "meta012",
+            "ll-overfull",
+            "distance-empty"
+        ],
+        "bitProof": "LL65/66/256 lengths1 yield Kraft3/2. Third length1 starts71+256+2=329. Header332 complete; following01011 is an opaque5-bit control suffix, not codes of an invalid tree."
+    },
+    {
+        "id": "dynamic.alphabet.overfull-meta",
+        "valid": false,
+        "rawLength": 43,
+        "endBitExclusive": 337,
+        "outputLength": null,
+        "outputSha256": null,
+        "expectedFailure": "Deflate.OverSubscribedCodeLengthTree",
+        "faultBitOffset": 68,
+        "control": "dynamic.alphabet.valid",
+        "treeProfiles": [
+            "meta-overfull",
+            "ll-ab-intended-only",
+            "distance-empty-intended-only",
+            "meta012-reference-only"
+        ],
+        "bitProof": "Meta symbols0/1/2 lengths1 yield Kraft3/2. Third nonzero declaration is symbol1 at RFC order index17, starts17+17*3=68. Header71. Remaining266 bits are normal-control suffix encoded with meta012, NOT valid codes for the malformed declared meta tree."
+    },
+    {
+        "id": "fixed.distance0.valid",
+        "valid": true,
+        "rawLength": 4,
+        "endBitExclusive": 30,
+        "outputLength": 4,
+        "outputSha256": "63C1DD951FFEDF6F7FD968AD4EFA39B8ED584F162F46E715114EE184F8DE9201",
+        "expectedFailure": null,
+        "faultBitOffset": null,
+        "control": null,
+        "treeProfiles": [
+            "fixed-ll",
+            "fixed-distance"
+        ],
+        "bitProof": "3+8(A)+7(length3)+5(distance1)+7(EOB)=30. Output AAAA; P=1 permits distance1."
+    },
+    {
+        "id": "fixed.reserved-distance30.invalid",
+        "valid": false,
+        "rawLength": 4,
+        "endBitExclusive": 30,
+        "outputLength": null,
+        "outputSha256": null,
+        "expectedFailure": "Deflate.ReservedDistanceSymbol",
+        "faultBitOffset": 18,
+        "control": "fixed.distance0.valid",
+        "treeProfiles": [
+            "fixed-ll",
+            "fixed-distance"
+        ],
+        "bitProof": "Same30 construction bits as valid control, but fixed5-bit distance symbol30 replaces0 at3+8+7=18. No legal distance value exists. The suffix EOB is nominal only; no HDIST header is present."
+    },
+    {
+        "id": "fixed.reserved-distance31.invalid",
+        "valid": false,
+        "rawLength": 4,
+        "endBitExclusive": 30,
+        "outputLength": null,
+        "outputSha256": null,
+        "expectedFailure": "Deflate.ReservedDistanceSymbol",
+        "faultBitOffset": 18,
+        "control": "fixed.distance0.valid",
+        "treeProfiles": [
+            "fixed-ll",
+            "fixed-distance"
+        ],
+        "bitProof": "Same30 construction bits as valid control, but fixed5-bit distance symbol31 replaces0 at3+8+7=18. No legal distance value exists. The suffix EOB is nominal only; no HDIST header is present."
+    }
+]

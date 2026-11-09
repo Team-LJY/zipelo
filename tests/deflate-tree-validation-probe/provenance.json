@@ -1,0 +1,477 @@
+{
+    "schemaVersion": 1,
+    "parent": "188047b4ce4bb555114e9045ea5f20e43283cbb8",
+    "branch": "features/deflate-tree-validation-probe",
+    "status": "미실행 격리 후보이며 zero-slot 미해결로 채택 차단임.",
+    "upstreamRepository": "https://github.com/icsharpcode/SharpZipLib",
+    "upstreamCommit": "33f64eb0f28cdd2b084cb822fcc224c7c5aba553",
+    "upstreamFiles": [
+        {
+            "upstream_path": "src/ICSharpCode.SharpZipLib/Zip/Compression/Inflater.cs",
+            "original_git_blob_sha1": "439b4c6010eb548ad995fbd00327ad962de1f87a",
+            "original_sha256": "03d71ba116df441a962ae11473af40725a0273f6bbec9e14073e84f88f517e44",
+            "history_sha256": "03d71ba116df441a962ae11473af40725a0273f6bbec9e14073e84f88f517e44",
+            "candidate_sha256": "efd1434aa5f921e023d0f67a58f825131b319aea620512cea5ec1299e4f9d5fb",
+            "compiled_path": "tests/deflate-tree-validation-probe/library/vendor/Zip/Compression/Inflater.cs",
+            "new_tree_patch": true,
+            "existing_history_patch": false
+        },
+        {
+            "upstream_path": "src/ICSharpCode.SharpZipLib/Zip/Compression/InflaterDynHeader.cs",
+            "original_git_blob_sha1": "8e0196b11f71a9bb0e8141f6c08f24e28978fc01",
+            "original_sha256": "6c0e651185f27f4e92d02fa74df2fd4c2fd4b7edcb49781089f9a11c7f808eb2",
+            "history_sha256": "6c0e651185f27f4e92d02fa74df2fd4c2fd4b7edcb49781089f9a11c7f808eb2",
+            "candidate_sha256": "24b9ed8694ff0702a3af7cd07cf77f73300acd616911b91ae1bb7a9f4cf4841a",
+            "compiled_path": "tests/deflate-tree-validation-probe/library/vendor/Zip/Compression/InflaterDynHeader.cs",
+            "new_tree_patch": true,
+            "existing_history_patch": false
+        },
+        {
+            "upstream_path": "src/ICSharpCode.SharpZipLib/Zip/Compression/InflaterHuffmanTree.cs",
+            "original_git_blob_sha1": "ed318824ffe33ee67a18b942b8cf24e55045881b",
+            "original_sha256": "3529df0ca4eff9a43017e08d89f8295ce052d77086a9f29618e35da88dd522d7",
+            "history_sha256": "3529df0ca4eff9a43017e08d89f8295ce052d77086a9f29618e35da88dd522d7",
+            "candidate_sha256": "f08d017f6608c5c4f6d2a95e90bb3e749a258f1b32e86f4548edd33128194a6d",
+            "compiled_path": "tests/deflate-tree-validation-probe/library/vendor/Zip/Compression/InflaterHuffmanTree.cs",
+            "new_tree_patch": true,
+            "existing_history_patch": false
+        },
+        {
+            "upstream_path": "src/ICSharpCode.SharpZipLib/Zip/Compression/DeflaterConstants.cs",
+            "original_git_blob_sha1": "b7c7d2a6994bd421d2b9d24d09e5b4a93b401a7c",
+            "original_sha256": "99386bd2339eb6a45c9c11f1096a038d71f5fd403d8806f7d028711f5d78d983",
+            "history_sha256": "99386bd2339eb6a45c9c11f1096a038d71f5fd403d8806f7d028711f5d78d983",
+            "candidate_sha256": "99386bd2339eb6a45c9c11f1096a038d71f5fd403d8806f7d028711f5d78d983",
+            "compiled_path": "tests/deflate-history-validation-probe/vendor/Zip/Compression/DeflaterConstants.cs",
+            "new_tree_patch": false,
+            "existing_history_patch": false
+        },
+        {
+            "upstream_path": "src/ICSharpCode.SharpZipLib/Zip/Compression/DeflaterHuffman.cs",
+            "original_git_blob_sha1": "2f71366fca724a2b1f3f69b7dd942d306d733b82",
+            "original_sha256": "318219fbb9b6dd56b6443024b88c04fa1ed69eb9c952d2a69118559998f45d12",
+            "history_sha256": "318219fbb9b6dd56b6443024b88c04fa1ed69eb9c952d2a69118559998f45d12",
+            "candidate_sha256": "318219fbb9b6dd56b6443024b88c04fa1ed69eb9c952d2a69118559998f45d12",
+            "compiled_path": "tests/deflate-history-validation-probe/vendor/Zip/Compression/DeflaterHuffman.cs",
+            "new_tree_patch": false,
+            "existing_history_patch": false
+        },
+        {
+            "upstream_path": "src/ICSharpCode.SharpZipLib/Zip/Compression/DeflaterPending.cs",
+            "original_git_blob_sha1": "80d3e2142e34300d07d54ab82579a5c7c21ac62a",
+            "original_sha256": "a8815ccc4e203b32bf7a2785b6b1b6d204b4e0621ebfb5f8e3cb7d9f29c8e10a",
+            "history_sha256": "a8815ccc4e203b32bf7a2785b6b1b6d204b4e0621ebfb5f8e3cb7d9f29c8e10a",
+            "candidate_sha256": "a8815ccc4e203b32bf7a2785b6b1b6d204b4e0621ebfb5f8e3cb7d9f29c8e10a",
+            "compiled_path": "tests/deflate-history-validation-probe/vendor/Zip/Compression/DeflaterPending.cs",
+            "new_tree_patch": false,
+            "existing_history_patch": false
+        },
+        {
+            "upstream_path": "src/ICSharpCode.SharpZipLib/Zip/Compression/PendingBuffer.cs",
+            "original_git_blob_sha1": "6ed7e4ab8a72c2a2e9f264792620a42d03dcc307",
+            "original_sha256": "1e3a8d5d1b81ddf24fe05a51644213b259c1dd9d0473f90804ae71fd28f7f5a1",
+            "history_sha256": "1e3a8d5d1b81ddf24fe05a51644213b259c1dd9d0473f90804ae71fd28f7f5a1",
+            "candidate_sha256": "1e3a8d5d1b81ddf24fe05a51644213b259c1dd9d0473f90804ae71fd28f7f5a1",
+            "compiled_path": "tests/deflate-history-validation-probe/vendor/Zip/Compression/PendingBuffer.cs",
+            "new_tree_patch": false,
+            "existing_history_patch": false
+        },
+        {
+            "upstream_path": "src/ICSharpCode.SharpZipLib/Zip/Compression/Streams/OutputWindow.cs",
+            "original_git_blob_sha1": "d8241c18c20062e32464ebfe4ffc2dd817f6d0b3",
+            "original_sha256": "88fce20b006a38a7e4b90a227c95988c46ada3d2ae96f6b53e917da9de52e856",
+            "history_sha256": "2e16f3b7f0fbb0ee7ec187a62a3d9a479b2ce732612ecf8ce30bb1a072314895",
+            "candidate_sha256": "2e16f3b7f0fbb0ee7ec187a62a3d9a479b2ce732612ecf8ce30bb1a072314895",
+            "compiled_path": "tests/deflate-history-validation-probe/vendor/Zip/Compression/Streams/OutputWindow.cs",
+            "new_tree_patch": false,
+            "existing_history_patch": true
+        },
+        {
+            "upstream_path": "src/ICSharpCode.SharpZipLib/Zip/Compression/Streams/StreamManipulator.cs",
+            "original_git_blob_sha1": "aff6a9c6c52529dd7c152acdb5623161c50eb618",
+            "original_sha256": "5d6dbd9dee806e34a853ab8c6f68d6a1a2cb33148f28c1ad23857f960bd47e94",
+            "history_sha256": "5d6dbd9dee806e34a853ab8c6f68d6a1a2cb33148f28c1ad23857f960bd47e94",
+            "candidate_sha256": "5d6dbd9dee806e34a853ab8c6f68d6a1a2cb33148f28c1ad23857f960bd47e94",
+            "compiled_path": "tests/deflate-history-validation-probe/vendor/Zip/Compression/Streams/StreamManipulator.cs",
+            "new_tree_patch": false,
+            "existing_history_patch": false
+        },
+        {
+            "upstream_path": "src/ICSharpCode.SharpZipLib/Checksum/Adler32.cs",
+            "original_git_blob_sha1": "b2a0f151a12c26dc90fea101087ab5325f4dc1fc",
+            "original_sha256": "659c93673e5d13e1f17db211b5dad1b953f16b3c4552df465ad2e7b290bf4ccc",
+            "history_sha256": "659c93673e5d13e1f17db211b5dad1b953f16b3c4552df465ad2e7b290bf4ccc",
+            "candidate_sha256": "659c93673e5d13e1f17db211b5dad1b953f16b3c4552df465ad2e7b290bf4ccc",
+            "compiled_path": "tests/deflate-history-validation-probe/vendor/Checksum/Adler32.cs",
+            "new_tree_patch": false,
+            "existing_history_patch": false
+        },
+        {
+            "upstream_path": "src/ICSharpCode.SharpZipLib/Checksum/IChecksum.cs",
+            "original_git_blob_sha1": "db74a5a5d20a76b8340efabad88f4df0e53c48be",
+            "original_sha256": "32b3d05de60dcf3764142885206200b258be847ca4fd488e32e6dfe068d9270b",
+            "history_sha256": "32b3d05de60dcf3764142885206200b258be847ca4fd488e32e6dfe068d9270b",
+            "candidate_sha256": "32b3d05de60dcf3764142885206200b258be847ca4fd488e32e6dfe068d9270b",
+            "compiled_path": "tests/deflate-history-validation-probe/vendor/Checksum/IChecksum.cs",
+            "new_tree_patch": false,
+            "existing_history_patch": false
+        },
+        {
+            "upstream_path": "src/ICSharpCode.SharpZipLib/Core/Exceptions/SharpZipBaseException.cs",
+            "original_git_blob_sha1": "eb14e2d49f9aef92e483e4a6180656423762080b",
+            "original_sha256": "1824f4fb34890a1cb4a8c292f78a910cf8199ab6aa3bdf850aed9292a119a38e",
+            "history_sha256": "1824f4fb34890a1cb4a8c292f78a910cf8199ab6aa3bdf850aed9292a119a38e",
+            "candidate_sha256": "1824f4fb34890a1cb4a8c292f78a910cf8199ab6aa3bdf850aed9292a119a38e",
+            "compiled_path": "tests/deflate-history-validation-probe/vendor/Core/Exceptions/SharpZipBaseException.cs",
+            "new_tree_patch": false,
+            "existing_history_patch": false
+        },
+        {
+            "upstream_path": "src/ICSharpCode.SharpZipLib/Core/Exceptions/StreamDecodingException.cs",
+            "original_git_blob_sha1": "e22b11b0d164da18564233ca9cfa8b76d079bbc0",
+            "original_sha256": "8f62c5cfd77d9ed6295f362ad950f71b94d501285fd83fa5b3a581d1403f6f46",
+            "history_sha256": "8f62c5cfd77d9ed6295f362ad950f71b94d501285fd83fa5b3a581d1403f6f46",
+            "candidate_sha256": "8f62c5cfd77d9ed6295f362ad950f71b94d501285fd83fa5b3a581d1403f6f46",
+            "compiled_path": "tests/deflate-history-validation-probe/vendor/Core/Exceptions/StreamDecodingException.cs",
+            "new_tree_patch": false,
+            "existing_history_patch": false
+        },
+        {
+            "upstream_path": "src/ICSharpCode.SharpZipLib/Core/Exceptions/ValueOutOfRangeException.cs",
+            "original_git_blob_sha1": "d41cf988275043a10d7f605b8bb83d3bdef2b5ca",
+            "original_sha256": "ba3938db192c344ca9a383969ee856de254306c195fbd46ec4a2526b01964384",
+            "history_sha256": "ba3938db192c344ca9a383969ee856de254306c195fbd46ec4a2526b01964384",
+            "candidate_sha256": "ba3938db192c344ca9a383969ee856de254306c195fbd46ec4a2526b01964384",
+            "compiled_path": "tests/deflate-history-validation-probe/vendor/Core/Exceptions/ValueOutOfRangeException.cs",
+            "new_tree_patch": false,
+            "existing_history_patch": false
+        },
+        {
+            "upstream_path": "LICENSE.txt",
+            "original_git_blob_sha1": "f4597ac929a3206971bb0f8549cf937916082266",
+            "original_sha256": "d7fbbc16f871bf24fa5624c7eaf945054b778985f32676dcacba41fddca61133",
+            "history_sha256": "d7fbbc16f871bf24fa5624c7eaf945054b778985f32676dcacba41fddca61133",
+            "candidate_sha256": "d7fbbc16f871bf24fa5624c7eaf945054b778985f32676dcacba41fddca61133",
+            "compiled_path": "tests/deflate-history-validation-probe/vendor/LICENSE.txt",
+            "new_tree_patch": false,
+            "existing_history_patch": false
+        },
+        {
+            "upstream_path": "src/ICSharpCode.SharpZipLib/Zip/Compression/Deflater.cs",
+            "original_git_blob_sha1": "3dbe98c8d9bdc00fb73d90a75241545ed859ed79",
+            "original_sha256": "35f7e8dfc6534951279a18ffbe6f08bd60960ebb69414654de57fc306c6338c4",
+            "history_sha256": "35f7e8dfc6534951279a18ffbe6f08bd60960ebb69414654de57fc306c6338c4",
+            "candidate_sha256": "35f7e8dfc6534951279a18ffbe6f08bd60960ebb69414654de57fc306c6338c4",
+            "compiled_path": "tests/deflate-history-validation-probe/vendor/Zip/Compression/Deflater.cs",
+            "new_tree_patch": false,
+            "existing_history_patch": false
+        },
+        {
+            "upstream_path": "src/ICSharpCode.SharpZipLib/Zip/Compression/DeflaterEngine.cs",
+            "original_git_blob_sha1": "556911c4033cae8cc26fc758131b39d4bc403722",
+            "original_sha256": "5fbff1bbb0668c50cc9cf78a6757e071eb2b932d395beb0538fad78f786a9e0b",
+            "history_sha256": "5fbff1bbb0668c50cc9cf78a6757e071eb2b932d395beb0538fad78f786a9e0b",
+            "candidate_sha256": "5fbff1bbb0668c50cc9cf78a6757e071eb2b932d395beb0538fad78f786a9e0b",
+            "compiled_path": "tests/deflate-history-validation-probe/vendor/Zip/Compression/DeflaterEngine.cs",
+            "new_tree_patch": false,
+            "existing_history_patch": false
+        }
+    ],
+    "unchangedFiles": [
+        {
+            "path": "tests/deflate-history-validation-probe/NuGet.Config",
+            "head": "c47013b9277a2ff91ee6879cc520947d1b754ac3",
+            "sha256": "fafadef85f8fbc5e04d0edc0474dee3f993ef63d76694294ddb0eb656b8f64e1"
+        },
+        {
+            "path": "tests/deflate-history-validation-probe/Program.cs",
+            "head": "c47013b9277a2ff91ee6879cc520947d1b754ac3",
+            "sha256": "193e680c0e91b04bda8fe268ea1a4882ceab12e19042eac4fa86f0f8a7e2302d"
+        },
+        {
+            "path": "tests/deflate-history-validation-probe/RawProbe.cs",
+            "head": "c47013b9277a2ff91ee6879cc520947d1b754ac3",
+            "sha256": "3a0868addef3f297ddaf271d83afce055e73489246f3f3c599c1797f92dfeabe"
+        },
+        {
+            "path": "tests/deflate-history-validation-probe/SHA256SUMS",
+            "head": "c47013b9277a2ff91ee6879cc520947d1b754ac3",
+            "sha256": "a34d0599e1acf77b7a51a8fa032ea08d50f700f13ac44fb9dee60c800c5627ce"
+        },
+        {
+            "path": "tests/deflate-history-validation-probe/Zipelo.HistoryProbe.csproj",
+            "head": "c47013b9277a2ff91ee6879cc520947d1b754ac3",
+            "sha256": "8f6e311c4239b19b3c61e54d10a1c740b392a0fb2a07a4fc7fb3ff56e6289fdf"
+        },
+        {
+            "path": "tests/deflate-history-validation-probe/contract.json",
+            "head": "c47013b9277a2ff91ee6879cc520947d1b754ac3",
+            "sha256": "38d5b261ce5bef81004dc3391d6230f489a26f4046e2e40db45cf6161f82d645"
+        },
+        {
+            "path": "tests/deflate-history-validation-probe/history-validation.patch",
+            "head": "c47013b9277a2ff91ee6879cc520947d1b754ac3",
+            "sha256": "a4fdd90b93da48da7a1724f116b19d250c68b00f2891dd0d07bcd72b493408b7"
+        },
+        {
+            "path": "tests/deflate-history-validation-probe/provenance.json",
+            "head": "c47013b9277a2ff91ee6879cc520947d1b754ac3",
+            "sha256": "c4d550ed8c83eedbe0b4a1ca55f9f62bac77a5278996cbda9c776d4abb3d8b84"
+        },
+        {
+            "path": "tests/deflate-history-validation-probe/vendor/Checksum/Adler32.cs",
+            "head": "c47013b9277a2ff91ee6879cc520947d1b754ac3",
+            "sha256": "659c93673e5d13e1f17db211b5dad1b953f16b3c4552df465ad2e7b290bf4ccc"
+        },
+        {
+            "path": "tests/deflate-history-validation-probe/vendor/Checksum/IChecksum.cs",
+            "head": "c47013b9277a2ff91ee6879cc520947d1b754ac3",
+            "sha256": "32b3d05de60dcf3764142885206200b258be847ca4fd488e32e6dfe068d9270b"
+        },
+        {
+            "path": "tests/deflate-history-validation-probe/vendor/Core/Exceptions/SharpZipBaseException.cs",
+            "head": "c47013b9277a2ff91ee6879cc520947d1b754ac3",
+            "sha256": "1824f4fb34890a1cb4a8c292f78a910cf8199ab6aa3bdf850aed9292a119a38e"
+        },
+        {
+            "path": "tests/deflate-history-validation-probe/vendor/Core/Exceptions/StreamDecodingException.cs",
+            "head": "c47013b9277a2ff91ee6879cc520947d1b754ac3",
+            "sha256": "8f62c5cfd77d9ed6295f362ad950f71b94d501285fd83fa5b3a581d1403f6f46"
+        },
+        {
+            "path": "tests/deflate-history-validation-probe/vendor/Core/Exceptions/ValueOutOfRangeException.cs",
+            "head": "c47013b9277a2ff91ee6879cc520947d1b754ac3",
+            "sha256": "ba3938db192c344ca9a383969ee856de254306c195fbd46ec4a2526b01964384"
+        },
+        {
+            "path": "tests/deflate-history-validation-probe/vendor/LICENSE.txt",
+            "head": "c47013b9277a2ff91ee6879cc520947d1b754ac3",
+            "sha256": "d7fbbc16f871bf24fa5624c7eaf945054b778985f32676dcacba41fddca61133"
+        },
+        {
+            "path": "tests/deflate-history-validation-probe/vendor/Zip/Compression/Deflater.cs",
+            "head": "c47013b9277a2ff91ee6879cc520947d1b754ac3",
+            "sha256": "35f7e8dfc6534951279a18ffbe6f08bd60960ebb69414654de57fc306c6338c4"
+        },
+        {
+            "path": "tests/deflate-history-validation-probe/vendor/Zip/Compression/DeflaterConstants.cs",
+            "head": "c47013b9277a2ff91ee6879cc520947d1b754ac3",
+            "sha256": "99386bd2339eb6a45c9c11f1096a038d71f5fd403d8806f7d028711f5d78d983"
+        },
+        {
+            "path": "tests/deflate-history-validation-probe/vendor/Zip/Compression/DeflaterEngine.cs",
+            "head": "c47013b9277a2ff91ee6879cc520947d1b754ac3",
+            "sha256": "5fbff1bbb0668c50cc9cf78a6757e071eb2b932d395beb0538fad78f786a9e0b"
+        },
+        {
+            "path": "tests/deflate-history-validation-probe/vendor/Zip/Compression/DeflaterHuffman.cs",
+            "head": "c47013b9277a2ff91ee6879cc520947d1b754ac3",
+            "sha256": "318219fbb9b6dd56b6443024b88c04fa1ed69eb9c952d2a69118559998f45d12"
+        },
+        {
+            "path": "tests/deflate-history-validation-probe/vendor/Zip/Compression/DeflaterPending.cs",
+            "head": "c47013b9277a2ff91ee6879cc520947d1b754ac3",
+            "sha256": "a8815ccc4e203b32bf7a2785b6b1b6d204b4e0621ebfb5f8e3cb7d9f29c8e10a"
+        },
+        {
+            "path": "tests/deflate-history-validation-probe/vendor/Zip/Compression/Inflater.cs",
+            "head": "c47013b9277a2ff91ee6879cc520947d1b754ac3",
+            "sha256": "03d71ba116df441a962ae11473af40725a0273f6bbec9e14073e84f88f517e44"
+        },
+        {
+            "path": "tests/deflate-history-validation-probe/vendor/Zip/Compression/InflaterDynHeader.cs",
+            "head": "c47013b9277a2ff91ee6879cc520947d1b754ac3",
+            "sha256": "6c0e651185f27f4e92d02fa74df2fd4c2fd4b7edcb49781089f9a11c7f808eb2"
+        },
+        {
+            "path": "tests/deflate-history-validation-probe/vendor/Zip/Compression/InflaterHuffmanTree.cs",
+            "head": "c47013b9277a2ff91ee6879cc520947d1b754ac3",
+            "sha256": "3529df0ca4eff9a43017e08d89f8295ce052d77086a9f29618e35da88dd522d7"
+        },
+        {
+            "path": "tests/deflate-history-validation-probe/vendor/Zip/Compression/PendingBuffer.cs",
+            "head": "c47013b9277a2ff91ee6879cc520947d1b754ac3",
+            "sha256": "1e3a8d5d1b81ddf24fe05a51644213b259c1dd9d0473f90804ae71fd28f7f5a1"
+        },
+        {
+            "path": "tests/deflate-history-validation-probe/vendor/Zip/Compression/Streams/OutputWindow.cs",
+            "head": "c47013b9277a2ff91ee6879cc520947d1b754ac3",
+            "sha256": "2e16f3b7f0fbb0ee7ec187a62a3d9a479b2ce732612ecf8ce30bb1a072314895"
+        },
+        {
+            "path": "tests/deflate-history-validation-probe/vendor/Zip/Compression/Streams/StreamManipulator.cs",
+            "head": "c47013b9277a2ff91ee6879cc520947d1b754ac3",
+            "sha256": "5d6dbd9dee806e34a853ab8c6f68d6a1a2cb33148f28c1ad23857f960bd47e94"
+        },
+        {
+            "path": "tests/deflate-stateful-validation/Fixtures.cs",
+            "head": "188047b4ce4bb555114e9045ea5f20e43283cbb8",
+            "sha256": "fe6d762dcdfdacaeaeed08dd738458e43cba3b33cf16be3daa88c9161c8673b4"
+        },
+        {
+            "path": "tests/deflate-stateful-validation/HistoryAliases.cs",
+            "head": "188047b4ce4bb555114e9045ea5f20e43283cbb8",
+            "sha256": "c4bb5f61d825961a2b83bc10de734b5977addbf41d1ea2361fc8bd5430943212"
+        },
+        {
+            "path": "tests/deflate-stateful-validation/NuGet.Config",
+            "head": "188047b4ce4bb555114e9045ea5f20e43283cbb8",
+            "sha256": "bcc893bead312e9bf4d7e24ce2f4b7bb1940d6ac41ce4936649457c64bb6ff28"
+        },
+        {
+            "path": "tests/deflate-stateful-validation/Program.cs",
+            "head": "188047b4ce4bb555114e9045ea5f20e43283cbb8",
+            "sha256": "0acb8fae973e86d71b46af6d5a3c3f15e288ae87040a2812c4bef9eca8f416b1"
+        },
+        {
+            "path": "tests/deflate-stateful-validation/SHA256SUMS",
+            "head": "188047b4ce4bb555114e9045ea5f20e43283cbb8",
+            "sha256": "7a24bc7825822535330c31bbd0626a92a1d58b16800ec3c8f51a6cb3f2375733"
+        },
+        {
+            "path": "tests/deflate-stateful-validation/StateDriver.cs",
+            "head": "188047b4ce4bb555114e9045ea5f20e43283cbb8",
+            "sha256": "83bc92e2f669e7dd9fa8c0405a50721e0013cb6d4ac3a1f0a244655648f59ba9"
+        },
+        {
+            "path": "tests/deflate-stateful-validation/Zipelo.StatefulProbe.csproj",
+            "head": "188047b4ce4bb555114e9045ea5f20e43283cbb8",
+            "sha256": "cef821ca2f07ca488aa87eef2ad22fc5bb0dd62ee9956e86e7f6db80a527716d"
+        },
+        {
+            "path": "tests/deflate-stateful-validation/contract.json",
+            "head": "188047b4ce4bb555114e9045ea5f20e43283cbb8",
+            "sha256": "031ec020c7a8754e04f66055d82361989c5467b739ea820ea5f5b0334883034c"
+        },
+        {
+            "path": "tests/deflate-stateful-validation/provenance.json",
+            "head": "188047b4ce4bb555114e9045ea5f20e43283cbb8",
+            "sha256": "90b1cd4db0f1d3ac371ae7ca479d8b75d4c9ab1a4f97853cd44c31db5bf95fe1"
+        },
+        {
+            "path": "tests/deflate-stateful-validation/stateful.patch",
+            "head": "188047b4ce4bb555114e9045ea5f20e43283cbb8",
+            "sha256": "04aad2ceea52bc55803113607d10e53009935dfd3ba1d150652a5f49ce4bfe09"
+        },
+        {
+            "path": "tests/dynamic-deflate-corpus/Corpus.cs",
+            "head": "6b00aa4ba662ccd99cf4a7fa23bc82ddd350eccb",
+            "sha256": "d1d040628908b6d76b6ec38cd3df6eedd10103d31704601f045f98da3f7b3919"
+        },
+        {
+            "path": "tests/dynamic-deflate-corpus/FixtureWriter.cs",
+            "head": "6b00aa4ba662ccd99cf4a7fa23bc82ddd350eccb",
+            "sha256": "07cd36575b8480352bd34b5d8850adf7ba88a2e0207a896a2a9cb980a880cb9b"
+        },
+        {
+            "path": "tests/dynamic-deflate-corpus/NuGet.Config",
+            "head": "6b00aa4ba662ccd99cf4a7fa23bc82ddd350eccb",
+            "sha256": "026d16a16d2935475ad6b679752acd549757d489cdca32c1a919acccbbc35920"
+        },
+        {
+            "path": "tests/dynamic-deflate-corpus/Program.cs",
+            "head": "6b00aa4ba662ccd99cf4a7fa23bc82ddd350eccb",
+            "sha256": "87a46b9f2a5bbb268813f041f0379ed2adfcdc02264c7e8fb1855f7020c8452b"
+        },
+        {
+            "path": "tests/dynamic-deflate-corpus/SHA256SUMS",
+            "head": "6b00aa4ba662ccd99cf4a7fa23bc82ddd350eccb",
+            "sha256": "10bd658de2a8fcadf9a62be1698442bace70d29342cac23b5e2a9289658775fd"
+        },
+        {
+            "path": "tests/dynamic-deflate-corpus/Zipelo.DynamicDeflateCorpus.csproj",
+            "head": "6b00aa4ba662ccd99cf4a7fa23bc82ddd350eccb",
+            "sha256": "bb5ecffd721459fa1c5f4a243216401562f391851375ea94c2df7cbfe2c0238f"
+        },
+        {
+            "path": "tests/dynamic-deflate-corpus/contract.json",
+            "head": "6b00aa4ba662ccd99cf4a7fa23bc82ddd350eccb",
+            "sha256": "7fde00c4b4b86c66f88e4dfc5b96d5a39543853ab280469db4de51692aac57d7"
+        },
+        {
+            "path": "tests/dynamic-deflate-corpus/expectations.json",
+            "head": "6b00aa4ba662ccd99cf4a7fa23bc82ddd350eccb",
+            "sha256": "da76ba2d1e2fcceb967f6cc0195502986995947a9974034a79bac62439eaa174"
+        },
+        {
+            "path": "tests/dynamic-deflate-corpus/provenance.json",
+            "head": "6b00aa4ba662ccd99cf4a7fa23bc82ddd350eccb",
+            "sha256": "10f8a5f5f6435871a2b62f407559602bbcc5ed9b77e4c8a8d072a2c19becba1a"
+        }
+    ],
+    "newFiles": [
+        "tests/deflate-tree-validation-probe/ExtraFixtures.cs",
+        "tests/deflate-tree-validation-probe/NuGet.Config",
+        "tests/deflate-tree-validation-probe/Program.cs",
+        "tests/deflate-tree-validation-probe/SHA256SUMS",
+        "tests/deflate-tree-validation-probe/Zipelo.TreeProbe.csproj",
+        "tests/deflate-tree-validation-probe/contract.json",
+        "tests/deflate-tree-validation-probe/library/Zipelo.TreeCandidate.csproj",
+        "tests/deflate-tree-validation-probe/library/vendor/Zip/Compression/Inflater.cs",
+        "tests/deflate-tree-validation-probe/library/vendor/Zip/Compression/InflaterDynHeader.cs",
+        "tests/deflate-tree-validation-probe/library/vendor/Zip/Compression/InflaterHuffmanTree.cs",
+        "tests/deflate-tree-validation-probe/provenance.json",
+        "tests/deflate-tree-validation-probe/tree-validation.patch"
+    ],
+    "newFileHashes": [
+        {
+            "path": "tests/deflate-tree-validation-probe/ExtraFixtures.cs",
+            "sha256": "6dace3c549d2c7b13bd82776d55706566b86735dc29e887a23f8a6d691a99e0c"
+        },
+        {
+            "path": "tests/deflate-tree-validation-probe/NuGet.Config",
+            "sha256": "fafadef85f8fbc5e04d0edc0474dee3f993ef63d76694294ddb0eb656b8f64e1"
+        },
+        {
+            "path": "tests/deflate-tree-validation-probe/Program.cs",
+            "sha256": "062346dc115297674a4f7681a98a6fc45477fec282e3fe9d7e7e44ae3453894e"
+        },
+        {
+            "path": "tests/deflate-tree-validation-probe/Zipelo.TreeProbe.csproj",
+            "sha256": "e700de5f59531b7bbae2e97a2b41b80d6e30d3ebaff55582b948b0f19debee79"
+        },
+        {
+            "path": "tests/deflate-tree-validation-probe/contract.json",
+            "sha256": "14772a140e695ce15cda6018c7d90749be7a7b13ed657e2625939377aa393d75"
+        },
+        {
+            "path": "tests/deflate-tree-validation-probe/library/Zipelo.TreeCandidate.csproj",
+            "sha256": "359c108519130b09ebe038208b912997620e2e4b0b32310964697dcd4fe87378"
+        },
+        {
+            "path": "tests/deflate-tree-validation-probe/library/vendor/Zip/Compression/Inflater.cs",
+            "sha256": "efd1434aa5f921e023d0f67a58f825131b319aea620512cea5ec1299e4f9d5fb"
+        },
+        {
+            "path": "tests/deflate-tree-validation-probe/library/vendor/Zip/Compression/InflaterDynHeader.cs",
+            "sha256": "24b9ed8694ff0702a3af7cd07cf77f73300acd616911b91ae1bb7a9f4cf4841a"
+        },
+        {
+            "path": "tests/deflate-tree-validation-probe/library/vendor/Zip/Compression/InflaterHuffmanTree.cs",
+            "sha256": "f08d017f6608c5c4f6d2a95e90bb3e749a258f1b32e86f4548edd33128194a6d"
+        },
+        {
+            "path": "tests/deflate-tree-validation-probe/tree-validation.patch",
+            "sha256": "4c5b336d9e7478464c40481e80eb3db861ae7369ec5e9042ae9dae7f90e47ef6"
+        }
+    ],
+    "patches": {
+        "tree": "tests/deflate-tree-validation-probe/tree-validation.patch",
+        "treePatchSha256": "4c5b336d9e7478464c40481e80eb3db861ae7369ec5e9042ae9dae7f90e47ef6",
+        "history": "tests/deflate-history-validation-probe/history-validation.patch",
+        "historyPatchSha256": "a4fdd90b93da48da7a1724f116b19d250c68b00f2891dd0d07bcd72b493408b7",
+        "application": "tree-validation.patch는 library/vendor3개 경로에 원본 전체 바이트가 있을 때 적용함. 원본은 고정 history vendor와 동일함. 나머지13개 컴파일 소스와 LICENSE는 기존 경로를 링크하고 복제하지 않음. 기존 OutputWindow 수정 바이트와 history patch는 불변임."
+    },
+    "license": "tests/deflate-history-validation-probe/vendor/LICENSE.txt",
+    "format": "기존 상류3파일의 BOM/탭/주석/고지를 그대로 보존하고 승인한 로직만 변경함.",
+    "counts": {
+        "unchangedFiles": 44,
+        "newFiles": 12,
+        "allFiles": 56,
+        "candidateCompileSources": 16,
+        "newModifiedUpstreamSources": 3,
+        "linkedUpstreamSources": 13,
+        "probeCompileSources": 4
+    },
+    "verification": "원격 고정 tree와 로컬44개 파일의 Git blob 일치를 확인한 후 작성함. 컴파일, fixture emit와 실행은 중앙 검증에 남아 있음."
+}

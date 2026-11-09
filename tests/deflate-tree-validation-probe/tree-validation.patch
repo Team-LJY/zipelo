@@ -1,0 +1,61 @@
+--- a/tests/deflate-tree-validation-probe/library/vendor/Zip/Compression/Inflater.cs
++++ b/tests/deflate-tree-validation-probe/library/vendor/Zip/Compression/Inflater.cs
+@@ -348,15 +348,12 @@
+ 							return false;
+ 						}
+ 
+-						try
+-						{
+-							repDist = CPDIST[symbol];
+-							neededBits = CPDEXT[symbol];
+-						}
+-						catch (Exception)
+-						{
+-							throw new SharpZipBaseException("Illegal rep dist code");
+-						}
++						if (symbol >= 30)
++						{
++							throw new StreamDecodingException("Illegal rep dist code");
++						}
++						repDist = CPDIST[symbol];
++						neededBits = CPDEXT[symbol];
+ 
+ 						goto case DECODE_HUFFMAN_DISTBITS; // fall through
+ 
+--- a/tests/deflate-tree-validation-probe/library/vendor/Zip/Compression/InflaterDynHeader.cs
++++ b/tests/deflate-tree-validation-probe/library/vendor/Zip/Compression/InflaterDynHeader.cs
+@@ -12,7 +12,7 @@
+ 		private const int LITLEN_MAX = 286;
+ 
+ 		// maximum number of distance codes
+-		private const int DIST_MAX = 30;
++		private const int DIST_MAX = 32;
+ 
+ 		// maximum data code lengths to read
+ 		private const int CODELEN_MAX = LITLEN_MAX + DIST_MAX;
+--- a/tests/deflate-tree-validation-probe/library/vendor/Zip/Compression/InflaterHuffmanTree.cs
++++ b/tests/deflate-tree-validation-probe/library/vendor/Zip/Compression/InflaterHuffmanTree.cs
+@@ -92,9 +92,23 @@
+ 			for (int i = 0; i < codeLengths.Count; i++)
+ 			{
+ 				int bits = codeLengths[i];
++				if (bits > MAX_BITLEN)
++				{
++					throw new StreamDecodingException("Invalid Huffman code length");
++				}
+ 				if (bits > 0)
+ 				{
+ 					blCount[bits]++;
++				}
++			}
++
++			int left = 1;
++			for (int bits = 1; bits <= MAX_BITLEN; bits++)
++			{
++				left = (left << 1) - blCount[bits];
++				if (left < 0)
++				{
++					throw new StreamDecodingException("Oversubscribed Huffman tree");
+ 				}
+ 			}
+ 
