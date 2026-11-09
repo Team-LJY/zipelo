@@ -111,7 +111,7 @@ internal static class ExtractionCases
 
     public static async Task InvalidZip(string root, string kind)
     {
-        var bytes = kind == "traversal" ? ZipFixture.Build(new("../escape", [1])) : ZipFixture.Build(Item);
+        var bytes = kind == "traversal" ? ZipFixture.Build(new FixtureEntry("../escape", [1])) : ZipFixture.Build(Item);
         if (kind == "crc") { bytes[30 + "payload.bin".Length] ^= 1; }
         if (kind == "truncated") { bytes = bytes[..^1]; }
         if (kind == "duplicate") { bytes = ZipFixture.Build(new("a", []), new("a", [])); }
