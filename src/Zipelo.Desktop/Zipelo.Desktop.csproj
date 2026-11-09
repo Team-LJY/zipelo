@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <OutputType>WinExe</OutputType>
+        <TargetFramework>net10.0-windows</TargetFramework>
+        <UseWPF>true</UseWPF>
+        <EnableWindowsTargeting>true</EnableWindowsTargeting>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <ApplicationManifest>app.manifest</ApplicationManifest>
+        <AssemblyName>Zipelo</AssemblyName>
+        <RootNamespace>Zipelo.Desktop</RootNamespace>
+    </PropertyGroup>
+    <PropertyGroup Condition="'$(ZipeloCreationValidation)' == 'true'">
+        <DefineConstants>$(DefineConstants);ZIPELO_CREATION_VALIDATION</DefineConstants>
+    </PropertyGroup>
+    <PropertyGroup Condition="'$(ZipeloExtractionValidation)' == 'true'">
+        <DefineConstants>$(DefineConstants);ZIPELO_EXTRACTION_VALIDATION</DefineConstants>
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="../Zipelo.Core/Zipelo.Core.csproj" />
+        <ProjectReference Include="../Zipelo.Runtime/Zipelo.Runtime.csproj" />
+        <ProjectReference Include="../Zipelo.Worker/Zipelo.Worker.csproj"
+            ReferenceOutputAssembly="false" Private="false"
+            GlobalPropertiesToRemove="PublishProfile;PublishProfileFullPath;PublishDir;OutputPath;OutDir;BaseOutputPath;BaseIntermediateOutputPath;IntermediateOutputPath;TargetDir"
+            AdditionalProperties="UseAppHost=true" />
+    </ItemGroup>
+    <Import Project="WorkerDeployment.targets" />
+</Project>

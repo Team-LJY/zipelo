@@ -1,0 +1,67 @@
+<Project>
+    <PropertyGroup>
+        <!-- 명시적으로 전달하는 게시 속성을 제거 목록에 중복하지 않음. -->
+        <_ZipeloWorkerPublishRemoveProperties>PublishProfile;PublishProfileFullPath;PublishUrl;OutputPath;OutDir;BaseOutputPath;BaseIntermediateOutputPath;IntermediateOutputPath;TargetDir;NoBuild;PublishSelfContained</_ZipeloWorkerPublishRemoveProperties>
+        <_ZipeloWorkerProject>$(MSBuildThisFileDirectory)../Zipelo.Worker/Zipelo.Worker.csproj</_ZipeloWorkerProject>
+    </PropertyGroup>
+
+    <Target Name="PrepareZipeloWorkerDeployment">
+        <PropertyGroup>
+            <_ZipeloWorkerSelfContained Condition="'$(SelfContained)' == ''">false</_ZipeloWorkerSelfContained>
+            <_ZipeloWorkerSelfContained Condition="'$(SelfContained)' != ''">$(SelfContained)</_ZipeloWorkerSelfContained>
+        </PropertyGroup>
+    </Target>
+
+    <!-- 개발 빌드의 작업자 출력을 앱 기준 고정 하위 폴더에 배치함. -->
+    <Target Name="StageZipeloWorkerForBuild" AfterTargets="Build" DependsOnTargets="PrepareZipeloWorkerDeployment"
+        Condition="'$(DesignTimeBuild)' != 'true' And ('$(OS)' == 'Windows_NT' Or '$(RuntimeIdentifier)' == 'win-x64')">
+        <MSBuild Projects="$(_ZipeloWorkerProject)" Targets="GetTargetPath"
+            RemoveProperties="TargetFramework;PublishProfile;PublishProfileFullPath;PublishDir;OutputPath;OutDir;BaseOutputPath;BaseIntermediateOutputPath;IntermediateOutputPath;TargetDir"
+            Properties="Configuration=$(Configuration);TargetFramework=net10.0;RuntimeIdentifier=$(RuntimeIdentifier);SelfContained=$(_ZipeloWorkerSelfContained);UseAppHost=true">
+            <Output TaskParameter="TargetOutputs" ItemName="_ZipeloWorkerTargetPath" />
+        </MSBuild>
+        <Error Condition="'@(_ZipeloWorkerTargetPath)' == ''" Text="작업자 출력 위치를 확인하지 못했습니다." />
+        <PropertyGroup>
+            <_ZipeloWorkerBuildDirectory>@(_ZipeloWorkerTargetPath->'%(RootDir)%(Directory)')</_ZipeloWorkerBuildDirectory>
+        </PropertyGroup>
+        <ItemGroup>
+            <_ZipeloWorkerBuildFile Include="$(_ZipeloWorkerBuildDirectory)**/*"
+                Exclude="$(_ZipeloWorkerBuildDirectory)publish/**/*" />
+        </ItemGroup>
+        <Error Condition="!Exists('$(_ZipeloWorkerBuildDirectory)Zipelo.Worker.exe') Or !Exists('$(_ZipeloWorkerBuildDirectory)Zipelo.Worker.dll') Or !Exists('$(_ZipeloWorkerBuildDirectory)Zipelo.Worker.runtimeconfig.json') Or !Exists('$(_ZipeloWorkerBuildDirectory)Zipelo.Worker.deps.json') Or !Exists('$(_ZipeloWorkerBuildDirectory)Zipelo.Core.dll') Or !Exists('$(_ZipeloWorkerBuildDirectory)Zipelo.Runtime.dll')"
+            Text="작업자 필수 빌드 파일이 누락되었습니다. Desktop과 작업자를 같은 구성으로 빌드하세요." />
+        <Copy SourceFiles="@(_ZipeloWorkerBuildFile)"
+            DestinationFiles="@(_ZipeloWorkerBuildFile->'$(TargetDir)worker/%(RecursiveDir)%(Filename)%(Extension)')"
+            SkipUnchangedFiles="true" />
+    </Target>
+
+    <!-- 최종 배치는 UI 게시 위치 아래에 SDK가 같은 RID로 별도 게시하도록 함. -->
+    <Target Name="PublishZipeloWorker" AfterTargets="Publish" DependsOnTargets="PrepareZipeloWorkerDeployment"
+        Condition="'$(DesignTimeBuild)' != 'true' And ('$(OS)' == 'Windows_NT' Or '$(RuntimeIdentifier)' == 'win-x64')">
+        <Error Condition="'$(PublishDir)' == ''" Text="Windows UI 게시 출력 디렉터리가 비어 있습니다." />
+        <PropertyGroup>
+            <_ZipeloWorkerPublishSelfContained>$(_ZipeloWorkerSelfContained)</_ZipeloWorkerPublishSelfContained>
+            <_ZipeloWorkerPublishSelfContained Condition="'$(PublishSelfContained)' != ''">$(PublishSelfContained)</_ZipeloWorkerPublishSelfContained>
+            <_ZipeloWorkerPublishStage>$([System.IO.Path]::GetFullPath('$(IntermediateOutputPath)', '$(MSBuildProjectDirectory)'))/zipelo-worker-publish/$([System.Guid]::NewGuid())/</_ZipeloWorkerPublishStage>
+            <_ZipeloWorkerPublishDirectory>$([System.IO.Path]::GetFullPath('$(PublishDir)', '$(MSBuildProjectDirectory)'))/worker/</_ZipeloWorkerPublishDirectory>
+        </PropertyGroup>
+        <!-- 이번 게시의 새 SDK 출력만 수집하며 이전 bin/publish를 검색하지 않음. -->
+        <MakeDir Directories="$(_ZipeloWorkerPublishStage)" />
+        <MSBuild Projects="$(_ZipeloWorkerProject)" Targets="Publish"
+            RemoveProperties="$(_ZipeloWorkerPublishRemoveProperties)"
+            Properties="Configuration=$(Configuration);TargetFramework=net10.0;RuntimeIdentifier=$(RuntimeIdentifier);SelfContained=$(_ZipeloWorkerPublishSelfContained);UseAppHost=true;PublishSingleFile=false;PublishTrimmed=false;PublishAot=false;PublishDir=$(_ZipeloWorkerPublishStage)" />
+        <ItemGroup>
+            <_ZipeloWorkerPublishRequired Include="$(_ZipeloWorkerPublishStage)Zipelo.Worker.exe;$(_ZipeloWorkerPublishStage)Zipelo.Worker.dll;$(_ZipeloWorkerPublishStage)Zipelo.Worker.deps.json;$(_ZipeloWorkerPublishStage)Zipelo.Worker.runtimeconfig.json;$(_ZipeloWorkerPublishStage)Zipelo.Core.dll;$(_ZipeloWorkerPublishStage)Zipelo.Runtime.dll" />
+            <_ZipeloWorkerPublishRequired Include="$(_ZipeloWorkerPublishStage)System.Private.CoreLib.dll;$(_ZipeloWorkerPublishStage)coreclr.dll;$(_ZipeloWorkerPublishStage)clrjit.dll;$(_ZipeloWorkerPublishStage)hostfxr.dll;$(_ZipeloWorkerPublishStage)hostpolicy.dll"
+                Condition="'$(_ZipeloWorkerPublishSelfContained)' == 'true'" />
+        </ItemGroup>
+        <Error Condition="!Exists('%(_ZipeloWorkerPublishRequired.Identity)')" Text="Windows 작업자 필수 게시 파일이 누락되었습니다: %(_ZipeloWorkerPublishRequired.Filename)%(_ZipeloWorkerPublishRequired.Extension)" />
+        <ItemGroup>
+            <_ZipeloWorkerPublishedFile Include="$(_ZipeloWorkerPublishStage)**/*" />
+        </ItemGroup>
+        <Copy SourceFiles="@(_ZipeloWorkerPublishedFile)"
+            DestinationFiles="@(_ZipeloWorkerPublishedFile->'$(_ZipeloWorkerPublishDirectory)%(RecursiveDir)%(Filename)%(Extension)')"
+            SkipUnchangedFiles="false" />
+        <RemoveDir Directories="$(_ZipeloWorkerPublishStage)" />
+    </Target>
+</Project>

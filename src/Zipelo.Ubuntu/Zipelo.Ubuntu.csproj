@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <AvaloniaUseCompiledBindingsByDefault>false</AvaloniaUseCompiledBindingsByDefault>
+        <AssemblyName>Zipelo.Ubuntu</AssemblyName>
+    </PropertyGroup>
+    <PropertyGroup Condition="'$(ZipeloCreationValidation)' == 'true'">
+        <DefineConstants>$(DefineConstants);ZIPELO_CREATION_VALIDATION</DefineConstants>
+    </PropertyGroup>
+    <PropertyGroup Condition="'$(ZipeloExtractionValidation)' == 'true'">
+        <DefineConstants>$(DefineConstants);ZIPELO_EXTRACTION_VALIDATION</DefineConstants>
+    </PropertyGroup>
+    <ItemGroup>
+        <Compile Include="../Zipelo.Desktop/ZipCreationWorkflow.cs" Link="Ui/ZipCreationWorkflow.cs" />
+        <Compile Include="../Zipelo.Desktop/ZipExtractionWorkflow.cs" Link="Ui/ZipExtractionWorkflow.cs" />
+        <Compile Include="../Zipelo.Desktop/ArchiveOpenArguments.cs" Link="Ui/ArchiveOpenArguments.cs" />
+        <PackageReference Include="Avalonia" Version="11.3.9" />
+        <PackageReference Include="Avalonia.Desktop" Version="11.3.9" />
+        <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.9" />
+        <!-- GHSA-xrw6-gwf8-vvr9 수정 백포트 버전으로 고정함. -->
+        <PackageReference Include="Tmds.DBus.Protocol" Version="[0.21.3]" />
+        <ProjectReference Include="../Zipelo.Core/Zipelo.Core.csproj" />
+        <ProjectReference Include="../Zipelo.Runtime/Zipelo.Runtime.csproj" />
+        <ProjectReference Include="../Zipelo.Worker/Zipelo.Worker.csproj"
+            ReferenceOutputAssembly="false" Private="false"
+            GlobalPropertiesToRemove="PublishProfile;PublishProfileFullPath;PublishDir;PublishUrl;OutputPath;OutDir;BaseOutputPath;BaseIntermediateOutputPath;IntermediateOutputPath;TargetDir;PublishSingleFile;PublishTrimmed;PublishAot"
+            AdditionalProperties="Configuration=$(Configuration);RuntimeIdentifier=$(RuntimeIdentifier);SelfContained=$(SelfContained);UseAppHost=true;PublishSingleFile=false;PublishTrimmed=false;PublishAot=false" />
+    </ItemGroup>
+    <Import Project="WorkerDeployment.targets" />
+</Project>

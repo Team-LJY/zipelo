@@ -1,0 +1,78 @@
+<Project>
+    <PropertyGroup>
+        <_UbuntuWorkerProject>$(MSBuildThisFileDirectory)../Zipelo.Worker/Zipelo.Worker.csproj</_UbuntuWorkerProject>
+        <_UbuntuWorkerRemoveProperties>PublishProfile;PublishProfileFullPath;PublishDir;PublishUrl;OutputPath;OutDir;BaseOutputPath;BaseIntermediateOutputPath;IntermediateOutputPath;TargetDir;NoBuild</_UbuntuWorkerRemoveProperties>
+        <!-- 명시적으로 전달하는 속성을 제거 목록에 중복하지 않음. -->
+        <_UbuntuWorkerPublishRemoveProperties>PublishProfile;PublishProfileFullPath;PublishUrl;OutputPath;OutDir;BaseOutputPath;BaseIntermediateOutputPath;IntermediateOutputPath;TargetDir;NoBuild;PublishSelfContained</_UbuntuWorkerPublishRemoveProperties>
+    </PropertyGroup>
+
+    <Target Name="PrepareUbuntuWorkerDeployment">
+        <PropertyGroup>
+            <_UbuntuWorkerSelfContained>$(SelfContained)</_UbuntuWorkerSelfContained>
+            <_UbuntuWorkerSelfContained Condition="'$(_UbuntuWorkerSelfContained)' == ''">false</_UbuntuWorkerSelfContained>
+            <_UbuntuWorkerWindows>false</_UbuntuWorkerWindows>
+            <_UbuntuWorkerWindows Condition="$([System.String]::Copy('$(RuntimeIdentifier)').StartsWith('win-')) Or ('$(RuntimeIdentifier)' == '' And '$(OS)' == 'Windows_NT')">true</_UbuntuWorkerWindows>
+            <_UbuntuWorkerAppHost>Zipelo.Worker</_UbuntuWorkerAppHost>
+            <_UbuntuWorkerAppHost Condition="'$(_UbuntuWorkerWindows)' == 'true'">Zipelo.Worker.exe</_UbuntuWorkerAppHost>
+        </PropertyGroup>
+    </Target>
+
+    <!-- 개발 배치는 같은 구성의 작업자 빌드 출력에서 실행 의존 파일만 복사함. -->
+    <Target Name="StageUbuntuWorkerForBuild" AfterTargets="Build" DependsOnTargets="PrepareUbuntuWorkerDeployment"
+        Condition="'$(DesignTimeBuild)' != 'true'">
+        <MSBuild Projects="$(_UbuntuWorkerProject)" Targets="GetTargetPath"
+            RemoveProperties="$(_UbuntuWorkerRemoveProperties)"
+            Properties="Configuration=$(Configuration);TargetFramework=net10.0;RuntimeIdentifier=$(RuntimeIdentifier);SelfContained=$(_UbuntuWorkerSelfContained);UseAppHost=true;PublishSingleFile=false;PublishTrimmed=false;PublishAot=false">
+            <Output TaskParameter="TargetOutputs" ItemName="_UbuntuWorkerTargetPath" />
+        </MSBuild>
+        <Error Condition="'@(_UbuntuWorkerTargetPath)' == ''" Text="Ubuntu 작업자의 빌드 출력 위치를 확인하지 못했습니다." />
+        <PropertyGroup>
+            <_UbuntuWorkerBuildDirectory>@(_UbuntuWorkerTargetPath->'%(RootDir)%(Directory)')</_UbuntuWorkerBuildDirectory>
+        </PropertyGroup>
+        <ItemGroup>
+            <_UbuntuWorkerBuildRequired Include="$(_UbuntuWorkerBuildDirectory)$(_UbuntuWorkerAppHost);$(_UbuntuWorkerBuildDirectory)Zipelo.Worker.dll;$(_UbuntuWorkerBuildDirectory)Zipelo.Worker.deps.json;$(_UbuntuWorkerBuildDirectory)Zipelo.Worker.runtimeconfig.json;$(_UbuntuWorkerBuildDirectory)Zipelo.Core.dll;$(_UbuntuWorkerBuildDirectory)Zipelo.Runtime.dll" />
+            <_UbuntuWorkerBuildRequired Include="$(_UbuntuWorkerBuildDirectory)System.Private.CoreLib.dll"
+                Condition="'$(_UbuntuWorkerSelfContained)' == 'true'" />
+        </ItemGroup>
+        <Error Condition="!Exists('%(_UbuntuWorkerBuildRequired.Identity)')" Text="Ubuntu 작업자 필수 빌드 파일이 누락되었습니다: %(_UbuntuWorkerBuildRequired.Filename)%(_UbuntuWorkerBuildRequired.Extension)" />
+        <ItemGroup>
+            <_UbuntuWorkerBuildFile Include="$(_UbuntuWorkerBuildDirectory)*.dll;$(_UbuntuWorkerBuildDirectory)*.so;$(_UbuntuWorkerBuildDirectory)*.so.*;$(_UbuntuWorkerBuildDirectory)$(_UbuntuWorkerAppHost);$(_UbuntuWorkerBuildDirectory)Zipelo.Worker.deps.json;$(_UbuntuWorkerBuildDirectory)Zipelo.Worker.runtimeconfig.json" />
+            <_UbuntuWorkerBuildFile Include="$(_UbuntuWorkerBuildDirectory)**/*.resources.dll"
+                Exclude="$(_UbuntuWorkerBuildDirectory)*.resources.dll" />
+        </ItemGroup>
+        <Copy SourceFiles="@(_UbuntuWorkerBuildFile)"
+            DestinationFiles="@(_UbuntuWorkerBuildFile->'$(TargetDir)worker/%(RecursiveDir)%(Filename)%(Extension)')"
+            SkipUnchangedFiles="true" />
+    </Target>
+
+    <!-- 최종 배치는 UI 게시 위치 아래에 SDK가 같은 RID로 별도 게시하도록 함. -->
+    <Target Name="PublishUbuntuWorker" AfterTargets="Publish" DependsOnTargets="PrepareUbuntuWorkerDeployment"
+        Condition="'$(DesignTimeBuild)' != 'true'">
+        <Error Condition="'$(RuntimeIdentifier)' != 'linux-x64'" Text="Ubuntu 최종 게시에는 명시적인 linux-x64 RID가 필요합니다." />
+        <Error Condition="'$(PublishDir)' == ''" Text="Ubuntu UI 게시 출력 디렉터리가 비어 있습니다." />
+        <PropertyGroup>
+            <_UbuntuWorkerPublishSelfContained>$(_UbuntuWorkerSelfContained)</_UbuntuWorkerPublishSelfContained>
+            <_UbuntuWorkerPublishSelfContained Condition="'$(PublishSelfContained)' != ''">$(PublishSelfContained)</_UbuntuWorkerPublishSelfContained>
+            <_UbuntuWorkerPublishStage>$([System.IO.Path]::GetFullPath('$(IntermediateOutputPath)', '$(MSBuildProjectDirectory)'))/zipelo-worker-publish/$([System.Guid]::NewGuid())/</_UbuntuWorkerPublishStage>
+            <_UbuntuWorkerPublishDirectory>$([System.IO.Path]::GetFullPath('$(PublishDir)', '$(MSBuildProjectDirectory)'))/worker/</_UbuntuWorkerPublishDirectory>
+        </PropertyGroup>
+        <!-- 이번 게시의 새 SDK 출력만 수집하며 이전 bin/publish를 검색하지 않음. -->
+        <MakeDir Directories="$(_UbuntuWorkerPublishStage)" />
+        <MSBuild Projects="$(_UbuntuWorkerProject)" Targets="Publish"
+            RemoveProperties="$(_UbuntuWorkerPublishRemoveProperties)"
+            Properties="Configuration=$(Configuration);TargetFramework=net10.0;RuntimeIdentifier=$(RuntimeIdentifier);SelfContained=$(_UbuntuWorkerPublishSelfContained);UseAppHost=true;PublishSingleFile=false;PublishTrimmed=false;PublishAot=false;PublishDir=$(_UbuntuWorkerPublishStage)" />
+        <ItemGroup>
+            <_UbuntuWorkerPublishRequired Include="$(_UbuntuWorkerPublishStage)Zipelo.Worker;$(_UbuntuWorkerPublishStage)Zipelo.Worker.dll;$(_UbuntuWorkerPublishStage)Zipelo.Worker.deps.json;$(_UbuntuWorkerPublishStage)Zipelo.Worker.runtimeconfig.json;$(_UbuntuWorkerPublishStage)Zipelo.Core.dll;$(_UbuntuWorkerPublishStage)Zipelo.Runtime.dll" />
+            <_UbuntuWorkerPublishRequired Include="$(_UbuntuWorkerPublishStage)System.Private.CoreLib.dll;$(_UbuntuWorkerPublishStage)libcoreclr.so;$(_UbuntuWorkerPublishStage)libclrjit.so;$(_UbuntuWorkerPublishStage)libhostfxr.so;$(_UbuntuWorkerPublishStage)libhostpolicy.so"
+                Condition="'$(_UbuntuWorkerPublishSelfContained)' == 'true'" />
+        </ItemGroup>
+        <Error Condition="!Exists('%(_UbuntuWorkerPublishRequired.Identity)')" Text="Ubuntu 작업자 필수 게시 파일이 누락되었습니다: %(_UbuntuWorkerPublishRequired.Filename)%(_UbuntuWorkerPublishRequired.Extension)" />
+        <ItemGroup>
+            <_UbuntuWorkerPublishedFile Include="$(_UbuntuWorkerPublishStage)**/*" />
+        </ItemGroup>
+        <Copy SourceFiles="@(_UbuntuWorkerPublishedFile)"
+            DestinationFiles="@(_UbuntuWorkerPublishedFile->'$(_UbuntuWorkerPublishDirectory)%(RecursiveDir)%(Filename)%(Extension)')"
+            SkipUnchangedFiles="false" />
+        <RemoveDir Directories="$(_UbuntuWorkerPublishStage)" />
+    </Target>
+</Project>
