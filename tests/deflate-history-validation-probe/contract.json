@@ -3,7 +3,7 @@
     "baseCommit": "018e7593ecb2b3a7ae0bc17a440ecf2c0de8b4dd",
     "status": "미검증 테스트 전용 수정본임. 정식 SharpZipLib 패키지나 제품 검증기가 아님.",
     "scope": [
-        "upstream 14개 소스와 MIT 고지를 그대로 보존하되 OutputWindow만 수정함.",
+        "upstream 16개 소스와 MIT 고지를 그대로 보존하되 OutputWindow만 수정함.",
         "PR #15, 생산 코드, NuGet 원본과 cache에 연결하지 않음.",
         "BCL 결합, GZip 파서와 게시, 성능 측정은 제외함."
     ],
@@ -18,7 +18,7 @@
     ],
     "sourcePolicy": [
         "provenance.json은 원본 Git blob SHA-1과 원본/수정 바이트 SHA-256을 기록함.",
-        "history-validation.patch는 원본에서 수정본으로 가는 정확한 unified diff임. 나머지 13개 소스와 LICENSE.txt는 바이트 일치해야 함.",
+        "history-validation.patch는 원본에서 수정본으로 가는 정확한 unified diff임. 나머지 15개 소스와 LICENSE.txt는 바이트 일치해야 함.",
         "vendor 내부 형식, BOM, 기존 영어 주석과 고지는 원본 보존을 위해 변경하지 않음.",
         "원본 MIT 전문과 Copyright 2000-2018 SharpZipLib Contributors를 vendor/LICENSE.txt에 보존함.",
         "별도 assembly 이름을 사용하고 NuGet 패키지 ID/서명/배포물로 위장하지 않음. 원본과 비교 시 별도 프로세스 또는 명시적 assembly alias를 사용함.",
@@ -63,5 +63,21 @@
         "최종 독립 corpus 대조",
         "zlib dictionary 통합 경로의 별도 검증",
         "전체 Deflate 문법과 보안 정확성 검토 및 정식 채택 판단"
-    ]
+    ],
+    "dependencyCorrection": {
+        "previousHead": "96264a6c2b41f37638c914b41e8dec6b6f338411",
+        "previousStatus": "정적 검토에서 Deflater 타입 의존성 누락이 발견된 미실행 후보임. 중앙 build/test는 시작되지 않았음.",
+        "addedSources": [
+            "vendor/Zip/Compression/Deflater.cs",
+            "vendor/Zip/Compression/DeflaterEngine.cs"
+        ],
+        "scope": "고정 upstream 커밋의 전체 원본 두 파일과 기존 고지를 보존함. DeflateStrategy는 DeflaterEngine.cs에 정의됨. 상수 대체나 가짜 타입, 함수 추출은 하지 않음.",
+        "counts": {
+            "upstreamSources": 16,
+            "compileItems": 18,
+            "projectFiles": 25
+        },
+        "patch": "OutputWindow 패치와 기존 회귀 코드는 변경하지 않음. 추가 소스의 원본/수정 해시는 같음.",
+        "validation": "정적 의존성 검토만 수행함. 복원, 빌드와 실행은 중앙에 남아 있음."
+    }
 }

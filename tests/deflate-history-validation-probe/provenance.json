@@ -124,7 +124,51 @@
             "original_sha256": "d7fbbc16f871bf24fa5624c7eaf945054b778985f32676dcacba41fddca61133",
             "modified_sha256": "d7fbbc16f871bf24fa5624c7eaf945054b778985f32676dcacba41fddca61133",
             "changed": false
+        },
+        {
+            "upstream_path": "src/ICSharpCode.SharpZipLib/Zip/Compression/Deflater.cs",
+            "local_path": "vendor/Zip/Compression/Deflater.cs",
+            "git_blob_sha1": "3dbe98c8d9bdc00fb73d90a75241545ed859ed79",
+            "original_sha256": "35f7e8dfc6534951279a18ffbe6f08bd60960ebb69414654de57fc306c6338c4",
+            "modified_sha256": "35f7e8dfc6534951279a18ffbe6f08bd60960ebb69414654de57fc306c6338c4",
+            "changed": false
+        },
+        {
+            "upstream_path": "src/ICSharpCode.SharpZipLib/Zip/Compression/DeflaterEngine.cs",
+            "local_path": "vendor/Zip/Compression/DeflaterEngine.cs",
+            "git_blob_sha1": "556911c4033cae8cc26fc758131b39d4bc403722",
+            "original_sha256": "5fbff1bbb0668c50cc9cf78a6757e071eb2b932d395beb0538fad78f786a9e0b",
+            "modified_sha256": "5fbff1bbb0668c50cc9cf78a6757e071eb2b932d395beb0538fad78f786a9e0b",
+            "changed": false
         }
     ],
-    "reason": "유효 이력 기반 거리 검사와 상태 변경 전 용량 검사를 추가함. 복사와 비트 해석 알고리즘은 유지함."
+    "reason": "유효 이력 기반 거리 검사와 상태 변경 전 용량 검사를 추가함. 복사와 비트 해석 알고리즘은 유지함.",
+    "dependency_review": {
+        "superseded_head": "96264a6c2b41f37638c914b41e8dec6b6f338411",
+        "reason": "기존 미실행 후보에서 Inflater의 Deflater.DEFLATED 참조에 필요한 전체 소스가 누락됨.",
+        "source_count": 16,
+        "compile_count": 18,
+        "added_edges": {
+            "Inflater.cs": [
+                "Deflater.DEFLATED"
+            ],
+            "Deflater.cs": [
+                "DeflaterEngine",
+                "DeflateStrategy (DeflaterEngine.cs)",
+                "DeflaterPending",
+                "DeflaterConstants"
+            ],
+            "DeflaterEngine.cs": [
+                "DeflateStrategy (same file)",
+                "DeflaterPending",
+                "DeflaterHuffman",
+                "DeflaterConstants",
+                "Adler32",
+                "SharpZipBaseException (DebugDeflation conditional)"
+            ]
+        },
+        "closure": "추가 두 파일의 사용자 정의 타입은 같은 파일 또는 기존 14개 소스에 정의됨. 기존 소스의 생성자, 상속, 정적 타입 참조도 재검토함. BCL과 중첩 타입은 별도 외부 패키지를 요구하지 않음.",
+        "limit": "정적 검토이며 컴파일 성공은 아직 검증하지 않음.",
+        "patch": "추가 원본 두 파일은 변경하지 않음. history-validation.patch는 OutputWindow에만 적용되며 바이트 그대로 유지함."
+    }
 }

@@ -17,6 +17,8 @@
         <Compile Include="vendor/Zip/Compression/Inflater.cs" />
         <Compile Include="vendor/Zip/Compression/InflaterDynHeader.cs" />
         <Compile Include="vendor/Zip/Compression/InflaterHuffmanTree.cs" />
+        <Compile Include="vendor/Zip/Compression/Deflater.cs" />
+        <Compile Include="vendor/Zip/Compression/DeflaterEngine.cs" />
         <Compile Include="vendor/Zip/Compression/DeflaterConstants.cs" />
         <Compile Include="vendor/Zip/Compression/DeflaterHuffman.cs" />
         <Compile Include="vendor/Zip/Compression/DeflaterPending.cs" />
