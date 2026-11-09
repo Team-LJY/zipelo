@@ -1,0 +1,125 @@
+{
+    "schemaVersion": 1,
+    "repository": "Team-LJY/zipelo",
+    "branch": "fix/deflate-incomplete-tree-fixtures",
+    "baseCommit": "018e7593ecb2b3a7ae0bc17a440ecf2c0de8b4dd",
+    "authoringStatus": "source/provenance/해시와 정적검사만 작성함. 복원/컴파일/실행/VM/새패키지/생성자료 업로드 없음.",
+    "ownership": "tests/deflate-incomplete-tree-fixtures만 추가함. 기존PR23/24와 decoder/main/제품 소스는 변경하지 않음.",
+    "frozenSource": {
+        "pr": 23,
+        "commit": "a1e939cab850d7f8fca03bb90a3e10471618b5b9",
+        "manifestSha256": "67833eb8d9f585225cd150b5e66b928c87bcba6aafea96df1313a162ad1c200b",
+        "files": {
+            "frozen-pr23/FixtureWriter.cs": {
+                "sourcePath": "tests/deflate-prefix-fixtures/FixtureWriter.cs",
+                "sha256": "ebecc9c79a5495801b2f7179e9284656127e4e90249975d147648a74d5af57fe",
+                "gitBlob": "a4146ac7ac6802269193b2f3bec496530b58627d"
+            },
+            "frozen-pr23/Fixtures.cs": {
+                "sourcePath": "tests/deflate-prefix-fixtures/Fixtures.cs",
+                "sha256": "4a955fdb795e466cc5817d293361d8a69e2d8368dde50300a6298fe56aef1a01",
+                "gitBlob": "ee719a8c5b6ae5fdcb4c51c95f503c35dfde6bba"
+            },
+            "frozen-pr23/Spec.cs": {
+                "sourcePath": "tests/deflate-prefix-fixtures/Spec.cs",
+                "sha256": "a36b1522e08644c9604549f3fad322e1d9b3ab6ab0a79a462b6988e368c407b9",
+                "gitBlob": "286d04b7103310a522c51a5d5fc567fb8054da17"
+            },
+            "frozen-pr23/expectations.json": {
+                "sourcePath": "tests/deflate-prefix-fixtures/expectations.json",
+                "sha256": "3fa1e73dfe68cfc2f0fbe5e768c408ab98928b32c51a6e59d93e4747278f42cb",
+                "gitBlob": "4d96a3b723d000a40137b4a96a3d1892c2a0f3d0"
+            }
+        }
+    },
+    "adaptedSources": {
+        "FixtureWriter.cs": {
+            "sourcePath": "tests/deflate-prefix-fixtures/FixtureWriter.cs",
+            "sourceSha256": "ebecc9c79a5495801b2f7179e9284656127e4e90249975d147648a74d5af57fe"
+        },
+        "Spec.cs": {
+            "sourcePath": "tests/deflate-prefix-fixtures/Spec.cs",
+            "sourceSha256": "a36b1522e08644c9604549f3fad322e1d9b3ab6ab0a79a462b6988e368c407b9"
+        },
+        "corpus/Program.cs": {
+            "sourcePath": "tests/deflate-prefix-fixtures/corpus/Program.cs",
+            "sourceSha256": "bd21f5cbc789dac5e0ecf36565885e62065c2a41403040dce3f122e886833fab"
+        },
+        "harness/Driver.cs": {
+            "sourcePath": "tests/deflate-prefix-fixtures/harness/Driver.cs",
+            "sourceSha256": "de202af2dc442f1fb0f67d313931e3b60c2956a2a0f766a6992a082dcc44d842"
+        },
+        "harness/Decoder.cs": {
+            "sourcePath": "tests/deflate-prefix-fixtures/harness/Decoder.cs",
+            "sourceSha256": "4e55893c724b4f1ae62d79a5fb35e96bb448e4b1b7914ffa3b1484164f9667a1"
+        },
+        "harness/DriverRegression.cs": {
+            "sourcePath": "tests/deflate-prefix-fixtures/harness/DriverRegression.cs",
+            "sourceSha256": "1d8259694897155ed5dc1d2bb0a4cdfc4420b2d9ad08f6d68d90fe0a681c040f"
+        },
+        "harness/Program.cs": {
+            "sourcePath": "tests/deflate-prefix-fixtures/harness/Program.cs",
+            "sourceSha256": "12f5ab0e902e3593de69090a886df61e0081e02186c17f2e2bfcfc78f301e1b0"
+        }
+    },
+    "adaptation": "Driver.cs와Decoder.cs는 namespace만바꿈. 새Spec은namespace와기대값파일명만바꿈. 작성기와CLI/회귀는14개정책표본과추가진단에맞춰최소조정함. frozen4파일은바이트그대로이며7개중5개만새corpus에노출함.",
+    "basis": [
+        {
+            "source": "RFC1951",
+            "url": "https://www.rfc-editor.org/rfc/rfc1951.html",
+            "sections": [
+                "3.1.1",
+                "3.2.1",
+                "3.2.2",
+                "3.2.7",
+                "3.3"
+            ],
+            "use": "비트/canonical/fullbinary정의와명시적거리예외/HDIST범위의근거임."
+        },
+        {
+            "source": "zlib1.3.1 inftrees.c",
+            "url": "https://github.com/madler/zlib/blob/v1.3.1/inftrees.c#L107",
+            "use": "불완전집합검사와빈집합sentinel경로의정적대조임. reference거부만을규격oracle로쓰지않음."
+        },
+        {
+            "source": "zlib1.3.1 puff.c",
+            "url": "https://github.com/madler/zlib/blob/v1.3.1/contrib/puff/puff.c#L604",
+            "use": "EOB-only허용설명/트리별검사/빈CODES지연거부경로를구분함."
+        },
+        {
+            "source": "zlib1.3.1 inflate.c",
+            "url": "https://github.com/madler/zlib/blob/v1.3.1/inflate.c#L898",
+            "use": "default HDIST30제한과빈CODES호출부추적임. 실행관찰로주장하지않음."
+        }
+    ],
+    "sourceLayout": "별도corpus/harness csproj/obj/bin이며공통Spec만컴파일함. corpus는고정PR23작성기4파일을포함하고harness는작성기를포함하지않음. PackageReference/ProjectReference없음. NuGet.Config는packageSources를비움.",
+    "fileList": [
+        "FixtureWriter.cs",
+        "Fixtures.cs",
+        "NuGet.Config",
+        "SHA256SUMS",
+        "Spec.cs",
+        "contract.json",
+        "corpus/Program.cs",
+        "corpus/Zipelo.IncompleteCorpus.csproj",
+        "frozen-pr23/FixtureWriter.cs",
+        "frozen-pr23/Fixtures.cs",
+        "frozen-pr23/Spec.cs",
+        "frozen-pr23/expectations.json",
+        "harness/Decoder.cs",
+        "harness/Driver.cs",
+        "harness/DriverRegression.cs",
+        "harness/Program.cs",
+        "harness/Zipelo.IncompleteProbe.csproj",
+        "policy-expectations.json",
+        "provenance.json"
+    ],
+    "limits": [
+        "빌드/실행 미검증",
+        "raw해시 생성/실행 없음",
+        "reference의오류계층/선행읽기는논리경계와다름",
+        "EOB길이2/10 Wait41은전체길이열완료를기다리는시험단계계약임",
+        "긴불완전tree구성/수용정책과subtreezero raw도달미해결",
+        "생산채택차단"
+    ]
+}

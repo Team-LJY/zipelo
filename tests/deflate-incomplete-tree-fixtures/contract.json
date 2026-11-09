@@ -1,0 +1,245 @@
+{
+    "schemaVersion": 1,
+    "scope": "불완전 Huffman tree 수용 정책의 독립 raw corpus14개와 외부 고정 SharpZipLib 호환 DLL 실행기임. decoder 구현이나 제품 연결을 포함하지 않음.",
+    "status": "소스 작성과 정적 검사만 수행함. 복원/컴파일/spec/emit/자체회귀/decoder 실행은 중앙 검증에 남아 있음.",
+    "counts": {
+        "fixtures": 14,
+        "valid": 6,
+        "invalid": 8,
+        "inherited": 5,
+        "newFixtures": 9,
+        "matrix": 168,
+        "gated": 52,
+        "trueEof": 6,
+        "totalAcceptanceTrialsPerDecoder": 226,
+        "normalCompletionTrials": 92,
+        "formattedRejectionTrials": 128,
+        "trueEofControls": 6,
+        "scheduledCheckpointAssertions": 88,
+        "driverRegressions": 50,
+        "separateDelayedObservations": 6,
+        "arithmetic": "14*3입력*2출력*2꼬리=168, checkpoint가 있는13개*2출력*2꼬리=52, 정상3개EOF*2출력=6으로226임. checkpoint22개*4=88은 계획 수이며 실제 방문 수가 아님. 정상92+형식거부128+EOF6=226임. 직접회귀8시간+7경계*2출력*3응답=50과 빈CODES지연관찰6은226에 합산하지 않음."
+    },
+    "policies": {
+        "codes": {
+            "accepted": "길이0..7, 활성 코드의 Kraft합1인 완전한 트리임.",
+            "rejected": "불완전/빈 집합과 singleton을 거부함.",
+            "layer": "CODES 선언을 읽은 뒤 길이열 해독 전에 검증하는 계약임."
+        },
+        "lens": {
+            "accepted": "길이0..15의 완전한 트리 또는 EOB256만 길이1임. EOB는 필수임.",
+            "rejected": "EOB-only 길이2/10 등 예외 밖의 양수 Kraft잔여량을 거부함.",
+            "layer": "전체 LL/D 길이열을 읽은 뒤 LENS 구성에서 본문 전에 거부하는 계약임."
+        },
+        "dists": {
+            "accepted": "완전한 트리, 단일1비트 코드, 실제로 사용되지 않는 빈 트리임.",
+            "rejected": "미사용이라도 단일길이2와 [2,2]를 구성 단계에서 거부함. 빈트리는 실제 거리 참조 때 거부함.",
+            "layer": "불완전 선언은 DISTS 구성 단계, 빈거리 실제 참조는 거리 해독 단계임. LL에 길이257이 존재한다는 이유만으로 빈거리를 거부하지 않음."
+        },
+        "sourceDistinction": "RFC3.2.1의 두 자식 트리 정의에서 완전성 요구를 해석함. 거리 단일1비트/미사용빈트리는 RFC3.2.7에 직접 기술됨. LENS EOB-only1비트 예외는 puff의 설명과 reference검사에서 더 명확하며 동일 수준의 RFC 직접 문구라고 주장하지 않음. reference의 거부만을 규격 oracle로 쓰지 않음.",
+        "references": "zlib1.3.1 inftrees는 비어 있지 않은 불완전 CODES와 최대길이1이 아닌 불완전 LENS/DISTS를 거부함. 빈집합은 invalid sentinel을 만들고 성공을 반환함. puff construct도 빈집합 성공 뒤 decode실패 경로가 있음. 빈CODES의 생성 시점 즉시거부와 reference호출부의 지연거부/EOF를 구분함.",
+        "hdist": "HDIST값30/31은31/32개 선언임. 추가 예약거리 길이0과 미사용을 정상대조로 유지함. default zlib/puff의 거리개수30제한 거부는 호환성 관찰이며 이 정상 기대를 뒤집지 않음. 이 harness는 zlib C ABI adapter가 아니며 외부 SharpZipLib 공개 API만 연결함.",
+        "limit": "[1,10] 생성자 정적 추적을 실제 raw 도달 증명으로 사용하지 않음. 긴 불완전 트리 구성 문제와 실제 subtree zero-slot raw 도달은 미해결이며 생산 채택은 차단함."
+    },
+    "encoding": {
+        "header": "H(N,D,M)는 BFINAL1/BTYPE2/HLIT=N-257/HDIST=D-1/HCLEN14와 RFC순서 첫18개 meta길이로 총71비트임. LL/D 길이는 반복코드 없이 직접 기록함.",
+        "metaOrder": [
+            16,
+            17,
+            18,
+            0,
+            8,
+            7,
+            9,
+            6,
+            10,
+            5,
+            11,
+            4,
+            12,
+            3,
+            13,
+            2,
+            14,
+            1
+        ],
+        "bitOrder": "정수필드는LSB-first, canonical코드는MSB-first이며 바이트의낮은비트부터채움. 마지막상위패딩은0임.",
+        "inherited": "frozen-pr23의4파일은 PR23 a1e939ca와 바이트 그대로임. 고정작성기가 만든7개 중 지정5개를 raw/hash/token/trees/spec까지 그대로 복사하여 emit함. 원래5개 기대값과 checkpoint도 JSON전체동등성을 검사함.",
+        "inheritedIds": [
+            "valid.eob-only",
+            "valid.single-distance",
+            "valid.empty-distance-unused",
+            "invalid.empty-distance-reference",
+            "valid.subtree-split"
+        ],
+        "recipes": [
+            {
+                "id": "invalid.lens-eob-2",
+                "meta": {
+                    "0": 1,
+                    "2": 1
+                },
+                "suffix": "0^256 | 1 | 0 | 00",
+                "arithmetic": "71+258=329 선언; 본문2; 구성끝331/raw42"
+            },
+            {
+                "id": "invalid.lens-eob-10",
+                "meta": {
+                    "0": 1,
+                    "10": 1
+                },
+                "suffix": "0^256 | 1 | 0 | 0^10",
+                "arithmetic": "71+258=329 선언; 본문10; 구성끝339/raw43"
+            },
+            {
+                "id": "invalid.dists-pair-used",
+                "meta": {
+                    "0": 1,
+                    "1": 2,
+                    "2": 2
+                },
+                "suffix": "0^65 | 10 | 0^190 | (11)^4 | 0 | 11 | 00 | 10",
+                "arithmetic": "71+65+2+190+8=336 선언; 본문7; 구성끝343/raw43"
+            },
+            {
+                "id": "invalid.codes-incomplete",
+                "meta": {
+                    "0": 2,
+                    "1": 2
+                },
+                "suffix": "(00)^256 | 01 | 00 | 0",
+                "arithmetic": "CODES선언71; 명목상길이열516로DataStart587; 본문1; 구성끝588/raw74"
+            },
+            {
+                "id": "invalid.codes-empty",
+                "meta": {},
+                "suffix": "",
+                "arithmetic": "빈CODES선언71; 길이열/본문 없음; 구성끝71/raw9; 상위패딩1비트"
+            },
+            {
+                "id": "valid.hdist31",
+                "meta": {
+                    "0": 1,
+                    "1": 1
+                },
+                "suffix": "0^256 | 1 | 1 | 0^30 | 0",
+                "arithmetic": "71+288=359 선언; EOB1; 끝360/raw45"
+            },
+            {
+                "id": "valid.hdist32",
+                "meta": {
+                    "0": 1,
+                    "1": 1
+                },
+                "suffix": "0^256 | 1 | 1 | 0^31 | 0",
+                "arithmetic": "71+289=360 선언; EOB1; 끝361/raw46"
+            },
+            {
+                "id": "invalid.dists-singleton-2-unused",
+                "meta": {
+                    "0": 1,
+                    "1": 2,
+                    "2": 2
+                },
+                "suffix": "0^256 | 10 | 11 | 0",
+                "arithmetic": "71+256+2+2=331 선언; EOB1; 구성끝332/raw42"
+            },
+            {
+                "id": "invalid.dists-pair-unused",
+                "meta": {
+                    "0": 1,
+                    "1": 2,
+                    "2": 2
+                },
+                "suffix": "0^65 | 10 | 0^190 | (11)^4 | 10",
+                "arithmetic": "71+65+2+190+8=336 선언; EOB2; 구성끝338/raw43"
+            }
+        ],
+        "meaning": "^n은n회반복, |는연결, 생략길이는0임. 무효표본의EndBitExclusive는구성끝이지성공EOB위치가아님. DataStartBit는명목상본문시작이며 빈CODES는헤더끝을가리킴. FaultStartBit는잘못된선언구간시작, DecisiveEndBit는이시험의검증단계경계이며최초정보이론적무효확정시점이아님.",
+        "hashes": "raw해시는중앙emitter가생성한입력의식별값이며 독립hash oracle로주장하지않음. 출력해시는직접고정패턴으로계산함. 생성raw/emit/log/binary는업로드하지않음."
+    },
+    "gates": {
+        "newInvalid": "새 무효7개는 Wait8->Reject9(CODES2개) 또는 Wait41->Reject42(LENS2개/DISTS3개)임. Wait는output0/consumed=offered/remaining0이고 Reject는출력0/미완료/형식예외가필요함.",
+        "codes": "71비트 선언을 포함하는9바이트를 공급함. 빈CODES는패딩1비트, 불완전CODES는후속길이열의첫비트가함께들어감. 정확한bit별API시점시험이아님.",
+        "lens": "329비트는LL/D전체길이열완료경계임. 42바이트에는k2의본문전체와패딩, k10의본문7비트가함께있음. k10은43번째바이트를공급하기전에거부해야함.",
+        "dists": "[2,2]는336비트=42바이트여서본문을주지않고거부함. singleton2는331비트여서42바이트안에EOB1과패딩4비트가동반됨.",
+        "waitLimitation": "Wait41은대상이전체LL/D길이열을읽은뒤검증하는단계계약임. EOB길이2/10의LL자체는328비트에서이미무효일수있으므로 이Wait를모든규격준수구현의필수행동이나아직정상완성이가능하다는증명으로해석하지않음. 더이른형식거부는이경계시험에서는UnvisitedCheckpoint실패로기록하되규격위반으로단정하지않음.",
+        "inherited": "기존5개는원래gate를그대로보존함. 빈거리참조의Reject42에는새Wait를끼워넣지않음. 정상subtree의Wait108/109/110과뒤입력정상완료를유지함.",
+        "validHdist": "31개는Wait44,32개는Wait45에서output0/consumed=offered/remaining0을확인한뒤정상완료함.",
+        "consumption": "기존5개의소비기대는그대로임. 새무효matrix는ceil(선언경계/8)..rawLength 범위만허용하고추가tail은소비불가임. gated는offered상한과counter불변식으로9또는42바이트를넘을수없음. 이바이트범위를논리비트소비나모든reference의prefetch량과동일시하지않음. 형식예외만으로내부검증계층을인증하지않으며gate와무출력을함께확인함.",
+        "outcome": "Budget/EOF/Timeout/NoProgress/NoProgressLimit/ArrayError/거짓Complete/배열예외는형식화된거부로세지않음. trueEOF대조의통과는잘림감지계약임. 계획checkpoint88과실제방문수는구분함."
+    },
+    "execution": {
+        "inputs": [
+            1,
+            7,
+            "전체"
+        ],
+        "outputs": [
+            1,
+            257
+        ],
+        "tailBytes": [
+            0,
+            1
+        ],
+        "pump": "기존PR23 Driver를namespace만바꾸어재사용함. Inflate로먼저배출하고미완료/반환0/NeedInput일때만SetInput함. 실패인스턴스는폐기함.",
+        "limits": {
+            "externalSecondsPerProcess": 60,
+            "cooperativeSecondsPerTrial": 5,
+            "cumulativeOutputBytesPerTrial": 65536,
+            "callsPerTrial": 100000,
+            "guardBytesEachSide": 16
+        },
+        "finally": "throw에도TotalOut증가분/출력해시/불일치/guard/미보고출력/입력불변/카운터를수집함. 호출전과반환/throw후및완료후stability전후의5초검사를보존함. 비반환호출은외부60초제한이담당함.",
+        "completion": "정상은정확한출력/길이/해시와TotalIn=rawLength/Finished가필요함. 완료후Inflate의출력/소비/잔여/상태불변을검사함.",
+        "binding": "절대외부DLL경로와SHA256을먼저확인하고동일assembly의공개Inflater/SetInput/Inflate/속성만연결함. private반사나내부table변조없음.",
+        "output": "기본실행은decoder식별1+observation226+summary1행임. 전부충족시exit0,실패exit1,잘못된CLIexit2임. corpus기본은명세요약1행, --emit은14행임. --self-test는50개제어mock회귀+summary로decoder시험에합산하지않음.",
+        "diagnostic": "--observe-empty-codes는기본226조건대신빈CODESraw9바이트에0바이트33개를붙여입력1/7/전체와출력1/257의6관찰만실행함. 이꼬리는정상길이열이나성공데이터가아님. 추가gate없이drain-first를유지하므로조기거부시꼬리가미공급일수있음. strictContractSatisfied는원래소비범위계약이며지연거부를즉시거부통과로올리지않음. exit0은제어위반없이관찰수집을마쳤다는뜻이며Eof/거짓Complete는기록대상일뿐형식거부성공이아님. Budget/Timeout/배열/불변식/예상밖예외등은진단실행도exit1임.",
+        "commands": [
+            "dotnet restore tests/deflate-incomplete-tree-fixtures/corpus/Zipelo.IncompleteCorpus.csproj --configfile tests/deflate-incomplete-tree-fixtures/NuGet.Config --packages <project-root>/tests/.incomplete-cache -p:NuGetAudit=false",
+            "dotnet restore tests/deflate-incomplete-tree-fixtures/harness/Zipelo.IncompleteProbe.csproj --configfile tests/deflate-incomplete-tree-fixtures/NuGet.Config --packages <project-root>/tests/.incomplete-cache -p:NuGetAudit=false",
+            "dotnet build tests/deflate-incomplete-tree-fixtures/corpus/Zipelo.IncompleteCorpus.csproj -c Release --no-restore",
+            "dotnet build tests/deflate-incomplete-tree-fixtures/harness/Zipelo.IncompleteProbe.csproj -c Release --no-restore",
+            "dotnet tests/deflate-incomplete-tree-fixtures/corpus/bin/Release/net10.0/Zipelo.IncompleteCorpus.dll",
+            "dotnet tests/deflate-incomplete-tree-fixtures/corpus/bin/Release/net10.0/Zipelo.IncompleteCorpus.dll --emit > <project-root>/tests/.incomplete-run/fixtures.jsonl",
+            "dotnet tests/deflate-incomplete-tree-fixtures/harness/bin/Release/net10.0/Zipelo.IncompleteProbe.dll --self-test",
+            "dotnet tests/deflate-incomplete-tree-fixtures/harness/bin/Release/net10.0/Zipelo.IncompleteProbe.dll --assembly <absolute-pinned-decoder-DLL> --sha256 <measured-DLL-SHA256> --corpus <project-root>/tests/.incomplete-run/fixtures.jsonl",
+            "dotnet tests/deflate-incomplete-tree-fixtures/harness/bin/Release/net10.0/Zipelo.IncompleteProbe.dll --assembly <absolute-pinned-decoder-DLL> --sha256 <measured-DLL-SHA256> --corpus <project-root>/tests/.incomplete-run/fixtures.jsonl --observe-empty-codes",
+            "dotnet tests/deflate-incomplete-tree-fixtures/corpus/bin/Release/net10.0/Zipelo.IncompleteCorpus.dll --invalid",
+            "dotnet tests/deflate-incomplete-tree-fixtures/harness/bin/Release/net10.0/Zipelo.IncompleteProbe.dll --invalid"
+        ],
+        "centralOnly": "각 명령은중앙에서기존SDK10.0.403/runtime10.0.14/참조팩으로offline수행함. 모든명령에외부60초프로세스제한과종료/잔류확인을적용함. 새다운로드/패키지/VM설치없음. 생성/캐시/emit은프로젝트tests아래에만둠.",
+        "comparisons": [
+            {
+                "pr": 24,
+                "head": "2b0ed428804f0d52ed3bfe998f06e13751da0de8",
+                "assembly": "Zipelo.Experimental.SharpZipLibZeroSlotCandidate",
+                "providedCentralSha256": "9ae0a2d7bce612f885c85f0f22b94f7be15de650a120ae2ed7d1857119d88a5a"
+            },
+            {
+                "pr": 22,
+                "head": "a22cfd52998349772a408f74b368c2744fd3088a",
+                "assembly": "Zipelo.Experimental.SharpZipLibTreeCandidate"
+            },
+            {
+                "pr": 17,
+                "head": "c47013b9277a2ff91ee6879cc520947d1b754ac3",
+                "assembly": "Zipelo.Experimental.SharpZipLibHistoryProbe"
+            },
+            {
+                "upstream": "SharpZipLib1.4.2",
+                "source": "33f64eb0f28cdd2b084cb822fcc224c7c5aba553",
+                "assembly": "ICSharpCode.SharpZipLib"
+            }
+        ],
+        "recording": "소스head/manifest/DLL/emit해시와OS/SDK/runtime/실제조건별결과를기록함. 다른PR의유한통과결과를이14개시험결과로이월하지않음. 원래5개raw/hash/token/출력/소비/완료기대의동등성을중앙에서PR23고정emit과대조함."
+    },
+    "exclusions": [
+        "기존PR/decoder수정",
+        "생산연결/main병합/공개배포",
+        "전체안전성/보안인증",
+        "실제subtreezero raw도달증명",
+        "생성raw/emit/log/binary업로드"
+    ]
+}
