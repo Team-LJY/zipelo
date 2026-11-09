@@ -1,0 +1,185 @@
+{
+    "schemaVersion": 1,
+    "status": "source-only; restore/build/execution pending central validation; adoption blocked",
+    "candidate": {
+        "branch": "features/deflate-zero-slot-probe",
+        "parentCommit": "a22cfd52998349772a408f74b368c2744fd3088a",
+        "assemblyName": "Zipelo.Experimental.SharpZipLibZeroSlotCandidate",
+        "project": "tests/deflate-zero-slot-probe/library/Zipelo.ZeroSlotCandidate.csproj",
+        "dll": "tests/deflate-zero-slot-probe/library/bin/Release/net10.0/Zipelo.Experimental.SharpZipLibZeroSlotCandidate.dll",
+        "sha256": "Measure built DLL centrally; source hashes are not DLL hashes."
+    },
+    "scope": {
+        "decoderChanges": "Exactly three symbol == 0 guards after full-subtree, partial-subtree and partial-root lookup, before DropBits; existing SharpZipBaseException/message reused.",
+        "preserved": [
+            "Existing full-root guard",
+            "Nonzero incomplete leaf returns -1 without DropBits",
+            "Negative short-root subtree pointer returns -1",
+            "BuildTree, fields and incomplete-tree acceptance policy",
+            "PR22 HDIST/reserved-distance/Kraft patches",
+            "History OutputWindow patch",
+            "All baseline sources and original seven external raw fixtures"
+        ],
+        "excluded": [
+            "Production connection",
+            "Blanket left != 0 rejection",
+            "Canonical metadata arrays",
+            "Private table mutation",
+            "Decoder replacement"
+        ]
+    },
+    "directProbe": {
+        "project": "tests/deflate-zero-slot-probe/Zipelo.ZeroSlotProbe.csproj",
+        "assembly": "Zipelo.Experimental.DeflateZeroSlotValidation",
+        "cases": 19,
+        "exitCodes": {
+            "0": "19 passed",
+            "1": "One or more failed, including wrong exception or cooperative timeout",
+            "2": "Any arguments supplied"
+        },
+        "bounds": {
+            "externalProcessSeconds": 60,
+            "cooperativeCaseSeconds": 5,
+            "checks": "Elapsed checked after return/throw; external deadline handles nonreturning calls. Finite 19 cases, two repeated waits each, at most one symbol after each continuation."
+        },
+        "oracle": "Public StreamManipulator bit setup and literal expected codewords, no private table mutation. These are constructor/GetSymbol tests, not raw DEFLATE streams or whole-stream IsFinished proofs.",
+        "completeTreeLengths": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            11
+        ],
+        "casesDetail": [
+            {
+                "name": "candidate-identity",
+                "count": 1,
+                "expected": "Tree, Inflater and StreamManipulator bind to candidate assembly"
+            },
+            {
+                "name": "empty-tree-zero-bits-reject",
+                "count": 1,
+                "lengths": [
+                    0
+                ],
+                "expected": "Construction allowed; first GetSymbol throws exact SharpZipBaseException with Encountered invalid codelength 0; no bit consumption"
+            },
+            {
+                "name": "single-zero-bits-wait-then-symbol-zero",
+                "count": 1,
+                "lengths": [
+                    1
+                ],
+                "expected": "Two -1 returns at zero bits; append byte 0; symbol 0, consumes 1 bit, 7 zero bits remain"
+            },
+            {
+                "name": "complete-tree-symbol-zero",
+                "count": 1,
+                "lengths": [
+                    1,
+                    1
+                ],
+                "expected": "One exact zero bit decodes symbol 0 and consumes one bit"
+            },
+            {
+                "name": "single-unused-partial/full-root-reject",
+                "count": 2,
+                "lengths": [
+                    1
+                ],
+                "availableBits": [
+                    1,
+                    9
+                ],
+                "prefix": "all ones",
+                "expected": "Exact base exception/message; all bits preserved"
+            },
+            {
+                "name": "partial-subtree-complete-ten-bit-leaf",
+                "count": 1,
+                "canonical": "1111111110",
+                "wireLowBits": 511,
+                "availableBits": 10,
+                "expectedSymbol": 9,
+                "remainingBits": 0
+            },
+            {
+                "name": "full-subtree-complete-eleven-bit-leaf",
+                "count": 1,
+                "canonical": "11111111110",
+                "wireLowBits": 1023,
+                "availableBits": 11,
+                "expectedSymbol": 10,
+                "remainingBits": 0
+            },
+            {
+                "name": "complete-tree-wait-n-then-eleven-bit-leaf",
+                "count": 11,
+                "prefixBits": "n = 0..10",
+                "canonicalPrefix": "n ones",
+                "expected": "Two -1 returns with prefix and bit count unchanged; append 11-n ones and byte padding; decode symbol 11 (11111111111); remaining n + 8*ceil((11-n)/8) - 11 zero bits"
+            }
+        ],
+        "inputGuard": "Every supplied array compared with its pre-call clone in finally, including rejection. Wrong exceptions are failures."
+    },
+    "centralExecution": {
+        "environment": "Existing SDK 10.0.403, Windows26300 and Ubuntu26.04.1 runtime10.0.14; no new package acquisition",
+        "workingDirectory": "Repository root of immutable candidate checkout",
+        "commands": [
+            "dotnet restore tests/deflate-zero-slot-probe/Zipelo.ZeroSlotProbe.csproj --configfile tests/deflate-zero-slot-probe/NuGet.Config",
+            "dotnet build tests/deflate-zero-slot-probe/Zipelo.ZeroSlotProbe.csproj -c Release --no-restore",
+            "dotnet tests/deflate-zero-slot-probe/bin/Release/net10.0/Zipelo.Experimental.DeflateZeroSlotValidation.dll",
+            "dotnet tests/deflate-zero-slot-probe/bin/Release/net10.0/Zipelo.Experimental.DeflateZeroSlotValidation.dll --invalid"
+        ],
+        "expectedWarnings": "Inherited serialization warning SYSLIB0051 may remain in library; report exact build warnings without suppressing them.",
+        "processDeadline": "Run each process through central external 60-second controller; timeout is failure, never typed Deflate rejection.",
+        "hashGate": "Verify SHA256SUMS from repository root before build; record all input hashes and candidate DLL SHA256 before and after each OS run. Run the identical portable assembly on both OSes."
+    },
+    "externalPrefixHarness": {
+        "repository": "Team-LJY/zipelo",
+        "pr": 23,
+        "pin": "Resolve and record separately reviewed immutable PR23 head and manifest before central execution; do not silently use moving branch or assume original 9ebd4fd7 includes new gates.",
+        "command": "dotnet <pinned-prefix-harness.dll> --assembly <absolute-Zipelo.Experimental.SharpZipLibZeroSlotCandidate.dll> --sha256 <actual-64-hex-DLL-SHA256> --corpus <centrally-emitted-pinned-seven-line-corpus.jsonl>",
+        "expectedConditions": 114,
+        "rawFixtures": 7,
+        "requiredCheckpoints": [
+            "EOB unused: Wait41 -> Reject42 before extra tail",
+            "Single distance unused: Wait43 -> Reject44 before extra tail",
+            "Valid subtree: Wait108/109/110 then exact completion",
+            "Empty distance actual-use immediate rejection including zero available distance bits"
+        ],
+        "checkpointMeaning": "Byte-supply API boundaries, not an RFC guarantee of exact per-bit error timing. Added checkpoints do not add trials.",
+        "limits": "Drain-first; input 1/7/all plus gated boundaries; output 1/257; 64KiB cumulative output, no-progress guard, cooperative 5 seconds after return/throw and stability probe, external 60 seconds. Budget/timeout/no-progress/array errors/false completion/EOF for invalid fixtures are not accepted typed Deflate rejection. Preserve explicit real-EOF negative controls.",
+        "evidence": "Central alone emits corpus and executes. Never upload generated corpus, logs, screenshots or binaries. Existing seven raw/expected values remain unchanged."
+    },
+    "centralComparisons": {
+        "method": "In isolated comparison copies only, change library binding or the matching HuffmanTree vendor file to this candidate; hash-check all other source/fixture files and existing alias/assembly contracts. Never modify fixed baseline branches.",
+        "expectedCounts": {
+            "PR17-direct": 78,
+            "PR16": 330,
+            "PR18-inherited": 184,
+            "PR18-integration": 162,
+            "PR19-stateful": 220,
+            "PR20-dynamic": 270,
+            "PR22-primary": 352
+        },
+        "status": "Required central regression evidence, not executed by author."
+    },
+    "limitations": {
+        "normalPreservation": "Only complete trees, one-bit single codes, unused empty distance trees and actually tested conditions.",
+        "unresolved": [
+            "Arbitrary under-subscribed long-tree construction and acceptance policy",
+            "Raw reachability of full/partial subtree zero slots"
+        ],
+        "staticExample": "Lengths [1,10] pass range/Kraft guards, but code interval [32768,32832) has equal 0x1ff80-masked endpoints; subtree allocation is omitted and fill uses zero as pointer. Constructor-level static analysis only, not an executed RFC-valid raw counterexample.",
+        "proofBoundary": "Contiguous canonical [0,K) intervals and zero-extension minimum imply impossible prefix only when lookup table faithfully represents those intervals. Length range and non-oversubscription alone do not establish this for arbitrary incomplete long trees.",
+        "adoption": "Blocked even after finite passing runs; no full security or split-input completeness certification."
+    }
+}

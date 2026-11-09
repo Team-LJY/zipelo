@@ -1,0 +1,35 @@
+--- a/library/vendor/Zip/Compression/InflaterHuffmanTree.cs
++++ b/library/vendor/Zip/Compression/InflaterHuffmanTree.cs
+@@ -212,6 +212,10 @@
+ 				if ((lookahead = input.PeekBits(bitlen)) >= 0)
+ 				{
+ 					symbol = tree[subtree | (lookahead >> 9)];
++					if (symbol == 0)
++					{
++						throw new SharpZipBaseException("Encountered invalid codelength 0");
++					}
+ 					input.DropBits(symbol & 15);
+ 					return symbol >> 4;
+ 				}
+@@ -220,6 +224,10 @@
+ 					int bits = input.AvailableBits;
+ 					lookahead = input.PeekBits(bits);
+ 					symbol = tree[subtree | (lookahead >> 9)];
++					if (symbol == 0)
++					{
++						throw new SharpZipBaseException("Encountered invalid codelength 0");
++					}
+ 					if ((symbol & 15) <= bits)
+ 					{
+ 						input.DropBits(symbol & 15);
+@@ -236,6 +244,10 @@
+ 				int bits = input.AvailableBits;
+ 				lookahead = input.PeekBits(bits);
+ 				symbol = tree[lookahead];
++				if (symbol == 0)
++				{
++					throw new SharpZipBaseException("Encountered invalid codelength 0");
++				}
+ 				if (symbol >= 0 && (symbol & 15) <= bits)
+ 				{
+ 					input.DropBits(symbol & 15);
