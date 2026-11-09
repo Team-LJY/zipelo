@@ -1,7 +1,9 @@
 <Project>
     <PropertyGroup>
         <_UbuntuWorkerProject>$(MSBuildThisFileDirectory)../Zipelo.Worker/Zipelo.Worker.csproj</_UbuntuWorkerProject>
-        <_UbuntuWorkerRemoveProperties>TargetFramework;PublishProfile;PublishProfileFullPath;PublishDir;PublishUrl;OutputPath;OutDir;BaseOutputPath;BaseIntermediateOutputPath;IntermediateOutputPath;TargetDir;NoBuild;PublishSingleFile;PublishTrimmed;PublishAot</_UbuntuWorkerRemoveProperties>
+        <_UbuntuWorkerRemoveProperties>PublishProfile;PublishProfileFullPath;PublishDir;PublishUrl;OutputPath;OutDir;BaseOutputPath;BaseIntermediateOutputPath;IntermediateOutputPath;TargetDir;NoBuild</_UbuntuWorkerRemoveProperties>
+        <!-- 명시적으로 전달하는 속성을 제거 목록에 중복하지 않음. -->
+        <_UbuntuWorkerPublishRemoveProperties>PublishProfile;PublishProfileFullPath;PublishUrl;OutputPath;OutDir;BaseOutputPath;BaseIntermediateOutputPath;IntermediateOutputPath;TargetDir;NoBuild;PublishSelfContained</_UbuntuWorkerPublishRemoveProperties>
     </PropertyGroup>
 
     <Target Name="PrepareUbuntuWorkerDeployment">
@@ -51,16 +53,26 @@
         <PropertyGroup>
             <_UbuntuWorkerPublishSelfContained>$(_UbuntuWorkerSelfContained)</_UbuntuWorkerPublishSelfContained>
             <_UbuntuWorkerPublishSelfContained Condition="'$(PublishSelfContained)' != ''">$(PublishSelfContained)</_UbuntuWorkerPublishSelfContained>
+            <_UbuntuWorkerPublishStage>$([System.IO.Path]::GetFullPath('$(IntermediateOutputPath)', '$(MSBuildProjectDirectory)'))/zipelo-worker-publish/$([System.Guid]::NewGuid())/</_UbuntuWorkerPublishStage>
             <_UbuntuWorkerPublishDirectory>$([System.IO.Path]::GetFullPath('$(PublishDir)', '$(MSBuildProjectDirectory)'))/worker/</_UbuntuWorkerPublishDirectory>
         </PropertyGroup>
+        <!-- 이번 게시의 새 SDK 출력만 수집하며 이전 bin/publish를 검색하지 않음. -->
+        <MakeDir Directories="$(_UbuntuWorkerPublishStage)" />
         <MSBuild Projects="$(_UbuntuWorkerProject)" Targets="Publish"
-            RemoveProperties="$(_UbuntuWorkerRemoveProperties);PublishSelfContained"
-            Properties="Configuration=$(Configuration);TargetFramework=net10.0;RuntimeIdentifier=$(RuntimeIdentifier);SelfContained=$(_UbuntuWorkerPublishSelfContained);UseAppHost=true;PublishSingleFile=false;PublishTrimmed=false;PublishAot=false;PublishDir=$(_UbuntuWorkerPublishDirectory)" />
+            RemoveProperties="$(_UbuntuWorkerPublishRemoveProperties)"
+            Properties="Configuration=$(Configuration);TargetFramework=net10.0;RuntimeIdentifier=$(RuntimeIdentifier);SelfContained=$(_UbuntuWorkerPublishSelfContained);UseAppHost=true;PublishSingleFile=false;PublishTrimmed=false;PublishAot=false;PublishDir=$(_UbuntuWorkerPublishStage)" />
         <ItemGroup>
-            <_UbuntuWorkerPublishRequired Include="$(_UbuntuWorkerPublishDirectory)Zipelo.Worker;$(_UbuntuWorkerPublishDirectory)Zipelo.Worker.dll;$(_UbuntuWorkerPublishDirectory)Zipelo.Worker.deps.json;$(_UbuntuWorkerPublishDirectory)Zipelo.Worker.runtimeconfig.json;$(_UbuntuWorkerPublishDirectory)Zipelo.Core.dll;$(_UbuntuWorkerPublishDirectory)Zipelo.Runtime.dll" />
-            <_UbuntuWorkerPublishRequired Include="$(_UbuntuWorkerPublishDirectory)System.Private.CoreLib.dll;$(_UbuntuWorkerPublishDirectory)libcoreclr.so;$(_UbuntuWorkerPublishDirectory)libhostfxr.so;$(_UbuntuWorkerPublishDirectory)libhostpolicy.so"
+            <_UbuntuWorkerPublishRequired Include="$(_UbuntuWorkerPublishStage)Zipelo.Worker;$(_UbuntuWorkerPublishStage)Zipelo.Worker.dll;$(_UbuntuWorkerPublishStage)Zipelo.Worker.deps.json;$(_UbuntuWorkerPublishStage)Zipelo.Worker.runtimeconfig.json;$(_UbuntuWorkerPublishStage)Zipelo.Core.dll;$(_UbuntuWorkerPublishStage)Zipelo.Runtime.dll" />
+            <_UbuntuWorkerPublishRequired Include="$(_UbuntuWorkerPublishStage)System.Private.CoreLib.dll;$(_UbuntuWorkerPublishStage)libcoreclr.so;$(_UbuntuWorkerPublishStage)libclrjit.so;$(_UbuntuWorkerPublishStage)libhostfxr.so;$(_UbuntuWorkerPublishStage)libhostpolicy.so"
                 Condition="'$(_UbuntuWorkerPublishSelfContained)' == 'true'" />
         </ItemGroup>
         <Error Condition="!Exists('%(_UbuntuWorkerPublishRequired.Identity)')" Text="Ubuntu 작업자 필수 게시 파일이 누락되었습니다: %(_UbuntuWorkerPublishRequired.Filename)%(_UbuntuWorkerPublishRequired.Extension)" />
+        <ItemGroup>
+            <_UbuntuWorkerPublishedFile Include="$(_UbuntuWorkerPublishStage)**/*" />
+        </ItemGroup>
+        <Copy SourceFiles="@(_UbuntuWorkerPublishedFile)"
+            DestinationFiles="@(_UbuntuWorkerPublishedFile->'$(_UbuntuWorkerPublishDirectory)%(RecursiveDir)%(Filename)%(Extension)')"
+            SkipUnchangedFiles="false" />
+        <RemoveDir Directories="$(_UbuntuWorkerPublishStage)" />
     </Target>
 </Project>
