@@ -1,0 +1,42 @@
+# Local agent coordination state
+.messenger-*
+
+# Build, publish, and package output
+[Bb]in/
+[Oo]bj/
+artifacts/
+dist/
+publish/
+packaging/output/
+packaging/staging/
+
+# Test and Python scratch data
+tests/security/.work/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+TestResults/
+*.log
+
+# Local IDE and operating-system files
+.vs/
+.idea/
+*.user
+*.suo
+.DS_Store
+Thumbs.db
+
+# Local environment files and private key material
+.env
+.env.*
+*.pem
+*.key
+*.pfx
+*.p12
+*.snk
+*.pubxml.user
+
+# Curated tests/**/fixtures/*.zip are intentional source fixtures.
+# Do not add a blanket *.zip ignore rule.
