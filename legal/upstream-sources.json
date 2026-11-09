@@ -30,5 +30,29 @@
         "sha256": "6ee769c9ac4dac9abb16b98b1341e9528ff9f4ab685481410d3376d14148f3a9",
         "bytes": 1072,
         "origin_type": "pinned_upstream_source"
+    },
+    {
+        "path": "legal/notices/windowsdesktop-10.0.14-source/wpf-THIRD-PARTY-NOTICES.TXT",
+        "url": "https://api.github.com/repos/dotnet/dotnet/contents/src/wpf/THIRD-PARTY-NOTICES.TXT?ref=0427b9abbead3fa64c6655eb4290c537397131fa",
+        "git_blob_sha": "c2ce2452c1dd7ff03eb862e1d8cd8f6117cee05b",
+        "sha256": "d23dba2fee20c6b59d8f7088ee9ed372459c952a319b7ca90f3eec370cc76eb9",
+        "bytes": 2703,
+        "origin_type": "pinned_upstream_source"
+    },
+    {
+        "path": "legal/notices/windowsdesktop-10.0.14-source/wpf-LICENSE.TXT",
+        "url": "https://api.github.com/repos/dotnet/dotnet/contents/src/wpf/LICENSE.TXT?ref=0427b9abbead3fa64c6655eb4290c537397131fa",
+        "git_blob_sha": "a616ed188dfce68ee308f674350ad242d8588c2b",
+        "sha256": "ae48df11a335dc1a615f4f938b69cba73bcf4485c4f97af49b38efb0f216353b",
+        "bytes": 1115,
+        "origin_type": "pinned_upstream_source"
+    },
+    {
+        "path": "legal/notices/windowsdesktop-10.0.14-source/winforms-THIRD-PARTY-NOTICES.TXT",
+        "url": "https://api.github.com/repos/dotnet/dotnet/contents/src/winforms/THIRD-PARTY-NOTICES.TXT?ref=0427b9abbead3fa64c6655eb4290c537397131fa",
+        "git_blob_sha": "d8d1743824a0ab5bdc7d45623ebee5e71cf59da1",
+        "sha256": "5a412b38efae0b162dc0893b319023f4cd14a8985a0f9f9ae01ac052b37a36eb",
+        "bytes": 1966,
+        "origin_type": "pinned_upstream_source"
     }
 ]
