@@ -64,10 +64,10 @@ Reject("trailing.nonzero", [.. normal, .. Enumerable.Repeat((byte)1, 512)], Arch
 Reject("trailing.partial", [.. normal, (byte)0], ArchiveError.IntegrityFailure, checksum: false);
 Reject("padding.nonzero", Mutate(Fixtures.Archive(new Fixture("a", [1])), 513, 1), ArchiveError.IntegrityFailure, checksum: false);
 Reject("size.huge.octal", Field(Fixtures.Archive(new Fixture("a", [])), 124, "77777777777\0"), ArchiveError.IntegrityFailure);
-Reject("size.base256", Mutate(normal, 124, 128), ArchiveError.IntegrityFailure);
-Reject("size.negative", Field(normal, 124, "-0000000001\0"), ArchiveError.IntegrityFailure);
-Reject("size.invalid.digit", Mutate(normal, 124, (byte)'8'), ArchiveError.IntegrityFailure);
-Reject("size.internal.terminator", Field(normal, 124, "0\00000000001"), ArchiveError.IntegrityFailure);
+RejectSizeEncoding("size.base256", [0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], []);
+RejectSizeEncoding("size.negative", Encoding.ASCII.GetBytes("-0000000000\0"), []);
+RejectSizeEncoding("size.invalid.digit", Encoding.ASCII.GetBytes("00000000008\0"), new byte[8]);
+RejectSizeEncoding("size.internal.terminator", Encoding.ASCII.GetBytes("000000000\0" + "1\0"), new byte[1]);
 Reject("directory.nonzero", Field(normal, 124, "00000000001\0"), ArchiveError.IntegrityFailure);
 Reject("version", Mutate(normal, 264, (byte)'1'), ArchiveError.UnsupportedEntry);
 Reject("gnu.magic", Mutate(normal, 262, (byte)' '), ArchiveError.UnsupportedEntry);
@@ -319,6 +319,25 @@ void Reject(string name, byte[] bytes, ArchiveError code, bool checksum = true, 
             selection ?? (entries => entries.Where(e => e.Kind == EntryKind.File).Select(e => e.Id).ToArray()), sink.Write, default));
         if (expectNoOutput) { Check(sink.Calls == 0); }
     }));
+}
+
+void RejectSizeEncoding(string name, byte[] size, byte[] data)
+{
+    Check(size.Length == 12);
+    var valid = Fixtures.Archive(new Fixture("number.bin", data));
+    tests.Add((name + ".valid", async () =>
+    {
+        using var source = new MemoryStream(valid, false);
+        using var sink = new HashSink();
+        var result = await new UstarReader(defaults, FileNamePolicy.Linux).ReadAsync(source, _ => ["0"], sink.Write, default);
+        Check(result.Entries.Count == 1 && result.Entries[0].Kind == EntryKind.File);
+        Check(result.Entries[0].DeclaredSize == data.LongLength && sink.Counts["0"] == data.LongLength);
+        Check(sink.Digest("0") == Convert.ToHexString(SHA256.HashData(data)));
+    }));
+    // size 이외의 구조는 정상 대조군과 같으며 헤더 체크섬만 다시 계산함.
+    var invalid = (byte[])valid.Clone();
+    size.CopyTo(invalid, 124);
+    Reject(name, invalid, ArchiveError.IntegrityFailure);
 }
 
 async Task<UstarResult> Run(byte[] bytes, CancellationToken token = default)
