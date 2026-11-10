@@ -357,3 +357,45 @@ fn zero_output_limit_allows_unselected_and_rejects_selected() {
     );
     assert_eq!(selected.usage().output, 0);
 }
+
+#[test]
+fn observer_cancel_then_callback_error_preserves_original_at_final_checkpoint() {
+    let (operation, cancel) = Operation::start().unwrap();
+    let mut marker = Some(Marker(Box::from(*b"original")));
+    let pointer = marker.as_ref().unwrap().0.as_ptr();
+    let mut budget = budget();
+    let mut events = Vec::new();
+    let terminal = operation.gzip(gzip_request("gzip_digits", true), &mut budget, |event| {
+        let at_final = event.checkpoint.stage == Stage::BeforeReturn;
+        events.push(event);
+        if at_final {
+            assert!(!cancel.is_requested());
+            assert!(cancel.request());
+            Err(Stop::Callback(marker.take().unwrap()))
+        } else {
+            Ok(())
+        }
+    });
+    assert!(marker.is_none());
+    assert_eq!(events.last().unwrap().checkpoint.stage, Stage::BeforeReturn);
+    assert_stream(&events, &terminal, Policy::GzipSingleMemberV1);
+    assert!(terminal.cancellation_requested());
+    assert!(!terminal.cancellation_forwarded());
+    assert_eq!(
+        budget.usage(),
+        Usage {
+            processed: 38,
+            output: 9,
+            metadata: 10
+        }
+    );
+    let failure = terminal.into_result().unwrap_err();
+    assert_eq!(failure.adapter, None);
+    match failure.native.unwrap() {
+        Error::Callback(marker) => {
+            assert_eq!(marker.0.as_ptr(), pointer);
+            assert_eq!(&*marker.0, b"original");
+        }
+        other => panic!("{other:?}"),
+    }
+}

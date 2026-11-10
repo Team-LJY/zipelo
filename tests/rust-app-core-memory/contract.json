@@ -3,7 +3,7 @@
     "source_head": "23b8d1c615f24f42469138fcc63e7fce7cda4f24",
     "source_manifest_sha256": "13afa3d9bf53fd5a1c69af085842b722953dd36de1d63d305fea93bf78580b8d",
     "scope": "실제 app-core와 세 원본 library의 공개 API 회귀 소스임. 생산 코드 복사, hook, 외부 의존성 추가 없음",
-    "declared_test_count": 66,
+    "declared_test_count": 67,
     "test_names": [
         "control::cancellation_is_shared_monotonic_and_operation_local",
         "control::ids_are_nonzero_distinct_and_bound_to_handles",
@@ -30,6 +30,7 @@
         "gzip::late_cancel_does_not_rewrite_error_snapshot",
         "gzip::late_cancel_does_not_rewrite_success_snapshot",
         "gzip::observer_cancel_is_not_flag_forwarding",
+        "gzip::observer_cancel_then_callback_error_preserves_original_at_final_checkpoint",
         "gzip::observer_deadline_beats_requested_cancel_and_stays_budget",
         "gzip::observer_requests_cancel_after_output_and_discards_result",
         "gzip::pre_requested_cancel_still_delivers_start_and_forwards",
@@ -79,13 +80,13 @@
         "success": "GZip Boundary/선택 bytes/누적 Usage, USTAR 목록/선택 bytes/입력 hash/Usage/ContentVerification::Unavailable, ZIP Stored/Deflate native 결과 일치",
         "ownership": "Terminal -> MemoryValidated -> native 소유값 이동 시 기존 payload allocation 주소와 bytes를 확인함. 원본 타입을 복사한 대체 구현을 사용하지 않음",
         "errors": "원래 Reader/Backend/Callback/Selection 변형과 boxed E 주소 보존, ZIP 기존 Failure 원형 보존. 실패 Terminal에는 완료 payload 없음",
-        "cancellation": "요청 전, observer 요청, observer Cancelled/Deadline/E 우선, 최종 checkpoint 취소, 완료 또는 오류 후 늦은 요청, USTAR selection 오류와 requested=true 공존",
+        "cancellation": "요청 전, observer 요청, observer Cancelled/Deadline/E 우선, 최종 checkpoint 취소, 완료 또는 오류 후 늦은 요청, USTAR selection 오류와 requested=true 공존, GZip 최종 observer 안에서 취소 요청 후 원래 Callback(E) 반환 우선순위",
         "delivery": "실제 Operation이 낸 Event/Terminal만 수집함. 전체 순번, stale 우선 제외, 중복/역전/누락 sticky fault, terminal 뒤 거부 및 호출자 측 미적용 검증",
         "send": "선택한 소유 Marker: Send와 요청/Operation/Cancellation/Event/Terminal/MemoryValidated의 assert_send 컴파일 요구를 1개 선언에 포함함. 아직 컴파일하지 않음"
     },
     "limits": [
         "ID/sequence overflow는 공개 주입 수단이 없으며 동적 도달/통과 수에 포함하지 않음",
-        "마지막 checkpoint와 Terminal 생성 사이의 취소 경쟁을 결정적으로 주입할 수 없어 해당 짧은 창의 success+requested=true 조합은 미검증임. 완료 후 늦은 취소로 성공 snapshot을 보존하는 시험과 selection 오류+requested=true 시험을 구분함",
+        "마지막 checkpoint와 Terminal 생성 사이의 취소 경쟁을 결정적으로 주입할 수 없어 해당 짧은 창의 success+requested=true 조합은 미검증임. 완료 후 늦은 취소로 성공 snapshot을 보존하는 시험과 selection 오류+requested=true 시험을 구분함 GZip 최종 observer 내부의 취소 요청과 callback 오류는 동시성 창과 별개인 결정적 공개 API 사례로 작성함",
         "선택한 E: Send의 양성 컴파일 요구만 작성함. !Send E 지원/거부를 증명하지 않음. thread::spawn의 이동값과 callback 캡처에는 별도 Send + 'static 요건이 있으며 실제 thread 실행 없음",
         "ZIP final Usage는 native API에 없어 생성하지 않음. ZIP native 출력 비교는 독립 codec/round-trip 검증이 아님",
         "USTAR 내용 무결성 보장은 추가하지 않음. ProcessCleanup::NotApplicable은 OS 정리/게시/전역 panic 또는 OOM 회수 증거가 아님",
@@ -113,7 +114,7 @@
             ]
         }
     ],
-    "counting": "기존 모듈 결과는 원래 head 이력이며 새 66개 선언/통과 수에 합산하지 않음. 내부 assertion과 9개 Python helper 시험도 별도임",
+    "counting": "기존 모듈 결과는 원래 head 이력이며 새 67개 선언/통과 수에 합산하지 않음. 내부 assertion과 9개 Python helper 시험도 별도임",
     "validation": {
         "phase": "source/static only",
         "allowed": [
