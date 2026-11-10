@@ -1,15 +1,15 @@
 {
     "schema": 1,
-    "state": "검토 대기. 후보 tree에서 compile/discovery/runtime을 실행하지 않음",
+    "state": "7개 고정 baseline 비교 입력 보완 후 검토 대기. static/metadata/compile/discovery/runtime 재실행 없음",
     "branch": "features/rust-integration-baseline",
     "steps": [
         {
             "stage": "identity",
-            "required": "고정 candidate commit/tree 및 sources.json의 295개 path/mode/type/blob와 SHA256SUMS 검증. main 144개 전부 일치해야 함. 최초 차이에서 중단"
+            "required": "고정 candidate commit/tree 및 sources.json의 302개 path/mode/type/blob와 SHA256SUMS 검증. main 144개 전부 일치해야 함. 최초 차이에서 중단 7개 baseline은 byte 비교만 하며 C# 컴파일/실행 대상에서 제외함."
         },
         {
             "stage": "static",
-            "required": "새 격리 검증 checkout에서 원본 static_check.py와 dependency audit, rustfmt --check 및 명시적 기존 toolchain의 cargo metadata --locked --offline. source/lock/fixture 변경 금지. 설치/restore 없음"
+            "required": "새 격리 검증 checkout에서 원본 static_check.py와 dependency audit, rustfmt --check 및 명시적 기존 toolchain의 cargo metadata --locked --offline. source/lock/fixture 변경 금지. 설치/restore 없음 dependency_audit.py는 dependencies.json을 쓰므로 승인 후 별도 폐기 가능한 검증 사본에서만 수행하고 고정 원본과 비교함. 변경된 출력으로 고정 입력을 덮지 않음."
         },
         {
             "stage": "headless",
@@ -92,5 +92,11 @@
         "Windows/Ubuntu24/실제 사용자 display/IME/전체 접근성 미검증",
         "기존 16실패/7미검증 및 execveat EACCES 보류를 유지함",
         "main merge 없음"
-    ]
+    ],
+    "first_failure_preserved": {
+        "path": "tests/rust-integration-baseline/validation-e015332b-independent/result-audit.json",
+        "sha256": "4a5d380ccbe3f4bc09dc2e515b98cd9f93ac5a7915e86d6ead4fa1d6c3434269",
+        "preserved": true
+    },
+    "reference_audit": "sources.json/reference_audit"
 }
