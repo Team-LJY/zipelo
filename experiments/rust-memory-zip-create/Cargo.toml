@@ -16,3 +16,7 @@ zip = { version = "=9.5.0", default-features = false, features = ["deflate-flate
 
 [lib]
 doctest = false
+
+[[test]]
+name = "memory_zip_create"
+path = "../../tests/rust-memory-zip-create/api.rs"

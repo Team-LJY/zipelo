@@ -97,7 +97,7 @@
         "build": false,
         "typeCheck": false,
         "testExecution": false,
-        "regressionSources": "Pending bugfix owner codex-6de71bb5-4699-4369-aa54-89ea1f4a846d under tests/rust-memory-zip-create. No test target is wired yet; zero discovered tests must not be reported as a pass.",
+        "regressionSources": "PR36 287d4dfe288247b37c6a26f82003f8f26e4a90cc provides 42 public and 11 private test functions. Cargo test target and cfg(test) child module are wired here. Tests remain owned by bugfix; manager must integrate both heads before central validation. No executed test result.",
         "testContract": [
             "Stored/Deflate empty and multiple files with order/name/content/CRC/method/time",
             "all ASCII name rejection and duplicate/ancestor collision directions",
@@ -107,11 +107,17 @@
             "private storage sticky failure, no subsequent mutation, original cause through Drop",
             "ZIP64 absence and unsupported option refusal before any Write"
         ],
-        "excluded": "Blocked EOCD security reproductions and execveat paths are not part of this candidate. Existing C# files, old expectations and all earlier PRs preserved."
+        "excluded": "Blocked EOCD security reproductions and execveat paths are not part of this candidate. Existing C# files, old expectations and all earlier PRs preserved.",
+        "regressionSourceHead": "287d4dfe288247b37c6a26f82003f8f26e4a90cc",
+        "regressionManifestSha256": "689bb46a8295cabc0bb488fc21ed1e309a54a839b1176a8c7a7cd209043b4cc4",
+        "integration": "Only Cargo.toml target and src/storage.rs cfg(test) child declaration change. No public exports or production logic change. Test source historical production hashes refer to df292b44; verify this wiring delta and new production manifest separately. PR35 alone does not contain PR36 test files."
     },
     "centralCommands": [
         "sha256sum -c experiments/rust-memory-zip-create/SHA256SUMS",
-        "cargo build --locked --offline --manifest-path experiments/rust-memory-zip-create/Cargo.toml --lib",
-        "After regression owner supplies tests and target wiring: run agreed tests only; current manifest has no regression target."
-    ]
+        "sha256sum -c tests/rust-memory-zip-create/SHA256SUMS",
+        "cargo +1.99.1 build --locked --offline --manifest-path experiments/rust-memory-zip-create/Cargo.toml --lib --target-dir tests/rust-memory-zip-create/target",
+        "cargo +1.99.1 test --locked --offline --manifest-path experiments/rust-memory-zip-create/Cargo.toml --lib --target-dir tests/rust-memory-zip-create/target -- --test-threads=1",
+        "cargo +1.99.1 test --locked --offline --manifest-path experiments/rust-memory-zip-create/Cargo.toml --test memory_zip_create --target-dir tests/rust-memory-zip-create/target -- --test-threads=1"
+    ],
+    "centralRules": "Verify exact integrated head and all files first. Require discovery of 42 public and 11 private tests; zero tests is not a pass. Report each run and fixed head separately. Stop on mismatched source or unexpected targets."
 }

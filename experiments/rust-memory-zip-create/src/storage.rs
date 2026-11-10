@@ -96,3 +96,7 @@ impl<C: FnMut(Checkpoint) -> Result<(), Stop>> Seek for Bounded<'_, C> {
         Ok(to)
     }
 }
+
+#[cfg(test)]
+#[path = "../../../tests/rust-memory-zip-create/storage.rs"]
+mod memory_zip_storage_tests;
