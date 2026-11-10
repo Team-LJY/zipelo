@@ -154,7 +154,8 @@ fn source_metadata_limit_rejects_before_next_read() {
     assert_eq!(io_failure(source.read(&mut [0; 1])), Failure::Budget);
     assert_eq!(calls.borrow().len(), 32);
     source.metadata_switch().set(false);
-    assert_eq!(source.read(&mut [0; 1]).unwrap(), 1);
+    assert_eq!(io_failure(source.read(&mut [0; 1])), Failure::Budget);
+    assert_eq!(calls.borrow().len(), 32);
 }
 
 #[test]
@@ -252,4 +253,59 @@ fn timespan_invalid_syntax_and_components() {
             "{value}"
         );
     }
+}
+
+#[test]
+fn source_metadata_rejection_latches_shared_budget_before_smaller_retry() {
+    let (inner, calls) = Observed::new(vec![0; MAX_METADATA as usize + 2]);
+    let shared = budget();
+    let mut source = Source::new(inner, MAX_METADATA + 2, shared.clone()).unwrap();
+    let mut output = Vec::new();
+    let mut frames = crate::wire::Frames::new(&mut output, ID, shared.clone()).unwrap();
+    frames.begin().unwrap();
+    let mut chunk = [0; CHUNK];
+    for _ in 0..31 {
+        source.read_exact(&mut chunk).unwrap();
+    }
+    source.read_exact(&mut chunk[..CHUNK - 1]).unwrap();
+    assert_eq!(shared.check(), Ok(()));
+    assert_eq!(calls.borrow().len(), 32);
+    // 잔여 metadata 1바이트보다 큰 요청을 거부한 뒤 재시도도 차단함.
+    assert_eq!(io_failure(source.read(&mut [0; 2])), Failure::Budget);
+    assert_eq!(shared.check(), Err(Failure::Budget));
+    assert_eq!(shared.entries(0), Err(Failure::Budget));
+    assert_eq!(shared.charge(0, 0), Err(Failure::Budget));
+    assert_eq!(io_failure(source.read(&mut [0; 1])), Failure::Budget);
+    source.metadata_switch().set(false);
+    assert_eq!(io_failure(source.read(&mut [0; 1])), Failure::Budget);
+    assert_eq!(io_failure(source.read(&mut [])), Failure::Budget);
+    assert_eq!(io_failure(source.seek(SeekFrom::Start(0))), Failure::Budget);
+    assert_eq!(calls.borrow().len(), 32);
+    assert_eq!(frames.complete(), Err(Failure::Budget));
+    drop(frames);
+    assert_eq!(frame_records(&output), vec![(1, vec![])]);
+
+    let (other, other_calls) = Observed::new(vec![0; 22]);
+    let mut other = Source::new(other, 22, shared).unwrap();
+    assert_eq!(io_failure(other.read(&mut [0; 1])), Failure::Budget);
+    assert!(other_calls.borrow().is_empty());
+}
+
+#[test]
+fn source_metadata_disabled_before_failure_still_charges_processed_bytes() {
+    let mut l = limits();
+    l.processed = MAX_METADATA + 1;
+    let shared = Budget::new(l).unwrap();
+    let (inner, calls) = Observed::new(vec![0; MAX_METADATA as usize + 1]);
+    let mut source = Source::new(inner, MAX_METADATA + 1, shared.clone()).unwrap();
+    let mut chunk = [0; CHUNK];
+    for _ in 0..32 {
+        source.read_exact(&mut chunk).unwrap();
+    }
+    assert_eq!(shared.check(), Ok(()));
+    source.metadata_switch().set(false);
+    assert_eq!(source.read(&mut [0; 1]).unwrap(), 1);
+    assert_eq!(calls.borrow().len(), 33);
+    assert_eq!(shared.check(), Ok(()));
+    assert_eq!(shared.charge(1, 0), Err(Failure::Budget));
 }

@@ -162,6 +162,7 @@ impl<R: Read + Seek> Read for Source<R> {
             return Ok(0);
         }
         if self.metadata.get() && count as u64 > MAX_METADATA - self.metadata_bytes {
+            self.budget.failed.set(true);
             return Err(Failure::Budget.into());
         }
         let got = self.inner.read(&mut buffer[..count])?;

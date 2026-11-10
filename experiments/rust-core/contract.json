@@ -130,5 +130,13 @@
         "base64 decoded size at cap/over cap/padding/malformed",
         "TimeSpan constant representation and upper bound",
         "budget exact boundary/overflow-safe rejection and sticky failure"
-    ]
+    ],
+    "metadataAccounting": {
+        "logicalStructure": "ZIP32 entry count, names, extras, local/central and packed boundaries are structural guards, not read counters.",
+        "readScope": "MAX_METADATA counts actual Source reads only while metadata_mode=true: preflight, ZipArchive indexing and header consistency/metadata checks. Repeated reads in that phase count again.",
+        "disabledAt": "open() disables metadata_mode after checking all by_index_data records and before extract() calls archive.by_index. Later item-open metadata rereads are not counted against MAX_METADATA.",
+        "remainingLimits": "v2 later reads still charge processed bytes and obey Remote request/range caps; decoded output charges processed/output separately. v1 list_accounting charges input length once, not each repeated read.",
+        "failureLatch": "Rejecting a metadata request larger than the remaining allowance latches the shared Budget before inner Read. Smaller retries, metadata disable, shared Sources and frame completion cannot clear it.",
+        "evidence": "Direct source regression only; zip 9.5 catching this error and completing successfully has not been observed. No demonstrated total-budget bypass is claimed."
+    }
 }

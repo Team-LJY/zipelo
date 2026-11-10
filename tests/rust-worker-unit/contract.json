@@ -1,12 +1,12 @@
 {
     "schemaVersion": 1,
-    "baselineCommit": "9b7891c3dba6c51f2ba8a120c9405bf7591ccb4e",
+    "baselineCommit": "3f7eefa0c45511d8c4250cc591558cacc0672bb5",
     "target": "worker_unit",
-    "namedTests": 74,
-    "assertionTests": 73,
+    "namedTests": 76,
+    "assertionTests": 75,
     "policyObservations": 1,
     "execution": "not built or executed; central validation required",
-    "moduleLinking": "main.rs #[path] imports the five existing worker modules from experiments/rust-core/src; no implementation copy and three reviewed production fixes. The main process entry point is excluded.",
+    "moduleLinking": "main.rs #[path] imports the five existing worker modules from experiments/rust-core/src; no implementation copy and reviewed production fixes including metadata failure latching. The main process entry point is excluded.",
     "groups": [
         {
             "id": "guid",
@@ -120,7 +120,9 @@
                 "source_seek_extremes_and_eof_do_not_read",
                 "source_actual_eof_is_truncated_not_format_error",
                 "source_metadata_limit_rejects_before_next_read",
-                "source_listing_charges_length_once_instead_of_each_read"
+                "source_listing_charges_length_once_instead_of_each_read",
+                "source_metadata_rejection_latches_shared_budget_before_smaller_retry",
+                "source_metadata_disabled_before_failure_still_charges_processed_bytes"
             ]
         },
         {
@@ -605,6 +607,18 @@
             "file": "review.rs",
             "group": "json",
             "kind": "assertion"
+        },
+        {
+            "name": "source_metadata_rejection_latches_shared_budget_before_smaller_retry",
+            "file": "bounds.rs",
+            "group": "budget-source",
+            "kind": "assertion"
+        },
+        {
+            "name": "source_metadata_disabled_before_failure_still_charges_processed_bytes",
+            "file": "bounds.rs",
+            "group": "budget-source",
+            "kind": "assertion"
         }
     ],
     "provenance": {
@@ -615,9 +629,9 @@
         "dependencies": "Only existing crate dependencies, no added dev-dependencies"
     },
     "limits": [
-        "74 named Rust test functions; 8 new regressions, 66 existing functions preserved. Loop rows are subcases, not additional named tests.",
-        "73 assertion tests and one policy observation. Deflate packed-tail acceptance/rejection is printed with --nocapture and is not evidence of C# policy compatibility.",
-        "Production changes are limited to Unix type precedence, bounded duration parsing and borrowed nested-error classification. Existing test assertions are preserved; execution is pending.",
+        "76 named Rust test functions; two new metadata regressions and one existing metadata expectation strengthened to require sticky failure. Other 73 functions preserved. Loop rows are subcases.",
+        "75 assertion tests and one policy observation. Deflate packed-tail acceptance/rejection is printed with --nocapture and is not evidence of C# policy compatibility.",
+        "Reviewed production fixes include Unix type precedence, bounded duration parsing, borrowed nested-error classification and metadata failure latching. Execution remains pending.",
         "Allocator activity is not instrumented. Oversized JSON/Source/range requests are checked by no-body-read/no-request observations plus static preallocation review.",
         "21 MiB wire cap is unreachable through the public Frames API under current stricter caps: <=16 MiB data + <=65536*64 header bytes + <=1024*16 item metadata bytes +1 completion byte <21 MiB. No claimed direct branch hit.",
         "Generic crate integrity errors do not establish a precise parser step or actual EOF. Explicit short transport/Source reads are tested separately.",
@@ -641,9 +655,24 @@
         "nestedErrors": "Owned and borrowed io/ZipError conversions share classification; observed UnexpectedEof, embedded Failure and declared decompressed-size limit retain identity; messages never infer EOF/budget.",
         "dependencyReachability": "Regression errors are constructed directly. Actual dependency reachability has not been executed.",
         "separatePendingAssignments": [
-            "Metadata failure latch and metadata-mode contract follow-up are separate queued work.",
             "Central Cargo.lock import is separate queued work; no lock is fabricated here."
         ],
         "oldBuild": "Coordinator reports c9a2747d Rust/Cargo 1.99.1 locked offline compile exit 0, no warnings/errors, after normal registry approval; not validation of 9b7891c3 or this correction head."
+    },
+    "metadataAccounting": {
+        "logicalStructure": "ZIP32 entry count, names, extras, local/central and packed boundaries are structural guards, not read counters.",
+        "readScope": "MAX_METADATA counts actual Source reads only while metadata_mode=true: preflight, ZipArchive indexing and header consistency/metadata checks. Repeated reads in that phase count again.",
+        "disabledAt": "open() disables metadata_mode after checking all by_index_data records and before extract() calls archive.by_index. Later item-open metadata rereads are not counted against MAX_METADATA.",
+        "remainingLimits": "v2 later reads still charge processed bytes and obey Remote request/range caps; decoded output charges processed/output separately. v1 list_accounting charges input length once, not each repeated read.",
+        "failureLatch": "Rejecting a metadata request larger than the remaining allowance latches the shared Budget before inner Read. Smaller retries, metadata disable, shared Sources and frame completion cannot clear it.",
+        "evidence": "Direct source regression only; zip 9.5 catching this error and completing successfully has not been observed. No demonstrated total-budget bypass is claimed."
+    },
+    "metadataRegression": {
+        "newCases": 2,
+        "strengthenedExistingCase": "source_metadata_limit_rejects_before_next_read",
+        "expectationChange": "Previously accepted a read after metadata disable following rejection. Now requires Budget failure and no additional inner read, per explicit sticky-failure correction.",
+        "allocationAndIo": "Observed reader call counts establish no new read after rejection; not allocator instrumentation.",
+        "completed": false,
+        "execution": "not executed"
     }
 }
