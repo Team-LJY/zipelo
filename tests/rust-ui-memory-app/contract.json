@@ -1,0 +1,112 @@
+{
+    "scope": "합성 메모리 입력만 사용하는 실제 PR42 호출 UI 후보임. 사용자 archive/선택기/파일 저장/게시/worker/tar.gz 연결 없음",
+    "core_head": "23b8d1c615f24f42469138fcc63e7fce7cda4f24",
+    "branch": "features/rust-ui-memory-app",
+    "layout": {
+        "palette": {
+            "paper": "#FFFFFF",
+            "ink": "#182739",
+            "selection": "#D3E6F6",
+            "focus": "#174C7C"
+        },
+        "type": "기존 설치 Noto CJK 한국어 폰트 index 1, 본문/버튼 18px, 제목 26px임",
+        "structure": "상단 동작 선택, 좌측 결과 목록, 우측 내용, 하단 상태의 작업실 구조임. 부가 설명도 본문 크기로 표시함",
+        "review": "기존 PR34의 파란색 선택과 한글 가독성을 계승하며 장식 카드/별도 아이콘을 추가하지 않음"
+    },
+    "transport": {
+        "capacity": 256,
+        "full": "유효 입력에서도 발생 가능한 UI 전달 한계임. 사용자 취소/손상 archive로 표시하지 않음. 대형 입력 처리를 보장하지 않음",
+        "raw": "모든 checkpoint Event를 순번 변경 없이 try_send함. 최초 전달 실패 이후 suffix는 보내지 않고 first_missing_sequence로 시작 위치를 보존함. 원래 observer Err를 반환 우선순위로 유지하며 전달 실패는 별도임",
+        "receiver": "원본 연속 stream을 PR42 Receiver로 검증함. 누락/중복 오류는 sticky로 보존하고 재생성하지 않음. terminal은 원형 보존하되 transport 오류가 있으면 payload 목록/내용에 적용하지 않음",
+        "completion": "용량 1 별도 채널로 Terminal 소유 이동. Full/Disconnected이면 반환된 값을 작업 스레드 반환값으로 소유하여 join으로 회수함. 복제하지 않음",
+        "mutex": "추가 공유 mutex를 사용하지 않아 자체 poison 경로 없음. 표준 채널 내부 구현 전체의 panic 회수를 주장하지 않음"
+    },
+    "lifecycle": {
+        "frame": "poll/try_recv/try_iter/is_finished만 사용하며 실행 중 join하지 않음. 완료 수신과 join 상태를 분리하고 원본 결과를 한 번 소유함",
+        "close": "확인/취소 요청 후 대기/철회 구분. 철회해도 전송한 취소는 남음. 종료 확인 전 시작/재시작/실제 닫기 금지. 확인 중 먼저 완료돼도 선택은 유지함",
+        "drop": "정상 GUI frame은 busy Task를 제거하지 않음. 비정상 owner 폐기의 Drop은 취소 요청 후 동기 join하여 조용한 detach를 피함. 이 비정상 fallback은 기다릴 수 있으며 비선점 callback/OOM/강제 프로세스 종료에서 유한 종료를 보장하지 않음",
+        "panic": "JoinError 원형을 별도로 소유하며 Terminal이나 cleanup 성공을 합성하지 않음",
+        "cancel": "요청과 실제 native 반환을 구분함. 이미 완료된 성공을 뒤늦은 취소로 바꾸지 않음. 마지막 checkpoint와 Terminal 생성 사이 경합은 확정 검증하지 않음"
+    },
+    "payload": {
+        "ownership": "원본 typed Terminal이 bytes/목록/Usage/원래 오류를 소유함. GUI 문자열은 별도 제한된 표시임",
+        "generation": "새 시작 시 checked 세대 증가 및 목록/원본 결과/선택 동시 제거. 선택 키는 실제 operation/세대/행 index임. USTAR id/name bytes는 원형 보존함",
+        "preview": "최대 Unicode 2048자 표시, 비 UTF-8은 바이너리 길이만 표시. 전체 bytes는 결과에 보존함. 원문 이름/내용을 경로나 명령으로 사용하지 않음",
+        "limitations": "파일 저장 미지원, 합성 입력 전용, 메모리 완료, USTAR ContentVerification::Unavailable을 화면에 표시함. ZIP 생성의 round-trip 검증이나 최종 Usage를 만들지 않음"
+    },
+    "fixtures": {
+        "producer": "Python 3.14.4 표준 gzip.compress(mtime=0), tarfile USTAR_FORMAT과 합성 UTF-8 bytes임",
+        "gzip": "payload.txt 전체 선택",
+        "ustar": "자료.txt 및 empty.txt 두 파일을 선택 콜백에서 전체 선택함. UI 행 선택은 이미 검증하여 반환한 bytes 중 표시할 항목만 선택함",
+        "zip": "payload.txt를 sample.txt라는 ASCII 이름으로 실제 ZIP 생성함",
+        "no_drain": "세 정상 fixture 각각 UI가 중간에 progress를 전혀 배출하지 않아도 모든 Event가 기본 256 큐에 들어가고 실제 Terminal 성공/순번 일치함을 회귀로 검증하도록 작성함. 아직 실행 전이므로 event 실제 최대값/통과를 주장하지 않음"
+    },
+    "dependencies": {
+        "external_new_outside_original_locks": 0,
+        "headless_default": true,
+        "ui_optional": "eframe =0.37.0, PR34 동일 features",
+        "platform_counts_including_local": {
+            "linux_headless": 34,
+            "linux_gui": 242,
+            "windows_gnu_headless": 35,
+            "windows_gnu_gui": 144,
+            "windows_msvc_headless": 35,
+            "windows_msvc_gui": 144
+        },
+        "registry_lock_records": 384,
+        "selected_analysis": "Windows는 metadata/tree만이며 Linux 외 빌드를 의미하지 않음",
+        "reference_ui_lock": {
+            "source_head": "63b80e3158c08b71ec70666a2a39216cd36752b1",
+            "source_path": "experiments/rust-ui-probe/Cargo.lock",
+            "copy": "tests/rust-ui-memory-app/reference-ui.lock",
+            "sha256": "865d69b95660fefe8c9ad6129d2692cff8007ecc3d55de1a049fe162173f434d"
+        },
+        "license_supplement": "기존 PR34의 고정 upstream 보충 원문 JSON을 새 tests 폴더에 동일 bytes로 보존함. archive에 license 파일이 없는 GUI package의 출처를 함께 제공하며 최종 배포 고지는 별도임"
+    },
+    "validation": {
+        "toolchain": "기존 Rust/Cargo/rustfmt 1.99.1 및 cache만 사용함",
+        "rust_tests_declared": 28,
+        "names": [
+            "zip_default_queue_fits_without_ui_drain",
+            "ustar_default_queue_fits_without_ui_drain",
+            "gzip_default_queue_fits_without_ui_drain",
+            "full_queue_is_transport_failure_not_user_cancel",
+            "disconnected_progress_preserves_first_missing_sequence",
+            "original_observer_error_beats_full_queue",
+            "original_observer_error_beats_disconnected_queue",
+            "original_observer_error_still_delivers_its_raw_event_when_possible",
+            "completion_receiver_loss_recovers_payload_from_join",
+            "full_completion_channel_returns_ownership_instead_of_dropping",
+            "progress_gap_keeps_real_terminal_but_cannot_apply_payload",
+            "thread_panic_is_joined_without_synthesized_terminal",
+            "cancellation_before_work_returns_real_cancelled_result",
+            "cancellation_after_terminal_does_not_rewrite_success",
+            "repeated_start_is_rejected_until_join_even_if_thread_finished",
+            "repeated_cancel_sets_request_once",
+            "close_confirmation_does_not_cancel_and_can_be_retracted",
+            "close_cancel_retraction_keeps_existing_cancel_request",
+            "close_waits_for_join_and_preserves_terminal",
+            "completed_during_confirmation_still_requires_choice",
+            "atomic_generation_replacement_rejects_old_selection",
+            "ustar_exact_ids_and_content_limitation_are_retained",
+            "error_retry_uses_new_operation_and_clears_previous_payload",
+            "headless_values_satisfy_thread_transfer_bounds",
+            "oversized_queue_is_rejected_without_spawning",
+            "gzip_preview_preserves_original_bytes",
+            "ui_event_wrapper_excludes_old_operation_before_current_sequence",
+            "native_gzip_callback_error_survives_simultaneous_queue_full"
+        ],
+        "rust_tests_compiled": false,
+        "rust_tests_discovered": false,
+        "rust_tests_executed": false,
+        "gui_executed": false,
+        "limits": "고정 head 검토 후 회귀/GUI 실행 별도 배정. 이전 PR34/39/42 및 원본 모듈 결과를 이 후보 통과로 합산하지 않음",
+        "builds": {
+            "headless_lib": "Linux locked/offline exit 0",
+            "gui": "Linux ui feature binary locked/offline exit 0",
+            "rustfmt": "1.99.1 check exit 0",
+            "metadata": "Linux headless/GUI locked/offline exit 0. Windows 두 target headless/GUI 선택 감사 완료. 미캐시 iOS를 포함한 무필터 metadata는 offline 실패로 보존함"
+        }
+    },
+    "preservation": "새 두 디렉터리만 추가함. 기존 core/60개 원본/PR34/39/main/C# 수정 없음. 공유 로컬 Git 브랜치 전환/스테이징 없음"
+}
