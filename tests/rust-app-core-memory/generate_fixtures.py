@@ -6,6 +6,13 @@ import tarfile
 import zlib
 
 
+def gzip_bytes(payload):
+    archive = io.BytesIO()
+    with gzip.GzipFile(filename="", mode="wb", compresslevel=6, fileobj=archive, mtime=0) as writer:
+        writer.write(payload)
+    return archive.getvalue()
+
+
 def build():
     payload = b"123456789"
     archive = io.BytesIO()
@@ -18,8 +25,8 @@ def build():
     tar_bytes = archive.getvalue()[:2048]
     values = {
         "digits": payload,
-        "gzip_digits": gzip.compress(payload, compresslevel=6, mtime=0),
-        "gzip_empty": gzip.compress(b"", compresslevel=6, mtime=0),
+        "gzip_digits": gzip_bytes(payload),
+        "gzip_empty": gzip_bytes(b""),
         "ustar_one": tar_bytes,
         "ustar_sha256": hashlib.sha256(tar_bytes).digest(),
     }

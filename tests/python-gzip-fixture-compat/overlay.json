@@ -1,0 +1,84 @@
+{
+    "schema": 1,
+    "status": "source-static-only; Rust compile/run awaits fixed-head review",
+    "branch": "features/python-gzip-fixture-compat",
+    "base_head": "f7fc8cbece281e2f9a6374b4640ca4dd9d321fbc",
+    "base_tree": "ab5574289f537a4028a3abf092e4634cb9b89282",
+    "historical_sources": {
+        "path": "tests/rust-integration-baseline/sources.json",
+        "sha256": "d28874ea921a8027029f37bf35b64cb804c8e19345be893bc37a929d8b9dd932"
+    },
+    "historical_metadata": [
+        {
+            "path": "tests/rust-integration-baseline/sources.json",
+            "mode": "100644",
+            "type": "blob",
+            "sha": "495e32eb6eb40a81d95935385b4c9bef01732692"
+        },
+        {
+            "path": "tests/rust-integration-baseline/run-plan.json",
+            "mode": "100644",
+            "type": "blob",
+            "sha": "89eabfc1f19a402ab84666233a704e464288ec10"
+        },
+        {
+            "path": "tests/rust-integration-baseline/SHA256SUMS",
+            "mode": "100644",
+            "type": "blob",
+            "sha": "e0e32c99b5401562a8abcc0a7ebe6335d82d8413"
+        }
+    ],
+    "replacements": {
+        "tests/rust-app-core-memory/generate_fixtures.py": {
+            "before_git_blob": "9cffa6f45fa063fcc77d0b48796bb42a38e938a8",
+            "before_sha256": "203566ae81a254f4006924b74a3433a18b465950e5f1c9acb69e807809643534",
+            "after_git_blob": "f0e89ea50d7e6178a4e4f6d3e29e8af6c6f63640",
+            "after_sha256": "a358a8480c9f3addfcf9ab7572f31858ce59828436a1765faa6e427cfb062e11"
+        },
+        "tests/rust-app-core-memory/SHA256SUMS": {
+            "before_git_blob": "d2545fab5e8472abe8a49f2ba491d02d9cf27278",
+            "before_sha256": "9855466588a5a145c70d3db49ca0e372aeb20f0142520df318954b424884d95e",
+            "after_git_blob": "278ee9a537cfe0777fb53f1227f95330dc6a1d04",
+            "after_sha256": "0c8a155a9b14c886b3c46f002e35a6f795d7b5a815c8ea7ed87526d3574cff30"
+        }
+    },
+    "preservation": {
+        "base_files": 305,
+        "unchanged_base_files": 303,
+        "all_rust_source_tests_unchanged": true,
+        "fixtures_hex_json_unchanged": true,
+        "native_static_check_unchanged": true,
+        "historical_source_test_evidence_pins_unchanged": true,
+        "no_check_removed_or_relaxed": true
+    },
+    "generation": "Use stdlib GzipFile with empty filename, explicit mtime=0 and compression level=6; no header patching, expected byte changes, new dependency or raw encoder replacement.",
+    "validation": "Compare full generated fixtures.hex and fixtures.json bytes against unchanged frozen originals on host Python3.14 and Ubuntu24 Python3.12; run the unchanged core static checker with the new core manifest hash. This is Python-only, not Rust execution.",
+    "future_plan": {
+        "historical_plan": "tests/rust-integration-baseline/run-plan.json",
+        "overlay_application": "Materialize fixed base main then apply only these two replacements and this overlay directory; do not reinterpret historical pin files as the new candidate. Fix and verify the final PR head/tree separately before any Rust compile/run.",
+        "headless_groups": [
+            67,
+            11,
+            42,
+            150,
+            303,
+            31,
+            14,
+            72
+        ],
+        "expected_total": 690,
+        "test_names_and_expectations": "All eight original native contracts and Rust files unchanged",
+        "first_failure_stop": true,
+        "each_test_once_serially": true,
+        "cargo_build_jobs": 1,
+        "locked_offline": true,
+        "rust_toolchain": "1.99.1",
+        "no_host_targets_for_ubuntu24": true,
+        "no_gui_worker_vm_or_real_data": true
+    },
+    "limitations": [
+        "Empty filename/mtime/OS header policy is explicit; exact equality was checked only on the two recorded Python/zlib environments, not every future compressor version.",
+        "No Rust type check/compile/discovery/runtime or Ubuntu24 kernel/desktop support claim.",
+        "Previous static failures and all previous passed/failed execution records remain historical evidence."
+    ]
+}
