@@ -1,0 +1,123 @@
+{
+    "schemaVersion": 1,
+    "implementation": "zipelo-rust-memory-zip-create",
+    "baseline": "9626abbf22f3a4c66a996e64601694ed5fe98763",
+    "scope": "Owned finite memory entries to a single completed ZIP32 Vec<u8>. Backend implementation candidate only. No file input, traversal, extraction, publication, worker, IPC or UI.",
+    "api": {
+        "function": "create<C>(Request, C) -> Result<Vec<u8>, Failure> where C: FnMut(Checkpoint) -> Result<(), Stop>",
+        "entry": "Entry { name: String, bytes: Box<[u8]> }",
+        "request": "Request { entries: Vec<Entry>, options: Options, limits: Limits, timeout: Duration }",
+        "options": "Options { method: Method::Stored|Deflate, encrypted: bool, split: bool, zip64: bool }; Default: Deflate, unsupported flags false",
+        "limits": "Limits { input: u64, output: u64, entries: usize, processed: u64 }; each effective limit is min(caller, hard maximum). entries includes artifact.",
+        "failures": [
+            "InvalidRequest",
+            "Unsupported",
+            "UnsafeName",
+            "Conflict",
+            "Budget",
+            "Cancelled",
+            "Deadline",
+            "Allocation",
+            "Engine"
+        ],
+        "stops": [
+            "Cancelled",
+            "Deadline"
+        ],
+        "checkpoint": "Start, Validate{index}, Entry{index}, Input{index,offset,len}, Write{offset,len,extent}, Seek{from,to}, Flush, Finish, Return. Offsets and extent describe the operation before mutation. No byte content exposed.",
+        "ownership": "Request ownership transfers at call. Entry bytes are read without modification, then dropped normally. No input recovery API on failure; do not claim moved inputs are returned or zeroized."
+    },
+    "limits": {
+        "inputs": [
+            1,
+            1024
+        ],
+        "inputBytes": 16777216,
+        "outputBytes": 16777216,
+        "entriesIncludingArtifact": 1025,
+        "processedBytes": 33554432,
+        "nameBytes": 1024,
+        "componentBytes": 255,
+        "inputChunkBytes": 65536,
+        "timeoutSecondsMaximum": 300,
+        "timeoutZero": "InvalidRequest",
+        "processedAccounting": "Reserve full known input total before creating the writer. Every output write checks input total + max(previous extent, write end), including central directory and patch writes. Rewrites do not charge duplicate bytes. Never infer a pass just from final output length.",
+        "allocation": "Check length and budgets before try_reserve_exact/resize. Private output Vec only. Input already allocated by caller; no total heap cap. Allocator may reserve more capacity than requested. ZIP metadata and compressor allocation/OOM/panic are not fully recoverable."
+    },
+    "format": {
+        "methods": "Stored or Deflate level 6; default Deflate",
+        "zip64": "Rejected option; large_file(false), default auto_large_file=false, at most 16 MiB and 1024 entries",
+        "time": "Explicit DateTime::DEFAULT = DOS 1980-01-01 00:00:00",
+        "permissions": "Fixed regular file mode 0644; no filesystem metadata is restored.",
+        "entries": "Input order retained; only file entries, empty files allowed; no empty archive or explicit directory entries.",
+        "extra": "No comment or custom extra fields supplied; library owns all ZIP encoding and CRC."
+    },
+    "names": {
+        "policy": "Portable ASCII subset, independent of host OS. No Unicode normalization or OrdinalIgnoreCase emulation.",
+        "reject": "Empty/non-ASCII name; >1024 bytes; empty, dot or parent components; components >255 bytes; leading/trailing slash; backslash; ASCII controls including DEL; <>:\"|?*; trailing space/dot; all-space component; Windows reserved CON PRN AUX NUL CONIN$ CONOUT$ COM1..9 LPT1..9 stems (case-insensitive, trim spaces before extension).",
+        "conflicts": "ASCII-case-insensitive duplicates and file/child conflicts in either order. Intermediate directory case spelling is not canonicalized.",
+        "compatibility": "Stricter than C# Linux names and Windows backslash normalization. Unicode/Korean and OS parity remain unsupported. DOS timestamp differs from C# generation time. ZIP byte-for-byte equality is not a parity criterion."
+    },
+    "lifecycle": {
+        "gate": "First observed gate failure is sticky. Failed checks, storage limit/allocation/seek errors block later writes, seeks, flushes and callbacks. Preparation errors are latched before explicitly dropping ZipWriter.",
+        "finish": "ZipWriter::finish consumes writer; it can internally Drop/finalize again on error. Returned original ZipError is mapped before considering later cleanup effects, so cleanup does not replace the original returned cause. Storage failures carry typed Failure inside io::Error.",
+        "dropLimit": "Cannot suppress upstream Drop stderr diagnostics or all backend-internal retry work. On backend-only finish error, implicit Drop occurs before the error becomes visible to caller; do not claim all internal cleanup writes are preblocked in that case. No artifact escapes on any returned error.",
+        "success": "Only successful finish followed by final Return cancellation/deadline checkpoint permits Vec extraction. No partial artifact is public.",
+        "deadline": "Monotonic Instant checked before and after caller callback. Deadline/cancellation are cooperative between calls. Callback and codec calls cannot be preempted; panic/OOM/CPU hard limits and live supervision are not implemented."
+    },
+    "dependencies": {
+        "direct": "zip =9.5.0, default-features=false, deflate-flate2-zlib-rs",
+        "newPackages": 0,
+        "registryPackages": 33,
+        "baselineRegistryPackages": 40,
+        "removed": [
+            "base64",
+            "itoa",
+            "ryu",
+            "serde",
+            "serde_core",
+            "serde_derive",
+            "serde_json"
+        ],
+        "linuxResolvedRegistryPackages": 20,
+        "baselineLinuxResolvedRegistryPackages": 25,
+        "retainedVersionChecksumAndLinuxFeaturesUnchanged": true,
+        "license": "zip MIT; existing flate2 MIT OR Apache-2.0; zlib-rs Zlib with rust-allocator only. Cargo metadata licenses checked; no new dependency or vulnerability-free claim.",
+        "baseLockSha256": "92f7b05d7da086b4b8c6b596755ba6233129e5bac8b060b9c6b3aa63fe17fecf"
+    },
+    "sourceEvidence": {
+        "baselineCreate": "main 018e7593 / src/Zipelo.Worker/BuiltInZipEngine.cs and src/Zipelo.Runtime/ZipWorkerClient.cs",
+        "baselineNamePolicy": "src/Zipelo.Core/OutputPathPolicy.cs",
+        "crate": "Cached zip 9.5.0 src/write.rs new, finish, Drop and src/write/options.rs. No copied codec/crypto or ZIP serializer."
+    },
+    "validation": {
+        "sourcePrepared": true,
+        "rustfmtOnly": true,
+        "lockedOfflineMetadata": true,
+        "build": false,
+        "typeCheck": false,
+        "testExecution": false,
+        "regressionSources": "PR36 287d4dfe288247b37c6a26f82003f8f26e4a90cc provides 42 public and 11 private test functions. Cargo test target and cfg(test) child module are wired here. Tests remain owned by bugfix; manager must integrate both heads before central validation. No executed test result.",
+        "testContract": [
+            "Stored/Deflate empty and multiple files with order/name/content/CRC/method/time",
+            "all ASCII name rejection and duplicate/ancestor collision directions",
+            "exact and one-below input/output/entries/processed limits",
+            "central-directory output overflow and rewrite accounting",
+            "cancel/deadline at Input, Write patch, Finish and Return; no returned artifact",
+            "private storage sticky failure, no subsequent mutation, original cause through Drop",
+            "ZIP64 absence and unsupported option refusal before any Write"
+        ],
+        "excluded": "Blocked EOCD security reproductions and execveat paths are not part of this candidate. Existing C# files, old expectations and all earlier PRs preserved.",
+        "regressionSourceHead": "287d4dfe288247b37c6a26f82003f8f26e4a90cc",
+        "regressionManifestSha256": "689bb46a8295cabc0bb488fc21ed1e309a54a839b1176a8c7a7cd209043b4cc4",
+        "integration": "Only Cargo.toml target and src/storage.rs cfg(test) child declaration change. No public exports or production logic change. Test source historical production hashes refer to df292b44; verify this wiring delta and new production manifest separately. PR35 alone does not contain PR36 test files."
+    },
+    "centralCommands": [
+        "sha256sum -c experiments/rust-memory-zip-create/SHA256SUMS",
+        "sha256sum -c tests/rust-memory-zip-create/SHA256SUMS",
+        "cargo +1.99.1 build --locked --offline --manifest-path experiments/rust-memory-zip-create/Cargo.toml --lib --target-dir tests/rust-memory-zip-create/target",
+        "cargo +1.99.1 test --locked --offline --manifest-path experiments/rust-memory-zip-create/Cargo.toml --lib --target-dir tests/rust-memory-zip-create/target -- --test-threads=1",
+        "cargo +1.99.1 test --locked --offline --manifest-path experiments/rust-memory-zip-create/Cargo.toml --test memory_zip_create --target-dir tests/rust-memory-zip-create/target -- --test-threads=1"
+    ],
+    "centralRules": "Verify exact integrated head and all files first. Require discovery of 42 public and 11 private tests; zero tests is not a pass. Report each run and fixed head separately. Stop on mismatched source or unexpected targets."
+}

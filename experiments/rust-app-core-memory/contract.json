@@ -1,0 +1,81 @@
+{
+    "schema_version": 1,
+    "scope": "Synchronous app boundary calling three real owned-memory modules via path dependencies. No GUI/model dependency, worker, filesystem, publishing, tar.gz chaining or process supervision.",
+    "api": {
+        "start": "Operation::start() -> Result<(Operation, Cancellation), AdapterFailure>; consumes a process-local monotonic non-reused ID. Operation is not Clone and each run method consumes self.",
+        "gzip": "Operation::gzip<E>(gzip::Request, &mut gzip::Budget, FnMut(Event<gzip::Checkpoint>) -> Result<(), gzip::Stop<E>>) -> Terminal<gzip::Completed, gzip::Error<E>>",
+        "ustar": "Operation::ustar<E>(ustar::Request, FnOnce(&[ustar::Entry]) -> Result<Vec<String>, E>, FnMut(Event<ustar::Checkpoint>) -> Result<(), ustar::Stop>) -> Terminal<ustar::Completed, ustar::Error<E>>",
+        "zip": "Operation::create_zip(zip_create::Request, FnMut(Event<zip_create::Checkpoint>) -> Result<(), zip_create::Stop>) -> Terminal<Vec<u8>, zip_create::Failure>",
+        "exports": "Re-export native gzip, ustar, zip_create crates, Request/Limits/Usage/checkpoint/error types without reinterpretation.",
+        "receiver": "Receiver::new(operation.id()); progress(&Event), terminal(&Terminal) -> Result<Delivery, DeliveryError>. Check before applying UI changes or taking payload.",
+        "memory": "Terminal::into_result() transfers Result<MemoryValidated<T>, Failure<E>>; success has private constructor and exposes native value by borrow or ownership transfer."
+    },
+    "identity": {
+        "scope": "Unique within one linked library instance/process lifetime, not persisted identity or authentication. IDs 1..u64::MAX-1, exhaustion returns OperationIdExhausted, never wraps or reuses. No worker/job ID conversion.",
+        "new_work": "Create a fresh Operation, Cancellation and Receiver. Old handles remain bound to old operation and cannot cancel a new one. Caller explicitly chooses the current Receiver.",
+        "concurrency": "Caller may move Operation to its own thread and retain Cancellation; adapter creates no thread, channel, executor or queue. Callback delivery/backpressure and integration are caller-owned."
+    },
+    "events": {
+        "stamp": "Private stamp contains OperationId and sequence, starting at zero per operation. Each delivered checkpoint consumes one sequence; returned Terminal consumes the next position, including no-checkpoint native errors.",
+        "overflow": "Reserve u64::MAX for Terminal. At exhausted sequence, do not call observer; record SequenceExhausted and return native Stop::Cancelled to stop work. Terminal retains native failure and secondary adapter cause; drop any success payload if adapter fault exists. This is an explicit transport limit, not a format Budget.",
+        "receiver": "Ignore other operation IDs before checking sequence or closed/faulted state. Current duplicate/reversal/gap fails and latches Faulted. After terminal reject current progress/duplicate terminal. Do not silently reset on mismatch.",
+        "receiver_failure": "Receiver error is an app delivery error, not a format error or cleanup proof. Caller should separately request cancellation and handle the actual terminal; rebuilding a receiver for the same operation to hide a gap is outside the contract.",
+        "stages": "Event contains the exact native Checkpoint, including USTAR pass/selection, ZIP validate/write/seek/finish, GZip stage and cumulative Usage. No synthetic terminal callback before native return.",
+        "delivery": "Observer receives events synchronously and may forward them. Receiver validates ordering only, not forged metadata or external authentication. Event mutation by consumer is not evidence of backend activity."
+    },
+    "progress": {
+        "all_totals": "None; no derived percentage or inferred work total. 100% never establishes completion.",
+        "gzip": "GzipCumulativeProcessedBytes from native checkpoint.usage.processed; includes prior calls on same Budget, input supply/read-ahead and actual output, including failures. Native usage snapshot also retained.",
+        "ustar": "UstarInputOffset { pass } and UstarEntryIndex { pass } are cursor/index observations with original checkpoint timing, not cross-pass cumulative bytes or completed item counts. Native Completed.usage remains authoritative.",
+        "zip": "ZipInputOffset { entry } is the original before-input checkpoint offset; ZipOutputExtent is the existing buffer extent before the pending write, not successful pending bytes. Seek/rewrite are not added as new output. No native final Usage exists; do not fabricate one.",
+        "comparison": "Metrics and phases are distinct; never compare them as one shared processed counter."
+    },
+    "control": {
+        "request": "Cancellation::request() is monotonic/idempotent and reports whether it set the flag first. It is a request, not an actual cancellation result.",
+        "poll_order": "At an existing native checkpoint, allocate event stamp and invoke the native-typed observer first. Observer Err is returned unchanged. Only observer Ok is followed by polling the request flag and returning native Stop::Cancelled. No extra checks before entering or after returning from the native module.",
+        "priority": "Preserve native request validation, pre/post callback deadline checks, GZip failed-output charging/backend precedence, USTAR selection-error immediate return and ZIP sticky first Failure. Budget stays Budget; do not infer Deadline.",
+        "snapshot": "Terminal cancellation_requested is a snapshot at return construction; cancellation_forwarded means this handle was observed and converted to Stop::Cancelled at a checkpoint. Neither overrides actual native result. Explicit observer cancellation may yield Cancelled with forwarded=false.",
+        "late_request": "A request after the final checkpoint can coexist with success. A request after terminal creation does not mutate that terminal. Native errors before a checkpoint may coexist with requested=true and forwarded=false.",
+        "limits": "Cooperative only. No preemption or all-panic/OOM recovery. Callback time remains included in native timing. A panic may produce no Terminal."
+    },
+    "result": {
+        "only_success": "MemoryValidated means native operation returned successfully under the identified frozen policy; no additional round-trip validation is claimed for ZIP creation. Only private adapter code constructs this wrapper.",
+        "failure": "No Completed payload. Failure.native owns the exact returned typed error; Failure.adapter independently preserves sequence faults, never overwriting native cause.",
+        "origin": "Terminal policy identifies the frozen implementation mapping in sources.json: GzipSingleMemberV1, UstarLinuxV1, ZipAsciiCreateV1.",
+        "limits_preserved": [
+            "GZip exact single member/EOF, unselected full decode, caller-shared Budget retained across retries",
+            "USTAR Linux raw UTF-8 policy, Windows Unsupported, exact string IDs and ContentVerification::Unavailable retained in Completed",
+            "ZIP existing ASCII name policy and already-coarsened Failure::Engine retained; underlying backend details cannot be recovered by the adapter"
+        ],
+        "callback_types": "GZip original Stop::Callback(E) -> Error::Callback(E); USTAR select E -> Error::Selection(E). ZIP/USTAR checkpoint APIs only support Cancelled/Deadline, not arbitrary E; observer signature reflects that limitation.",
+        "no_promotion": "No ProtocolObserved, Published, mock PR39 type, OS receipt or external cleanup evidence. ProcessCleanup::NotApplicable means no process resource was created by this adapter; it does not claim every upstream allocation/Drop/panic is recovered."
+    },
+    "dependency_policy": {
+        "direct": "Three existing path libraries only. All 42 registry package records match the union of original locks. Linux selected 29 package feature sets equal original selected union.",
+        "licenses": "Own code MIT; raw cache-matched third-party license bytes and hashes listed in dependencies.json/THIRD-PARTY-NOTICES.txt. Scope is Linux selected packages, not final all-platform distribution.",
+        "unchanged": "Original source/test/lock/manifest bytes preserved. No source include or production copy into adapter, no new codec/crypto or external package."
+    },
+    "validation": {
+        "rust_toolchain": "1.99.1",
+        "target": "x86_64-unknown-linux-gnu",
+        "build": "locked/offline --lib, exit 0, final build without warnings",
+        "format": "rustfmt check required on adapter only",
+        "originals": "60 imported source/test blobs compared to fixed GitHub trees before and after build",
+        "runtime": "No adapter regression or original regression rerun. Existing module results belong to their original heads only.",
+        "not_claimed": [
+            "Independent execution",
+            "GUI, Windows or product acceptance",
+            "Advisory freshness or vulnerability-free dependencies",
+            "Dynamic overflow coverage; ID/sequence exhaustion branches have no public injection API"
+        ]
+    },
+    "next_regressions": [
+        "Real small synthetic GZip/USTAR/ZIP calls, matching native payload and typed failures",
+        "Native callback error/selection E identity, Budget vs Deadline and shared GZip retry accumulation",
+        "Pre-requested cancellation, callback error precedence, cancel from callback, late cancellation retaining success/error",
+        "Event exact sequence, no-checkpoint native error terminal zero, new operation stale progress/terminal ignored",
+        "Receiver duplicates/gaps/reversal/post-terminal rejection without payload application",
+        "Native policy/Usage/ContentVerification preservation, no protocol/publishing promotion",
+        "Source imports and full dependency lock/feature provenance"
+    ]
+}

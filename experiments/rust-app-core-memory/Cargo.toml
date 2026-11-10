@@ -1,0 +1,18 @@
+[package]
+name = "zipelo-app-core-memory"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.99"
+license = "MIT"
+publish = false
+autotests = false
+
+[lib]
+doctest = false
+
+[dependencies]
+gzip = { package = "zipelo-memory-gzip-reader", path = "../rust-memory-gzip-reader" }
+ustar = { package = "zipelo-memory-ustar-reader", path = "../rust-memory-ustar-reader" }
+zip_create = { package = "zipelo-rust-memory-zip-create", path = "../rust-memory-zip-create" }
+
+[workspace]
