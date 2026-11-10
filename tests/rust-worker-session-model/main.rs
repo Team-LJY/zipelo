@@ -62,12 +62,16 @@ fn completed(model: &mut SessionModel<'_>, payload: &[u8]) {
 }
 
 fn settle(model: &mut SessionModel<'_>, code: u32) {
+    settle_status(model, ExitStatus::Code(code));
+}
+
+fn settle_status(model: &mut SessionModel<'_>, status: ExitStatus) {
     for event in [
         Observation::Closed(Channel::Request),
         Observation::ResultEof,
         Observation::DiagnosticEof,
-        Observation::Exit(ExitStatus::Code(code)),
-        Observation::Reaped(ExitStatus::Code(code)),
+        Observation::Exit(status),
+        Observation::Reaped(status),
         Observation::Closed(Channel::Result),
         Observation::Closed(Channel::Diagnostic),
         Observation::ResourcesReleased,
@@ -344,7 +348,16 @@ fn frame_after_terminal_is_trailing_data() {
     let mut model = session(b"");
     sent(&mut model);
     completed(&mut model, b"");
+    let before = model.report().usage;
     assert!(frame(&mut model, Kind::ResultEnd, 2, &[1]).is_err());
+    let after = model.report().usage;
+    assert_eq!(after.result_wire_bytes, before.result_wire_bytes);
+    assert_eq!(after.result_frames, before.result_frames);
+    assert_eq!(after.result_data_bytes, before.result_data_bytes);
+    assert_eq!(after.request_wire_bytes, before.request_wire_bytes);
+    assert_eq!(after.request_frames, before.request_frames);
+    assert_eq!(after.diagnostic_bytes, before.diagnostic_bytes);
+    assert_eq!(after.observations, before.observations + 1);
     assert_eq!(
         model.report().first_fault,
         Some(Fault::Protocol(ProtocolError::TrailingData))
@@ -361,7 +374,9 @@ fn cancellation_first_cause_survives_io_and_signal_observations() {
         .unwrap();
     assert!(model.report().missing.reap);
     assert!(model.observe(NOW, Observation::IoFailure).is_err());
-    settle(&mut model, 9);
+    settle_status(&mut model, ExitStatus::Signal(9));
+    assert_eq!(model.report().observed_exit, Some(ExitStatus::Signal(9)));
+    assert!(!model.report().missing.reap);
     assert_eq!(model.report().first_fault, Some(Fault::Cancelled));
     assert_eq!(model.report().phase, Phase::SettledModel);
 }
