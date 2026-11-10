@@ -1,0 +1,10 @@
+--- tests/rust-zip-worker-probe/frozen/src/Zipelo.Runtime/LinuxFolderPublication.cs
++++ tests/rust-publication-barrier/derived/LinuxFolderPublication.cs
+@@ -179,6 +179,7 @@
+             token.ThrowIfCancellationRequested();
+             if (Fsync(node.Handle) != 0) { ThrowLast(); }
+         }
++        Zipelo.PublicationBarrierTests.Barrier.Reach(TemporaryName, leaf, token);
+         token.ThrowIfCancellationRequested();
+         // RENAME_NOREPLACE가 없는 커널/FS에서는 대체 경로 없이 실패함.
+         if (Renameat2(parent, TemporaryName, parent, leaf, 1) != 0) { ThrowLast(); }

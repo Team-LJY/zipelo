@@ -1,0 +1,155 @@
+{
+    "schemaVersion": 1,
+    "scope": "고정 Rust worker + 파생 시험 host",
+    "baseCommit": "dde29069f89016111c3a023a89530045190dcb13",
+    "workerCommit": "9626abbf22f3a4c66a996e64601694ed5fe98763",
+    "workerSha256": "62e157e304b01cac7c99a8eb60a147066877cf141b0314db5cf1a76aab55a5f7",
+    "derived": {
+        "originalPath": "tests/rust-zip-worker-probe/frozen/src/Zipelo.Runtime/LinuxFolderPublication.cs",
+        "originalSha256": "6840730b865afa73bf1cbd1494c936b56f9cc3b2b74f958694785c02ee61f2d8",
+        "path": "derived/LinuxFolderPublication.cs",
+        "difference": "injection.patch",
+        "addedLines": 1,
+        "deletedLines": 0
+    },
+    "linkedFiles": [
+        {
+            "path": "tests/rust-zip-worker-probe/frozen/src/Zipelo.Core/ArchiveContracts.cs",
+            "sha256": "8dcfa7ac7287b326abf2b755352fbc4e2f494326a6557688a87a6dc6874987a5"
+        },
+        {
+            "path": "tests/rust-zip-worker-probe/frozen/src/Zipelo.Core/ArchiveJob.cs",
+            "sha256": "5510ad4cf73d5c689def68aeda28d69cd9a97ff103b694c8c9fb557729136f8e"
+        },
+        {
+            "path": "tests/rust-zip-worker-probe/frozen/src/Zipelo.Core/EngineContext.cs",
+            "sha256": "dfe432962117e663f1c34155184c47a4dc78ec34ce198c165ecf50003f8cfa30"
+        },
+        {
+            "path": "tests/rust-zip-worker-probe/frozen/src/Zipelo.Core/JobBudget.cs",
+            "sha256": "878caa4469642b2e03f375872ce29eadea3d6fa0d4b6f34b6bf5e0fb8dfa008f"
+        },
+        {
+            "path": "tests/rust-zip-worker-probe/frozen/src/Zipelo.Core/OutputPathPolicy.cs",
+            "sha256": "c4df09afc59d00560f3cef8e05c00925b78c8162c4b074b4d1c244e77ec4b509"
+        },
+        {
+            "path": "tests/rust-zip-worker-probe/frozen/src/Zipelo.Runtime/LinuxPublication.cs",
+            "sha256": "ef684bf291b7af4a23ec21b2877b2559fd57aaad3eef802c6dba9097fd5f0505"
+        },
+        {
+            "path": "tests/rust-zip-worker-probe/frozen/src/Zipelo.Runtime/NewFolderPublisher.cs",
+            "sha256": "fe77406a2f7716f740fe52f4296b8639043806060a75983b759fec674eb2169e"
+        },
+        {
+            "path": "tests/rust-zip-worker-probe/frozen/src/Zipelo.Runtime/NewZipPublisher.cs",
+            "sha256": "fc2a302f05b2e773ff4b8c87baf55e6133b7dbc6f5ca5ab75418c516c033c916"
+        },
+        {
+            "path": "tests/rust-zip-worker-probe/frozen/src/Zipelo.Runtime/PendingFolderPublication.Streaming.cs",
+            "sha256": "9ba2e3441560ee40997b3c42f10ef9a1670c8058a834637d51a11ba28bc3d0f9"
+        },
+        {
+            "path": "tests/rust-zip-worker-probe/frozen/src/Zipelo.Runtime/PendingFolderPublication.cs",
+            "sha256": "2701cfbea1d5d26f25ddb5c8af2555f6a9812d4cc602a7d3c4385ad1a18c8647"
+        },
+        {
+            "path": "tests/rust-zip-worker-probe/frozen/src/Zipelo.Runtime/Streaming/ExtractionWire.cs",
+            "sha256": "f64c47add55bf7499227ce65921e1e4241cd51425336052f402b9381c086129f"
+        },
+        {
+            "path": "tests/rust-zip-worker-probe/frozen/src/Zipelo.Runtime/Streaming/HandleReadStream.cs",
+            "sha256": "1ec38e3698b87d0caf60c474d3d2632dd232d53f9b00bea434861aa627bcda1b"
+        },
+        {
+            "path": "tests/rust-zip-worker-probe/frozen/src/Zipelo.Runtime/Streaming/StreamingExtractionDiagnostics.cs",
+            "sha256": "52e3b492c49f802b6f0839f4d9f33ddbf4c8b958049978c6147c45b1ce1e1b4c"
+        },
+        {
+            "path": "tests/rust-zip-worker-probe/frozen/src/Zipelo.Runtime/Streaming/StreamingZipWorkerClient.cs",
+            "sha256": "5fc0945a2b60f28f3a378cb69398cacab965314108e2cbc35234cefe1c693fb5"
+        },
+        {
+            "path": "tests/rust-zip-worker-probe/frozen/src/Zipelo.Runtime/Streaming/WorkerStreamChannel.cs",
+            "sha256": "4109e345138763df3ecec0368755660b5891349567908ac7ddb996b38ca94046"
+        },
+        {
+            "path": "tests/rust-zip-worker-probe/frozen/src/Zipelo.Runtime/Streaming/WorkerStreamContract.cs",
+            "sha256": "0e8e8c21478224d6ed861e50a5ec310dce8b6af522ce3d66e4f899a926cf7a94"
+        },
+        {
+            "path": "tests/rust-zip-worker-probe/frozen/src/Zipelo.Runtime/Streaming/WorkerStreamValidator.cs",
+            "sha256": "933e93fc4d4cae7ac9e1bc0621ed0598994ff057ff0c320c7dc5f7cc59ada09a"
+        },
+        {
+            "path": "tests/rust-zip-worker-probe/frozen/src/Zipelo.Runtime/Streaming/ZipStreamIndex.cs",
+            "sha256": "981bcdecc754f68aca0bcb39fc6f6db1e779c72798a58bcb9d83a96963a96468"
+        },
+        {
+            "path": "tests/rust-zip-worker-probe/frozen/src/Zipelo.Runtime/WindowsFolderGuard.cs",
+            "sha256": "8924c914edbf246a4335c89bdecea0f099c7d76701c1430192a6a51066112df7"
+        },
+        {
+            "path": "tests/rust-zip-worker-probe/frozen/src/Zipelo.Runtime/WindowsFolderPublication.cs",
+            "sha256": "26d4c9d24286c7eec6d5dee37457e7e9fa587ec620ee08c7ec4dc9596674aee3"
+        },
+        {
+            "path": "tests/rust-zip-worker-probe/frozen/src/Zipelo.Runtime/WindowsPublication.cs",
+            "sha256": "170bf2a4cad401241e7eb324ab9c9acdb9b1f7a4cbf8147e301d00696366b720"
+        },
+        {
+            "path": "tests/rust-zip-worker-probe/frozen/src/Zipelo.Runtime/WorkerPlatform.cs",
+            "sha256": "08fa3b50c77a2d52de44038e0958af26cd04b18ba773c5e4b6e197953bd6a577"
+        },
+        {
+            "path": "tests/rust-zip-worker-probe/frozen/src/Zipelo.Runtime/WorkerProtocol.cs",
+            "sha256": "582232bdddad14388858eb669fbcd6c4948f2c514273997bdab7af7b0f696a2f"
+        },
+        {
+            "path": "tests/rust-zip-worker-probe/frozen/src/Zipelo.Runtime/ZipExtraction.cs",
+            "sha256": "a7fcbd766dc0df71483ceb19bbf6fc02c4964d3ae290e368a92bb64ddfac3625"
+        },
+        {
+            "path": "tests/rust-zip-worker-probe/frozen/src/Zipelo.Runtime/ZipWorkerClient.cs",
+            "sha256": "5df676f75957cf081237671585ce6ad2098c6f8c8ed1392efece28960a3ebbd0"
+        },
+        {
+            "path": "tests/rust-zip-worker-probe/shared/Models.cs",
+            "sha256": "4138879b8c01792f6874353cdfebe54422035207d23f7f6bbf04969f82772491"
+        },
+        {
+            "path": "tests/rust-zip-worker-probe/shared/Check.cs",
+            "sha256": "3d0e4d9d9c85394b8fb8683c7ee16b50498654a6c7607269b0e3b874b167871f"
+        },
+        {
+            "path": "tests/rust-zip-worker-probe/shared/Evidence.cs",
+            "sha256": "e6ea97c56cc5997e718e875a62f2103897ad869fc9e289df0e4071933a7dfb7b"
+        },
+        {
+            "path": "tests/rust-zip-worker-probe/frozen/pr12/ZipFixture.cs",
+            "sha256": "394f76e6181f52b09deee56a1105dc19289b858f53dc605396494ae010953c10"
+        },
+        {
+            "path": "tests/rust-zip-worker-probe/frozen/pr12/CaseLifetime.cs",
+            "sha256": "af13821ec2f7b5102d0c3bdd52c51f13f71e8b15709125980eb4e4b5a779dd11"
+        }
+    ],
+    "supervisor": {
+        "path": "tests/rust-zip-worker-probe/process_scope.py",
+        "sha256": "68a726a794e744f4c348eecf9a9588bff80a5a8b42ac5e2ca0afaae139981cd5"
+    },
+    "frozenManifestSha256": "e69c21d45e192687a61ecbd191c4ce8c72c7bc792233a3f9869098503940f957",
+    "retirement": "Rust 전환 완료 후 정리 검토할 임시 C# 비교 자산임. 이 폴더의 csproj가 frozen Core/Runtime 및 PR12 시험 소스를 참조함. 현재 삭제하지 않음.",
+    "limits": [
+        "frozen host 미검증 7개를 소급 통과시키지 않음",
+        "성능과 전체 수용 및 Windows 성공을 주장하지 않음",
+        "최종 취소 검사 이후 renameat2 전의 추가 경합은 검증하지 않음"
+    ],
+    "fixtureEvidence": {
+        "corpusSource": "tests/rust-zip-worker-probe/corpus/Program.cs",
+        "corpusSourceSha256": "9bd9a69fff7bfe85bffbf99b0f7aacd6e13268bec1567980f143f4de05d59313",
+        "input": "stored-chunk",
+        "inputSha256": "a6e206b9f9fefd406d765562664ce023aa30dcacf66e942e264e276d95600b51",
+        "basis": "고정 dde29069 중앙 corpus의 기존 입력 해시를 읽어 사용함. 이 작업에서 fixture를 실행하거나 새 바이너리를 생성하지 않음."
+    }
+}

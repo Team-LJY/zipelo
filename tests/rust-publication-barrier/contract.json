@@ -1,0 +1,92 @@
+{
+    "schemaVersion": 1,
+    "scope": "고정 Rust worker + 파생 시험 host",
+    "sourceOnly": true,
+    "compileAndRunStatus": "중앙 빌드와 실행 대기",
+    "cases": [
+        {
+            "mode": "control",
+            "expected": "Published=true, None, 정확한 payload.bin"
+        },
+        {
+            "mode": "cancel-new",
+            "expected": "Published=false, Cancelled, result 없음"
+        },
+        {
+            "mode": "cancel-existing",
+            "expected": "Published=false, Cancelled, 기존 result/existing.txt 그대로"
+        }
+    ],
+    "fixture": {
+        "source": "../rust-zip-worker-probe/frozen/pr12/ZipFixture.cs",
+        "corpusDefinition": "../rust-zip-worker-probe/corpus/Program.cs: stored-chunk",
+        "inputSha256": "a6e206b9f9fefd406d765562664ce023aa30dcacf66e942e264e276d95600b51",
+        "payloadSha256": "237356e18b503616912abb8ffaed3a72591e397d4ac294c4637917d48a3f529d",
+        "payloadBytes": 65537
+    },
+    "deadlinesSeconds": {
+        "operation": 15,
+        "body": 45,
+        "drain": 25,
+        "diagnosticStop": 1,
+        "external": 75,
+        "forcedExitObservation": 5,
+        "barrierIndependentWait": 15
+    },
+    "barrierContract": [
+        "최종 취소 검사 바로 앞의 동기 장벽 하나임",
+        "실제 terminal/EOF/exit 0/range 종료/입력 정리/출력 검증 이후 도달을 진단으로 검증함",
+        "고유 JobId와 host PID, worker PID, 실행 경로 해시, 실행파일 SHA256 및 일회성 nonce를 연결함",
+        "취소 완료를 기다린 제어자가 장벽을 해제하며 장벽 자체는 작업 토큰을 사용하지 않음",
+        "독립 장벽 기한이나 제어 실패는 시험 실패이며 Cancelled 성공이 아님",
+        "원래 최종 검사에서 Cancelled가 발생하고 게시 종료 진단 없이 Abort와 Dispose가 완료되어야 함",
+        "진단은 제어 장벽이 아니며 중복/누락/드롭과 예상 외 실패 경로를 거부함"
+    ],
+    "build": {
+        "prerequisite": "이미 승인된 .NET 10 SDK와 참조팩만 사용하며 새 설치/외부 NuGet/의존성 복원 다운로드는 금지함. 기존 Windows SDK로 managed 빌드 후 승인된 기존 Linux .NET runtime으로 중앙 실행 가능함.",
+        "project": "tests/rust-publication-barrier/Zipelo.PublicationBarrierProbe.csproj",
+        "command": [
+            "EXISTING_DOTNET_SDK",
+            "build",
+            "tests/rust-publication-barrier/Zipelo.PublicationBarrierProbe.csproj",
+            "-c",
+            "Release",
+            "--configfile",
+            "tests/rust-publication-barrier/NuGet.Config",
+            "--disable-build-servers"
+        ],
+        "isolation": "전용 새 후보 트리에서 실행하며 obj/bin은 이 새 폴더 안에만 생성함. 모든 Compile 참조의 해시를 provenance로 검증하고 기존 프로젝트를 빌드하거나 변경하지 않음.",
+        "output": "tests/rust-publication-barrier/bin/Release/net10.0/Zipelo.PublicationBarrierProbe.dll",
+        "warningsAndErrorsExpected": 0
+    },
+    "run": {
+        "platform": "Linux x64 ext4 우선, frozen 파일시스템 보호 유지",
+        "command": [
+            "python3",
+            "-B",
+            "tests/rust-publication-barrier/runner.py",
+            "--config",
+            "ABSOLUTE_FILLED_CONFIG",
+            "--work-parent",
+            "ABSOLUTE_OWNED_PARENT_UNDER_tests/rust-publication-barrier"
+        ],
+        "config": "config.example.json 복사본의 새 host head, 소스 manifest 및 실제 전체 산출물 해시를 채움. dotnet/native worker/managed DLL/deps/runtimeconfig 및 호스트 출력 디렉터리의 모든 파일을 기록함.",
+        "worker": "검증된 9626abbf 바이너리 SHA256 62e157e304b01cac7c99a8eb60a147066877cf141b0314db5cf1a76aab55a5f7만 native --extract-stream-v2로 직접 실행함. wrapper/fake peer 없음.",
+        "supervision": "고정 process_scope.py의 새 Linux 세션과 /proc 소유 프로세스 확인을 사용함. gate polling은 프로세스 감독 진입에만 사용하고 게시 주입에는 사용하지 않음.",
+        "stop": "보존 검사 예외, 장벽 미도달, 종료/정리/진단 불확실, 비정상 결과, 외부 timeout/강제 종료가 하나라도 있으면 후속 사례를 시작하지 않음. 자료는 보존하며 광범위 삭제 없음.",
+        "outputs": [
+            "run-*/MODE/plan.json",
+            "run-*/MODE/diagnostics.tsv",
+            "run-*/MODE/observation.json",
+            "run-*/summary.json"
+        ],
+        "upload": false
+    },
+    "limitations": [
+        "현재 source와 정적 검토만 수행하며 빌드와 3개 사례의 실행 성공을 주장하지 않음",
+        "frozen host의 기존 미검증 7개와 16개 분류 실패 및 Rust 직접 분류 실패를 유지함",
+        "Windows 실행, 성능, 전체 수용, 제품 채택과 릴리스 통과 아님",
+        "취소 검사 이후 syscall 이전의 추가 경합 또는 완전한 Rust 게시 host 검증 아님",
+        "전환 중 임시 C# 자산이며 provenance 참조를 따라 향후 삭제 범위를 정함. 현재 삭제 없음"
+    ]
+}

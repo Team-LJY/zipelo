@@ -1,0 +1,24 @@
+{
+    "schemaVersion": 1,
+    "sourceManifestSha256": "REPLACE_WITH_THIS_SHA256SUMS_SHA256",
+    "dotnet": {
+        "path": "ABSOLUTE_EXISTING_DOTNET_PATH",
+        "sha256": "REPLACE"
+    },
+    "host": {
+        "path": "ABSOLUTE_ZIPELO_PUBLICATIONBARRIERPROBE_DLL",
+        "sha256": "REPLACE",
+        "sourceCommit": "REPLACE_WITH_NEW_DRAFT_PR_HEAD"
+    },
+    "worker": {
+        "path": "ABSOLUTE_EXISTING_RUST_WORKER",
+        "sha256": "62e157e304b01cac7c99a8eb60a147066877cf141b0314db5cf1a76aab55a5f7",
+        "sourceCommit": "9626abbf22f3a4c66a996e64601694ed5fe98763"
+    },
+    "artifacts": [
+        {
+            "path": "ABSOLUTE_EACH_HOST_BUNDLE_FILE_DOTNET_AND_WORKER",
+            "sha256": "REPLACE"
+        }
+    ]
+}

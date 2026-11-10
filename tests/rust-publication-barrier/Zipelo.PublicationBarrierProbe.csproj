@@ -1,0 +1,51 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <AssemblyName>Zipelo.PublicationBarrierProbe</AssemblyName>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+        <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+        <DefineConstants>$(DefineConstants);ZIPELO_STREAM_DIAGNOSTICS</DefineConstants>
+        <Deterministic>true</Deterministic>
+        <IsPackable>false</IsPackable>
+    </PropertyGroup>
+    <ItemGroup>
+        <Compile Include="Program.cs" />
+        <Compile Include="Barrier.cs" />
+        <Compile Include="Probe.cs" />
+        <Compile Include="TraceProof.cs" />
+        <Compile Include="derived/LinuxFolderPublication.cs" />
+        <Compile Include="../rust-zip-worker-probe/frozen/src/Zipelo.Core/ArchiveContracts.cs" />
+        <Compile Include="../rust-zip-worker-probe/frozen/src/Zipelo.Core/ArchiveJob.cs" />
+        <Compile Include="../rust-zip-worker-probe/frozen/src/Zipelo.Core/EngineContext.cs" />
+        <Compile Include="../rust-zip-worker-probe/frozen/src/Zipelo.Core/JobBudget.cs" />
+        <Compile Include="../rust-zip-worker-probe/frozen/src/Zipelo.Core/OutputPathPolicy.cs" />
+        <Compile Include="../rust-zip-worker-probe/frozen/src/Zipelo.Runtime/LinuxPublication.cs" />
+        <Compile Include="../rust-zip-worker-probe/frozen/src/Zipelo.Runtime/NewFolderPublisher.cs" />
+        <Compile Include="../rust-zip-worker-probe/frozen/src/Zipelo.Runtime/NewZipPublisher.cs" />
+        <Compile Include="../rust-zip-worker-probe/frozen/src/Zipelo.Runtime/PendingFolderPublication.Streaming.cs" />
+        <Compile Include="../rust-zip-worker-probe/frozen/src/Zipelo.Runtime/PendingFolderPublication.cs" />
+        <Compile Include="../rust-zip-worker-probe/frozen/src/Zipelo.Runtime/Streaming/ExtractionWire.cs" />
+        <Compile Include="../rust-zip-worker-probe/frozen/src/Zipelo.Runtime/Streaming/HandleReadStream.cs" />
+        <Compile Include="../rust-zip-worker-probe/frozen/src/Zipelo.Runtime/Streaming/StreamingExtractionDiagnostics.cs" />
+        <Compile Include="../rust-zip-worker-probe/frozen/src/Zipelo.Runtime/Streaming/StreamingZipWorkerClient.cs" />
+        <Compile Include="../rust-zip-worker-probe/frozen/src/Zipelo.Runtime/Streaming/WorkerStreamChannel.cs" />
+        <Compile Include="../rust-zip-worker-probe/frozen/src/Zipelo.Runtime/Streaming/WorkerStreamContract.cs" />
+        <Compile Include="../rust-zip-worker-probe/frozen/src/Zipelo.Runtime/Streaming/WorkerStreamValidator.cs" />
+        <Compile Include="../rust-zip-worker-probe/frozen/src/Zipelo.Runtime/Streaming/ZipStreamIndex.cs" />
+        <Compile Include="../rust-zip-worker-probe/frozen/src/Zipelo.Runtime/WindowsFolderGuard.cs" />
+        <Compile Include="../rust-zip-worker-probe/frozen/src/Zipelo.Runtime/WindowsFolderPublication.cs" />
+        <Compile Include="../rust-zip-worker-probe/frozen/src/Zipelo.Runtime/WindowsPublication.cs" />
+        <Compile Include="../rust-zip-worker-probe/frozen/src/Zipelo.Runtime/WorkerPlatform.cs" />
+        <Compile Include="../rust-zip-worker-probe/frozen/src/Zipelo.Runtime/WorkerProtocol.cs" />
+        <Compile Include="../rust-zip-worker-probe/frozen/src/Zipelo.Runtime/ZipExtraction.cs" />
+        <Compile Include="../rust-zip-worker-probe/frozen/src/Zipelo.Runtime/ZipWorkerClient.cs" />
+        <Compile Include="../rust-zip-worker-probe/shared/Models.cs" />
+        <Compile Include="../rust-zip-worker-probe/shared/Check.cs" />
+        <Compile Include="../rust-zip-worker-probe/shared/Evidence.cs" />
+        <Compile Include="../rust-zip-worker-probe/frozen/pr12/ZipFixture.cs" />
+        <Compile Include="../rust-zip-worker-probe/frozen/pr12/CaseLifetime.cs" />
+    </ItemGroup>
+</Project>
