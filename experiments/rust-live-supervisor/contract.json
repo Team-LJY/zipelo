@@ -77,7 +77,8 @@
             "no publication or products",
             "no source processed-byte or compression ratio enforcement beyond worker config"
         ],
-        "post_reap_range": "Buffered range bytes after modeled reap fail as OutstandingResponse before creating a reply that cannot be sent. Drain continues under cleanup quota; no kill of a reaped child."
+        "post_reap_range": "Buffered range bytes after modeled reap fail as OutstandingResponse before creating a reply that cannot be sent. Drain continues under cleanup quota; no kill of a reaped child.",
+        "evidence_rejection": "Every Session event checks supervisor_invalid. Rejection latches the lower first cause only when no earlier model cause exists, marks model cleanup confirmation failed, blocks settlement and aborts pending model responses without recursive event delivery. This is evidence/model failure, not proof of open OS fds. IoSettled and CleanupComplete require their individual attestation flags."
     },
     "central": {
         "build_status": "NOT BUILT; tests NOT RUN by implementing agent",
@@ -105,6 +106,16 @@
             "existing seven uninjected conditions",
             "Windows installation approval pending"
         ],
-        "direct_test_source_count": 46
+        "direct_test_source_count": 58,
+        "prior_validation": {
+            "head": "c171d35d8cad3dc3666339d757aef07178406b52",
+            "reported_by": "independent central validation",
+            "locked_offline_build": "passed",
+            "supervisor_model": "46 passed / 0 failed",
+            "separate_pr30": "51 passed / 0 failed",
+            "additional_adversarial": "0 passed / 1 failed: event cap caused contradictory model cleanup settlement",
+            "new_head": "source/static checks only; central rebuild and regression pending"
+        },
+        "launch_preflight_report": "Separate central preflight reported memfd creation/sealing/sealed-byte hash success, then execveat(AT_EMPTY_PATH) denied with errno 13 EACCES. Stopped without retry/pathname fallback/settings bypass. Not a live supervisor validation; no local execution performed for this fix."
     }
 }

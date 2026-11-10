@@ -675,3 +675,183 @@ fn buffered_range_after_reap_cannot_create_unsendable_reply() {
     assert_eq!(reactor.plan().stdin_max, 0);
     assert_eq!(reactor.report().phase, Phase::Stopping);
 }
+
+const SESSION_EVENT_LIMIT: usize = 131_072;
+
+// 유효한 6프레임을 나눠 실제 Session 이벤트 예산을 소진함.
+fn completed_with_stdout_events(count: usize) -> Reactor {
+    let mut bytes = Vec::new();
+    let mut item = [0; 16];
+    item[0] = 1;
+    let frames = [
+        (1u16, [0; 16], vec![]),
+        (2, item, 131_072u64.to_le_bytes().to_vec()),
+        (3, item, vec![0; 65_536]),
+        (3, item, vec![0; 65_536]),
+        (4, item, 131_072u64.to_le_bytes().to_vec()),
+        (5, [0; 16], vec![1]),
+    ];
+    for (sequence, (kind, item, body)) in frames.into_iter().enumerate() {
+        let mut header = [0; 64];
+        header[..4].copy_from_slice(b"ZIP2");
+        header[4..6].copy_from_slice(&2u16.to_le_bytes());
+        header[6..8].copy_from_slice(&kind.to_le_bytes());
+        header[8..12].copy_from_slice(&(body.len() as u32).to_le_bytes());
+        header[16..32].copy_from_slice(&JOB);
+        header[32..48].copy_from_slice(&item);
+        header[48..56].copy_from_slice(&(sequence as u64).to_le_bytes());
+        bytes.extend_from_slice(&header);
+        bytes.extend_from_slice(&body);
+    }
+    assert!((SESSION_EVENT_LIMIT - 8..=SESSION_EVENT_LIMIT).contains(&count));
+    let mut reactor = running();
+    for byte in &bytes[..count - 1] {
+        reactor.begin_turn(Duration::ZERO, false);
+        reactor.stdout_bytes(&[*byte]);
+    }
+    reactor.begin_turn(Duration::ZERO, false);
+    reactor.stdout_bytes(&bytes[count - 1..]);
+    let report = reactor.report();
+    assert_eq!(report.first, None);
+    assert!(report.protocol.stream.completed);
+    assert_eq!(report.protocol.stream.frames, 6);
+    assert!(!report.protocol.supervisor_invalid);
+    reactor
+}
+
+fn finish_model_observations(reactor: &mut Reactor) {
+    reactor.stdout_eof();
+    reactor.stderr_eof();
+    reactor.wait_observation(WaitObservation::Exited(0));
+    reactor.stdin_closed();
+    reactor.fds_closed();
+}
+
+fn assert_evidence_rejected(reactor: &Reactor, first: Reason) {
+    let report = reactor.report();
+    assert_eq!(report.phase, Phase::Blocked);
+    assert_eq!(report.first, Some(first));
+    assert!(report.cleanup_failed);
+    assert!(report.protocol.supervisor_invalid);
+    assert!(!report.protocol.cleanup_confirmed_attested);
+    assert!(report.stop_required);
+    assert!(!report.live_verified && !report.publication);
+}
+
+fn supervisor_order() -> Reason {
+    Reason::Raw(zipelo_rust_host_errors::Cause::SupervisorOrder)
+}
+
+#[test]
+fn session_cap_rejecting_io_settled_blocks_model_settlement() {
+    let mut reactor = completed_with_stdout_events(SESSION_EVENT_LIMIT - 2);
+    finish_model_observations(&mut reactor);
+    assert_evidence_rejected(&reactor, supervisor_order());
+    assert!(!reactor.report().protocol.io_settled_attested);
+    assert!(reactor.report().owned_child_reaped);
+}
+
+#[test]
+fn session_cap_rejecting_cleanup_complete_preserves_io_confirmation() {
+    let mut reactor = completed_with_stdout_events(SESSION_EVENT_LIMIT - 3);
+    finish_model_observations(&mut reactor);
+    assert_evidence_rejected(&reactor, supervisor_order());
+    assert!(reactor.report().protocol.io_settled_attested);
+}
+
+#[test]
+fn exact_session_cap_accepts_both_cleanup_events() {
+    let mut reactor = completed_with_stdout_events(SESSION_EVENT_LIMIT - 4);
+    finish_model_observations(&mut reactor);
+    let report = reactor.report();
+    assert_eq!(report.phase, Phase::SettledModel);
+    assert_eq!(report.first, None);
+    assert!(!report.cleanup_failed && !report.protocol.supervisor_invalid);
+    assert!(report.protocol.io_settled_attested);
+    assert!(report.protocol.cleanup_confirmed_attested);
+    assert!(report.stop_required && !report.live_verified && !report.publication);
+}
+
+#[test]
+fn cancelled_first_survives_each_cleanup_event_rejection() {
+    for reserve in [3, 4] {
+        let mut reactor = completed_with_stdout_events(SESSION_EVENT_LIMIT - reserve);
+        reactor.begin_turn(Duration::ZERO, true);
+        finish_model_observations(&mut reactor);
+        assert_evidence_rejected(&reactor, Reason::Cancelled);
+        assert_eq!(reactor.report().protocol.io_settled_attested, reserve == 4);
+    }
+}
+
+#[test]
+fn io_first_survives_each_cleanup_event_rejection() {
+    for reserve in [3, 4] {
+        let mut reactor = completed_with_stdout_events(SESSION_EVENT_LIMIT - reserve);
+        reactor.io_failure();
+        finish_model_observations(&mut reactor);
+        assert_evidence_rejected(&reactor, Reason::Io);
+        assert_eq!(reactor.report().protocol.io_settled_attested, reserve == 4);
+    }
+}
+
+#[test]
+fn raw_failure_survives_cleanup_evidence_rejection() {
+    let mut reactor = completed_with_stdout_events(SESSION_EVENT_LIMIT - 4);
+    reactor.stdout_bytes(&[0]);
+    let first = reactor.report().first.unwrap();
+    assert!(matches!(first, Reason::Raw(_)));
+    finish_model_observations(&mut reactor);
+    assert_evidence_rejected(&reactor, first);
+}
+
+#[test]
+fn stdout_event_rejection_marks_cleanup_unconfirmed() {
+    let mut reactor = completed_with_stdout_events(SESSION_EVENT_LIMIT);
+    reactor.stdout_bytes(&[0]);
+    assert_evidence_rejected(&reactor, supervisor_order());
+}
+
+#[test]
+fn stdout_eof_event_rejection_marks_cleanup_unconfirmed() {
+    let mut reactor = completed_with_stdout_events(SESSION_EVENT_LIMIT);
+    reactor.stdout_eof();
+    assert_evidence_rejected(&reactor, supervisor_order());
+    assert!(!reactor.report().protocol.stdout_eof_attested);
+}
+
+#[test]
+fn natural_exit_event_rejection_marks_cleanup_unconfirmed() {
+    let mut reactor = completed_with_stdout_events(SESSION_EVENT_LIMIT);
+    reactor.wait_observation(WaitObservation::Exited(0));
+    assert_evidence_rejected(&reactor, supervisor_order());
+    assert_eq!(
+        reactor.report().protocol.exit,
+        zipelo_rust_host_errors::Exit::Unknown
+    );
+    assert!(reactor.report().owned_child_reaped);
+}
+
+#[test]
+fn signalled_exit_event_rejection_marks_cleanup_unconfirmed() {
+    let mut reactor = completed_with_stdout_events(SESSION_EVENT_LIMIT);
+    reactor.wait_observation(WaitObservation::Signalled);
+    assert_evidence_rejected(&reactor, supervisor_order());
+    assert_eq!(
+        reactor.report().protocol.exit,
+        zipelo_rust_host_errors::Exit::Unknown
+    );
+}
+
+#[test]
+fn rejected_host_failure_keeps_original_host_cause() {
+    let mut reactor = completed_with_stdout_events(SESSION_EVENT_LIMIT);
+    reactor.io_failure();
+    assert_evidence_rejected(&reactor, Reason::Io);
+}
+
+#[test]
+fn rejected_cleanup_failure_keeps_original_confirmation_failure() {
+    let mut reactor = completed_with_stdout_events(SESSION_EVENT_LIMIT);
+    reactor.fds_closed();
+    assert_evidence_rejected(&reactor, Reason::CleanupUnconfirmed);
+}

@@ -152,15 +152,28 @@ impl Reactor {
     fn event(&mut self, event: Event<'_>) {
         self.session.observe(self.job, self.event_sequence, event);
         self.event_sequence = self.event_sequence.saturating_add(1);
+        let report = self.session.report();
+        if report.supervisor_invalid {
+            // 하위 증거 거부를 재귀 이벤트 없이 보존함. 실제 fd 누수 판정은 아님.
+            let cause = match report.outcome {
+                Outcome::Failed(cause) => cause,
+                _ => Cause::SupervisorOrder,
+            };
+            self.first.get_or_insert(Reason::Raw(cause));
+            self.cleanup_failed = true;
+            self.phase = Phase::Blocked;
+            self.range.abort();
+        }
     }
 
     fn cleanup_failure(&mut self) {
-        if !self.cleanup_failed {
-            self.event(Event::CleanupFailed);
-        }
+        let notify = !self.cleanup_failed;
         self.cleanup_failed = true;
         self.first.get_or_insert(Reason::CleanupUnconfirmed);
         self.phase = Phase::Blocked;
+        if notify {
+            self.event(Event::CleanupFailed);
+        }
     }
 
     fn fail(&mut self, reason: Reason) {
@@ -442,7 +455,17 @@ impl Reactor {
         }
         self.closed_fds = true;
         self.event(Event::IoSettled);
+        let report = self.session.report();
+        if report.supervisor_invalid || !report.io_settled_attested {
+            self.cleanup_failure();
+            return;
+        }
         self.event(Event::CleanupComplete);
+        let report = self.session.report();
+        if report.supervisor_invalid || !report.cleanup_confirmed_attested {
+            self.cleanup_failure();
+            return;
+        }
         if !self.cleanup_failed {
             self.phase = Phase::SettledModel;
         }
