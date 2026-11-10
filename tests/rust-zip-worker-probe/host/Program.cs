@@ -2,10 +2,17 @@ using System.Diagnostics;
 using Zipelo.StreamingExtractionTests;
 using Zipelo.Runtime.Streaming;
 
+if (args.Length == 0) { return await ListRelay.Run(); }
 if (args is ["--extract-stream-v2"]) { return await FakeWorker.Run(); }
+if (args is ["--regression", var regressionGate, var regressionRoot, var dotnet])
+{
+    await Data.Gate(regressionGate);
+    return await Regression.Run(regressionRoot, dotnet);
+}
 if (args is not ["--gate", var gate, "--plan", var planPath]) { return 2; }
 await Data.Gate(gate);
 var plan = Data.Read<CasePlan>(planPath, 4 * 1024 * 1024);
+Evidence.Validate(plan);
 var root = Path.GetFullPath(plan.RunDirectory);
 Check.That(Path.IsPathFullyQualified(plan.RunDirectory) && Directory.Exists(root) &&
     Path.GetDirectoryName(Path.GetFullPath(planPath)) == root, "시험 계획 경로 불일치");
@@ -24,7 +31,8 @@ var observation = new Observation
     OsPolicy = OperatingSystem.IsWindows() ? "windows" : "linux",
     JobId = Guid.NewGuid().ToString(),
     Injection = plan.Case.Injection,
-    FaultKind = plan.Case.FaultKind
+    FaultKind = plan.Case.FaultKind,
+    Invocation = plan.Invocation
 };
 var watch = Stopwatch.StartNew();
 var diagnostic = Path.Combine(root, "diagnostics.tsv");
@@ -52,8 +60,7 @@ else
     }
     else if (failure is not null)
     {
-        observation.Verdict = "fail";
-        observation.Detail = "harness_exception:" + failure.GetType().Name;
+        Safety.Fail(observation, failure);
     }
     try
     {
@@ -62,28 +69,31 @@ else
             StreamingExtractionDiagnostics.Dropped == 0;
         if (observation.DiagnosticsComplete && plan.Case.Operation != "list")
         {
-            var lines = File.ReadAllLines(diagnostic);
-            observation.WorkerStarted = lines.Any(line => line.Split('\t').ElementAtOrDefault(3) == "process.started");
+            var rows = Evidence.Parse(File.ReadAllLines(diagnostic), Guid.Parse(observation.JobId), Environment.ProcessId);
+            var pid = Evidence.Started(rows);
+            observation.WorkerStarted = pid is not null;
+            if (pid is not null)
+            {
+                Check.That(Evidence.StreamIdentity(rows, plan.Invocation, pid.Value), "실행 진단 identity 불일치");
+                observation.IdentityConfirmed = true;
+                observation.IdentityEvidence = "stream_process_executable_and_worker_path_hash";
+            }
             if (plan.Case.Operation == "peer")
             {
-                var peerPid = Path.Combine(root, "peer.pid");
-                var observedPids = lines.Select(line => line.Split('\t'))
-                    .Where(parts => parts.Length >= 5 && parts[3] == "process.started")
-                    .Select(parts => parts[4]).ToArray();
-                var reached = File.Exists(peerPid) &&
-                    observedPids.Contains(File.ReadAllText(peerPid).Trim(), StringComparer.Ordinal);
-                observation.InjectionConfirmed &= reached;
-                if (!reached || observation.WorkerExitCode == 71)
-                {
-                    observation.Verdict = "blocked";
-                    observation.Detail = "peer_injection_unconfirmed";
-                }
+                var peerPath = Path.Combine(root, "peer.pid");
+                int? peerPid = File.Exists(peerPath) && new FileInfo(peerPath).Length <= 16 &&
+                    int.TryParse(File.ReadAllText(peerPath), out var parsedPid) ? parsedPid : null;
+                Evidence.ConfirmPeer(observation, plan.Case.Mode, rows, pid, peerPid, Evidence.Ready(root));
             }
             observation.CoverageLayer = plan.Case.Operation == "peer" ? "host_fault_peer" :
                 observation.WorkerStarted == true ? "host_and_worker" : "host_preflight";
         }
     }
-    catch { observation.DiagnosticsComplete = false; }
+    catch (Exception error)
+    {
+        observation.DiagnosticsComplete = false;
+        Safety.Fail(observation, error);
+    }
     if (!observation.DiagnosticsComplete)
     {
         observation.Verdict = "fail";
@@ -91,6 +101,8 @@ else
         observation.Detail = "diagnostics_unconfirmed";
     }
 }
+try { Evidence.VerifyFiles(plan.Invocation); }
+catch (Exception error) { Safety.Fail(observation, error); }
 observation.ElapsedMilliseconds = watch.Elapsed.TotalMilliseconds;
 if (!observation.CleanupConfirmed || observation.WorkerExitConfirmed == false) { observation.StopRequired = true; }
 Data.WriteNew(Path.Combine(root, "observation.json"), observation);

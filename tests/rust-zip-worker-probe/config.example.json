@@ -19,13 +19,15 @@
             "name": "csharp",
             "path": "ABSOLUTE_FROZEN_ZIPELO_WORKER_DLL",
             "sha256": "REPLACE",
-            "sourceCommit": "06e5d6c17318349ea96efef81a9e7d8f54c1e1a1"
+            "sourceCommit": "06e5d6c17318349ea96efef81a9e7d8f54c1e1a1",
+            "invocationKind": "dotnet-managed"
         },
         {
             "name": "rust",
             "path": "ABSOLUTE_RUST_WORKER",
             "sha256": "REPLACE",
-            "sourceCommit": "REPLACE_WITH_RUST_PR_HEAD"
+            "sourceCommit": "REPLACE_WITH_RUST_PR_HEAD",
+            "invocationKind": "native"
         }
     ],
     "artifacts": [

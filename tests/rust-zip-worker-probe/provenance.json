@@ -364,17 +364,31 @@
         "restored": false,
         "built": false,
         "executed": false,
-        "windowsCleanupSequence24": "unverified"
+        "windowsCleanupSequence24": "unverified",
+        "parentCentralBuild": {
+            "head": "a06ad4b33fd5f3d251f095afa85417ed36ad575a",
+            "reportedWarnings": 0,
+            "reportedErrors": 0,
+            "projects": [
+                "host",
+                "frozen C# worker"
+            ],
+            "fullComparisonExecuted": false,
+            "appliesToNewHead": false
+        },
+        "directRegressionsWritten": 38
     },
     "limits": [
         "Runtime은 PR10 고정 사본임. main 최신 Runtime과 같은 바이너리로 취급하지 않음.",
         "호스트 사전 거부는 Rust decoder 실행 근거가 아님.",
         "PR12 원본 계약은 참조 자료이며 이 harness의 사례 수와 합산하지 않음.",
-        "생성 corpus/raw/로그/바이너리는 PR에 포함하지 않음."
+        "생성 corpus/raw/로그/바이너리는 PR에 포함하지 않음.",
+        "목록 v1 실행 identity는 새 시험 relay로 관측하며 frozen v1 검증은 그대로임. relay 오버헤드와 새 회귀는 중앙 실행 전 미검증임."
     ],
     "fileList": [
         "Directory.Build.props",
         "NuGet.Config",
+        "SHA256SUMS",
         "cases.json",
         "config.example.json",
         "contract.json",
@@ -424,15 +438,18 @@
         "frozen/tests/extraction/fixture_factory.py",
         "frozen/tests/extraction/fixtures.json",
         "host/Cases.cs",
+        "host/ListRelay.cs",
         "host/Program.cs",
+        "host/Regression.cs",
         "host/Zipelo.RustComparison.csproj",
         "process_scope.py",
         "provenance.json",
+        "regression_runner.py",
         "result.schema.json",
         "runner.py",
         "shared/Check.cs",
-        "shared/Models.cs",
-        "SHA256SUMS"
+        "shared/Evidence.cs",
+        "shared/Models.cs"
     ],
     "hashManifest": "SHA256SUMS lists every file except itself; its own SHA256 is reported in the PR.",
     "projectReferences": {

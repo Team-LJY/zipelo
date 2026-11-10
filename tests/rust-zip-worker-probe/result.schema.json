@@ -34,7 +34,10 @@
         "outputBytes",
         "processedBytes",
         "elapsedMilliseconds",
-        "entries"
+        "entries",
+        "invocation",
+        "identityConfirmed",
+        "identityEvidence"
     ],
     "additionalProperties": false,
     "properties": {
@@ -194,6 +197,52 @@
                     }
                 }
             }
+        },
+        "invocation": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "kind",
+                "executable",
+                "executableSha256",
+                "worker",
+                "workerSha256",
+                "arguments"
+            ],
+            "properties": {
+                "kind": {
+                    "enum": [
+                        "native",
+                        "dotnet-managed"
+                    ]
+                },
+                "executable": {
+                    "type": "string"
+                },
+                "executableSha256": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                },
+                "worker": {
+                    "type": "string"
+                },
+                "workerSha256": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                },
+                "arguments": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "identityConfirmed": {
+            "type": "boolean"
+        },
+        "identityEvidence": {
+            "type": "string"
         }
     }
 }

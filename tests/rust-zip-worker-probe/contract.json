@@ -40,14 +40,17 @@
         "diagnosticDrain": 1,
         "externalCase": 75,
         "externalKillObservation": 5,
-        "startGate": 10
+        "startGate": 10,
+        "listRelay": 15,
+        "listRelayKillObservation": 5,
+        "directReader": 10
     },
     "ownership": {
         "windows": "unnamed Job with kill-on-close; child waits for assignment gate; inherited descendants must stay in Job",
         "linux": "fresh session; /proc session members; bounded kill of owned groups only",
         "notASandbox": true,
         "retainedTestArtifacts": "source.zip, marker, observations, diagnostics and successful synthetic results remain for central inspection; host temporary directories must be absent",
-        "stopOn": "timeout, unconfirmed worker/owned process exit, unexpected temporary residue, diagnostic failure; no next case"
+        "stopOn": "timeout, unconfirmed worker/owned process exit, unexpected temporary residue, diagnostic failure; no next case; every harness exception and preservation I/O failure forces cleanupConfirmed=false and stopRequired=true"
     },
     "resultRules": {
         "pass": "expected outcome plus exact preservation/tree/length/hash/CRC checks and observed injection; supervisor exit confirmation required",
@@ -63,14 +66,15 @@
         "dotnet build tests/rust-zip-worker-probe/frozen/src/Zipelo.Worker/Zipelo.Worker.csproj --configfile tests/rust-zip-worker-probe/NuGet.Config",
         "dotnet build tests/rust-zip-worker-probe/host/Zipelo.RustComparison.csproj --configfile tests/rust-zip-worker-probe/NuGet.Config",
         "dotnet build tests/rust-zip-worker-probe/corpus/Zipelo.ComparisonCorpus.csproj --configfile tests/rust-zip-worker-probe/NuGet.Config",
+        "python3 -B tests/rust-zip-worker-probe/regression_runner.py --dotnet <absolute-dotnet> --dotnet-sha256 <hash> --host <absolute-Zipelo.RustComparison.dll> --host-sha256 <hash> --work-parent <absolute-tests/rust-zip-worker-probe>",
         "중앙에서 config.example.json을 시험 소유 경로에 복사하고 실제 절대경로/바이너리/전체 산출물 해시 및 Rust lock 정보를 채움.",
-        "python3 tests/rust-zip-worker-probe/runner.py prepare --config <actual-config> --work-parent <absolute-tests/rust-zip-worker-probe>",
-        "python3 tests/rust-zip-worker-probe/runner.py run --config <actual-config> --work-parent <absolute-tests/rust-zip-worker-probe> --bundle <same-bundle.json> --bundle-sha256 <pinned-hash>",
+        "python3 -B tests/rust-zip-worker-probe/runner.py prepare --config <actual-config> --work-parent <absolute-tests/rust-zip-worker-probe>",
+        "python3 -B tests/rust-zip-worker-probe/runner.py run --config <actual-config> --work-parent <absolute-tests/rust-zip-worker-probe> --bundle <same-bundle.json> --bundle-sha256 <pinned-hash>",
         "Windows에서는 기존 python 실행기 명령으로 동일 명령을 사용함. 양 OS의 bundle 바이트와 SHA256이 같아야 함.",
         "신규 설치/복원 네트워크 접근은 이 계약으로 승인하지 않음. 기존 SDK/reference packs만 사용함."
     ],
     "performance": {
-        "mode": "--performance, fullAcceptance=true required; current seven unavailable conditions prevent acceptance",
+        "mode": "disabled: --performance still requires all 137 observations to pass; 7 unavailable conditions remain, gate unchanged",
         "warmupPerCase": 1,
         "measuredRepetitions": 5,
         "alternatingImplementations": true,
@@ -79,7 +83,7 @@
             "min",
             "max"
         ],
-        "elapsed": "process launch through host CRC/path verification/publication/cleanup/exit; listing is an end-to-end startup proxy",
+        "elapsed": "process launch through host CRC/path verification/publication/cleanup/exit; listing is an end-to-end startup proxy; listing includes common relay process overhead",
         "rss": "50ms concurrent process RSS sum; shared pages may be counted twice; not OS-independent absolute measure",
         "idle": "one-shot worker N/A; future unchanged host idle requires stable no-job phase",
         "installedSize": "measure installer/download bytes separately from installed app plus required runtimes, codecs, resources and notices; prerequisite-present/absent separately; no numbers generated",
@@ -101,5 +105,88 @@
         "decoder EOF versus format error not exposed separately by current host",
         "runtime and Cargo.lock/dependency/license resolution remain central validation"
     ],
-    "supervisorNote": "강제 종료로 잔류를 없앴더라도 사례 통과로 세지 않음. fixture 작성도 외부 감독 자식에서 수행함."
+    "supervisorNote": "강제 종료로 잔류를 없앴더라도 사례 통과로 세지 않음. fixture 작성도 외부 감독 자식에서 수행함.",
+    "revision": {
+        "parentHead": "a06ad4b33fd5f3d251f095afa85417ed36ad575a",
+        "centralParentEvidence": "중앙 보고: frozen 43파일 원본 대조 일치, host/C# worker offline 컴파일 경고 0/오류 0. 전체 비교 미실행. 새 head에는 적용하지 않음.",
+        "newHeadValidation": "source static only; no restore/build/direct-regression execution/comparison execution"
+    },
+    "peerEvidence": {
+        "planJson": "PascalCase Job/Mode; shared camelCase result writer unchanged; actual frozen reader used by regression",
+        "allPeers": "peer.pid must match this JobId/host PID process.started; peer exit 71 never passes",
+        "noEof": [
+            "ready=1",
+            "endjob.validated",
+            "stdout.eof.begin",
+            "no stdout.eof.end"
+        ],
+        "noExit": [
+            "ready=1",
+            "endjob.validated",
+            "stdout.eof.begin",
+            "stdout.eof.end",
+            "process.exit.begin",
+            "no process.exit.end"
+        ],
+        "ordering": "stages unique and ordered in trace with nondecreasing stage ticks; unrelated concurrent trace enqueue order is not assumed",
+        "missingEvidence": "blocked, including BudgetExceeded with PID only or pre-frame delay; expected errors unchanged"
+    },
+    "identity": {
+        "configuration": "exactly csharp dotnet-managed .dll and rust native; actual samefile and duplicate SHA-256 rejected; Rust cannot be dotnet or harness",
+        "plan": "executable path/hash, worker path/hash and exact ArgumentList required; file hashes checked before and after each case",
+        "streaming": "frozen process.started executable path hash + process.worker_identity worker path hash tied to JobId/host PID/worker PID; arguments follow unchanged frozen .dll/native launch code",
+        "list": "unchanged frozen v1 client calls new harness relay; relay records actual ProcessStartInfo executable/arguments, worker path/hash, JobId, relay/worker PID and exit after both hashes rechecked",
+        "listLimit": "relay is additional common test process and overhead, included in external ownership and timings; no claim of OS loader attestation or protection against concurrent trusted-binary replacement",
+        "preflight": "no process.started remains host_preflight with identityConfirmed=false; not worker execution evidence"
+    },
+    "directRegressions": {
+        "total": 38,
+        "csharp": 29,
+        "python": 9,
+        "registeredSeparately": true,
+        "executed": false,
+        "cases": [
+            "peer.frozen-pascal-reader",
+            "peer.frozen-camel-rejected",
+            "cleanup.source-io",
+            "cleanup.marker-io",
+            "cleanup.tree-io",
+            "cleanup.normal-preservation",
+            "cleanup.late-body-exception",
+            "deadline.no-eof-ready-ordered",
+            "deadline.no-exit-ready-ordered",
+            "deadline.pid-only-no-eof",
+            "deadline.pid-only-no-exit",
+            "deadline.missing-ready",
+            "deadline.wrong-pid",
+            "deadline.wrong-order",
+            "deadline.missing-terminal",
+            "deadline.eof-already-ended",
+            "deadline.exit-already-ended",
+            "identity.native-trace",
+            "identity.managed-trace",
+            "identity.executable-mismatch",
+            "identity.worker-mismatch",
+            "identity.arguments-mismatch",
+            "identity.trace-job-mismatch",
+            "identity.trace-host-mismatch",
+            "identity.trace-time-order",
+            "identity.relay-match",
+            "identity.relay-stale-job",
+            "identity.relay-hash-mismatch",
+            "identity.relay-args-mismatch",
+            "schedule.source-io-stops-next",
+            "schedule.marker-io-stops-next",
+            "schedule.tree-io-stops-next",
+            "candidate.distinct-accepted",
+            "candidate.same-file-rejected",
+            "candidate.same-bytes-rejected",
+            "candidate.native-dll-rejected",
+            "candidate.managed-kind-rejected",
+            "candidate.rust-kind-rejected"
+        ],
+        "actualFrozenReader": "two bounded child processes invoke unchanged FakeWorker.Run; Pascal Job/Mode produces unsupported exit 2 plus matching PID, camelCase produces 71 before PID",
+        "cleanup": "Cases.Run finally source/marker/tree I/O fault probes produce real stop observations consumed by the same runner.run_schedule; normal preservation and late exception regressions also included",
+        "scope": "source only; helper/trace/identity regressions do not replace 137 functional observations or Windows cleanup.sequence24"
+    }
 }

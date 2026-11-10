@@ -8,8 +8,10 @@ namespace Zipelo.StreamingExtractionTests;
 
 internal static class Cases
 {
-    internal static async Task Run(CasePlan plan, Observation report)
+    internal static async Task Run(CasePlan plan, Observation report, Action<string>? verificationProbe = null)
     {
+        Evidence.Validate(plan);
+        var cleanupCandidate = false;
         Check.That(plan.Sample.Base64.Length <= 2 * 1024 * 1024, "입력 크기 초과");
         var bytes = Convert.FromBase64String(plan.Sample.Base64);
         Check.That(bytes.Length <= 1024 * 1024 && Data.Hash(bytes) == plan.Sample.Sha256, "입력 해시 불일치");
@@ -95,8 +97,17 @@ internal static class Cases
                 };
                 if (plan.Case.Operation == "list")
                 {
-                    var value = await new ZipWorkerClient(plan.Worker, plan.Dotnet)
+                    Data.WriteNew(Path.Combine(plan.RunDirectory, "list-relay.json"),
+                        new RelayPlan(Guid.Parse(report.JobId), plan.Invocation));
+                    var value = await new ZipWorkerClient(typeof(Cases).Assembly.Location, plan.Dotnet)
                         .ListAsync(Guid.Parse(report.JobId), source, limits, cancellation.Token);
+                    var proof = Data.Read<RelayProof>(Path.Combine(plan.RunDirectory, "list-identity.json"), 128 * 1024);
+                    Check.That(ListRelay.Matches(proof, Guid.Parse(report.JobId), plan.Invocation),
+                        "목록 실행 identity 불일치");
+                    report.IdentityConfirmed = true;
+                    report.IdentityEvidence = "list_relay_process_start_and_hash_before_after";
+                    report.WorkerStarted = true;
+                    report.WorkerExitCode = proof.ExitCode;
                     report.State = value.Job.State.ToString();
                     report.Error = value.Job.Error.ToString();
                     report.CoverageLayer = "worker_list";
@@ -130,7 +141,7 @@ internal static class Cases
                     worker = typeof(Cases).Assembly.Location;
                     var peerMode = mode.StartsWith("cancel-", StringComparison.Ordinal) ? mode[7..] :
                         mode.StartsWith("deadline-", StringComparison.Ordinal) ? mode[9..] : mode;
-                    Data.WriteNew(Path.Combine(plan.RunDirectory, "peer.json"),
+                    Evidence.WritePeer(Path.Combine(plan.RunDirectory, "peer.json"),
                         new PeerPlan(Guid.Parse(report.JobId), peerMode));
                 }
                 if (mode.StartsWith("deadline-", StringComparison.Ordinal))
@@ -164,7 +175,7 @@ internal static class Cases
                 report.WorkerExitCode = result.WorkerExitCode;
                 report.OutputBytes = result.Usage.OutputBytes;
                 report.ProcessedBytes = result.Usage.ProcessedBytes;
-                report.CleanupConfirmed = !result.InputCleanupFailed && result.InputTemporaryName is null &&
+                cleanupCandidate = !result.InputCleanupFailed && result.InputTemporaryName is null &&
                     !result.Publication.CleanupFailed && result.Publication.TemporaryFileName is null;
                 if (mode == "after-publish-cancel") { await cancellation.CancelAsync(); }
                 if (result.Publication.Published)
@@ -201,41 +212,49 @@ internal static class Cases
             }
             finally
             {
-                report.InjectionConfirmed = injected && report.InjectionConfirmed;
-                report.InputUnchanged = Data.Hash(File.ReadAllBytes(sourcePath)) == plan.Sample.Sha256 &&
-                    Data.Hash(bytes) == plan.Sample.Sha256;
-                report.SourcePositionVerified = source.CanRead &&
-                    (plan.Case.Operation == "list" ? source.Position == bytes.Length : source.Position == 0);
-                if (!report.InjectionConfirmed && source.Position == 0) { report.SourcePositionVerified = true; }
-                report.ExistingTargetUnchanged = Data.Hash(File.ReadAllBytes(marker)) == markerHash &&
-                    special.All(item => Data.Hash(File.ReadAllBytes(item.Path)) == item.Hash);
-                var exact = Directory.GetFileSystemEntries(parent).Select(Path.GetFileName).ToHashSet(StringComparer.Ordinal)
-                    .SetEquals(allowed);
-                if (mode is "destination-directory" or "destination-link")
+                Safety.Verify(report, () =>
                 {
-                    exact &= Directory.GetFileSystemEntries(destination).Select(Path.GetFileName)
-                        .SequenceEqual(new[] { "existing.txt" });
-                }
-                if (mode == "destination-link" && report.InjectionConfirmed)
-                {
-                    exact &= new DirectoryInfo(destination).LinkTarget == Path.Combine(plan.RunDirectory, "outside");
-                }
-                if (mode == "parent-link" && report.InjectionConfirmed)
-                {
-                    exact &= Directory.GetFileSystemEntries(Path.Combine(plan.RunDirectory, "outside"))
-                        .Select(Path.GetFileName).SequenceEqual(new[] { "existing.txt" });
-                }
-                if (plan.Case.Operation is "list" or "blocked" || !report.InjectionConfirmed)
-                {
-                    report.CleanupConfirmed = exact;
-                }
-                else { report.CleanupConfirmed &= exact; }
-                if (!report.InputUnchanged || !report.ExistingTargetUnchanged ||
-                    !report.SourcePositionVerified || !report.CleanupConfirmed)
-                {
-                    report.Verdict = "fail";
-                    report.Detail = "preservation_or_cleanup_failed";
-                }
+                    report.InjectionConfirmed = injected && report.InjectionConfirmed;
+                    verificationProbe?.Invoke("source");
+                    report.InputUnchanged = Data.Hash(File.ReadAllBytes(sourcePath)) == plan.Sample.Sha256 &&
+                        Data.Hash(bytes) == plan.Sample.Sha256;
+                    report.SourcePositionVerified = source.CanRead &&
+                        (plan.Case.Operation == "list" ? source.Position == bytes.Length : source.Position == 0);
+                    if (!report.InjectionConfirmed && source.Position == 0) { report.SourcePositionVerified = true; }
+                    verificationProbe?.Invoke("marker");
+                    report.ExistingTargetUnchanged = Data.Hash(File.ReadAllBytes(marker)) == markerHash &&
+                        special.All(item => Data.Hash(File.ReadAllBytes(item.Path)) == item.Hash);
+                    verificationProbe?.Invoke("tree");
+                    var exact = Directory.GetFileSystemEntries(parent).Select(Path.GetFileName).ToHashSet(StringComparer.Ordinal)
+                        .SetEquals(allowed);
+                    if (mode is "destination-directory" or "destination-link")
+                    {
+                        exact &= Directory.GetFileSystemEntries(destination).Select(Path.GetFileName)
+                            .SequenceEqual(new[] { "existing.txt" });
+                    }
+                    if (mode == "destination-link" && report.InjectionConfirmed)
+                    {
+                        exact &= new DirectoryInfo(destination).LinkTarget == Path.Combine(plan.RunDirectory, "outside");
+                    }
+                    if (mode == "parent-link" && report.InjectionConfirmed)
+                    {
+                        exact &= Directory.GetFileSystemEntries(Path.Combine(plan.RunDirectory, "outside"))
+                            .Select(Path.GetFileName).SequenceEqual(new[] { "existing.txt" });
+                    }
+                    if (plan.Case.Operation is "list" or "blocked" || !report.InjectionConfirmed)
+                    {
+                        cleanupCandidate = exact;
+                    }
+                    else { cleanupCandidate &= exact; }
+                    var confirmed = report.InputUnchanged && report.ExistingTargetUnchanged &&
+                        report.SourcePositionVerified && cleanupCandidate;
+                    if (!confirmed)
+                    {
+                        report.Verdict = "fail";
+                        report.Detail = "preservation_or_cleanup_failed";
+                    }
+                    return confirmed;
+                });
             }
         }
     }

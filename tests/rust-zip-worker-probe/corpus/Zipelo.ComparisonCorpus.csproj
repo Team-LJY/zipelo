@@ -10,6 +10,7 @@
     <ItemGroup>
         <Compile Include="Program.cs" />
         <Compile Include="../shared/Models.cs" />
+        <Compile Include="../shared/Evidence.cs" />
         <Compile Include="../shared/Check.cs" />
         <Compile Include="../frozen/pr12/ZipFixture.cs" />
     </ItemGroup>

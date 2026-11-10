@@ -67,6 +67,41 @@ def check_sources():
         require(digest(path.read_bytes()) == expected, "고정 소스 변경: " + relative)
 
 
+def validate_candidates(value):
+    candidates = {item["name"]: item for item in value["implementations"]}
+    csharp, rust = candidates["csharp"], candidates["rust"]
+    require(csharp["invocationKind"] == "dotnet-managed" and
+            Path(csharp["path"]).suffix.lower() == ".dll", "C# managed DLL 호출 필요")
+    require(rust["invocationKind"] == "native" and
+            Path(rust["path"]).suffix.lower() != ".dll", "Rust native 실행 필요")
+    require(Path(value["dotnet"]["path"]).stem.lower() == "dotnet", "고정 dotnet 실행파일 필요")
+    pairs = [(csharp, rust), (rust, value["dotnet"]), (rust, value["host"]), (csharp, value["host"])]
+    for left, right in pairs:
+        require(not os.path.samefile(left["path"], right["path"]), "서로 다른 실제 후보 파일 필요")
+        require(left["sha256"] != right["sha256"], "동일 바이트 후보를 별개 구현으로 비교할 수 없음")
+
+
+def invocation(implementation, settings, operation):
+    managed = implementation["invocationKind"] == "dotnet-managed"
+    arguments = [implementation["path"]] if managed else []
+    if operation != "list":
+        arguments.append("--extract-stream-v2")
+    executable = settings["dotnet"] if managed else implementation
+    return {
+        "kind": implementation["invocationKind"], "executable": executable["path"],
+        "executableSha256": executable["sha256"], "worker": implementation["path"],
+        "workerSha256": implementation["sha256"], "arguments": arguments,
+    }
+
+
+def run_schedule(jobs, execute):
+    for job in jobs:
+        record = execute(job)
+        yield record
+        if record["stopRequired"]:
+            return
+
+
 def config(path):
     value = read_json(path)
     require(value["schemaVersion"] == 1, "설정 버전 오류")
@@ -77,6 +112,7 @@ def config(path):
     for item in value["implementations"]:
         checked_file(item)
         require(HEX160.fullmatch(item["sourceCommit"]) is not None, "후보 commit 오류")
+    validate_candidates(value)
     require(HEX256.fullmatch(value["sourceManifestSha256"]) is not None, "소스 manifest 해시 필요")
     require(value["sourceManifestSha256"] == digest((ROOT / "SHA256SUMS").read_bytes()), "소스 manifest 불일치")
     require(HEX160.fullmatch(value["host"]["sourceCommit"]) is not None, "host commit 오류")
@@ -193,7 +229,9 @@ def child(case, implementation, bundle, settings, root, ordinal):
     plan = {
         "case": case, "sample": bundle[case["fixture"]], "implementation": implementation["name"],
         "worker": implementation["path"], "workerSha256": implementation["sha256"],
-        "dotnet": settings["dotnet"]["path"], "sourceCommit": implementation["sourceCommit"],
+        "dotnet": settings["dotnet"]["path"], "dotnetSha256": settings["dotnet"]["sha256"],
+        "sourceCommit": implementation["sourceCommit"],
+        "invocation": invocation(implementation, settings, case["operation"]),
         "runDirectory": str(area),
     }
     write_json(area / "plan.json", plan)
@@ -215,6 +253,11 @@ def child(case, implementation, bundle, settings, root, ordinal):
                 require(type(result[key]) is bool, "결과 bool 형식 오류")
     require(result["caseId"] == case["id"] and result["implementation"] == implementation["name"],
             "결과 identity 불일치")
+    if result_path.exists():
+        require(result["invocation"] == plan["invocation"], "실행 결과의 호출 계획 불일치")
+        require(result["binarySha256"] == implementation["sha256"], "결과 후보 해시 불일치")
+        if case["operation"] == "list" or result.get("workerStarted") is True:
+            require(result["identityConfirmed"], "실제 실행 identity 미확인")
     result["supervisor"] = supervised
     result["runDirectory"] = str(area)
     if supervised["forcedTermination"] or not supervised["ownedProcessesExited"] or supervised["exitCode"] == 124:
@@ -254,6 +297,7 @@ def run(args, settings):
     root = run_root(args.work_parent)
     records = []
     implementations = {item["name"]: item for item in settings["implementations"]}
+    jobs = []
     for case in cases:
         targets = ["csharp", "rust"] if case["operation"] not in ("peer", "blocked") else ["csharp"]
         for name in targets:
@@ -263,13 +307,14 @@ def run(args, settings):
                         "sha256": settings["host"]["sha256"], "sourceCommit": settings["host"]["sourceCommit"]}
             if case["operation"] == "blocked":
                 item["name"] = "contract"
-            record = child(case, item, bundle, settings, root, len(records))
-            records.append(record)
-            print(case["id"] + " " + item["name"] + " " + record["verdict"], flush=True)
-            if record["stopRequired"]:
-                break
-        if records[-1]["stopRequired"]:
-            break
+            jobs.append((case, item))
+    def execute(job):
+        case, item = job
+        record = child(case, item, bundle, settings, root, len(records))
+        print(case["id"] + " " + item["name"] + " " + record["verdict"], flush=True)
+        return record
+    for record in run_schedule(jobs, execute):
+        records.append(record)
     check_sources()
     config(args.config)
     summary = {

@@ -8,7 +8,8 @@ internal sealed record Sample(string Id, string Base64, string Sha256, ExpectedE
 internal sealed record CaseSpec(string Id, string Fixture, string Operation, string Mode,
     string Expected, string WindowsExpected, string Injection, string FaultKind, bool CauseRequired);
 internal sealed record CasePlan(CaseSpec Case, Sample Sample, string Implementation,
-    string Worker, string WorkerSha256, string Dotnet, string SourceCommit, string RunDirectory);
+    string Worker, string WorkerSha256, string Dotnet, string DotnetSha256, string SourceCommit,
+    string RunDirectory, Invocation Invocation);
 internal sealed record EntryObservation(string Name, string Kind, long Length, string? Sha256, uint? Crc32,
     string? Id, string Verification);
 internal sealed class Observation
@@ -38,6 +39,9 @@ internal sealed class Observation
     public bool SourcePositionVerified { get; set; }
     public bool DiagnosticsComplete { get; set; }
     public bool? WorkerStarted { get; set; }
+    public Invocation? Invocation { get; set; }
+    public bool IdentityConfirmed { get; set; }
+    public string IdentityEvidence { get; set; } = "not_started";
     public string CoverageLayer { get; set; } = "unobserved";
     public long OutputBytes { get; set; }
     public long ProcessedBytes { get; set; }
