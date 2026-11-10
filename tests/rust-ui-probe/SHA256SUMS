@@ -1,0 +1,9 @@
+fc23c61311c7f326eb16cd129320861d5e4e707a73f9a2f92c29e40ca6bffbdd  experiments/rust-ui-probe/Cargo.toml
+865d69b95660fefe8c9ad6129d2692cff8007ecc3d55de1a049fe162173f434d  experiments/rust-ui-probe/Cargo.lock
+994cd84d85adeb9bb15c5f1447f86ad02d4dac63f14dae84ec0bdfd33d99f705  experiments/rust-ui-probe/src/lib.rs
+3c61f478c699f9add93184f7ac6d651ac4db37a827c5eb3dfa5a2a61dc282cca  tests/rust-ui-probe/app.rs
+267728f6c4fcfafe8a32f30287e6d2ac819a2dab3337b4d727d66003a489a214  tests/rust-ui-probe/model.rs
+a7607dde61c6302cb7563cfdfd6214118eef9e37393eaab4da210044ff9e0aea  tests/rust-ui-probe/dependency_audit.py
+1cc4d3deeee0dd5052cd531637e1028636af36a4af7af47744decf4fdb885d24  tests/rust-ui-probe/dependency-inventory.json
+09aca74cb3f20f1ed5b3e03fd647c80ef8e872f6ff97e17882cf2fda8b108b2c  tests/rust-ui-probe/license-supplement.json
+54246e2f826327ebe7f462405578cb8e0bcc598225efbe7b99c53879b80e0714  tests/rust-ui-probe/contract.json

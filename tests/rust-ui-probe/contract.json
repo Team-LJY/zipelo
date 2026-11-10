@@ -1,0 +1,107 @@
+{
+    "schema": 1,
+    "base": "018e7593ecb2b3a7ae0bc17a440ecf2c0de8b4dd",
+    "branch": "features/rust-ui-probe",
+    "scope": "합성 UI 시험 후보임. 제품 UI 또는 실제 압축 작업 성공이 아님",
+    "layout": {
+        "palette": {
+            "background": "#FFFFFF",
+            "text": "#182739",
+            "action": "#174C7C",
+            "selection": "#D3E6F6",
+            "border": "#CCD5DE"
+        },
+        "type": "설치 Noto Sans CJK KR face, 본문/버튼 18px, 상태 20px, 제목 26px",
+        "structure": "상단 합성 상태 제어와 한글 입력, 중앙 왼쪽 정렬 가상 목록, 하단 고정 상태. 반복 카드 장식을 제거함"
+    },
+    "model": {
+        "external_dependencies": 0,
+        "rows": 100000,
+        "identity": "index+1로 안정된 합성 행 ID, 작업 serial은 checked_add임",
+        "selection": "단일 선택과 상하/Home/End/PageUp/PageDown, 경계 포화",
+        "mock_job": "수동 모의 진행/취소 요청/별도 모의 확인/오류. 실제 작업 종료 또는 정리 증거가 아님",
+        "late_results": "현재 job id와 phase를 함께 검사하여 과거 및 취소 뒤 성공을 거부함"
+    },
+    "renderer": {
+        "eframe": "=0.37.0",
+        "optional_feature": "ui",
+        "renderer": "Glow",
+        "features": [
+            "accesskit",
+            "clipboard",
+            "glow",
+            "system_fonts",
+            "wayland",
+            "x11"
+        ],
+        "virtualization": "ScrollArea::show_rows로 화면 range만 행과 문자열을 생성함. 실제 프레임 비용과 스크린리더 동작은 미실행임",
+        "keyboard": "목록 이동 버튼과 이전 화면 행 focus ID에 한정하여 키를 소비함. 입력 필드의 키를 가져오지 않음",
+        "accessibility": "표시 행에 안정 ID, 선택 상태와 accessible_name. 가상화 밖 행의 접근성 탐색은 실제 Orca/NVDA 시험이 필요함"
+    },
+    "font_input": {
+        "path": "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+        "face_index": 1,
+        "face": "Noto Sans CJK KR Regular",
+        "bytes": 19484784,
+        "sha256": "b76b0433203017ca80401b2ee0dd69350349871c4b19d504c34dbdd80541690a",
+        "package": "fonts-noto-cjk 1:20240730+repack1-1build1",
+        "license": "SIL OFL 1.1",
+        "license_path": "/usr/share/doc/fonts-noto-cjk/copyright",
+        "policy": "중앙 실행 전에 hash/face/license를 재확인함. 앱은 크기만 검사함. 저장소에 font 복사 없음. 최종 배포 font 확정이 아님"
+    },
+    "dependency_preparation": {
+        "toolchain": "Rust/Cargo 1.99.1 Linux",
+        "lock_packages_including_root": 371,
+        "commands_completed": [
+            "cargo generate-lockfile --manifest-path experiments/rust-ui-probe/Cargo.toml",
+            "cargo fetch --locked --manifest-path experiments/rust-ui-probe/Cargo.toml --target x86_64-unknown-linux-gnu",
+            "cargo fetch --locked --manifest-path experiments/rust-ui-probe/Cargo.toml --target x86_64-pc-windows-gnu",
+            "cargo fetch --locked --manifest-path experiments/rust-ui-probe/Cargo.toml --target x86_64-pc-windows-msvc",
+            "cargo metadata --locked --features ui --filter-platform x86_64-pc-windows-gnu --format-version 1 --manifest-path experiments/rust-ui-probe/Cargo.toml",
+            "python3 tests/rust-ui-probe/dependency_audit.py"
+        ],
+        "source": "crates.io registry만 사용함. Git dependency/patch 없음",
+        "restoration": "Linux/Windows GNU/MSVC 선택 graph의 crate 원본을 확보하고 index checksum/lock/archive SHA256을 대조함. fetch는 비활성 optional crate도 가져올 수 있으므로 신규 다운로드 개수를 추정하지 않음",
+        "graphs": "dependency-inventory.json의 실제 cargo tree normal/build 선택 graph와 target별 feature/라이선스/build script를 확인함",
+        "windows_limit": "Linux에서 target graph만 확인함. Windows build script 실행, SDK/link/실행/최종 배포 고지는 미검증임",
+        "system_limit": "새 OS package 설치 없음. 기존 X11/Wayland/EGL/GL 제공물로 실제 link/context 성공을 입증하지 않음",
+        "license_limit": "crate별 license expression/고지 파일 hash 및 보충 upstream 고지를 기록함. 최종 배포 notice 묶음은 별도임"
+    },
+    "central_contract": {
+        "cwd": "repository root",
+        "artifacts": "tests/rust-ui-probe/artifacts/ 아래에만 target/log/측정 산출물을 생성함",
+        "commands_not_executed": [
+            "CARGO_TARGET_DIR=\"$PWD/tests/rust-ui-probe/artifacts/target\" cargo +1.99.1 test --locked --offline --manifest-path experiments/rust-ui-probe/Cargo.toml --no-default-features --test ui_model",
+            "CARGO_TARGET_DIR=\"$PWD/tests/rust-ui-probe/artifacts/target\" cargo +1.99.1 build --locked --offline --manifest-path experiments/rust-ui-probe/Cargo.toml --features ui --bin zipelo-ui-probe",
+            "tests/rust-ui-probe/artifacts/target/debug/zipelo-ui-probe"
+        ],
+        "run_policy": "중앙 담당이 font hash/face, display/session/GL 접근을 확인한 뒤 제한된 수동 세션으로 실행함. 실행 backend와 DPI를 기록하고 창 종료/프로세스 종료 확인 후 다음 사례로 진행함. 차단 시 설치/보안 변경/우회 없이 중단함",
+        "automated_model_tests": 14,
+        "model_test_status": "소스 준비만 완료함. 빌드/시험 미실행임",
+        "manual_cases": [
+            "100k 목록 처음/중간/끝 스크롤과 화면 생성 행 range, 선택 유지 및 과도한 프레임/메모리 할당 관찰",
+            "Tab/Shift+Tab/Enter/Space, 방향/Home/End/Page 키, 포커스 시각 표시와 입력 필드 키 분리",
+            "Orca 행 이름/선택 상태/버튼/입력 이름과 가상화 밖 이동, 실제 tree 관찰",
+            "한글 glyph와 IBus 실제 IME 조합/확정/취소/커서 이동. clipboard 복사/붙여넣기 없이 직접 입력",
+            "모의 진행/취소 요청/별도 확인/오류/재시작과 이전 결과 주입",
+            "X11/Wayland 각각 실제 연결/Glow, 100/150/200% DPI, 640x500 최소창과 축소/복원/종료",
+            "Windows 빌드/실행/NVDA/IME는 해당 환경에서 별도로 수행함"
+        ],
+        "manual_status": "모두 미실행임"
+    },
+    "excluded": [
+        "worker",
+        "picker/rfd/ashpd",
+        "portal adapter",
+        "실제 사용자 파일",
+        "파일 생성/게시",
+        "브라우저/앱 네트워크 동작",
+        "새 font 다운로드",
+        "실제 clipboard 읽기",
+        "OS 설치",
+        "Windows toolchain 설치",
+        "C# 삭제",
+        "execveat 재시도/우회"
+    ],
+    "static_status": "고정 crate source에서 App::ui/Panel/ScrollArea/Button/accessibility/font API를 읽고 기존 1.99.1 rustfmt로 형식 검사함. typecheck/build/test/UI 실행은 수행하지 않음"
+}
