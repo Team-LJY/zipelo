@@ -5,6 +5,7 @@ import os
 from pathlib import Path, PurePosixPath
 import re
 import subprocess
+import sys
 
 ROOT = Path(__file__).resolve().parents[2]
 BASE_HEAD = "63b80e3158c08b71ec70666a2a39216cd36752b1"
@@ -91,6 +92,8 @@ def run(root, artifacts, name, args):
 
 
 def main(argv=None, root=ROOT):
+    if sys.flags.optimize:
+        raise RuntimeError("최적화 모드에서는 검증을 실행할 수 없음")
     parser = argparse.ArgumentParser()
     parser.add_argument("--source-head", required=True)
     parser.add_argument("--reducer-manifest-sha256", required=True)

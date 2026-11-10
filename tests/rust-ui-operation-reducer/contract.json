@@ -113,12 +113,14 @@
         "failed": 0,
         "ignored": 0,
         "filtered": 0,
-        "split": "기존 58개 + 새 Rust 회귀 9개 = private 7개 및 API 60개. 별도 Python helper 시험 15개는 합산하지 않음",
+        "split": "326f0017에서 기존 58개 + Rust 회귀 9개 = private 7개 및 API 60개를 실행함. 이후 helper 최적화 모드 거부 변경에서 Rust 시험은 재실행하지 않음. 별도 Python helper 17개는 합산하지 않음",
         "checks": "실행 전 두 manifest와 기대 file digest 대조, 실행 후 재검증/불변 비교, 실제 이름과 수 확인. 해당 고정 head 실행 결과는 PR과 로컬 report로 확인함",
         "historical": "이전 head bb5a659d의 작성자 측 49개 통과를 별도 이력으로 보존함. 현재 58개에 합산하지 않음. 완료/근거/cleanup 종류와 policy 필드를 추가한 후 기존 49개, 추가 후 최종 58개를 실행함 65b2c0a0의 58개 결과는 별도 이력이며 새 head 통과 수에 합산하지 않음",
         "command": "python3 tests/rust-ui-operation-reducer/validate.py --source-head <고정 commit> --reducer-manifest-sha256 <별도 신뢰 경로로 확인한 digest>",
         "artifacts": "tests/rust-ui-operation-reducer/artifacts/ 아래 분리 stdout/stderr/target/report만 생성함. 해당 생성물은 PR에 올리지 않음",
-        "limits": "독립 검증, 실제 GUI/IME/Orca/NVDA/DPI/Windows/GL 성공, 실제 작업 중단이나 cleanup 증거가 아님"
+        "limits": "독립 검증, 실제 GUI/IME/Orca/NVDA/DPI/Windows/GL 성공, 실제 작업 중단이나 cleanup 증거가 아님",
+        "rust_result_source_head": "326f00179837889deb5cccbd9a0be4450252ce27",
+        "optimization": "validate.main 진입 즉시 sys.flags.optimize를 검사하여 -O 및 PYTHONOPTIMIZE를 명시적 RuntimeError로 거부함. 인수/manifest 검사, 산출물 생성과 Cargo 호출보다 먼저 중단함. 두 직접 subprocess 회귀에서 비정상 종료, Cargo 호출 0회와 빈 임시 root를 확인함"
     },
     "preservation": [
         "PR34 63b80e31의 파일/14개 시험/lock/기준 blob 보존",

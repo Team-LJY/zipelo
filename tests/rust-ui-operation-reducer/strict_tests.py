@@ -1,6 +1,10 @@
 import hashlib
+import json
+import os
 from pathlib import Path
 import shutil
+import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -105,6 +109,50 @@ class PreCargoTests(unittest.TestCase):
     def test_missing_source_rejected(self):
         (self.root / "experiments/rust-ui-operation-reducer/src/lib.rs").unlink()
         self.reject_before_cargo()
+
+
+class OptimizationTests(unittest.TestCase):
+    def check_optimized_mode(self, flags, optimize):
+        base = v.ROOT / "tests/rust-ui-operation-reducer/artifacts"
+        base.mkdir(exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=base) as name:
+            env = os.environ.copy()
+            env.pop("PYTHONOPTIMIZE", None)
+            env["PYTHONDONTWRITEBYTECODE"] = "1"
+            if optimize is not None:
+                env["PYTHONOPTIMIZE"] = optimize
+            runner = """
+import json
+from pathlib import Path
+import sys
+from unittest.mock import patch
+import validate
+
+with patch.object(validate, "run") as cargo:
+    try:
+        validate.main([], root=Path(sys.argv[1]))
+    finally:
+        print(json.dumps({"cargo_calls": cargo.call_count, "optimize": sys.flags.optimize}))
+"""
+            result = subprocess.run(
+                [sys.executable, *flags, "-c", runner, name],
+                cwd=Path(v.__file__).parent,
+                env=env,
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("RuntimeError: 최적화 모드에서는 검증을 실행할 수 없음", result.stderr)
+            evidence = json.loads(result.stdout)
+            self.assertGreater(evidence["optimize"], 0)
+            self.assertEqual(evidence["cargo_calls"], 0)
+            self.assertEqual(list(Path(name).iterdir()), [])
+
+    def test_dash_o_rejected_before_artifacts_and_cargo(self):
+        self.check_optimized_mode(["-O"], None)
+
+    def test_environment_optimization_rejected_before_artifacts_and_cargo(self):
+        self.check_optimized_mode([], "1")
 
 
 if __name__ == "__main__":
