@@ -1,0 +1,116 @@
+{
+    "schema_version": 1,
+    "base_commit": "018e7593ecb2b3a7ae0bc17a440ecf2c0de8b4dd",
+    "branch": "features/rust-memory-ustar-reader",
+    "baseline_sources": [
+        "src/Zipelo.Worker/Tar/UstarReader.cs",
+        "src/Zipelo.Core/OutputPathPolicy.cs",
+        "src/Zipelo.Core/JobBudget.cs",
+        "tests/tar-stream-reader/Program.cs",
+        "tests/tar-stream-reader/contract.json"
+    ],
+    "scope": "독점 소유 Box<[u8]>의 엄격한 USTAR 일반 파일과 디렉터리를 Linux 이름 정책으로 읽는 실험 library임. 파일시스템, worker, IPC, 게시, UI, 암호, 복구와 압축 wrapper는 범위 밖임.",
+    "api": {
+        "signature": "read<E, S, C>(Request, select: S, checkpoint: C) -> Result<Completed, Error<E>>",
+        "select": "FnOnce(&[Entry]) -> Result<Vec<String>, E>. 전체 1차 검증 후 호출함. 목록은 콜백 관찰용이며 최종 Completed와 구별함.",
+        "checkpoint": "FnMut(Checkpoint) -> Result<(), Stop>. Start, Read { pass, offset }, Entry { pass, index }, BeforeSelection, AfterSelection, SelectionId { index }, Finish를 노출함. pass는 1 또는 2임.",
+        "request": "input: Box<[u8]>, policy: NamePolicy, limits: Limits. 안전한 Rust 소유권으로 외부 변경을 배제함. 호출 후 입력은 소비되며 실패에서도 반환하지 않음.",
+        "entry": "id: String, name: String, kind: File | Directory, size: u64. ID는 0부터 시작하는 정확한 십진 문자열임.",
+        "completed": "entries: Vec<Entry> 전체 목록, files: Vec<SelectedFile { id, bytes: Vec<u8> }>, usage: Usage { entries, processed, output }, input_sha256: [u8;32], content_verification: Unavailable",
+        "errors": [
+            "InvalidRequest",
+            "Unsupported",
+            "Integrity",
+            "UnsafePath",
+            "Conflict",
+            "Budget",
+            "Cancelled",
+            "Allocation",
+            "Selection(E)"
+        ],
+        "mapping": "오류는 Error::Reader(Failure) 또는 Error::Selection(E)임. 기한 초과와 Stop::Deadline은 Budget임. 선택 ID 중복, 미등록, 개수 초과와 Windows 정책은 Unsupported임. 실제 해시 불일치는 Integrity임.",
+        "precedence": "선택 콜백 반환 뒤 checkpoint를 실행하되 선택 콜백이 Err이면 원형 E를 우선 반환함. 그 외 최초로 관찰한 오류에서 즉시 종료함. 중간 결과와 작업 객체를 재사용하지 않음.",
+        "timing": "Instant를 호출 시작에 생성하고 콜백 소요 시간을 포함함. checkpoint 종료 후 경과 >= duration이면 Budget임. Stop::Cancelled가 해당 검사에서 기한보다 우선함. 콜백을 강제 중단하지 못함."
+    },
+    "selection": [
+        "1차 전체 검증과 SHA256 완료 후 선택함. 손상된 미선택 항목도 거부함.",
+        "빈 선택은 1차만 수행하고 전체 목록과 빈 files를 반환함.",
+        "디렉터리만 선택해도 2차 전체 검증과 전체 SHA256 비교를 수행함. 하위 파일을 자동 선택하지 않음.",
+        "선택 개수 > 전체 항목 수, 중복과 미등록 ID를 2차 전에 거부함. 01, +1, 공백은 1로 정규화하지 않음.",
+        "전체 목록과 files는 archive 순서임. 선택 요청 순서는 결과 순서에 영향을 주지 않음.",
+        "선택한 빈 파일은 bytes가 빈 SelectedFile로 남음. 디렉터리는 files에 넣지 않음.",
+        "모든 성공 조건과 최종 취소/기한 검사를 통과한 Completed만 반환함. 실패하면 누적 payload와 목록 결과를 폐기함."
+    ],
+    "strict_format": [
+        "입력 길이는 1024 이상이며 512의 배수임. 각 헤더의 checksum을 unsigned 합으로 확인함.",
+        "정확한 ustar NUL magic과 00 version, 일반 파일 0/NUL과 크기 0인 디렉터리 5만 허용함.",
+        "mode/uid/gid/size/mtime은 비음수 ASCII octal, 최대 i64::MAX임. 선행 공백 허용, 숫자 뒤 공백 또는 NUL 뒤에는 공백/NUL만 허용함. device 필드만 빈 값 허용하며 값은 0이어야 함.",
+        "name/prefix/uname/gname은 엄격한 UTF-8이며 NUL 뒤 영역은 0임. linkname과 마지막 12바이트는 전부 0임.",
+        "name은 비어 있으면 안 됨. prefix를 /로 연결하고 디렉터리의 마지막 / 하나만 제거함.",
+        "Linux 경로는 전체 4096 UTF-16 단위, 각 구성요소 UTF-8 255바이트 이하임. 빈 구성요소, 점/상위 경로, NUL, 역슬래시를 거부함. NFC나 casing을 변경하지 않으며 한국어/Jamo를 ASCII로 제한하지 않음.",
+        "정확한 중복과 양방향 파일/자식 충돌을 모든 항목에서 거부함. 디렉터리 조상은 허용함.",
+        "본문 padding은 0임. 종료 0블록 두 개 필수, 이후 정렬된 0블록만 허용함.",
+        "두 번째 순회도 같은 parser로 전체 목록과 순서를 대조하며 모든 입력 바이트 SHA256을 비교함. 자체 SHA/Unicode/상수 시간 비교 코드를 만들지 않음.",
+        "SHA256 32바이트 슬라이스에 subtle::ConstantTimeEq를 사용함. 저장된 본문 무결성 검사가 아니므로 Unavailable을 유지함."
+    ],
+    "limits": {
+        "input": 16777216,
+        "output": 16777216,
+        "entries": 1024,
+        "processed": 134217728,
+        "metadata_per_pass": 1048576,
+        "duration_seconds": 300,
+        "chunk": 65536,
+        "rule": "모든 caller 한도는 양수이며 각 hard cap과 작은 값을 사용함. 모든 입력 bytes, 미선택 본문, padding, 종료와 후행 0도 순회별 처리량에 포함함. entries는 1차만, metadata는 순회별 비종료 헤더 512바이트만 셈. 선택 파일 전체 출력 예산을 할당 전에 예약하며 fallible reserve 후 최대 64 KiB씩 복사함."
+    },
+    "limitations": [
+        "전체 heap/CPU 강제 상한과 콜백 강제 중단을 제공하지 않음. 최대 16 MiB 입력 외에 선택 payload 최대 16 MiB와 목록/allocator 비용이 필요함.",
+        "선택 및 checkpoint 콜백의 자체 할당, 부수효과, panic은 호출자 책임임. 라이브러리는 panic을 catch하지 않으며 OOM 전체 회수나 zeroization을 보장하지 않음.",
+        "subtle은 release 모드 사용을 전제로 한 best-effort 공개 API임. debug assertion과 컴파일러/하드웨어 한계가 있으며 실제 타이밍 검증을 수행하지 않음.",
+        "Windows 정책, GNU/PAX/sparse/link/특수 항목, 압축 wrapper, 암호와 복구를 지원하지 않음. 전체 제품 지원 또는 배포 준비 완료를 의미하지 않음.",
+        "기존 C#의 password-attempt 한도는 암호를 다루지 않는 이 Request에서 제거됨. 기준은 Request 생성이 아닌 read 시작부터 기한을 계산함.",
+        "C# InputSha256의 대문자 hex 문자열 대신 고정 [u8;32]를 반환함. sink의 임시 청크 대신 최종 파일별 Vec를 반환함."
+    ],
+    "test_applicability": {
+        "baseline_count": 103,
+        "status": "기존 C# 103개를 Rust에서 실행하거나 전체 동등 통과로 판정하지 않음. 독립 회귀는 별도 담당자가 root tests 아래에 추가할 예정임.",
+        "preserve": "목록, prefix, 헤더/숫자/UTF-8/padding/종료 거부, Linux 이름/충돌, 모든 예산 정확한 경계와 초과, 선택 중복/미등록/빈 선택/디렉터리 선택 의미를 보존함.",
+        "adapt": [
+            "selected.hash.chunks: 파일별 완료 bytes와 SHA/usage로 검사하고 내부 최대 청크는 checkpoint offset으로 별도 확인함.",
+            "cancel.before.read/cancel.during.read/cancel.sink: Start/Read/최종 checkpoint 취소로 변경함. sink 단계는 없음.",
+            "duration.cumulative: 실제 Instant 누적 기한과 주입 Stop::Deadline 매핑 시험을 구분함. 가상 TimeProvider는 없음.",
+            "single.use: Request 소유권 소비와 실패 결과 없음으로 대체함. 재사용 가능한 reader 객체가 없음.",
+            "invalid.limits: 현재 Limits 양수 검사만 적용하며 password-attempt 필드는 없음."
+        ],
+        "not_directly_applicable": [
+            "input.changed.between.passes",
+            "input.unselected.changed",
+            "nonseekable.rejected",
+            "sink.failure.propagates",
+            "FragmentedStream의 분할 읽기와 Stream I/O 오류",
+            "Windows 이름 정책의 기존 성공/실패 세부 조건"
+        ],
+        "add": [
+            "역순 선택이어도 archive 순서",
+            "01/+1/공백 ID 거부",
+            "디렉터리만 선택 시 processed가 입력 길이의 2배",
+            "디렉터리 선택의 하위 자동 선택 없음",
+            "선택 콜백 원형 오류와 전후 취소/기한",
+            "Finish 취소 시 전체 결과 없음",
+            "한글/Jamo 원문과 Linux 대소문자 보존",
+            "Windows 정책 Unsupported",
+            "완료 결과 SHA256과 독립 표준 해시 비교"
+        ]
+    },
+    "validation": {
+        "toolchain": "기존 Rust/Cargo 1.99.1",
+        "build": "cargo +1.99.1 build --manifest-path experiments/rust-memory-ustar-reader/Cargo.toml --locked --offline --lib --target-dir tests/rust-memory-ustar-reader-build/target",
+        "build_exit": 0,
+        "format": "rustfmt +1.99.1 --edition 2024 --check experiments/rust-memory-ustar-reader/src/*.rs",
+        "dependencies": "locked/offline metadata, 기존 registry 10 records 보존, subtle 2.6.1 하나 추가. Linux 선택 외부 패키지 10개, 전체 lock registry 11개. 각 cache archive checksum과 해제된 source 전체를 대조함.",
+        "tests_executed": 0,
+        "test_result": "미실행임. library build는 회귀 통과가 아님.",
+        "notices": "THIRD-PARTY-NOTICES.txt에 lock registry의 LICENSE/NOTICE 원문 19개를 보존함. 최종 제품 배포 고지 검토와 별개임.",
+        "security": "전체 advisory DB audit와 실제 타이밍 검증은 미실행임. 취약점 부재를 주장하지 않음."
+    }
+}
