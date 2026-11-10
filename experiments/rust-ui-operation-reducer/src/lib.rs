@@ -18,6 +18,7 @@ pub struct Mapping {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Failure {
     pub origin: String,
+    pub policy: String,
     pub classification: String,
     pub code: i64,
 }
@@ -26,14 +27,49 @@ impl Failure {
     fn valid(&self) -> bool {
         !self.origin.is_empty()
             && self.origin.len() <= 128
+            && !self.policy.is_empty()
+            && self.policy.len() <= 128
             && !self.classification.is_empty()
             && self.classification.len() <= 256
     }
 }
 
+/// 모든 값은 모의 모델 또는 호출자 진술임. OS 관찰 종류는 제공하지 않음.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EvidenceKind {
+    Model,
+    CallerAttested,
+}
+
+/// 단계 구분용 모의 값이며 Published receipt를 발급하지 않음.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CompletionKind {
+    MemoryValidated,
+    ProtocolObserved,
+    Published,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum OperationKind {
+    Memory,
+    Process,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CleanupKind {
+    NotApplicable,
+    Confirmed,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CleanupObservation {
+    pub kind: CleanupKind,
+    pub evidence: EvidenceKind,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Terminal {
-    MockSuccess,
+    Completed(CompletionKind),
     MockCancelled,
     Failed(Failure),
 }
@@ -49,6 +85,7 @@ pub enum LinkFault {
     InvalidProgress,
     InvalidEvidence,
     ConflictingCleanup,
+    CleanupKindMismatch,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -63,6 +100,7 @@ pub enum MockEvent {
     Progress { done: u64, total: u64 },
     Terminal(Terminal),
     CleanupConfirmed,
+    CleanupNotApplicable,
     CleanupFailed(Failure),
 }
 
@@ -70,26 +108,40 @@ pub enum MockEvent {
 pub struct Envelope {
     pub mapping: Mapping,
     pub sequence: u64,
+    pub evidence: EvidenceKind,
     pub event: MockEvent,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Operation {
+    pub kind: OperationKind,
     pub mapping: Mapping,
     pub next_sequence: u64,
     pub cancel_requested: bool,
     pub progress: Option<(u64, u64)>,
     pub terminal: Option<Terminal>,
-    pub cleanup_confirmed: bool,
+    pub terminal_evidence: Option<EvidenceKind>,
+    pub cleanup: Option<CleanupObservation>,
+    pub cleanup_failure_evidence: Option<EvidenceKind>,
     pub cleanup_failed: Option<Failure>,
     pub link_fault: Option<LinkFault>,
     pub first_error: Option<FirstError>,
 }
 
 impl Operation {
+    pub fn cleanup_confirmed(&self) -> bool {
+        self.cleanup
+            .is_some_and(|c| c.kind == CleanupKind::Confirmed)
+    }
     pub fn settled(&self) -> bool {
         self.terminal.is_some()
-            && self.cleanup_confirmed
+            && self.cleanup.is_some_and(|c| {
+                matches!(
+                    (self.kind, c.kind),
+                    (OperationKind::Memory, CleanupKind::NotApplicable)
+                        | (OperationKind::Process, CleanupKind::Confirmed)
+                )
+            })
             && self.cleanup_failed.is_none()
             && self.link_fault.is_none()
     }
@@ -112,6 +164,7 @@ pub enum CloseState {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Command {
     StartMock,
+    StartMockFor(OperationKind),
     RequestCancel,
     RequestClose,
     KeepOpen,
@@ -264,7 +317,11 @@ impl Model {
 
     fn command(&mut self, cmd: Command, effect: &mut Option<MockEffect>) -> Disposition {
         match cmd {
-            Command::StartMock => {
+            Command::StartMock | Command::StartMockFor(_) => {
+                let kind = match cmd {
+                    Command::StartMockFor(kind) => kind,
+                    _ => OperationKind::Process,
+                };
                 if self.close != CloseState::Open
                     || self.operation.as_ref().is_some_and(|op| !op.settled())
                 {
@@ -284,12 +341,15 @@ impl Model {
                 self.rows.clear();
                 self.selected = None;
                 self.operation = Some(Operation {
+                    kind,
                     mapping,
                     next_sequence: 0,
                     cancel_requested: false,
                     progress: None,
                     terminal: None,
-                    cleanup_confirmed: false,
+                    terminal_evidence: None,
+                    cleanup: None,
+                    cleanup_failure_evidence: None,
                     cleanup_failed: None,
                     link_fault: None,
                     first_error: None,
@@ -387,7 +447,7 @@ impl Model {
                     })
                 } else if matches!(&result, Terminal::Failed(e) if !e.valid()) {
                     Some(LinkFault::InvalidEvidence)
-                } else if op.cancel_requested && result == Terminal::MockSuccess {
+                } else if op.cancel_requested && matches!(result, Terminal::Completed(_)) {
                     Some(LinkFault::SuccessAfterCancel)
                 } else {
                     None
@@ -401,16 +461,32 @@ impl Model {
                         .get_or_insert(FirstError::Reported(failure.clone()));
                 }
                 op.terminal = Some(result);
+                op.terminal_evidence = Some(envelope.evidence);
             }
-            MockEvent::CleanupConfirmed => {
+            MockEvent::CleanupConfirmed | MockEvent::CleanupNotApplicable => {
+                let kind = match envelope.event {
+                    MockEvent::CleanupNotApplicable => CleanupKind::NotApplicable,
+                    _ => CleanupKind::Confirmed,
+                };
+                if !matches!(
+                    (op.kind, kind),
+                    (OperationKind::Memory, CleanupKind::NotApplicable)
+                        | (OperationKind::Process, CleanupKind::Confirmed)
+                ) {
+                    op.fault(LinkFault::CleanupKindMismatch);
+                    return Disposition::ConnectionFault(LinkFault::CleanupKindMismatch);
+                }
                 if op.cleanup_failed.is_some() {
                     return Disposition::Ignored(Rejection::CleanupSticky);
                 }
-                if op.cleanup_confirmed {
+                if op.cleanup.is_some() {
                     op.fault(LinkFault::ConflictingCleanup);
                     return Disposition::ConnectionFault(LinkFault::ConflictingCleanup);
                 }
-                op.cleanup_confirmed = true;
+                op.cleanup = Some(CleanupObservation {
+                    kind,
+                    evidence: envelope.evidence,
+                });
             }
             MockEvent::CleanupFailed(failure) => {
                 if !failure.valid() {
@@ -420,6 +496,7 @@ impl Model {
                 op.first_error
                     .get_or_insert(FirstError::Cleanup(failure.clone()));
                 op.cleanup_failed.get_or_insert(failure);
+                op.cleanup_failure_evidence.get_or_insert(envelope.evidence);
             }
         }
         Disposition::Applied

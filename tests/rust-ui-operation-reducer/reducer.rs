@@ -11,6 +11,7 @@ fn mapping(model: &Model) -> Mapping {
 }
 fn event(model: &Model, event: MockEvent) -> Transition {
     model.reduce(Input::Event(Envelope {
+        evidence: EvidenceKind::Model,
         mapping: mapping(model),
         sequence: model.operation().unwrap().next_sequence,
         event,
@@ -19,6 +20,7 @@ fn event(model: &Model, event: MockEvent) -> Transition {
 fn failure(origin: &str, classification: &str, code: i64) -> Failure {
     Failure {
         origin: origin.into(),
+        policy: "mock-policy-v1".into(),
         classification: classification.into(),
         code,
     }
@@ -76,7 +78,7 @@ fn repeated_cancel_emits_only_one_mock_command() {
     let second = command(&first.state, Command::RequestCancel);
     assert_eq!(second.effect, None);
     assert!(second.state.operation().unwrap().terminal.is_none());
-    assert!(!second.state.operation().unwrap().cleanup_confirmed);
+    assert!(!second.state.operation().unwrap().cleanup_confirmed());
 }
 
 #[test]
@@ -96,14 +98,21 @@ fn hundred_percent_is_not_a_terminal_result() {
 
 #[test]
 fn success_does_not_require_a_final_progress_event() {
-    let model = settle(&started(), Terminal::MockSuccess);
+    let model = settle(
+        &started(),
+        Terminal::Completed(CompletionKind::MemoryValidated),
+    );
     assert!(model.operation().unwrap().settled());
     assert!(command(&model, Command::StartMock).effect.is_some());
 }
 
 #[test]
 fn terminal_alone_does_not_enable_retry() {
-    let model = event(&started(), MockEvent::Terminal(Terminal::MockSuccess)).state;
+    let model = event(
+        &started(),
+        MockEvent::Terminal(Terminal::Completed(CompletionKind::MemoryValidated)),
+    )
+    .state;
     assert_eq!(command(&model, Command::StartMock).effect, None);
 }
 
@@ -111,7 +120,11 @@ fn terminal_alone_does_not_enable_retry() {
 fn cleanup_first_waits_for_terminal() {
     let model = event(&started(), MockEvent::CleanupConfirmed).state;
     assert_eq!(command(&model, Command::StartMock).effect, None);
-    let model = event(&model, MockEvent::Terminal(Terminal::MockSuccess)).state;
+    let model = event(
+        &model,
+        MockEvent::Terminal(Terminal::Completed(CompletionKind::MemoryValidated)),
+    )
+    .state;
     assert!(model.operation().unwrap().settled());
 }
 
@@ -154,7 +167,11 @@ fn original_failure_survives_cleanup_failure_and_link_error() {
     )
     .state;
     let model = event(&model, MockEvent::CleanupFailed(failure("host", "Io", 5))).state;
-    let model = event(&model, MockEvent::Terminal(Terminal::MockSuccess)).state;
+    let model = event(
+        &model,
+        MockEvent::Terminal(Terminal::Completed(CompletionKind::MemoryValidated)),
+    )
+    .state;
     assert_eq!(
         model.operation().unwrap().first_error,
         Some(FirstError::Reported(cause.clone()))
@@ -172,8 +189,13 @@ fn original_failure_survives_cleanup_failure_and_link_error() {
 #[test]
 fn old_events_do_not_advance_new_sequence_or_latch_error() {
     let old = started();
-    let model = command(&settle(&old, Terminal::MockSuccess), Command::StartMock).state;
+    let model = command(
+        &settle(&old, Terminal::Completed(CompletionKind::MemoryValidated)),
+        Command::StartMock,
+    )
+    .state;
     let old_event = Envelope {
+        evidence: EvidenceKind::Model,
         mapping: mapping(&old),
         sequence: u64::MAX,
         event: MockEvent::CleanupFailed(failure("old", "Io", 8)),
@@ -190,6 +212,7 @@ fn old_events_do_not_advance_new_sequence_or_latch_error() {
 fn current_duplicate_sequence_blocks_without_cleanup_attestation() {
     let model = event(&started(), MockEvent::Progress { done: 1, total: 2 }).state;
     let result = model.reduce(Input::Event(Envelope {
+        evidence: EvidenceKind::Model,
         mapping: mapping(&model),
         sequence: 0,
         event: MockEvent::CleanupConfirmed,
@@ -198,7 +221,7 @@ fn current_duplicate_sequence_blocks_without_cleanup_attestation() {
         result.disposition,
         Disposition::ConnectionFault(LinkFault::Sequence)
     );
-    assert!(!result.state.operation().unwrap().cleanup_confirmed);
+    assert!(!result.state.operation().unwrap().cleanup_confirmed());
 }
 
 #[test]
@@ -206,6 +229,7 @@ fn current_sequence_gap_blocks_and_does_not_recover_from_later_cleanup() {
     let model = started();
     let model = model
         .reduce(Input::Event(Envelope {
+            evidence: EvidenceKind::Model,
             mapping: mapping(&model),
             sequence: 2,
             event: MockEvent::CleanupConfirmed,
@@ -216,7 +240,7 @@ fn current_sequence_gap_blocks_and_does_not_recover_from_later_cleanup() {
         late.disposition,
         Disposition::Ignored(Rejection::ConnectionBlocked)
     );
-    assert!(!late.state.operation().unwrap().cleanup_confirmed);
+    assert!(!late.state.operation().unwrap().cleanup_confirmed());
 }
 
 #[test]
@@ -224,9 +248,10 @@ fn sequence_reversal_after_two_events_is_explicit_failure() {
     let model = event(&started(), MockEvent::Progress { done: 0, total: 2 }).state;
     let model = event(&model, MockEvent::Progress { done: 1, total: 2 }).state;
     let bad = model.reduce(Input::Event(Envelope {
+        evidence: EvidenceKind::Model,
         mapping: mapping(&model),
         sequence: 0,
-        event: MockEvent::Terminal(Terminal::MockSuccess),
+        event: MockEvent::Terminal(Terminal::Completed(CompletionKind::MemoryValidated)),
     }));
     assert_eq!(
         bad.disposition,
@@ -241,6 +266,7 @@ fn wrong_job_for_current_ui_is_not_a_valid_mapping() {
     let mut wrong = mapping(&model);
     wrong.job.0[0] ^= 1;
     let result = model.reduce(Input::Event(Envelope {
+        evidence: EvidenceKind::Model,
         mapping: wrong,
         sequence: 0,
         event: MockEvent::CleanupConfirmed,
@@ -257,6 +283,7 @@ fn future_ui_id_is_not_treated_as_old_event() {
     let mut wrong = mapping(&model);
     wrong.ui.0 += 1;
     let result = model.reduce(Input::Event(Envelope {
+        evidence: EvidenceKind::Model,
         mapping: wrong,
         sequence: 0,
         event: MockEvent::CleanupConfirmed,
@@ -269,7 +296,10 @@ fn future_ui_id_is_not_treated_as_old_event() {
 
 #[test]
 fn conflicting_terminal_blocks_even_after_prior_settlement() {
-    let model = settle(&started(), Terminal::MockSuccess);
+    let model = settle(
+        &started(),
+        Terminal::Completed(CompletionKind::MemoryValidated),
+    );
     let result = event(&model, MockEvent::Terminal(Terminal::MockCancelled));
     assert_eq!(
         result.disposition,
@@ -281,16 +311,28 @@ fn conflicting_terminal_blocks_even_after_prior_settlement() {
 
 #[test]
 fn repeated_terminal_at_new_sequence_is_explicit_error() {
-    let model = event(&started(), MockEvent::Terminal(Terminal::MockSuccess)).state;
+    let model = event(
+        &started(),
+        MockEvent::Terminal(Terminal::Completed(CompletionKind::MemoryValidated)),
+    )
+    .state;
     assert_eq!(
-        event(&model, MockEvent::Terminal(Terminal::MockSuccess)).disposition,
+        event(
+            &model,
+            MockEvent::Terminal(Terminal::Completed(CompletionKind::MemoryValidated))
+        )
+        .disposition,
         Disposition::ConnectionFault(LinkFault::DuplicateTerminal)
     );
 }
 
 #[test]
 fn late_progress_after_terminal_is_discarded_but_sequence_is_consumed() {
-    let model = event(&started(), MockEvent::Terminal(Terminal::MockSuccess)).state;
+    let model = event(
+        &started(),
+        MockEvent::Terminal(Terminal::Completed(CompletionKind::MemoryValidated)),
+    )
+    .state;
     let result = event(&model, MockEvent::Progress { done: 9, total: 10 });
     assert_eq!(
         result.disposition,
@@ -310,7 +352,10 @@ fn late_progress_after_terminal_is_discarded_but_sequence_is_consumed() {
 #[test]
 fn success_after_cancel_is_not_adopted() {
     let model = command(&started(), Command::RequestCancel).state;
-    let result = event(&model, MockEvent::Terminal(Terminal::MockSuccess));
+    let result = event(
+        &model,
+        MockEvent::Terminal(Terminal::Completed(CompletionKind::MemoryValidated)),
+    );
     assert_eq!(
         result.disposition,
         Disposition::ConnectionFault(LinkFault::SuccessAfterCancel)
@@ -366,7 +411,11 @@ fn keep_open_after_confirm_does_not_undo_cancellation() {
 
 #[test]
 fn terminal_pending_cleanup_close_does_not_send_cancel() {
-    let model = event(&started(), MockEvent::Terminal(Terminal::MockSuccess)).state;
+    let model = event(
+        &started(),
+        MockEvent::Terminal(Terminal::Completed(CompletionKind::MemoryValidated)),
+    )
+    .state;
     assert_eq!(
         command(&model, Command::RequestCancel).disposition,
         Disposition::Ignored(Rejection::CancelAfterTerminal)
@@ -382,7 +431,10 @@ fn terminal_pending_cleanup_close_does_not_send_cancel() {
 
 #[test]
 fn close_on_completed_operation_permits_close_once() {
-    let model = settle(&started(), Terminal::MockSuccess);
+    let model = settle(
+        &started(),
+        Terminal::Completed(CompletionKind::MemoryValidated),
+    );
     let closed = command(&model, Command::RequestClose);
     assert_eq!(closed.effect, Some(MockEffect::PermitClose));
     assert_eq!(command(&closed.state, Command::RequestClose).effect, None);
@@ -445,7 +497,11 @@ fn list_replacement_invalidates_old_row_key_even_when_id_repeats() {
 fn new_operation_cannot_reuse_old_row_selection() {
     let model = list(&started());
     let key = model.row_key(RowId(7)).unwrap();
-    let next = command(&settle(&model, Terminal::MockSuccess), Command::StartMock).state;
+    let next = command(
+        &settle(&model, Terminal::Completed(CompletionKind::MemoryValidated)),
+        Command::StartMock,
+    )
+    .state;
     let next = list(&next);
     assert_eq!(
         command(&next, Command::Select(key)).disposition,
@@ -457,7 +513,11 @@ fn new_operation_cannot_reuse_old_row_selection() {
 fn old_list_install_cannot_replace_new_operations_rows() {
     let model = list(&started());
     let old = mapping(&model).ui;
-    let next = command(&settle(&model, Terminal::MockSuccess), Command::StartMock).state;
+    let next = command(
+        &settle(&model, Terminal::Completed(CompletionKind::MemoryValidated)),
+        Command::StartMock,
+    )
+    .state;
     let result = command(
         &next,
         Command::ReplaceMockList {
@@ -546,7 +606,10 @@ fn invalid_failure_evidence_is_not_silently_truncated() {
 
 #[test]
 fn cleanup_failure_after_confirmation_revokes_retry_permission() {
-    let model = settle(&started(), Terminal::MockSuccess);
+    let model = settle(
+        &started(),
+        Terminal::Completed(CompletionKind::MemoryValidated),
+    );
     let model = event(
         &model,
         MockEvent::CleanupFailed(failure("host", "Unconfirmed", 5)),
@@ -558,7 +621,10 @@ fn cleanup_failure_after_confirmation_revokes_retry_permission() {
 
 #[test]
 fn closed_model_still_records_current_operation_contradiction() {
-    let model = settle(&started(), Terminal::MockSuccess);
+    let model = settle(
+        &started(),
+        Terminal::Completed(CompletionKind::MemoryValidated),
+    );
     let model = command(&model, Command::RequestClose).state;
     let result = event(&model, MockEvent::Terminal(Terminal::MockCancelled));
     assert_eq!(
@@ -625,4 +691,188 @@ fn progress_after_cancel_does_not_overwrite_displayed_progress() {
     );
     assert_eq!(result.state.operation().unwrap().progress, Some((2, 10)));
     assert!(result.state.operation().unwrap().terminal.is_none());
+}
+
+#[test]
+fn completion_kinds_and_evidence_are_preserved_without_upgrade() {
+    for kind in [
+        CompletionKind::MemoryValidated,
+        CompletionKind::ProtocolObserved,
+        CompletionKind::Published,
+    ] {
+        for evidence in [EvidenceKind::Model, EvidenceKind::CallerAttested] {
+            let model = started();
+            let result = model.reduce(Input::Event(Envelope {
+                mapping: mapping(&model),
+                sequence: 0,
+                evidence,
+                event: MockEvent::Terminal(Terminal::Completed(kind)),
+            }));
+            assert_eq!(
+                result.state.operation().unwrap().terminal,
+                Some(Terminal::Completed(kind))
+            );
+            assert_eq!(
+                result.state.operation().unwrap().terminal_evidence,
+                Some(evidence)
+            );
+            assert_eq!(result.effect, None);
+            assert!(!result.state.operation().unwrap().settled());
+        }
+    }
+}
+
+#[test]
+fn protocol_terminal_cannot_be_replaced_by_published_terminal() {
+    let model = event(
+        &started(),
+        MockEvent::Terminal(Terminal::Completed(CompletionKind::ProtocolObserved)),
+    )
+    .state;
+    let result = event(
+        &model,
+        MockEvent::Terminal(Terminal::Completed(CompletionKind::Published)),
+    );
+    assert_eq!(
+        result.disposition,
+        Disposition::ConnectionFault(LinkFault::ConflictingTerminal)
+    );
+    assert_eq!(
+        result.state.operation().unwrap().terminal,
+        Some(Terminal::Completed(CompletionKind::ProtocolObserved))
+    );
+}
+
+#[test]
+fn memory_operation_requires_explicit_not_applicable_cleanup() {
+    let model = command(
+        &Model::new(*b"memory-1").unwrap(),
+        Command::StartMockFor(OperationKind::Memory),
+    )
+    .state;
+    let model = event(
+        &model,
+        MockEvent::Terminal(Terminal::Completed(CompletionKind::MemoryValidated)),
+    )
+    .state;
+    assert_eq!(command(&model, Command::StartMock).effect, None);
+    let model = event(&model, MockEvent::CleanupNotApplicable).state;
+    let op = model.operation().unwrap();
+    assert_eq!(
+        op.cleanup,
+        Some(CleanupObservation {
+            kind: CleanupKind::NotApplicable,
+            evidence: EvidenceKind::Model
+        })
+    );
+    assert!(!op.cleanup_confirmed());
+    assert!(op.settled());
+    assert!(command(&model, Command::StartMock).effect.is_some());
+}
+
+#[test]
+fn process_operation_cannot_use_memory_cleanup_not_applicable() {
+    let result = event(&started(), MockEvent::CleanupNotApplicable);
+    assert_eq!(
+        result.disposition,
+        Disposition::ConnectionFault(LinkFault::CleanupKindMismatch)
+    );
+    assert_eq!(result.state.operation().unwrap().cleanup, None);
+}
+
+#[test]
+fn memory_operation_cannot_mislabel_cleanup_as_process_confirmation() {
+    let model = command(
+        &Model::new(*b"memory-1").unwrap(),
+        Command::StartMockFor(OperationKind::Memory),
+    )
+    .state;
+    let result = event(&model, MockEvent::CleanupConfirmed);
+    assert_eq!(
+        result.disposition,
+        Disposition::ConnectionFault(LinkFault::CleanupKindMismatch)
+    );
+    assert_eq!(result.state.operation().unwrap().cleanup, None);
+}
+
+#[test]
+fn terminal_and_cleanup_retain_their_independent_evidence() {
+    let model = event(
+        &started(),
+        MockEvent::Terminal(Terminal::Completed(CompletionKind::ProtocolObserved)),
+    )
+    .state;
+    let result = model.reduce(Input::Event(Envelope {
+        mapping: mapping(&model),
+        sequence: 1,
+        evidence: EvidenceKind::CallerAttested,
+        event: MockEvent::CleanupConfirmed,
+    }));
+    let op = result.state.operation().unwrap();
+    assert_eq!(op.terminal_evidence, Some(EvidenceKind::Model));
+    assert_eq!(
+        op.cleanup,
+        Some(CleanupObservation {
+            kind: CleanupKind::Confirmed,
+            evidence: EvidenceKind::CallerAttested
+        })
+    );
+    assert!(op.settled());
+}
+
+#[test]
+fn first_failure_policy_and_later_cleanup_failure_are_separate() {
+    let cause = Failure {
+        origin: "typed-adapter".into(),
+        policy: "mock-profile-only".into(),
+        classification: "StreamError".into(),
+        code: 19,
+    };
+    let model = event(
+        &started(),
+        MockEvent::Terminal(Terminal::Failed(cause.clone())),
+    )
+    .state;
+    let cleanup = failure("mock-supervisor", "CleanupFailed", 5);
+    let result = model.reduce(Input::Event(Envelope {
+        mapping: mapping(&model),
+        sequence: 1,
+        evidence: EvidenceKind::CallerAttested,
+        event: MockEvent::CleanupFailed(cleanup.clone()),
+    }));
+    let op = result.state.operation().unwrap();
+    assert_eq!(op.first_error, Some(FirstError::Reported(cause.clone())));
+    assert_eq!(op.terminal, Some(Terminal::Failed(cause)));
+    assert_eq!(op.cleanup_failed, Some(cleanup));
+    assert_eq!(
+        op.cleanup_failure_evidence,
+        Some(EvidenceKind::CallerAttested)
+    );
+}
+
+#[test]
+fn missing_policy_is_invalid_evidence_not_a_default_profile() {
+    let mut cause = failure("adapter", "Integrity", 12);
+    cause.policy.clear();
+    assert_eq!(
+        event(&started(), MockEvent::Terminal(Terminal::Failed(cause))).disposition,
+        Disposition::ConnectionFault(LinkFault::InvalidEvidence)
+    );
+}
+
+#[test]
+fn cancellation_blocks_all_mock_completion_kinds() {
+    for kind in [
+        CompletionKind::MemoryValidated,
+        CompletionKind::ProtocolObserved,
+        CompletionKind::Published,
+    ] {
+        let model = command(&started(), Command::RequestCancel).state;
+        let result = event(&model, MockEvent::Terminal(Terminal::Completed(kind)));
+        assert_eq!(
+            result.disposition,
+            Disposition::ConnectionFault(LinkFault::SuccessAfterCancel)
+        );
+        assert!(result.state.operation().unwrap().terminal.is_none());
+    }
 }

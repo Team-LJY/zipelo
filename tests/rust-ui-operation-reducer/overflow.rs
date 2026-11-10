@@ -32,8 +32,11 @@ fn last_serial_maps_injectively_then_next_start_is_rejected() {
     );
     let mut model = model;
     let op = model.operation.as_mut().unwrap();
-    op.terminal = Some(Terminal::MockSuccess);
-    op.cleanup_confirmed = true;
+    op.terminal = Some(Terminal::Completed(CompletionKind::MemoryValidated));
+    op.cleanup = Some(CleanupObservation {
+        kind: CleanupKind::Confirmed,
+        evidence: EvidenceKind::Model,
+    });
     let result = model.reduce(Input::Command(Command::StartMock));
     assert_eq!(
         result.disposition,
@@ -49,6 +52,7 @@ fn sequence_max_latches_fault_without_accepting_cleanup() {
     op.next_sequence = u64::MAX;
     let mapping = op.mapping;
     let result = model.reduce(Input::Event(Envelope {
+        evidence: EvidenceKind::Model,
         mapping,
         sequence: u64::MAX,
         event: MockEvent::CleanupConfirmed,
@@ -57,7 +61,7 @@ fn sequence_max_latches_fault_without_accepting_cleanup() {
         result.disposition,
         Disposition::ConnectionFault(LinkFault::SequenceOverflow)
     );
-    assert!(!result.state.operation().unwrap().cleanup_confirmed);
+    assert!(!result.state.operation().unwrap().cleanup_confirmed());
     assert_eq!(result.state.operation().unwrap().next_sequence, u64::MAX);
 }
 
@@ -68,6 +72,7 @@ fn sequence_last_representable_increment_is_accepted() {
     op.next_sequence = u64::MAX - 1;
     let mapping = op.mapping;
     let result = model.reduce(Input::Event(Envelope {
+        evidence: EvidenceKind::Model,
         mapping,
         sequence: u64::MAX - 1,
         event: MockEvent::CleanupConfirmed,

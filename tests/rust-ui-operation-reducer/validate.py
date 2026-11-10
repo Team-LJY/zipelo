@@ -35,7 +35,7 @@ source_before = hashes(source_paths + [CRATE / "Cargo.toml", CRATE / "Cargo.lock
 unit_names = re.findall(r"#\[test\]\s+fn (\w+)\(", (HERE / "overflow.rs").read_text())
 api_names = re.findall(r"#\[test\]\s+fn (\w+)\(", (HERE / "reducer.rs").read_text())
 expected = sorted(["overflow::" + name for name in unit_names] + api_names)
-assert len(expected) == len(set(expected)) == 49
+assert len(expected) == len(set(expected)) == 58
 base = ["cargo", "+1.99.1"]
 flags = ["--locked", "--offline", "--manifest-path", str(CRATE.relative_to(ROOT) / "Cargo.toml")]
 _, build = run("build", base + ["build", "--lib"] + flags)
@@ -46,7 +46,7 @@ output, execution = run("execution", base + ["test", "--lib", "--test", "operati
 passed_names = sorted(re.findall(r"^test ([^\s]+) \.\.\. ok$", output, re.M))
 assert passed_names == expected
 summaries = re.findall(r"test result: ok\. (\d+) passed; (\d+) failed; (\d+) ignored; (\d+) measured; (\d+) filtered out", output)
-assert sorted(summaries) == sorted([("6", "0", "0", "0", "0"), ("43", "0", "0", "0", "0")]), summaries
+assert sorted(summaries) == sorted([("6", "0", "0", "0", "0"), ("52", "0", "0", "0", "0")]), summaries
 assert hashes(PROTECTED) == before
 assert hashes(source_paths + [CRATE / "Cargo.toml", CRATE / "Cargo.lock"]) == source_before
 report = {"scope": "작성자 측 순수 모의 reducer 시험임. 독립 검증/실제 GUI/작업 실행이 아님", "build": build, "discovery": discovery, "execution": execution, "discovered": len(actual), "executed": len(passed_names), "passed": len(passed_names), "failed": 0, "ignored": 0, "filtered": 0, "names": actual, "source_hashes": source_before, "baseline_before": before, "baseline_after": hashes(PROTECTED)}
