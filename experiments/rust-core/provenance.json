@@ -1,0 +1,85 @@
+{
+    "schemaVersion": 1,
+    "license": "MIT for newly authored project code; dependencies retain their own licenses",
+    "origin": "New Rust IPC adapter and ZIP subset guards; no SharpZipLib decoder source copied or ported",
+    "references": [
+        {
+            "repository": "Team-LJY/zipelo",
+            "commit": "018e7593ecb2b3a7ae0bc17a440ecf2c0de8b4dd",
+            "paths": [
+                "src/Zipelo.Runtime/WorkerProtocol.cs",
+                "src/Zipelo.Core/ArchiveContracts.cs",
+                "src/Zipelo.Worker/BuiltInZipEngine.cs"
+            ],
+            "use": "wire shape, numeric enum mapping, listing accounting"
+        },
+        {
+            "repository": "Team-LJY/zipelo",
+            "commit": "06e5d6c17318349ea96efef81a9e7d8f54c1e1a1",
+            "paths": [
+                "src/Zipelo.Runtime/Streaming/ExtractionWire.cs",
+                "src/Zipelo.Runtime/Streaming/WorkerStreamContract.cs",
+                "src/Zipelo.Runtime/Streaming/ZipStreamIndex.cs",
+                "src/Zipelo.Worker/StreamingZipExtractor.cs"
+            ],
+            "use": "existing protocol and ZIP subset policy comparison; parsing/decompression delegated to zip crate"
+        },
+        {
+            "repository": "zip-rs/zip2",
+            "tag": "v9.5.0",
+            "paths": [
+                "Cargo.toml",
+                "src/read/zip_archive.rs",
+                "src/read/zipfile.rs",
+                "src/result.rs"
+            ],
+            "use": "public adapter API and dependency configuration"
+        }
+    ],
+    "directDependencies": [
+        {
+            "name": "zip",
+            "version": "=9.5.0",
+            "defaultFeatures": false,
+            "features": [
+                "deflate-flate2-zlib-rs"
+            ],
+            "license": "MIT",
+            "msrv": "1.88",
+            "reason": "maintained ZIP metadata, CRC verification and Deflate reader"
+        },
+        {
+            "name": "serde_json",
+            "version": "=1.0.145",
+            "defaultFeatures": false,
+            "features": [
+                "std"
+            ],
+            "license": "MIT OR Apache-2.0",
+            "reason": "verified fixed version for existing JSON protocol; no custom JSON parser or derive dependency"
+        },
+        {
+            "name": "base64",
+            "version": "=0.22.1",
+            "defaultFeatures": false,
+            "features": [
+                "std"
+            ],
+            "license": "MIT OR Apache-2.0",
+            "reason": "bounded decode_slice into pre-sized storage; no custom base64 codec"
+        }
+    ],
+    "transitivePlan": {
+        "codec": "flate2 -> zlib-rs selected by zip feature; no direct pin of transitives before actual Cargo resolution",
+        "verification": "central Cargo.lock checksums and target-specific normal/build/dev/feature graphs required; licenses and native dependencies reviewed separately",
+        "knownLicenses": {
+            "flate2": "MIT OR Apache-2.0",
+            "zlib-rs": "Zlib"
+        },
+        "complete": false
+    },
+    "preservation": "all baseline C# code, tests, fixtures, project files and PRs unchanged",
+    "syntheticOnly": true,
+    "productReady": false,
+    "releaseReady": false
+}

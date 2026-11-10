@@ -1,0 +1,134 @@
+{
+    "schemaVersion": 1,
+    "implementation": "zipelo-rust-zip-worker-probe",
+    "productIntegration": false,
+    "baseline": {
+        "main": "018e7593ecb2b3a7ae0bc17a440ecf2c0de8b4dd",
+        "streaming": "06e5d6c17318349ea96efef81a9e7d8f54c1e1a1",
+        "comparison": "35f1bdfd99b527f4f4f77f8c64ae4cb9b82afe57"
+    },
+    "modes": [
+        {
+            "args": [],
+            "input": "signed-positive int32 LE byte length <= 33554432, UTF-8 JSON, stdin EOF required",
+            "action": 0,
+            "fields": [
+                "JobId",
+                "Action",
+                "Inputs",
+                "Names",
+                "Limits"
+            ],
+            "output": "same length-prefixed PascalCase JSON, numeric Core enums, exit 0 if response written (including Job.State=Failed)",
+            "extraDiagnostic": "Probe.Failure is a static classification only; no archive path, raw input or library exception text",
+            "contentCrcVerified": false
+        },
+        {
+            "args": [
+                "--extract-stream-v2"
+            ],
+            "input": "64-byte ZXE2 config followed by exact ZXR2 replies",
+            "stderr": "48-byte ZXR2 requests only, no diagnostics",
+            "stdout": "64-byte ZIP2 header + payload; sequences start at 0; 64KiB max data",
+            "jobId": ".NET Guid mixed-endian 16 bytes",
+            "itemId": "central-directory ordinal + 1 in first four LE bytes, remaining 12 bytes zero",
+            "termination": "EndJob Completed + stdout EOF + exit 0 all required; failure emits no successful EndJob"
+        }
+    ],
+    "exitCodes": {
+        "0": "normal protocol completion; inspect v1 Job status",
+        "2": "invalid CLI",
+        "10": "unsupported ZIP subset",
+        "11": "unsupported entry",
+        "12": "integrity error; library may not expose EOF vs format cause",
+        "13": "budget or deadline exceeded",
+        "14": "protocol error",
+        "15": "observed UnexpectedEof only, not inferred from a generic ZIP error",
+        "16": "unclassified engine or I/O failure",
+        "17": "duplicate names would be collapsed by zip crate",
+        "18": "local/central or adapter metadata mismatch"
+    },
+    "supported": {
+        "container": "nonencrypted single-disk ZIP32",
+        "methods": [
+            "Stored",
+            "Deflate"
+        ],
+        "names": "ASCII or flagged strict UTF-8, <= 4096 raw bytes and 1024 UTF-16 code units",
+        "extraFields": [
+            "0x5455"
+        ],
+        "dataDescriptor": "ZIP32 signed or unsigned descriptor",
+        "sfx": false,
+        "zip64": false,
+        "encrypted": false,
+        "creation": false
+    },
+    "bounds": {
+        "inputBytes": 16777216,
+        "jsonFrameBytes": 33554432,
+        "decodedBase64Bytes": 16777216,
+        "entries": 1024,
+        "metadataReadBytes": 2097152,
+        "streamProcessedBytes": 134217728,
+        "outputBytes": 16777216,
+        "rangeBytes": 50331648,
+        "rangeRequests": 65536,
+        "frameBytes": 65536,
+        "wireBytes": 22020096,
+        "frames": 65536,
+        "durationSeconds": 300
+    },
+    "policyDifferences": [
+        "v1 uses strict ZIP32 structural preflight and local/central consistency, unlike the older permissive listing implementation",
+        "exact duplicate names fail explicitly before zip crate metadata can collapse them; old C# listing can expose them with separate IDs",
+        "metadata read budget is cumulative across preflight, crate indexing and consistency validation; existing per-parser C# limits may accept some larger metadata archives",
+        "v1 processed budget charges input length once as the C# listing does; v2 charges actual reads and decoded output, read counts depend on library",
+        "ZIP library CRC failures may be generic InvalidData; do not relabel all of them as actual EOF or a precise parser phase",
+        "first Deflate stream with trailing packed garbage or another stream requires explicit comparison against frozen C# fixtures; no backend acceptance claim is made before execution"
+    ],
+    "safetyBoundary": [
+        "no output path or archive path accepted by worker",
+        "no zip extract() call",
+        "host retains independent index, OS path/link checks, CRC, actual output budget, collision, publication and cleanup",
+        "list success does not verify payload CRC or filesystem safety",
+        "v2 output can be staged before CRC completion; host must never publish without EOF, exit 0 and successful independent verification",
+        "no progress or cancel-request control message is added",
+        "deadline checks are cooperative between I/O and codec calls; external host timeout and owned-process termination remain required",
+        "process separation is not an OS memory/CPU/permission sandbox",
+        "Windows FileDispositionInfo cleanup hang remains unresolved",
+        "stdin cannot be checked for EOF after last v2 range reply because host keeps reply pipe open until worker exit; exact reply headers and byte counts are checked and stdout EOF is produced by process exit"
+    ],
+    "validation": {
+        "staticReviewOnly": true,
+        "restore": false,
+        "build": false,
+        "unitExecution": false,
+        "comparisonExecution": false,
+        "rustfmt": "1.99.1 existing installation: syntax/format check only; not type-check or build",
+        "cargoLock": "not fabricated; central authorized dependency resolution required",
+        "directUnitSource": "location approval pending: common rule requires root tests/; implementation assignment allows crate-local tests"
+    },
+    "centralCommands": [
+        "cargo generate-lockfile --manifest-path experiments/rust-core/Cargo.toml",
+        "cargo tree --locked --manifest-path experiments/rust-core/Cargo.toml --edges normal,build,dev,features --target x86_64-unknown-linux-gnu",
+        "cargo tree --locked --manifest-path experiments/rust-core/Cargo.toml --edges normal,build,dev,features --target x86_64-pc-windows-msvc",
+        "cargo build --locked --offline --manifest-path experiments/rust-core/Cargo.toml",
+        "comparison harness: --worker <absolute worker path> --case <synthetic case> --result <owned result path>"
+    ],
+    "directUnitCasesPending": [
+        "Guid mixed-endian reference bytes and empty/malformed rejection",
+        "config magic/version/signed-negative bounds/duration/JobId rejection",
+        "range response JobId/sequence/offset/count/reserved mismatch rejection",
+        "short range header/body and zero-byte reads",
+        "seek before zero/after length, empty read and exact EOF",
+        "range request/byte cap and zero-length request suppression",
+        "frame sequence/header zero fields/64KiB and wire caps",
+        "begin/end transition, item order and declared/actual size mismatch",
+        "terminal frame prevents later frames",
+        "JSON frame signed length and trailing input rejection",
+        "base64 decoded size at cap/over cap/padding/malformed",
+        "TimeSpan constant representation and upper bound",
+        "budget exact boundary/overflow-safe rejection and sticky failure"
+    ]
+}
