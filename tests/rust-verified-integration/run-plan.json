@@ -945,12 +945,14 @@
     "expected_unique_total": 807,
     "deduplication": "manifest/target/exact-name 튜플로 구분함. PR54가 재사용한 UI31개를 기존690개와 두 번 세지 않음. Python helper와 GUI 시나리오는 807개에 포함하지 않음",
     "before_run": [
+        "공유 작업트리에서는 실행하지 않음. materialization_precondition의 고정 원격 380개 전체 검증/전용 짧은 checkout 준비가 가장 먼저임.",
         "고정 candidate head/tree와 SHA256SUMS/overlay 및 376개 blob/mode 확인. 새 metadata는 별도 검증함",
         "현재 room flock으로 소스/빌드/cache 쓰기 직렬화. 새 소유의 짧은 checkout과 별도 target 사용. Unix socket 최장 byte 경로 사전 검증",
         "기존 Rust1.99.1/완전한 lock cache 사전 감사. 새 dependency/version/install/download 없음",
         "기존 원본 정적 checker/전체 pin은 해당 원래 snapshot에서만 검사함. 통합본에서는 이 overlay로 3교체를 명시하고 나머지 blob/mode 보존을 확인함. 과거 source-pin 불일치를 통과로 바꾸거나 원본 checker를 수정하지 않음",
         "PR56 생성기를 Python3.12/3.14에서 기존 fixtures.hex/json과 bytes 완전 일치 확인. 새로운 fixture/기대값 생성 금지",
-        "기존 dependency_audit.py는 고정 dependencies.json을 쓰므로 별도 폐기 가능한 검증 사본에서만 실행해 원본과 대조함"
+        "기존 dependency_audit.py는 고정 dependencies.json을 쓰므로 별도 폐기 가능한 검증 사본에서만 실행해 원본과 대조함",
+        "build_environment의 CARGO_BUILD_JOBS=1 및 parser_precondition 자체시험이 완료된 뒤에만 807개 실행을 시작함."
     ],
     "execution": [
         "고정 검토 후에만 cargo +1.99.1 test --locked --offline --manifest-path <manifest> --test <target> --no-run --message-format=json. lib target만 --lib 사용",
@@ -982,5 +984,45 @@
         "TooLate 및 syscall 오류 주입 미검증 경계를 유지",
         "OS worker/권한제한/실행identity/제품 Published 증거 없음",
         "새 worker-session 구현/held probe/execveat/사용자 파일/실제GUI 연결 제외"
-    ]
+    ],
+    "materialization_precondition": {
+        "gate": "Rust/GUI/static source checks start only after a fresh exclusive short owned checkout has all 380 files of the externally reviewed remote commit. This metadata-only stage does not materialize or execute the candidate.",
+        "tracked_file_count": 380,
+        "inventory_source": "Review the exact full commit and recursive Git tree (truncated=false), freeze every 380 path/type/blob/mode including the four integration metadata files. Record commit/tree and independent inventory digest outside the checkout; do not infer the full checkout from overlay.entries, which lists 376 inherited inputs only.",
+        "ownership": "Create a new nonexisting owned short directory under project-root/tests/, verify canonical path/owner/no symlink or ancestor substitution. Keep dedicated target and logs outside the 380-file source inventory. No branch switching, whole-worktree staging or hard links.",
+        "bytes_and_mode": "For each file, calculate Git SHA1(blob header + exact bytes), compare type and exact 100644/100755 executable mode to the reviewed remote tree, then inventory the complete checkout for missing/extra paths. Require 380/380 and zero mismatch before source inspection/build. Record byte SHA256 too. Stop on the first missing/different/unknown mode.",
+        "copy_source": "tests/b/c is optional read-only source for original main 305 files. Reverify each against main f7fc8cbece281e2f9a6374b4640ca4dd9d321fbc tree ab5574289f537a4028a3abf092e4634cb9b89282, and copy into the candidate only if its blob/mode also match the reviewed candidate. The three replaced paths require selected remote blobs, not old-main bytes. Never modify the source copy.",
+        "remaining_files": "Acquire every remaining selected file from the fixed remote blob/commit, verify exact bytes/blob/mode, and never fill a gap using an arbitrary shared-worktree file. All GitHub actions use the selected connected account.",
+        "shared_worktree": "/home/user/projects/zipelo is not the candidate checkout: LinuxFolderPublication.cs differs and 14 remote paths were reported absent. Do not repair, overwrite, borrow mismatches from, or run candidate source there. No C# or historical-evidence updates.",
+        "execution_before_after": "Repeat all 380 blob/mode/SHA256 checks before and after each validation stage. Preserve the original failed/partial evidence. Unix socket maximum path bytes must be checked in the short checkout before any case."
+    },
+    "build_environment": {
+        "CARGO_BUILD_JOBS": "1",
+        "scope": "Every Cargo build/test/no-run/metadata/dependency-audit child inherits CARGO_BUILD_JOBS=1 explicitly; record the effective environment. Use dedicated target and the current cohort flock for shared cache writes. Do not reuse host target for Ubuntu24."
+    },
+    "parser_precondition": {
+        "gate": "Before any Rust discovery/case execution, freeze and review the actual supervisor/parser bytes in the new validation directory and pass its selftests with raw stdout/stderr/exit/hash preserved. Copy only the reviewed parser artifacts, never modify historical originals.",
+        "reviewed_reference": {
+            "path": "tests/rust-ui-system-font-regressions/validation-5ff9b434-parser/output_parser.py",
+            "sha256": "7f4b2c88585c3e9db520d6896e805ea4e0e3f6ac49012ac6e7ca8789839804bd",
+            "selftests_path": "tests/rust-ui-system-font-regressions/validation-5ff9b434-parser/parser_selftests.py",
+            "selftests_sha256": "cadf0d3c5ed27d5f37acddc9299bfb77bd076f94dc435c66ee3fa7f0586f568a",
+            "historical_cases": 48,
+            "scope": "External local reviewed validation artifacts, not files claimed to be present in the 380-file source tree. Revalidate their pinned hashes before use."
+        },
+        "positive_cases": [
+            "One-line test <exact-name> ... ok",
+            "--nocapture split test name, intermediate font bytes/index diagnostic output, then standalone ok",
+            "Real historical linux_loader stdout shape; output may be split across reads and line boundaries"
+        ],
+        "negative_cases": [
+            "missing/duplicate/foreign/mismatched test names",
+            "FAILED/ignored or summary disagreement, duplicate/missing summary, wrong passed/failed/ignored/measured/filtered",
+            "nonzero exit, timeout, output overflow, missing EOF or unconfirmed reap must fail regardless of apparent ok",
+            "truncated or unknown final status, output for multiple tests must fail exact-single-case validation"
+        ],
+        "pass_contract": "Accept only the expected unique exact name and one ok plus exactly 1 passed/0 failed/0 ignored/0 measured/group-count-minus-1 filtered with exit0 and confirmed EOF/reap/no timeout. Permit diagnostic lines between the known name and ok; do not treat diagnostic text itself as success or erase failures.",
+        "scope": "Parser selftest outcomes are independent Python checks, never counted among 807 Rust cases or as live OS cleanup proof.",
+        "adaptation": "Any copied parser/supervisor adjustment needs a diff/hash review and the positive/negative suite before use. No timeout, source or expectation relaxation."
+    }
 }
