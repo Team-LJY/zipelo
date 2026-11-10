@@ -1,0 +1,125 @@
+{
+    "base_head": "f7fc8cbece281e2f9a6374b4640ca4dd9d321fbc",
+    "base_tree": "ab5574289f537a4028a3abf092e4634cb9b89282",
+    "base_app_blob": "715ba9d662e507ad8a11b232edcefcf86276a14a",
+    "changed_existing_paths": [
+        "experiments/rust-ui-memory-app/src/app.rs"
+    ],
+    "new_source_paths": [
+        "experiments/rust-ui-memory-app/src/system_font.rs"
+    ],
+    "ui_overlay": [
+        {
+            "path": "experiments/rust-ui-memory-app/Cargo.lock",
+            "sha256": "d591ec67b8f1a1ea448b6bdd971e0b8c039a33a492c8f068b085bdd20b3a64ae",
+            "base_sha256": "d591ec67b8f1a1ea448b6bdd971e0b8c039a33a492c8f068b085bdd20b3a64ae"
+        },
+        {
+            "path": "experiments/rust-ui-memory-app/Cargo.toml",
+            "sha256": "7a74a5d5be456dc6d080c0dd78a25eaf8bd12ef43a3b921f26bbb7e35901040f",
+            "base_sha256": "7a74a5d5be456dc6d080c0dd78a25eaf8bd12ef43a3b921f26bbb7e35901040f"
+        },
+        {
+            "path": "experiments/rust-ui-memory-app/LICENSE",
+            "sha256": "0714945e52a4d5b560c02c9a18478519f8c4e2572cbf87bd6d52adcfb2b63c62",
+            "base_sha256": "0714945e52a4d5b560c02c9a18478519f8c4e2572cbf87bd6d52adcfb2b63c62"
+        },
+        {
+            "path": "experiments/rust-ui-memory-app/THIRD-PARTY-NOTICES.txt",
+            "sha256": "5b98107ae51806d6d4cb4337bea3b979f55070eba6dc7c0c294e13e7686ab4c6",
+            "base_sha256": "5b98107ae51806d6d4cb4337bea3b979f55070eba6dc7c0c294e13e7686ab4c6"
+        },
+        {
+            "path": "experiments/rust-ui-memory-app/src/app.rs",
+            "sha256": "5bef670594b8edf6d9b979871da56447342c92126fd56c6acd9eb7e3a9cece95",
+            "base_sha256": "1cddb84c6a8c5e4188be79220c92532351e51979d7ad0edbc0a12ac5381ed72c"
+        },
+        {
+            "path": "experiments/rust-ui-memory-app/src/controller.rs",
+            "sha256": "51dc979b88e395c209444900511aa7d56bcc8ccc31205fca22191f25dc6468e2",
+            "base_sha256": "51dc979b88e395c209444900511aa7d56bcc8ccc31205fca22191f25dc6468e2"
+        },
+        {
+            "path": "experiments/rust-ui-memory-app/src/lib.rs",
+            "sha256": "58d303d44c6b8580168f14c3ceb0eb878fc7a003f197f162584286873a904ddc",
+            "base_sha256": "58d303d44c6b8580168f14c3ceb0eb878fc7a003f197f162584286873a904ddc"
+        },
+        {
+            "path": "experiments/rust-ui-memory-app/src/runtime.rs",
+            "sha256": "c1c1dde16263ea7ed4cf5808b3182e21878b8ffadfe8850974a8cbdbd4607b3f",
+            "base_sha256": "c1c1dde16263ea7ed4cf5808b3182e21878b8ffadfe8850974a8cbdbd4607b3f"
+        },
+        {
+            "path": "experiments/rust-ui-memory-app/src/transport.rs",
+            "sha256": "7aef227ed4424e13cfa750373a9e1f32bebae12308589c81d051f41ea84991ac",
+            "base_sha256": "7aef227ed4424e13cfa750373a9e1f32bebae12308589c81d051f41ea84991ac"
+        },
+        {
+            "path": "tests/rust-ui-memory-app/contract.json",
+            "sha256": "5a9a48f08dea0d3b103a359251bde06dd82e2568be02bdb905f5b0ceb7bb6dd9",
+            "base_sha256": "5a9a48f08dea0d3b103a359251bde06dd82e2568be02bdb905f5b0ceb7bb6dd9"
+        },
+        {
+            "path": "tests/rust-ui-memory-app/dependencies.json",
+            "sha256": "5ee41a973a0e976fbb6fe36d4a3fcb0ed026e638e997042a0bef8c2f238f0599",
+            "base_sha256": "5ee41a973a0e976fbb6fe36d4a3fcb0ed026e638e997042a0bef8c2f238f0599"
+        },
+        {
+            "path": "tests/rust-ui-memory-app/dependency_audit.py",
+            "sha256": "8536779d3551eb86a82f4c8b814bb26ddeaff04f992d3e080ae06321f10e3453",
+            "base_sha256": "8536779d3551eb86a82f4c8b814bb26ddeaff04f992d3e080ae06321f10e3453"
+        },
+        {
+            "path": "tests/rust-ui-memory-app/files.json",
+            "sha256": "97c0bc5c804d85fb523da4c76abff2bec3aed3ae1e02b68db1c19792e9843808",
+            "base_sha256": "97c0bc5c804d85fb523da4c76abff2bec3aed3ae1e02b68db1c19792e9843808"
+        },
+        {
+            "path": "tests/rust-ui-memory-app/fixtures/payload.txt",
+            "sha256": "ce7c1973b4eab97e4e49257ce4dbc5cb35c5a1eaae7c666a04b548fe1fd41dba",
+            "base_sha256": "ce7c1973b4eab97e4e49257ce4dbc5cb35c5a1eaae7c666a04b548fe1fd41dba"
+        },
+        {
+            "path": "tests/rust-ui-memory-app/fixtures/sample.gz",
+            "sha256": "6adcdc0775bca7b8c1ff8e41adeecf8a724f876f8b469f7f8fc611406a626e61",
+            "base_sha256": "6adcdc0775bca7b8c1ff8e41adeecf8a724f876f8b469f7f8fc611406a626e61"
+        },
+        {
+            "path": "tests/rust-ui-memory-app/fixtures/sample.tar",
+            "sha256": "910cb4573b57fd26f122376f3f4eae0e4397163b83e32a3c850758d42f88dc55",
+            "base_sha256": "910cb4573b57fd26f122376f3f4eae0e4397163b83e32a3c850758d42f88dc55"
+        },
+        {
+            "path": "tests/rust-ui-memory-app/license-supplement.json",
+            "sha256": "09aca74cb3f20f1ed5b3e03fd647c80ef8e872f6ff97e17882cf2fda8b108b2c",
+            "base_sha256": "09aca74cb3f20f1ed5b3e03fd647c80ef8e872f6ff97e17882cf2fda8b108b2c"
+        },
+        {
+            "path": "tests/rust-ui-memory-app/reference-ui.lock",
+            "sha256": "865d69b95660fefe8c9ad6129d2692cff8007ecc3d55de1a049fe162173f434d",
+            "base_sha256": "865d69b95660fefe8c9ad6129d2692cff8007ecc3d55de1a049fe162173f434d"
+        },
+        {
+            "path": "tests/rust-ui-memory-app/regressions.rs",
+            "sha256": "4eec2f9e036bc0fc04a1ff0af31aa28e593c185f8d1d230c8105a8fefc92fc4d",
+            "base_sha256": "4eec2f9e036bc0fc04a1ff0af31aa28e593c185f8d1d230c8105a8fefc92fc4d"
+        },
+        {
+            "path": "tests/rust-ui-memory-app/sources.json",
+            "sha256": "f6a7b3df44869c206ff517f32653885c5fcd2f335ef4e8eff94d6ab626ca4119",
+            "base_sha256": "f6a7b3df44869c206ff517f32653885c5fcd2f335ef4e8eff94d6ab626ca4119"
+        },
+        {
+            "path": "tests/rust-ui-memory-app/static_check.py",
+            "sha256": "6a756de6da66731b1ea9eaaacedfbe32096bd6a918eab591a392bc45529184f5",
+            "base_sha256": "6a756de6da66731b1ea9eaaacedfbe32096bd6a918eab591a392bc45529184f5"
+        },
+        {
+            "path": "experiments/rust-ui-memory-app/src/system_font.rs",
+            "sha256": "f15657021dcb48bf3d0bb570dbcea1e36c4f7c9694cde21be972e350580851f7",
+            "base_sha256": null
+        }
+    ],
+    "dependency_change": false,
+    "original_manifests": "기존 고정 manifest는 과거 head 증거로 보존함. 이 overlay는 변경 app과 신규 module만 다른 입력임을 명시함"
+}

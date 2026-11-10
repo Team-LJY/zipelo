@@ -1,3 +1,6 @@
+#[path = "system_font.rs"]
+mod system_font;
+
 use eframe::egui::{self, Color32, FontData, FontDefinitions, FontFamily, FontId, TextStyle};
 use zipelo_ui_memory_app::{
     controller::{CloseState, Controller},
@@ -155,8 +158,7 @@ impl eframe::App for App {
 }
 
 fn main() -> eframe::Result {
-    let font = std::fs::read("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc")
-        .map_err(|e| eframe::Error::AppCreation(Box::new(e)))?;
+    let font = system_font::load().map_err(|e| eframe::Error::AppCreation(Box::new(e)))?;
     eframe::run_native(
         "Zipelo 합성 메모리 작업",
         eframe::NativeOptions {
@@ -168,8 +170,8 @@ fn main() -> eframe::Result {
         },
         Box::new(move |cc| {
             let mut fonts = FontDefinitions::empty();
-            let mut data = FontData::from_owned(font);
-            data.index = 1;
+            let mut data = FontData::from_owned(font.bytes);
+            data.index = font.face_index;
             fonts.font_data.insert("noto-kr".into(), data.into());
             fonts
                 .families
