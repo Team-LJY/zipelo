@@ -177,11 +177,8 @@ where
     let mut files = Vec::new();
     let first = scan(&request.input, &mut entries, None, &mut files, &mut budget)?;
     budget.check(Checkpoint::BeforeSelection)?;
-    let requested = select(&entries);
-    // 콜백 오류를 원형대로 보존하되 반환 뒤의 취소와 기한도 확인함.
-    let after = budget.check(Checkpoint::AfterSelection);
-    let requested = requested.map_err(Error::Selection)?;
-    after?;
+    let requested = select(&entries).map_err(Error::Selection)?;
+    budget.check(Checkpoint::AfterSelection)?;
     if requested.len() > entries.len() {
         return Err(Failure::Unsupported.into());
     }

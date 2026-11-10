@@ -29,7 +29,7 @@
             "Selection(E)"
         ],
         "mapping": "오류는 Error::Reader(Failure) 또는 Error::Selection(E)임. 기한 초과와 Stop::Deadline은 Budget임. 선택 ID 중복, 미등록, 개수 초과와 Windows 정책은 Unsupported임. 실제 해시 불일치는 Integrity임.",
-        "precedence": "선택 콜백 반환 뒤 checkpoint를 실행하되 선택 콜백이 Err이면 원형 E를 우선 반환함. 그 외 최초로 관찰한 오류에서 즉시 종료함. 중간 결과와 작업 객체를 재사용하지 않음.",
+        "precedence": "선택 콜백이 Err이면 후속 checkpoint 없이 원형 E를 Error::Selection(E)로 즉시 반환함. 성공한 선택 결과에만 AfterSelection 취소/기한 검사와 후속 검증을 수행함. 그 외 최초로 관찰한 오류에서 즉시 종료함. 중간 결과와 작업 객체를 재사용하지 않음.",
         "timing": "Instant를 호출 시작에 생성하고 콜백 소요 시간을 포함함. checkpoint 종료 후 경과 >= duration이면 Budget임. Stop::Cancelled가 해당 검사에서 기한보다 우선함. 콜백을 강제 중단하지 못함."
     },
     "selection": [
