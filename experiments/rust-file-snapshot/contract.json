@@ -1,0 +1,109 @@
+{
+    "schema": "zipelo.file-snapshot.candidate.v1",
+    "base_head": "23b8d1c615f24f42469138fcc63e7fce7cda4f24",
+    "branch": "features/rust-file-snapshot",
+    "status": "source-only; not compiled or executed",
+    "api": {
+        "capture": "capture<E>(Request { path: &Path, limits: Limits }, FnMut(Checkpoint) -> Result<(), Stop<E>>) -> Result<FileSnapshot, Failure<E>>",
+        "ownership": "FileSnapshot and Identity fields are private, with no public constructors, Default, deserialization, from-bytes or from-fd hooks. bytes() only borrows; into_bytes consumes the snapshot and returns the original Vec. No worker/publication/atomic-snapshot proof type exists.",
+        "output": "Owned bytes, SHA256 of those bytes, observed device/inode/length/nlink/mode/mtime/ctime, and per-attempt Usage. No source path retained. Debug for FileSnapshot omits bytes, identity and digest.",
+        "failure": "Failure preserves Error<E> plus all accumulated Usage and never returns partial payload. Io preserves operation and std::io::Error including raw errno. Callback(E) preserves the original E without conversion.",
+        "threading": "Synchronous API; no thread, queue, process, join or forced interrupt. E need not implement Send; sending Failure<E> across a thread requires E: Send and spawn-owned captures/results require 'static. No compile-time Send assertions have run."
+    },
+    "scope": {
+        "platform": "Linux source path uses openat2 and verified procfs. Non-Linux returns Unsupported(Platform) without touching the supplied path. x86_64 Linux is the initial metadata target; no OS runtime support is claimed.",
+        "input": "Absolute OS-byte path, 2..4096 bytes, nonempty components <=255 bytes, no dot/dotdot/NUL/trailing or repeated slash. UTF-8 is not required. Backslash remains a Linux name byte. This is a host input path policy, not a replacement archive entry name policy.",
+        "pinning": "openat2 with O_PATH|O_CLOEXEC and RESOLVE_NO_SYMLINKS pins the inode without opening FIFO/device data I/O. fstat must report regular file with exactly one hard link before any data open. FIFO/directory/socket/device and multiple hard links are rejected.",
+        "reopen": "Open /proc using O_PATH|O_DIRECTORY|O_CLOEXEC and RESOLVE_NO_SYMLINKS, check fstatfs PROC_SUPER_MAGIC, then numeric PID/fd using BENEATH|NO_SYMLINKS|NO_XDEV. openat follows only the held numeric fd link with O_RDONLY|O_NONBLOCK|O_NOCTTY|O_CLOEXEC. Recheck identity before reading. No supplied source pathname reopen; no normal pathname fallback.",
+        "trust": "Kernel/procfs, process fd table and process-local ownership are trusted. Does not defend against malicious code in the same process or a privileged actor controlling mounts/ptrace. Descriptor close is RAII, not measured OS cleanup proof. No temporary data file is created.",
+        "copy": "Read from offset zero into one bounded Vec, accumulating positive short reads. Probe one byte at initial length for EOF after each pass. Compare reread bytes exactly with the retained first pass; compare metadata after copy and after the final callback. SHA256 covers owned bytes only.",
+        "stability": "This is a two-pass observational copy, not an atomic source snapshot, coherent point-in-time guarantee, exclusion of concurrent writes, full ABA detection, archive integrity validation or pathname persistence guarantee. Rename/replacement can leave the held inode readable; observed metadata/link changes may reject it, but unchanged pathname association is not proved.",
+        "preservation": "No write/unlink/rename/chmod/launch syscalls. Reading can update source atime. Source contents and existing outputs are never intentionally modified. No app-core/UI integration yet."
+    },
+    "limits": {
+        "memory_bytes": 16777216,
+        "scratch_bytes": 65536,
+        "max_io_reservations": 134217728,
+        "max_read_calls": 131072,
+        "max_duration_seconds": 300,
+        "default_duration_seconds": 30,
+        "empty": "Empty regular input is supported with two one-byte EOF reservations; max_bytes=0 permits it, max_io_bytes=0 cannot complete those probes. max_read_calls=0 is InvalidLimits.",
+        "allocation": "try_reserve_exact before Vec resize. Bounds logical payload length, not allocator overhead/capacity rounding, total process RSS, callback allocations or infallible small path allocations. OOM abort is not covered.",
+        "io": "Before every read_at attempt reserve the full requested buffer length and one read call. No refund on short read, EOF, native error or mismatch. actual_read_bytes records successful returned bytes, compared_bytes records all second-pass bytes including a mismatching chunk. Earlier usage survives failures.",
+        "formula": "Normal full-chunk success for N bytes reserves 2*N+2 bytes, reads 2*N actual bytes, compares N bytes and takes 2*ceil(N/65536)+2 read calls. Positive short reads may consume more reservations and calls. Fixed acquisition path uses at most 4 open calls and 5 metadata calls, excluding automatic close.",
+        "attempts": "Limits and time are per capture invocation; no hidden retry. A caller retry creates a new attempt and must aggregate Failure/Success Usage if it needs a job-wide budget. Native archive library Budgets are untouched.",
+        "time": "Instant elapsed checks at checkpoints and after final metadata; cooperative only. Callback, open/stat/read/hash/allocator calls cannot be forcibly interrupted. No hard syscall timeout or worker isolation claim."
+    },
+    "control": {
+        "stages": [
+            "Opening",
+            "Pinned",
+            "Copying",
+            "Comparing",
+            "Finalizing"
+        ],
+        "checkpoint": "Opening before path validation/syscalls, Pinned after first metadata, Copying before allocation and each read plus EOF probe, Comparing before each read plus EOF probe, Finalizing after digest before final metadata. offset is stage-local; Usage is cumulative.",
+        "priority": "InvalidLimits first. At a checkpoint callback Cancelled/Callback(E) precedes Deadline. Native operation failures, read reservation failures and observed mismatch return directly before a later callback; errors are never rewritten by a later cancellation. Final metadata failure precedes the post-metadata deadline check.",
+        "late_cancel": "Finalizing is the final cancellation checkpoint. A request arriving after it can coexist with successful return; caller must not rewrite a returned snapshot. No public hook covers this narrow interval.",
+        "observers": "Callbacks run synchronously and can block/panic; panic propagates and RAII drops local handles, without synthesizing a completion. No transport policy is implemented. A callback is not allowed to supply bytes/identity as evidence."
+    },
+    "validation": {
+        "performed": [
+            "rustfmt 1.99.1 syntax/format",
+            "Cargo 1.99.1 offline lock generation",
+            "locked/offline metadata x86_64-unknown-linux-gnu",
+            "static API/bounds/manifest review",
+            "dependency archive checksum and cached source equality"
+        ],
+        "not_performed": [
+            "Rust compile/type-check",
+            "unit/integration tests",
+            "capture syscall invocation",
+            "synthetic or user file capture",
+            "Send compilation checks",
+            "Windows or other OS validation"
+        ],
+        "test_owner": "Independent regression source belongs to Kanon under root tests/rust-file-snapshot; none added here.",
+        "future_cases": [
+            "empty and chunk/limit boundaries",
+            "each path-component symlink and FIFO nonblocking rejection",
+            "hard link and special-file rejection",
+            "positive short reads and premature EOF",
+            "native errno and callback E preservation",
+            "append/truncate/same-size overwrite at checkpoints",
+            "path replacement with pinned inode semantics",
+            "cancel and deadline priority",
+            "failed attempt usage",
+            "opaque result and Send compile checks"
+        ],
+        "excluded": [
+            "publication",
+            "worker launch",
+            "execveat retry/bypass",
+            "new installation or network restore",
+            "held ZIP/Huffman probes",
+            "C# edits",
+            "main merge"
+        ]
+    },
+    "references": [
+        {
+            "head": "018e7593ecb2b3a7ae0bc17a440ecf2c0de8b4dd",
+            "path": "src/Zipelo.Core/OutputPathPolicy.cs",
+            "use": "Host path vs archive name policy distinction"
+        },
+        {
+            "head": "06e5d6c17318349ea96efef81a9e7d8f54c1e1a1",
+            "path": "src/Zipelo.Runtime/Streaming/StreamingZipWorkerClient.cs",
+            "use": "SnapshotAsync two-pass comparison and non-atomic limitation; no C# code copied"
+        },
+        {
+            "url": "https://man7.org/linux/man-pages/man2/open.2.html",
+            "use": "O_PATH type inspection, procfs held fd reopening, O_NONBLOCK"
+        },
+        {
+            "url": "https://man7.org/linux/man-pages/man2/openat2.2.html",
+            "use": "Kernel path resolution restrictions; no fallback"
+        }
+    ]
+}
