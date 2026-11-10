@@ -1,0 +1,659 @@
+{
+    "schema_version": 1,
+    "source_commit": "e1ffd7bbffc358b6e53358682a93bf3ce075e892",
+    "source_pr": 40,
+    "branch": "fix/rust-memory-gzip-regressions",
+    "source_pins": [
+        {
+            "path": "experiments/rust-memory-gzip-reader/contract.json",
+            "sha256": "1346c0b6f0ce5221acb9aef5067b0169e08ea6752f4db41a8b9c36b10ef9b43b",
+            "git_blob": "02729ca349d5629b1a9fcd7040441db2e2660065"
+        },
+        {
+            "path": "experiments/rust-memory-gzip-reader/dependencies.json",
+            "sha256": "3f71220451f8cd55dafdb6e6ae901572ec7bbe1be9c93d78953b44244aec6b07",
+            "git_blob": "bf9da9b737d9d574d5e31fb8343f844b61e4c192"
+        },
+        {
+            "path": "experiments/rust-memory-gzip-reader/LICENSE",
+            "sha256": "0714945e52a4d5b560c02c9a18478519f8c4e2572cbf87bd6d52adcfb2b63c62",
+            "git_blob": "5014abac33298592fd3450b51a9b414191e1aabc"
+        },
+        {
+            "path": "experiments/rust-memory-gzip-reader/Cargo.toml",
+            "sha256": "ae76aededbb85cdd6c9227b4c06a1c8fef1bb7f203f1703e787b68f30ccfab6a",
+            "git_blob": "1b1b77e23d39cde1f05e55f73b62f68cf77dd9c6"
+        },
+        {
+            "path": "experiments/rust-memory-gzip-reader/SHA256SUMS",
+            "sha256": "13e41e7d8ce2442cd8d93b1229211a5257e0568acc3466d5f9ec37f03c72a736",
+            "git_blob": "e248c4827c2fb2e82a5e92f80deb0d744209c65c"
+        },
+        {
+            "path": "experiments/rust-memory-gzip-reader/Cargo.lock",
+            "sha256": "511197f27b89d37c86f82ae1e8dda4229a3e5082ede9274efe8480df6e650d24",
+            "git_blob": "a638f9b00ea1d76a99ccd93ea465ef9df4163c7a"
+        },
+        {
+            "path": "experiments/rust-memory-gzip-reader/THIRD-PARTY-NOTICES.txt",
+            "sha256": "655ad3bee8c41a593c2b00cbb0a12be11e7246c41dda00319c223dd3f904910e",
+            "git_blob": "f56aa8d736e78465701ac62fa5ad26d4d7dc05c9"
+        },
+        {
+            "path": "experiments/rust-memory-gzip-reader/src/lib.rs",
+            "sha256": "a865a114fdb9d79b66226387b9f0e3fa601aad29cfe65ab443c946d6cbd74062",
+            "git_blob": "1811dfc7ec0917da607727e7942b5a268ac7330a"
+        },
+        {
+            "path": "experiments/rust-memory-gzip-reader/src/budget.rs",
+            "sha256": "b0d0b891a048712baba2038b8439d809a0359638f390b806f88496733753d61c",
+            "git_blob": "0fa6fd1cdb541896540b7003168e5db71c11cb4b"
+        }
+    ],
+    "baseline": {
+        "commit": "f56324c98468076c57e18255ac1661a66fe26f84",
+        "pr": 18,
+        "reported_historical_counts": {
+            "baseline": 184,
+            "followup": 162
+        },
+        "note": "C# 기준 수이며 새 Rust 발견/실행/통과 수가 아님. 아래 적용 분류는 사례군 단위이며 346개와 일대일 대응 수를 주장하지 않음.",
+        "pins": [
+            {
+                "path": "tests/gzip-boundary-probe/Program.cs",
+                "sha256": "f6ca5d16d1036514c704b4065bf20c38878c6508744d8f468d339ee0c9c17aef",
+                "git_blob": "5ad9c6ba629f36032f2cc163b71a14eca86b041e"
+            },
+            {
+                "path": "tests/gzip-history-integration-probe/BoundaryProbe.cs",
+                "sha256": "73c251e2370b24b724dd0719e09fff4d26c780d8d81b09b054ff4b69bbb96933",
+                "git_blob": "b8ac8c447611da941f7b678e5d8b1fff297f4380"
+            },
+            {
+                "path": "tests/gzip-history-integration-probe/BudgetRegression.cs",
+                "sha256": "3fad50415e8847f48e4aaa646379b663662de106dc6e9df080bd1c86d8a85997",
+                "git_blob": "31dcd37d280722e56a6bacb99f8978615b0f67cd"
+            },
+            {
+                "path": "tests/gzip-history-integration-probe/FinalizationRegression.cs",
+                "sha256": "cdf260b8183ab30c38cec3c081efe95c2f80cf8eaf1095c31a6035eee2493624",
+                "git_blob": "f70864627541314440cc7fe413c2e91528c63e7b"
+            },
+            {
+                "path": "tests/gzip-history-integration-probe/IntegrationProgram.cs",
+                "sha256": "bc106c5a1bd652d1067976c243507664987d38710737b3ce04c8444a4d36087a",
+                "git_blob": "16b7d1e36267ee881916e620126a77cd48806bc5"
+            },
+            {
+                "path": "tests/gzip-history-integration-probe/PendingValidation.cs",
+                "sha256": "7142648c4257854298a1fb71b0a1779f09bd1667bab4ff262a0d47ab48f805e2",
+                "git_blob": "3160f5ca588f9093932606a7096786bc4468a1f0"
+            },
+            {
+                "path": "tests/gzip-history-integration-probe/contract.json",
+                "sha256": "94bc3e2eb31dcd1c9931ef5e764a9ca28e508c1ea9ae7acdbd4fc1de8c5e48fa",
+                "git_blob": "035ff86220f862396336cee8aa4fb2724115ba49"
+            }
+        ]
+    },
+    "applicability": [
+        {
+            "status": "maintained",
+            "csharp": "header.flags.0..31; unselected.flags.0..31",
+            "rust_prefixes": [
+                "format::flags_"
+            ],
+            "note": "32가지 flag 각각 선택/미선택 정상 완료와 전체 bytes 및 경계를 검증함."
+        },
+        {
+            "status": "maintained",
+            "csharp": "header.invalid.*, header.reserved.*",
+            "rust_prefixes": [
+                "format::invalid_header_",
+                "format::reserved_flag_"
+            ],
+            "note": "magic/CM/예약 비트를 구분함."
+        },
+        {
+            "status": "maintained",
+            "csharp": "header.fhcrc; header.fhcrc-covers-name",
+            "rust_prefixes": [
+                "format::fhcrc_corrupt_"
+            ],
+            "note": "FHCRC 두 바이트와 이름 변조를 거부함."
+        },
+        {
+            "status": "maintained",
+            "csharp": "header.fname-no-path-use",
+            "rust_prefixes": [
+                "format::opaque_name_",
+                "format::flags_08_"
+            ],
+            "note": "이름/주석은 경로 또는 UTF-8 문자열로 사용하지 않음."
+        },
+        {
+            "status": "maintained",
+            "csharp": "header.unterminated-name/comment; extra-truncated; truncate.*; unselected.all-prefixes",
+            "rust_prefixes": [
+                "format::truncate_"
+            ],
+            "note": "32가지 fixture의 모든 prefix를 선택/미선택으로 검사함. prefix 루프를 별도 시험 수로 합산하지 않음."
+        },
+        {
+            "status": "maintained",
+            "csharp": "crc.byte.*; isize.byte.*; unselected.bad-crc",
+            "rust_prefixes": [
+                "format::invalid_crc_",
+                "format::invalid_size_",
+                "format::crc_before_",
+                "format::size_before_"
+            ],
+            "note": "CRC, Size, TrailingData 우선순위를 유지함."
+        },
+        {
+            "status": "maintained",
+            "csharp": "trailing.*; unselected.trailing",
+            "rust_prefixes": [
+                "format::trailing_"
+            ],
+            "note": "후행 0/255/512개 0/magic/정상 member/빈 member를 거부함."
+        },
+        {
+            "status": "maintained",
+            "csharp": "empty.raw.2; empty.raw.5; empty.fixture.raw-boundary-hash; valid-three-zero-bytes",
+            "rust_prefixes": [
+                "format::empty_fixed_",
+                "format::empty_stored_",
+                "format::zeros_three_"
+            ],
+            "note": "독립 known bytes로 빈 payload와 알려진 해제 결과를 비교함."
+        },
+        {
+            "status": "adapted",
+            "csharp": "crc.known-vector; crc.known-trailer; HashSink",
+            "rust_prefixes": [
+                "format::flags_00_"
+            ],
+            "note": "CRC 0xcbf43926과 완료 bytes 직접 일치를 검증함. SHA256은 Python fixture manifest에 고정하며 Rust SHA 구현을 추가하지 않음."
+        },
+        {
+            "status": "adapted",
+            "csharp": "valid.{len}.{feed}; unselected.{len}; valid.controls",
+            "rust_prefixes": [
+                "format::large_output_",
+                "format::multiple_input_",
+                "format::byte_a_"
+            ],
+            "note": "feed 인수가 없어 개별 feed 크기 조합을 그대로 이식하지 않음."
+        },
+        {
+            "status": "adapted",
+            "csharp": "boundary.stored-chunks; boundary.readahead; boundary.byte-feed; raw.finished-consumed-unread",
+            "rust_prefixes": [
+                "format::read_ahead_",
+                "checkpoints::output_chunks_",
+                "format::multiple_input_"
+            ],
+            "note": "공개 Boundary와 64KiB 출력/다중 공급 결과만 검증함. 내부 inflater 호출 위치나 빈 입력 drain 발생 자체는 증명하지 않음."
+        },
+        {
+            "status": "adapted",
+            "csharp": "deflate.invalid-block; accounting.decoder-exception",
+            "rust_prefixes": [
+                "format::reserved_deflate_",
+                "budgets::backend_error_"
+            ],
+            "note": "typed Backend(DataError)와 오류 전 출력 1바이트 과금, 후속 checkpoint 부재를 검증함."
+        },
+        {
+            "status": "adapted",
+            "csharp": "accounting.exception-over-limit",
+            "rust_prefixes": [
+                "budgets::output_overrun_"
+            ],
+            "note": "유효 출력 과금 초과가 backend 오류보다 우선하고 비용이 재시도에 남음."
+        },
+        {
+            "status": "maintained",
+            "csharp": "budget.input/processed/output/metadata; budget.exact; byte zero limits",
+            "rust_prefixes": [
+                "budgets::input_",
+                "budgets::processed_",
+                "budgets::output_",
+                "budgets::metadata_",
+                "budgets::exact_all_",
+                "budgets::zero_",
+                "budgets::selected_empty_"
+            ],
+            "note": "0/정확값/1부족 및 선택 여부에 따른 output 의미를 구분함."
+        },
+        {
+            "status": "adapted",
+            "csharp": "budget.clamps; budget.input-cap; budget.metadata-cap",
+            "rust_prefixes": [
+                "budgets::limits_are_"
+            ],
+            "note": "하드 캡의 공개 limits() 값을 검증함. 16MiB 초과 입력이나 1MiB 이름은 이 작은 fixture 범위에서 동적 시험하지 않음."
+        },
+        {
+            "status": "maintained",
+            "csharp": "budget.cumulative-processed/output/metadata; cumulative.processed",
+            "rust_prefixes": [
+                "budgets::cumulative_",
+                "budgets::shared_budget_",
+                "budgets::crc_failure_"
+            ],
+            "note": "동일 Budget의 성공/실패/재시도 누적을 검증함."
+        },
+        {
+            "status": "maintained",
+            "csharp": "budget.unselected-expansion",
+            "rust_prefixes": [
+                "budgets::unselected_expansion_"
+            ],
+            "note": "비선택 해제 bytes도 처리량에 과금함."
+        },
+        {
+            "status": "adapted",
+            "csharp": "budget.deadline; budget.sink-time; cumulative.time",
+            "rust_prefixes": [
+                "checkpoints::elapsed_deadline_"
+            ],
+            "note": "ManualClock 대신 짧은 실제 Start callback 대기와 동일 Budget 재시도를 검사함. 실시간 강제 중단 보장은 아님."
+        },
+        {
+            "status": "adapted",
+            "csharp": "cancel.before/sink/unselected-inflater; accounting.return-cancel/deadline",
+            "rust_prefixes": [
+                "checkpoints::start_",
+                "checkpoints::after_inflate_",
+                "checkpoints::after_output_",
+                "checkpoints::cancelled_callback_"
+            ],
+            "note": "public checkpoint의 취소/기한과 과금 순서를 검증함. C# polling 횟수 동등성 주장은 하지 않음."
+        },
+        {
+            "status": "adapted",
+            "csharp": "sink.exception; accounting.other-exception; pending.output-failure",
+            "rust_prefixes": [
+                "checkpoints::before_return_callback_",
+                "checkpoints::callback_identity_"
+            ],
+            "note": "sink 원형 예외는 generic callback E의 Arc 포인터 동일성으로 대체함."
+        },
+        {
+            "status": "adapted",
+            "csharp": "final.cancel/deadline; failure.discard; pending.output-cancel; sink.pending-after-crc-failure",
+            "rust_prefixes": [
+                "checkpoints::before_return_",
+                "format::invalid_crc_",
+                "budgets::crc_failure_"
+            ],
+            "note": "오류가 Result::Err이고 Completed를 반환하지 않으며 실패 비용이 보존됨."
+        },
+        {
+            "status": "not_applicable",
+            "csharp": "assembly.identity; CLI; mutable backing array; Pending wrapper reuse",
+            "rust_prefixes": [],
+            "note": "Rust Box 소유권과 최종 메모리 결과 API에 해당 seam이 없음."
+        },
+        {
+            "status": "not_applicable",
+            "csharp": "FinalizationRegression Dispose scenarios",
+            "rust_prefixes": [],
+            "note": "외부 Dispose 예외가 본문 오류를 덮는 C# 동작을 Rust Drop으로 동일 검증할 수 없음."
+        },
+        {
+            "status": "not_applicable",
+            "csharp": "inflater.contract-violation; FinalizationRegression TotalOut delta scenarios",
+            "rust_prefixes": [],
+            "note": "외부 카운터 변조가 불가능함. Boundary/overflow 분기를 위해 hook/unsafe를 추가하지 않음."
+        },
+        {
+            "status": "not_applicable",
+            "csharp": "inflater.no-progress injected StalledInflater",
+            "rust_prefixes": [],
+            "note": "고정 typed backend에 stalled inflater를 주입할 수 없음. 실제 NoProgress 도달 증거가 없으며 성공으로 세지 않음."
+        },
+        {
+            "status": "not_applicable",
+            "csharp": "deflate.invalid-backreference-history separate exact-history scenario",
+            "rust_prefixes": [],
+            "note": "기존 C# 근거는 유지하지만 이번에는 별도 Huffman/history 프로브를 재시도하지 않음. DataError 전체 동등성을 주장하지 않음."
+        }
+    ],
+    "validation": {
+        "scope": "source_only",
+        "rust_compiled": false,
+        "runtime_discovered": null,
+        "runtime_executed": 0,
+        "runtime_passed": null,
+        "allowed": [
+            "rustfmt",
+            "cargo metadata --locked --offline",
+            "Python fixture generation and static consistency checks"
+        ],
+        "pending": "고정 통합 snapshot 검토 뒤 Rust 컴파일/발견/실행을 별도 배정받음."
+    },
+    "limitations": [
+        "NoProgress와 빈 입력 drain 발생 자체는 공개 checkpoint만으로 증명하지 못함. 다중 출력과 정확한 최종 경계만 검증함.",
+        "Invalid counter delta, u64 overflow, allocator failure, NeedDict/StreamError/MemError는 주입하지 않으며 미도달임.",
+        "실제 시간 시험은 Start checkpoint 내 30ms 대기와 20ms 한도로 취소/콜백/시간 우선순위를 확인하는 소스임. 콜백 진입 전 미경과나 강제 중단 보장은 하지 않음.",
+        "backend malformed stream 소비량 전체가 SharpZipLib와 같다고 주장하지 않음.",
+        "Windows, 독립 실행, 제품 전체 수용, 사용자 archive, tar.gz/TAR 연결은 범위 밖임."
+    ],
+    "fixture_provenance": {
+        "generator": "generate_fixtures.py",
+        "manifest": "fixtures.json",
+        "storage": "fixtures.hex",
+        "data": "Python standard gzip/zlib and fixed empty/stored DEFLATE bytes, synthetic payloads only",
+        "malformed": "정상 member의 헤더/trailer/후행/prefix 변조 및 기존 C# BudgetRegression의 000100feff4107 raw bytes를 재구성함. 신규 codec 구현 없음."
+    },
+    "expected_test_count": 303,
+    "test_names": [
+        "budgets::backend_error_output_charged_selected",
+        "budgets::backend_error_output_charged_unselected",
+        "budgets::crc_failure_retains_cost_and_retry_selected",
+        "budgets::crc_failure_retains_cost_and_retry_unselected",
+        "budgets::cumulative_metadata_selected",
+        "budgets::cumulative_metadata_unselected",
+        "budgets::cumulative_processed_selected",
+        "budgets::cumulative_processed_unselected",
+        "budgets::cumulative_selected_output",
+        "budgets::exact_all_limits_selected",
+        "budgets::exact_all_limits_unselected",
+        "budgets::failed_header_retry_keeps_attempt_metadata",
+        "budgets::input_0_selected",
+        "budgets::input_0_unselected",
+        "budgets::input_28_selected",
+        "budgets::input_28_unselected",
+        "budgets::input_29_selected",
+        "budgets::input_29_unselected",
+        "budgets::input_cap_is_per_request_selected",
+        "budgets::input_cap_is_per_request_unselected",
+        "budgets::limits_are_clamped_and_do_not_overflow",
+        "budgets::metadata_0_selected",
+        "budgets::metadata_0_unselected",
+        "budgets::metadata_10_selected",
+        "budgets::metadata_10_unselected",
+        "budgets::metadata_9_selected",
+        "budgets::metadata_9_unselected",
+        "budgets::output_0_selected",
+        "budgets::output_0_unselected",
+        "budgets::output_8_selected",
+        "budgets::output_8_unselected",
+        "budgets::output_9_selected",
+        "budgets::output_9_unselected",
+        "budgets::output_failure_is_not_refunded_by_retry",
+        "budgets::output_overrun_precedes_backend_selected",
+        "budgets::output_overrun_precedes_backend_unselected",
+        "budgets::processed_0_selected",
+        "budgets::processed_0_unselected",
+        "budgets::processed_37_selected",
+        "budgets::processed_37_unselected",
+        "budgets::processed_38_selected",
+        "budgets::processed_38_unselected",
+        "budgets::selected_empty_zero_output_selected",
+        "budgets::selected_empty_zero_output_unselected",
+        "budgets::selected_large_output_limit_precedes_later_chunks",
+        "budgets::shared_budget_selected_then_unselected",
+        "budgets::shared_budget_unselected_then_selected",
+        "budgets::unselected_expansion_is_charged",
+        "budgets::zero_byte_limits_are_valid_requests",
+        "budgets::zero_duration_is_invalid",
+        "checkpoints::after_inflate_callback_selected",
+        "checkpoints::after_inflate_callback_unselected",
+        "checkpoints::after_inflate_cancel_precedes_trailer_failure_selected",
+        "checkpoints::after_inflate_cancel_precedes_trailer_failure_unselected",
+        "checkpoints::after_inflate_cancel_selected",
+        "checkpoints::after_inflate_cancel_unselected",
+        "checkpoints::after_inflate_deadline_selected",
+        "checkpoints::after_inflate_deadline_unselected",
+        "checkpoints::after_output_callback_selected",
+        "checkpoints::after_output_cancel_selected",
+        "checkpoints::after_output_deadline_selected",
+        "checkpoints::before_inflate_callback_selected",
+        "checkpoints::before_inflate_callback_unselected",
+        "checkpoints::before_inflate_cancel_selected",
+        "checkpoints::before_inflate_cancel_unselected",
+        "checkpoints::before_inflate_deadline_selected",
+        "checkpoints::before_inflate_deadline_unselected",
+        "checkpoints::before_return_callback_selected",
+        "checkpoints::before_return_callback_unselected",
+        "checkpoints::before_return_cancel_selected",
+        "checkpoints::before_return_cancel_unselected",
+        "checkpoints::before_return_deadline_selected",
+        "checkpoints::before_return_deadline_unselected",
+        "checkpoints::callback_identity_precedes_elapsed_deadline",
+        "checkpoints::cancellation_precedes_existing_processed_overrun",
+        "checkpoints::cancellation_precedes_input_cap",
+        "checkpoints::cancelled_callback_precedes_elapsed_deadline",
+        "checkpoints::completed_usage_snapshot_is_not_mutated_by_retry",
+        "checkpoints::elapsed_deadline_after_callback_and_retry",
+        "checkpoints::empty_selected_never_calls_after_output",
+        "checkpoints::header_callback_selected",
+        "checkpoints::header_callback_unselected",
+        "checkpoints::header_cancel_selected",
+        "checkpoints::header_cancel_unselected",
+        "checkpoints::header_deadline_selected",
+        "checkpoints::header_deadline_unselected",
+        "checkpoints::output_chunks_are_bounded_and_complete",
+        "checkpoints::output_failure_stops_later_callbacks",
+        "checkpoints::start_callback_selected",
+        "checkpoints::start_callback_unselected",
+        "checkpoints::start_cancel_selected",
+        "checkpoints::start_cancel_unselected",
+        "checkpoints::start_deadline_selected",
+        "checkpoints::start_deadline_unselected",
+        "checkpoints::successful_checkpoint_trace_selected",
+        "checkpoints::successful_checkpoint_trace_unselected",
+        "checkpoints::trailer_callback_selected",
+        "checkpoints::trailer_callback_unselected",
+        "checkpoints::trailer_cancel_selected",
+        "checkpoints::trailer_cancel_unselected",
+        "checkpoints::trailer_deadline_selected",
+        "checkpoints::trailer_deadline_unselected",
+        "checkpoints::unselected_never_exposes_after_output",
+        "format::byte_a_selected",
+        "format::byte_a_unselected",
+        "format::crc_before_size_and_trailing_selected",
+        "format::crc_before_size_and_trailing_unselected",
+        "format::empty_fixed_selected",
+        "format::empty_fixed_unselected",
+        "format::empty_options_selected",
+        "format::empty_options_unselected",
+        "format::empty_stored_selected",
+        "format::empty_stored_unselected",
+        "format::fhcrc_corrupt_16_selected",
+        "format::fhcrc_corrupt_16_unselected",
+        "format::fhcrc_corrupt_33_selected",
+        "format::fhcrc_corrupt_33_unselected",
+        "format::fhcrc_corrupt_34_selected",
+        "format::fhcrc_corrupt_34_unselected",
+        "format::flags_00_selected",
+        "format::flags_00_unselected",
+        "format::flags_01_selected",
+        "format::flags_01_unselected",
+        "format::flags_02_selected",
+        "format::flags_02_unselected",
+        "format::flags_03_selected",
+        "format::flags_03_unselected",
+        "format::flags_04_selected",
+        "format::flags_04_unselected",
+        "format::flags_05_selected",
+        "format::flags_05_unselected",
+        "format::flags_06_selected",
+        "format::flags_06_unselected",
+        "format::flags_07_selected",
+        "format::flags_07_unselected",
+        "format::flags_08_selected",
+        "format::flags_08_unselected",
+        "format::flags_09_selected",
+        "format::flags_09_unselected",
+        "format::flags_10_selected",
+        "format::flags_10_unselected",
+        "format::flags_11_selected",
+        "format::flags_11_unselected",
+        "format::flags_12_selected",
+        "format::flags_12_unselected",
+        "format::flags_13_selected",
+        "format::flags_13_unselected",
+        "format::flags_14_selected",
+        "format::flags_14_unselected",
+        "format::flags_15_selected",
+        "format::flags_15_unselected",
+        "format::flags_16_selected",
+        "format::flags_16_unselected",
+        "format::flags_17_selected",
+        "format::flags_17_unselected",
+        "format::flags_18_selected",
+        "format::flags_18_unselected",
+        "format::flags_19_selected",
+        "format::flags_19_unselected",
+        "format::flags_20_selected",
+        "format::flags_20_unselected",
+        "format::flags_21_selected",
+        "format::flags_21_unselected",
+        "format::flags_22_selected",
+        "format::flags_22_unselected",
+        "format::flags_23_selected",
+        "format::flags_23_unselected",
+        "format::flags_24_selected",
+        "format::flags_24_unselected",
+        "format::flags_25_selected",
+        "format::flags_25_unselected",
+        "format::flags_26_selected",
+        "format::flags_26_unselected",
+        "format::flags_27_selected",
+        "format::flags_27_unselected",
+        "format::flags_28_selected",
+        "format::flags_28_unselected",
+        "format::flags_29_selected",
+        "format::flags_29_unselected",
+        "format::flags_30_selected",
+        "format::flags_30_unselected",
+        "format::flags_31_selected",
+        "format::flags_31_unselected",
+        "format::header_truncation_charges_attempt_before_eof",
+        "format::input_without_deflate_selected",
+        "format::input_without_deflate_unselected",
+        "format::invalid_crc_0_selected",
+        "format::invalid_crc_0_unselected",
+        "format::invalid_crc_1_selected",
+        "format::invalid_crc_1_unselected",
+        "format::invalid_crc_2_selected",
+        "format::invalid_crc_2_unselected",
+        "format::invalid_crc_3_selected",
+        "format::invalid_crc_3_unselected",
+        "format::invalid_header_0_selected",
+        "format::invalid_header_0_unselected",
+        "format::invalid_header_1_selected",
+        "format::invalid_header_1_unselected",
+        "format::invalid_header_2_selected",
+        "format::invalid_header_2_unselected",
+        "format::invalid_size_0_selected",
+        "format::invalid_size_0_unselected",
+        "format::invalid_size_1_selected",
+        "format::invalid_size_1_unselected",
+        "format::invalid_size_2_selected",
+        "format::invalid_size_2_unselected",
+        "format::invalid_size_3_selected",
+        "format::invalid_size_3_unselected",
+        "format::large_output_selected",
+        "format::large_output_unselected",
+        "format::multiple_input_selected",
+        "format::multiple_input_unselected",
+        "format::opaque_name_selected",
+        "format::opaque_name_unselected",
+        "format::read_ahead_is_not_recharged",
+        "format::reserved_deflate_block_selected",
+        "format::reserved_deflate_block_unselected",
+        "format::reserved_flag_128_selected",
+        "format::reserved_flag_128_unselected",
+        "format::reserved_flag_32_selected",
+        "format::reserved_flag_32_unselected",
+        "format::reserved_flag_64_selected",
+        "format::reserved_flag_64_unselected",
+        "format::size_before_trailing_selected",
+        "format::size_before_trailing_unselected",
+        "format::trailing_empty_member_selected",
+        "format::trailing_empty_member_unselected",
+        "format::trailing_ff_selected",
+        "format::trailing_ff_unselected",
+        "format::trailing_magic_selected",
+        "format::trailing_magic_unselected",
+        "format::trailing_member_selected",
+        "format::trailing_member_unselected",
+        "format::trailing_padding_selected",
+        "format::trailing_padding_unselected",
+        "format::trailing_zero_selected",
+        "format::trailing_zero_unselected",
+        "format::truncate_flags_00_selected",
+        "format::truncate_flags_00_unselected",
+        "format::truncate_flags_01_selected",
+        "format::truncate_flags_01_unselected",
+        "format::truncate_flags_02_selected",
+        "format::truncate_flags_02_unselected",
+        "format::truncate_flags_03_selected",
+        "format::truncate_flags_03_unselected",
+        "format::truncate_flags_04_selected",
+        "format::truncate_flags_04_unselected",
+        "format::truncate_flags_05_selected",
+        "format::truncate_flags_05_unselected",
+        "format::truncate_flags_06_selected",
+        "format::truncate_flags_06_unselected",
+        "format::truncate_flags_07_selected",
+        "format::truncate_flags_07_unselected",
+        "format::truncate_flags_08_selected",
+        "format::truncate_flags_08_unselected",
+        "format::truncate_flags_09_selected",
+        "format::truncate_flags_09_unselected",
+        "format::truncate_flags_10_selected",
+        "format::truncate_flags_10_unselected",
+        "format::truncate_flags_11_selected",
+        "format::truncate_flags_11_unselected",
+        "format::truncate_flags_12_selected",
+        "format::truncate_flags_12_unselected",
+        "format::truncate_flags_13_selected",
+        "format::truncate_flags_13_unselected",
+        "format::truncate_flags_14_selected",
+        "format::truncate_flags_14_unselected",
+        "format::truncate_flags_15_selected",
+        "format::truncate_flags_15_unselected",
+        "format::truncate_flags_16_selected",
+        "format::truncate_flags_16_unselected",
+        "format::truncate_flags_17_selected",
+        "format::truncate_flags_17_unselected",
+        "format::truncate_flags_18_selected",
+        "format::truncate_flags_18_unselected",
+        "format::truncate_flags_19_selected",
+        "format::truncate_flags_19_unselected",
+        "format::truncate_flags_20_selected",
+        "format::truncate_flags_20_unselected",
+        "format::truncate_flags_21_selected",
+        "format::truncate_flags_21_unselected",
+        "format::truncate_flags_22_selected",
+        "format::truncate_flags_22_unselected",
+        "format::truncate_flags_23_selected",
+        "format::truncate_flags_23_unselected",
+        "format::truncate_flags_24_selected",
+        "format::truncate_flags_24_unselected",
+        "format::truncate_flags_25_selected",
+        "format::truncate_flags_25_unselected",
+        "format::truncate_flags_26_selected",
+        "format::truncate_flags_26_unselected",
+        "format::truncate_flags_27_selected",
+        "format::truncate_flags_27_unselected",
+        "format::truncate_flags_28_selected",
+        "format::truncate_flags_28_unselected",
+        "format::truncate_flags_29_selected",
+        "format::truncate_flags_29_unselected",
+        "format::truncate_flags_30_selected",
+        "format::truncate_flags_30_unselected",
+        "format::truncate_flags_31_selected",
+        "format::truncate_flags_31_unselected",
+        "format::zeros_three_selected",
+        "format::zeros_three_unselected"
+    ],
+    "truncation_prefix_assertions_planned": 2656
+}
