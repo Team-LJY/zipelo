@@ -4,6 +4,7 @@ import json
 import pathlib
 import re
 import runpy
+import sys
 import tomllib
 
 BASE = pathlib.Path(__file__).resolve().parent
@@ -15,6 +16,7 @@ TEST_FILES = {
     "Cargo.toml", "Cargo.lock", "main.rs", "support.rs", "format.rs",
     "budgets.rs", "checkpoints.rs", "generate_fixtures.py",
     "fixtures.hex", "fixtures.json", "contract.json", "static_check.py",
+    "static_check_helper_tests.py",
 }
 SOURCE_FILES = {
     "Cargo.toml", "Cargo.lock", "LICENSE", "THIRD-PARTY-NOTICES.txt",
@@ -57,6 +59,8 @@ def verify_pin(record):
 
 
 def main():
+    if sys.flags.optimize:
+        raise RuntimeError("최적화 모드에서는 정적 검사를 실행할 수 없음")
     parser = argparse.ArgumentParser()
     parser.add_argument("--source-head", required=True)
     parser.add_argument("--test-manifest-sha256", required=True)

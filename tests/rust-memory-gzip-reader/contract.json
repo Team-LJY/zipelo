@@ -655,5 +655,17 @@
         "format::zeros_three_selected",
         "format::zeros_three_unselected"
     ],
-    "truncation_prefix_assertions_planned": 2656
+    "truncation_prefix_assertions_planned": 2656,
+    "helper_optimization_guard": {
+        "baseline_test_commit": "6022c7e6c70def5996d853116ad1dfd97f90e19f",
+        "rule": "static_check.py main의 첫 단계에서 sys.flags.optimize가 0이 아니면 명시적 RuntimeError로 거부함.",
+        "helper_tests": "static_check_helper_tests.py",
+        "expected_helper_test_count": 5,
+        "checks": [
+            "-O 및 PYTHONOPTIMIZE=1 실제 CLI에서 필수 인수 처리 전에 거부함.",
+            "helper 모듈 로딩 후 인수 처리, manifest/pin 검증, Path 파일 읽기와 fixture generator 진입 감시값이 호출되지 않음을 두 최적화 모드에서 확인함.",
+            "최적화가 없는 대조군은 인수 처리 감시값에 도달함."
+        ],
+        "scope": "Python helper 시험 수는 Rust 선언 303개와 별도이며 Rust 컴파일/발견/실행 결과가 아님."
+    }
 }
