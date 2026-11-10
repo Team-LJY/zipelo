@@ -1,0 +1,85 @@
+{
+    "schema": "zipelo.ui-system-font-regressions.v1",
+    "source_head": "8600cee802bc08bfad171278133a22d94b64b597",
+    "source_tree": "fda600fd8dc72c712305a2ce82e4eef90a1a5695",
+    "branch": "fix/rust-ui-system-font-regressions",
+    "stage": "Source/static only. Rust compile/discovery/test/GUI have not been performed.",
+    "scope": "Only new tests path. Original UI, font loader, 31 regressions, Cargo lockfiles and historical evidence stay frozen.",
+    "deliverables": [
+        "Cargo.lock",
+        "Cargo.toml",
+        "SHA256SUMS",
+        "contract.json",
+        "linux_loader.rs",
+        "review.json",
+        "run-plan.json",
+        "source-pins.json",
+        "static_check.py"
+    ],
+    "new_tests": [
+        "linux_loader_preserves_installed_bytes_and_korean_face_index"
+    ],
+    "counts": {
+        "new_linux_loader": 1,
+        "reused_ui": 31,
+        "planned_total": 32,
+        "executed": 0
+    },
+    "base_app_sha256": "1cddb84c6a8c5e4188be79220c92532351e51979d7ad0edbc0a12ac5381ed72c",
+    "assembly": "#[path] compiles the exact unchanged system_font.rs as a test module, making pub(super) callable by the parent. No implementation copying, cfg rewriting, std replacement, syscall interposition or production seam.",
+    "loader_acceptance": [
+        "One real Linux production load() call reads installed Noto bytes and returns face_index=1.",
+        "Independently read before/after bytes equal the loader result, are nonempty, and preserve file device/inode/length/mtime/ctime.",
+        "Font input <=32MiB before the read; three vectors nominally <=96MiB. This is an environment precheck, not a hard memory bound against concurrent growth.",
+        "No font bytes stored in repository, logs or artifacts. Boolean equality assertions avoid dumping font content on failure.",
+        "Equal reads/identity do not establish atomic snapshot, collection parsing, glyph rendering or input authenticity."
+    ],
+    "ui_reuse": "Run the original ui_memory target and 31 exact names. These are reused tests, not new coverage; they exercise the headless library, not app.rs or font initialization.",
+    "app_creation": "Static only: production fs::read propagates the original io::Error via ?, load delegates, and app maps it to Error::AppCreation(Box::new(e)) before run_native. Runtime failure/downcast identity/early exit have not been observed.",
+    "failure_injection": "No Linux path/read seam. Missing/unreadable error checks from PR52's proposed plan cannot be induced using owned fixtures. Leave unverified without font move/chmod/mount/privilege/environment changes.",
+    "unverified": [
+        "Linux missing/unreadable font, actual errno/error identity and AppCreation early exit before window creation.",
+        "Font parse, face collection validity, Korean glyph rendering, production GUI startup, IME and accessibility.",
+        "Windows native compile/runtime, SystemRoot error/path branches and Malgun bytes/index/glyphs. No Windows cfg simulation.",
+        "Other OS Unsupported runtime, input ABA/concurrent changes, hostile font/environment, hard I/O or allocation limits."
+    ],
+    "dependencies": {
+        "new_external": 0,
+        "new_loader_graph": "std only",
+        "ui_graph": "unchanged existing manifest and lock"
+    },
+    "execution_plan": "run-plan.json",
+    "reused_ui_tests": [
+        "atomic_generation_replacement_rejects_old_selection",
+        "cancellation_after_terminal_does_not_rewrite_success",
+        "cancellation_before_work_returns_real_cancelled_result",
+        "close_cancel_retraction_keeps_existing_cancel_request",
+        "close_confirmation_does_not_cancel_and_can_be_retracted",
+        "close_waits_for_join_and_preserves_terminal",
+        "completed_during_confirmation_still_requires_choice",
+        "completion_receiver_loss_recovers_payload_from_join",
+        "controller_rejects_real_foreign_terminal_without_applying_payload",
+        "disconnected_progress_preserves_first_missing_sequence",
+        "error_retry_uses_new_operation_and_clears_previous_payload",
+        "full_completion_channel_returns_ownership_instead_of_dropping",
+        "full_queue_is_transport_failure_not_user_cancel",
+        "gzip_default_queue_fits_without_ui_drain",
+        "gzip_preview_preserves_original_bytes",
+        "headless_values_satisfy_thread_transfer_bounds",
+        "joined_task_without_received_terminal_is_delivery_failure",
+        "native_gzip_callback_error_survives_simultaneous_queue_full",
+        "normal_frame_controls_retain_running_handle_until_explicit_join",
+        "original_observer_error_beats_disconnected_queue",
+        "original_observer_error_beats_full_queue",
+        "original_observer_error_still_delivers_its_raw_event_when_possible",
+        "oversized_queue_is_rejected_without_spawning",
+        "progress_gap_keeps_real_terminal_but_cannot_apply_payload",
+        "repeated_cancel_sets_request_once",
+        "repeated_start_is_rejected_until_join_even_if_thread_finished",
+        "thread_panic_is_joined_without_synthesized_terminal",
+        "ui_event_wrapper_excludes_old_operation_before_current_sequence",
+        "ustar_default_queue_fits_without_ui_drain",
+        "ustar_exact_ids_and_content_limitation_are_retained",
+        "zip_default_queue_fits_without_ui_drain"
+    ]
+}
