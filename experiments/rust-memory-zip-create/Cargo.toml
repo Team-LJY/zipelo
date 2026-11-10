@@ -1,0 +1,18 @@
+[package]
+name = "zipelo-rust-memory-zip-create"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+license = "MIT"
+publish = false
+autotests = false
+autobenches = false
+autoexamples = false
+
+[dependencies]
+zip = { version = "=9.5.0", default-features = false, features = ["deflate-flate2-zlib-rs"] }
+
+[workspace]
+
+[lib]
+doctest = false

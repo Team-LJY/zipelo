@@ -1,0 +1,5 @@
+bb094be9b047cc7a9100492e1e7aa69ddbbc2a3d8bf2c4e8eaa49024160fd2c3  experiments/rust-memory-zip-create/Cargo.lock
+26fcf2d89f9078f3fce6500212c19f9ff630338b568c753f611944297ebafba5  experiments/rust-memory-zip-create/Cargo.toml
+2b6d84bb571df34b34ae608864ec88502ffc1439298756499a47b309a9c9d225  experiments/rust-memory-zip-create/contract.json
+3b2019fd963600155fd4dc01f55fef7f3e5c8ceec944a36597de984d5a8b7e8b  experiments/rust-memory-zip-create/src/lib.rs
+cc4e74eb52f1016792857aebdddf2c52430fbddc6714117edc9d843d5a2b65df  experiments/rust-memory-zip-create/src/storage.rs
