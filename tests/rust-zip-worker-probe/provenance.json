@@ -376,7 +376,13 @@
             "fullComparisonExecuted": false,
             "appliesToNewHead": false
         },
-        "directRegressionsWritten": 38
+        "directRegressionsWritten": 55,
+        "diagnosticStartFix": {
+            "parentHead": "b995ef1373fb4171767464a8bfbb91427b55a65b",
+            "addedRegressions": 17,
+            "actualFrozenProducerCases": 1,
+            "executed": false
+        }
     },
     "limits": [
         "Runtime은 PR10 고정 사본임. main 최신 Runtime과 같은 바이너리로 취급하지 않음.",

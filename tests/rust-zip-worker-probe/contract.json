@@ -109,7 +109,9 @@
     "revision": {
         "parentHead": "a06ad4b33fd5f3d251f095afa85417ed36ad575a",
         "centralParentEvidence": "중앙 보고: frozen 43파일 원본 대조 일치, host/C# worker offline 컴파일 경고 0/오류 0. 전체 비교 미실행. 새 head에는 적용하지 않음.",
-        "newHeadValidation": "source static only; no restore/build/direct-regression execution/comparison execution"
+        "newHeadValidation": "source static only; no restore/build/direct-regression execution/comparison execution",
+        "diagnosticStartFixParent": "b995ef1373fb4171767464a8bfbb91427b55a65b",
+        "diagnosticStartFix": "known first diagnostic.start is validated separately; frozen producer lifecycle and synthetic negative regression sources added; execution remains central-only"
     },
     "peerEvidence": {
         "planJson": "PascalCase Job/Mode; shared camelCase result writer unchanged; actual frozen reader used by regression",
@@ -129,7 +131,13 @@
             "no process.exit.end"
         ],
         "ordering": "stages unique and ordered in trace with nondecreasing stage ticks; unrelated concurrent trace enqueue order is not assumed",
-        "missingEvidence": "blocked, including BudgetExceeded with PID only or pre-frame delay; expected errors unchanged"
+        "missingEvidence": "blocked, including BudgetExceeded with PID only or pre-frame delay; expected errors unchanged",
+        "diagnosticStart": {
+            "position": "exactly once at index 0; missing, repeated or misplaced start is rejected",
+            "fields": "Guid.Empty, expected host PID, nonnegative tick, exact local Stopwatch.Frequency, sequence text 0 and empty identity",
+            "work": "nonempty expected JobId, same host PID, tick at or after start; existing deadline stage order and invocation identity checks remain",
+            "scope": "only the validated start row is removed; no blanket Guid.Empty filter and no producer authentication claim"
+        }
     },
     "identity": {
         "configuration": "exactly csharp dotnet-managed .dll and rust native; actual samefile and duplicate SHA-256 rejected; Rust cannot be dotnet or harness",
@@ -140,8 +148,8 @@
         "preflight": "no process.started remains host_preflight with identityConfirmed=false; not worker execution evidence"
     },
     "directRegressions": {
-        "total": 38,
-        "csharp": 29,
+        "total": 55,
+        "csharp": 46,
         "python": 9,
         "registeredSeparately": true,
         "executed": false,
@@ -153,6 +161,7 @@
             "cleanup.tree-io",
             "cleanup.normal-preservation",
             "cleanup.late-body-exception",
+            "diagnostic.frozen-producer-lifecycle",
             "deadline.no-eof-ready-ordered",
             "deadline.no-exit-ready-ordered",
             "deadline.pid-only-no-eof",
@@ -175,6 +184,22 @@
             "identity.relay-stale-job",
             "identity.relay-hash-mismatch",
             "identity.relay-args-mismatch",
+            "diagnostic.start-accepted",
+            "diagnostic.start-only",
+            "diagnostic.start-missing",
+            "diagnostic.start-duplicate",
+            "diagnostic.start-misplaced",
+            "diagnostic.start-job",
+            "diagnostic.start-pid",
+            "diagnostic.start-frequency",
+            "diagnostic.start-sequence",
+            "diagnostic.start-identity",
+            "diagnostic.start-negative-ticks",
+            "diagnostic.start-unknown-stage",
+            "diagnostic.work-job",
+            "diagnostic.work-empty-job",
+            "diagnostic.work-pid",
+            "diagnostic.work-before-start",
             "schedule.source-io-stops-next",
             "schedule.marker-io-stops-next",
             "schedule.tree-io-stops-next",
@@ -187,6 +212,13 @@
         ],
         "actualFrozenReader": "two bounded child processes invoke unchanged FakeWorker.Run; Pascal Job/Mode produces unsupported exit 2 plus matching PID, camelCase produces 71 before PID",
         "cleanup": "Cases.Run finally source/marker/tree I/O fault probes produce real stop observations consumed by the same runner.run_schedule; normal preservation and late exception regressions also included",
-        "scope": "source only; helper/trace/identity regressions do not replace 137 functional observations or Windows cleanup.sequence24"
+        "scope": "source only; helper/trace/identity regressions do not replace 137 functional observations or Windows cleanup.sequence24",
+        "diagnosticStart": {
+            "added": 17,
+            "actualProducer": 1,
+            "synthetic": 16,
+            "actualProducerFlow": "unchanged Runtime TryStart -> actual StreamingZipWorkerClient pre-cancelled operation -> cleanup -> StopAsync within 1 second -> Status=2/Dropped=0 -> same Evidence.Parse",
+            "limitations": "pre-cancelled operation does not start a worker or exercise filesystem publication; generated diagnostic remains local under external regression supervision; not executed by author"
+        }
     }
 }

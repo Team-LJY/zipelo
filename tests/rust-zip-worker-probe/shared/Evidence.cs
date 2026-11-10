@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
@@ -66,15 +67,28 @@ internal static class Evidence
 
     internal static TraceRow[] Parse(string[] lines, Guid job, int hostPid)
     {
+        Check.That(job != Guid.Empty && hostPid > 0 && lines.Length > 0, "진단 작업과 시작 행이 필요함");
         var rows = new List<TraceRow>();
-        foreach (var line in lines)
+        long startTicks = -1;
+        for (var index = 0; index < lines.Length; index++)
         {
-            var parts = line.Split('\t');
+            var parts = lines[index].Split('\t');
             Check.That(parts.Length == 7, "진단 필드 수 오류");
             var row = new TraceRow(long.Parse(parts[0], CultureInfo.InvariantCulture),
                 Guid.ParseExact(parts[1], "N"), int.Parse(parts[2], CultureInfo.InvariantCulture),
                 parts[3], long.Parse(parts[4], CultureInfo.InvariantCulture), parts[6]);
-            Check.That(row.Job == job && row.HostPid == hostPid && row.Ticks >= 0, "진단 작업 또는 순서 불일치");
+            Check.That(row.HostPid == hostPid && row.Ticks >= 0, "진단 PID 또는 시각 불일치");
+            if (index == 0)
+            {
+                // frozen 생산자의 첫 시작 행만 작업 ID 검사에서 제외함.
+                Check.That(row.Stage == "diagnostic.start" && row.Job == Guid.Empty &&
+                    row.Value == Stopwatch.Frequency && parts[5] == "0" && row.Identity == "",
+                    "진단 시작 행 계약 불일치");
+                startTicks = row.Ticks;
+                continue;
+            }
+            Check.That(row.Stage != "diagnostic.start" && row.Job == job && row.Ticks >= startTicks,
+                "진단 작업 또는 시작 순서 불일치");
             rows.Add(row);
         }
         return rows.ToArray();
