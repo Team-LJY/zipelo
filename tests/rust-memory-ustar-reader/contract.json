@@ -1,8 +1,8 @@
 {
     "schema_version": 1,
     "branch": "fix/rust-memory-ustar-regressions",
-    "source_commit": "831bc6b4cf4b47f87eb89cd020496910eeb16d1e",
-    "source_tree": "6471620dc4367d8f752f81b2f07e8f8978473ed6",
+    "source_commit": "d37fc59a1e54ed616442f0488600815f9b38336f",
+    "source_tree": "95759346dd8db66633f912ed682326f86b17c1df",
     "baseline_commit": "018e7593ecb2b3a7ae0bc17a440ecf2c0de8b4dd",
     "source_pins": {
         "831bc6b4cf4b47f87eb89cd020496910eeb16d1e": {
@@ -72,8 +72,8 @@
             "experiments/rust-memory-ustar-reader/contract.json",
             "experiments/rust-memory-ustar-reader/SHA256SUMS"
         ],
-        "oracle": "callbacks::callback_error_stops_before_after_checkpoint는 C#의 즉시 중단을 기대함. 831bc6b4에서 실패할 것으로 정적 분석되며 기대값을 완화하지 않음.",
-        "integration": "시험 브랜치 parent는 지정된 831bc6b4를 유지함. 새 production 통합 여부와 고정 통합 head의 실행은 총괄 배정 후 진행함. b60c23a8의 수정 완료 또는 동적 통과를 이 시험으로 선언하지 않음."
+        "oracle": "callbacks::callback_error_stops_before_after_checkpoint는 원래 선택 오류의 소유 객체를 보존하고 선택 오류 뒤의 모든 checkpoint 호출이 없음을 기대함. 831bc6b4에서 실패할 것으로 정적 분석되며 기대값을 완화하지 않음. 성공 선택의 AfterSelection 취소와 주입 Deadline 검사는 기존 전체 checkpoint 회귀에 유지함.",
+        "integration": "시험 브랜치의 원래 base 831bc6b4와 기존 test head 10aa746f는 보존함. 최종 production 기준은 d37fc59a이며 b60c23a8 대비 실행 코드와 API 및 lock은 같고 고지/계약/manifest만 변경됨. 총괄이 지정할 고정 통합 head에서 별도 실행하며 현재 동적 통과를 선언하지 않음."
     },
     "test_target": "memory_ustar_reader",
     "test_count": 150,
@@ -1114,5 +1114,7 @@
         "compile_check": "not_run",
         "test_execution": "not_run",
         "note": "정적 검사는 시험 소스와 hash 및 Cargo graph만 확인함. runtime 발견 수와 통과 수가 아님."
-    }
+    },
+    "original_branch_base_commit": "831bc6b4cf4b47f87eb89cd020496910eeb16d1e",
+    "original_branch_base_tree": "6471620dc4367d8f752f81b2f07e8f8978473ed6"
 }

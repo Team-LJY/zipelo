@@ -14,10 +14,10 @@ def sha256(path):
 
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--source-head", default="831bc6b4cf4b47f87eb89cd020496910eeb16d1e")
-    args = parser.parse_args()
     contract = json.loads((BASE / "contract.json").read_text())
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--source-head", default=contract["source_commit"])
+    args = parser.parse_args()
     expected = contract["source_pins"][args.source_head]
     for name, digest in expected.items():
         assert sha256(ROOT / name) == digest, name

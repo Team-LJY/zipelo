@@ -235,13 +235,17 @@ fn callback_error_stops_before_after_checkpoint() {
         payload: Box::new(43),
     };
     let pointer = marker.payload.as_ref() as *const u64;
-    let mut after = false;
+    let selection_failed = Cell::new(false);
+    let mut after_error = Vec::new();
     let error = read(
         request(normal()),
-        |_| Err(marker),
+        |_| {
+            selection_failed.set(true);
+            Err(marker)
+        },
         |point| {
-            if point == Checkpoint::AfterSelection {
-                after = true;
+            if selection_failed.get() {
+                after_error.push(point);
                 Err(Stop::Deadline)
             } else {
                 Ok(())
@@ -253,5 +257,8 @@ fn callback_error_stops_before_after_checkpoint() {
         Error::Selection(marker) => assert_eq!(marker.payload.as_ref() as *const u64, pointer),
         other => panic!("원래 오류가 교체됨: {other:?}"),
     }
-    assert!(!after, "선택 오류 뒤에는 checkpoint를 호출하면 안 됨");
+    assert!(
+        after_error.is_empty(),
+        "선택 오류 뒤에 checkpoint가 호출됨: {after_error:?}"
+    );
 }
