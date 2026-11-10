@@ -269,6 +269,8 @@ pub struct Spec {
     pub crc: u32,
     pub descriptor: u8,
     pub attributes: u32,
+    pub local_extra: Vec<u8>,
+    pub central_extra: Vec<u8>,
 }
 
 impl Spec {
@@ -281,6 +283,8 @@ impl Spec {
             crc: CRC,
             descriptor: 0,
             attributes: 0,
+            local_extra: Vec::new(),
+            central_extra: Vec::new(),
         }
     }
 
@@ -334,8 +338,10 @@ pub fn sample(entries: &[Spec]) -> Sample {
             put32(&mut h, 22, e.size);
         }
         put16(&mut h, 26, e.name.len() as u16);
+        put16(&mut h, 28, e.local_extra.len() as u16);
         s.bytes.extend(h);
         s.bytes.extend(e.name.as_bytes());
+        s.bytes.extend(&e.local_extra);
         s.data.push(s.bytes.len());
         s.bytes.extend(&e.packed);
         s.descriptor.push(s.bytes.len());
@@ -361,10 +367,12 @@ pub fn sample(entries: &[Spec]) -> Sample {
         put32(&mut h, 20, e.packed.len() as u32);
         put32(&mut h, 24, e.size);
         put16(&mut h, 28, e.name.len() as u16);
+        put16(&mut h, 30, e.central_extra.len() as u16);
         put32(&mut h, 38, e.attributes);
         put32(&mut h, 42, s.local[i] as u32);
         s.bytes.extend(h);
         s.bytes.extend(e.name.as_bytes());
+        s.bytes.extend(&e.central_extra);
     }
     s.end = s.bytes.len();
     let mut h = vec![0; 22];

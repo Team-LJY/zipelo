@@ -4,7 +4,7 @@ use std::{
 };
 
 use serde_json::{Value, json};
-use zip::{CompressionMethod, ZipArchive};
+use zip::{CompressionMethod, DateTime, ZipArchive, extra_fields::ExtendedTimestamp};
 
 use crate::{
     budget::{Budget, CHUNK, MAX_INPUT, Source},
@@ -23,7 +23,7 @@ struct Entry {
     central: u64,
 }
 
-fn extras(bytes: &[u8]) -> Result<()> {
+fn extras(bytes: &[u8], is_local: bool) -> Result<()> {
     let mut cursor = 0;
     while cursor < bytes.len() {
         if bytes.len() - cursor < 4 {
@@ -37,6 +37,12 @@ fn extras(bytes: &[u8]) -> Result<()> {
         if id != 0x5455 {
             return Err(Failure::Unsupported);
         }
+        // 기존 zip 메타데이터 파서의 추가 필드 검사를 유지함.
+        ExtendedTimestamp::try_from_reader(
+            &mut &bytes[cursor + 4..cursor + 4 + size],
+            size as u16,
+            is_local,
+        )?;
         cursor += 4 + size;
     }
     Ok(())
@@ -131,10 +137,10 @@ fn preflight<R: Read + Seek>(
         if name.encode_utf16().count() > 1024 {
             return Err(Failure::Budget);
         }
-        if !names.insert(name.clone()) {
+        if streaming && !names.insert(name.clone()) {
             return Err(Failure::DuplicateName);
         }
-        extras(&source.at(cursor + 46 + name_len as u64, extra_len)?)?;
+        extras(&source.at(cursor + 46 + name_len as u64, extra_len)?, false)?;
         let attributes = u32_at(&header, 38);
         let unix_type = (attributes >> 16) & 0xf000;
         let kind = if unix_type == 0xa000 {
@@ -165,6 +171,13 @@ fn preflight<R: Read + Seek>(
         {
             return Err(Failure::MetadataMismatch);
         }
+        // zip의 유효한 DOS 시각 또는 None 비교 계약을 그대로 사용함.
+        let local_time =
+            DateTime::try_from_msdos(u16_at(&local_header, 12), u16_at(&local_header, 10)).ok();
+        let central_time = DateTime::try_from_msdos(u16_at(&header, 14), u16_at(&header, 12)).ok();
+        if local_time != central_time {
+            return Err(Failure::Integrity);
+        }
         for (local_offset, expected) in [(14, crc), (18, packed as u32), (22, size as u32)] {
             let value = u32_at(&local_header, local_offset);
             if value != expected && !(flags & 8 != 0 && value == 0) {
@@ -172,7 +185,7 @@ fn preflight<R: Read + Seek>(
             }
         }
         let local_extra = u16_at(&local_header, 28) as usize;
-        extras(&source.at(local + 30 + name_len as u64, local_extra)?)?;
+        extras(&source.at(local + 30 + name_len as u64, local_extra)?, true)?;
         let data = local + 30 + name_len as u64 + local_extra as u64;
         let mut finish = data + packed;
         if finish > central {
@@ -275,8 +288,9 @@ fn open<R: Read + Seek>(
     Ok((archive, expected))
 }
 
-pub fn list<R: Read + Seek>(source: Source<R>, budget: &Budget) -> Result<Vec<Value>> {
-    let (_archive, entries) = open(source, budget, false)?;
+pub fn list<R: Read + Seek>(mut source: Source<R>, budget: &Budget) -> Result<Vec<Value>> {
+    // 이름으로 축약하지 않고 검증된 중앙 디렉터리 순서와 항목 수를 보존함.
+    let (entries, _) = preflight(&mut source, budget, false)?;
     let mut results = Vec::with_capacity(entries.len());
     for (index, item) in entries.into_iter().enumerate() {
         budget.check()?;

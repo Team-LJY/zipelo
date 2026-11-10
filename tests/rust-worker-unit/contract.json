@@ -1,9 +1,9 @@
 {
     "schemaVersion": 1,
-    "baselineCommit": "a53f60b46afcb1146eebd41f001db52586a5405d",
+    "baselineCommit": "cb05c26486e31346d5534bfe7248d85951caea66",
     "target": "worker_unit",
-    "namedTests": 79,
-    "assertionTests": 78,
+    "namedTests": 85,
+    "assertionTests": 84,
     "policyObservations": 1,
     "execution": "not built or executed; central validation required",
     "moduleLinking": "main.rs #[path] imports the five existing worker modules from experiments/rust-core/src; no implementation copy and reviewed production fixes including metadata failure latching. The main process entry point is excluded.",
@@ -129,7 +129,7 @@
             "id": "zip-structure",
             "boundary": "ZIP32 local/central/중복/descriptor/packed/미지원/항목 수",
             "cases": [
-                "zip_exact_duplicate_names_fail_before_collapsing",
+                "zip_listing_preserves_duplicate_ids_count_and_central_order",
                 "zip_local_name_flags_and_method_mismatch",
                 "zip_local_crc_size_and_packed_mismatch",
                 "zip_signed_and_unsigned_descriptors",
@@ -141,7 +141,13 @@
                 "zip_multidisk_zip64_encryption_and_method_are_unsupported",
                 "zip_count_cap_is_checked_before_central_records",
                 "zip_declared_output_cap_and_stored_size_mismatch",
-                "zip_matching_headers_with_overlapping_packed_ranges_rejected"
+                "zip_matching_headers_with_overlapping_packed_ranges_rejected",
+                "zip_duplicate_extraction_rejected_before_any_item",
+                "zip_duplicate_listing_counts_every_entry_against_limits",
+                "zip_duplicate_listing_keeps_structure_and_subset_guards",
+                "zip_listing_retains_local_central_dos_time_validation",
+                "zip_listing_retains_extended_timestamp_parser_validation",
+                "zip_duplicate_listing_does_not_claim_payload_crc_verification"
             ]
         },
         {
@@ -450,7 +456,7 @@
             "kind": "assertion"
         },
         {
-            "name": "zip_exact_duplicate_names_fail_before_collapsing",
+            "name": "zip_listing_preserves_duplicate_ids_count_and_central_order",
             "file": "archive.rs",
             "group": "zip-structure",
             "kind": "assertion"
@@ -640,6 +646,42 @@
             "file": "archive.rs",
             "group": "zip-completion",
             "kind": "assertion"
+        },
+        {
+            "name": "zip_duplicate_extraction_rejected_before_any_item",
+            "file": "archive.rs",
+            "group": "zip-structure",
+            "kind": "assertion"
+        },
+        {
+            "name": "zip_duplicate_listing_counts_every_entry_against_limits",
+            "file": "archive.rs",
+            "group": "zip-structure",
+            "kind": "assertion"
+        },
+        {
+            "name": "zip_duplicate_listing_keeps_structure_and_subset_guards",
+            "file": "archive.rs",
+            "group": "zip-structure",
+            "kind": "assertion"
+        },
+        {
+            "name": "zip_listing_retains_local_central_dos_time_validation",
+            "file": "archive.rs",
+            "group": "zip-structure",
+            "kind": "assertion"
+        },
+        {
+            "name": "zip_listing_retains_extended_timestamp_parser_validation",
+            "file": "archive.rs",
+            "group": "zip-structure",
+            "kind": "assertion"
+        },
+        {
+            "name": "zip_duplicate_listing_does_not_claim_payload_crc_verification",
+            "file": "archive.rs",
+            "group": "zip-structure",
+            "kind": "assertion"
         }
     ],
     "provenance": {
@@ -703,5 +745,15 @@
         "overlap": "New distinct first/second names keep local and central version/flags/method/CRC/packed/size/name fields consistent. First Stored packed range extends through second local header and payload, ends exactly at central start; rejects Integrity. Original name-mismatch case retained separately.",
         "oracleSelfChecks": "Ten mutations cover omitted empty item, wrong Data/BeginItem owner, declared/actual lengths, order, content, payload length, missing terminal and extra trailing terminal.",
         "execution": "Static source and formatting checks only. No branch instrumentation, build, test execution or frozen-host comparison performed. One policy observation remains non-normative."
+    },
+    "duplicateListing": {
+        "scope": "Listing uses the validated central/local ZIP32 index without name deduplication; extraction retains duplicate rejection before BeginItem.",
+        "validation": "All existing structural, range, subset and numeric budget limits retained. ExtendedTimestamp::try_from_reader and DateTime::try_from_msdos from locked zip 9.5.0 preserve extra-field parsing and normalized local/central DOS time equality previously performed by ZipArchive.",
+        "ordering": "Normal and duplicate names use central-directory ordinal entry IDs, including empty entries and central order different from physical local order.",
+        "budget": "EOCD full count and cumulative declared sizes count every duplicate. Metadata cap remains 2097152 actual read bytes; listing no longer performs redundant ZipArchive indexing reads.",
+        "crc": "Listing reads no payload for verification; Verification=0. Duplicate extraction still fails before any BeginItem.",
+        "knownFailure": "Central cb05c264: 77 assertion passes, 1 malformed Deflate classification failure, 1 non-normative packed-tail observation. Integrity expectation unchanged. This new source has not been built or run.",
+        "newCases": 6,
+        "changedExistingCase": "zip_listing_preserves_duplicate_ids_count_and_central_order"
     }
 }

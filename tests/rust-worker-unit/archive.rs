@@ -65,11 +65,159 @@ fn zip_central_order_and_utf8_names_preserved() {
 }
 
 #[test]
-fn zip_exact_duplicate_names_fail_before_collapsing() {
+fn zip_listing_preserves_duplicate_ids_count_and_central_order() {
+    for repeated in [false, true] {
+        let specs = [
+            Spec::empty("a"),
+            Spec::stored(if repeated { "a" } else { "b" }),
+            Spec::deflate("c"),
+        ];
+        let mut s = sample(&specs);
+        let order = [2, 0, 1];
+        let records: Vec<_> = s
+            .central
+            .iter()
+            .enumerate()
+            .map(|(i, &start)| {
+                s.bytes[start..s.central.get(i + 1).copied().unwrap_or(s.end)].to_vec()
+            })
+            .collect();
+        let reordered: Vec<_> = order.iter().flat_map(|&i| records[i].clone()).collect();
+        s.bytes[s.central[0]..s.end].copy_from_slice(&reordered);
+        let entries = list(s.bytes).unwrap();
+        assert_eq!(entries.len(), specs.len());
+        for (ordinal, &original) in order.iter().enumerate() {
+            assert_eq!(
+                entries[ordinal],
+                serde_json::json!({
+                    "Entry": {
+                        "Id": format!("entry-{ordinal}"),
+                        "Name": specs[original].name,
+                        "Kind": 0,
+                        "DeclaredSize": specs[original].size
+                    },
+                    "EntryId": format!("entry-{ordinal}"),
+                    "Outcome": 0, "Verification": 0, "Error": 0
+                })
+            );
+        }
+    }
+}
+
+#[test]
+fn zip_duplicate_extraction_rejected_before_any_item() {
+    for first in [Spec::stored("a"), Spec::empty("a"), Spec::deflate("a")] {
+        let s = sample(&[first, Spec::stored("a")]);
+        assert_eq!(list(s.bytes.clone()).unwrap().len(), 2);
+        let (result, output) = extract(s.bytes, limits());
+        assert_eq!(result, Err(Failure::DuplicateName));
+        let records = frame_records(&output);
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].kind, 1);
+    }
+}
+
+#[test]
+fn zip_duplicate_listing_counts_every_entry_against_limits() {
+    let s = sample(&[Spec::empty("a"), Spec::empty("a")]);
+    let mut cap = limits();
+    cap.entries = 1;
+    let b = crate::budget::Budget::new(cap).unwrap();
+    let source = crate::budget::Source::new(
+        std::io::Cursor::new(&s.bytes),
+        s.bytes.len() as u64,
+        b.clone(),
+    )
+    .unwrap();
+    assert_eq!(crate::zip_adapter::list(source, &b), Err(Failure::Budget));
+
+    let mut large = Spec::deflate("a");
+    large.size = 9 * 1024 * 1024;
     assert_eq!(
-        list(sample(&[Spec::stored("a"), Spec::stored("a")]).bytes),
-        Err(Failure::DuplicateName)
+        list(sample(&[large.clone(), large]).bytes),
+        Err(Failure::Budget)
     );
+
+    let mut s = sample(&[Spec::empty("a"), Spec::empty("a")]);
+    put16(&mut s.bytes, s.end + 8, 1);
+    put16(&mut s.bytes, s.end + 10, 1);
+    assert_eq!(list(s.bytes), Err(Failure::Integrity));
+}
+
+#[test]
+fn zip_duplicate_listing_keeps_structure_and_subset_guards() {
+    for mutation in 0..4 {
+        let mut s = sample(&[Spec::stored("a"), Spec::stored("a")]);
+        let expected = match mutation {
+            0 => {
+                s.bytes[s.local[1] + 30] = b'b';
+                Failure::MetadataMismatch
+            }
+            1 => {
+                put32(&mut s.bytes, s.central[1] + 42, s.local[0] as u32);
+                Failure::Integrity
+            }
+            2 => {
+                put16(&mut s.bytes, s.central[1] + 8, 0x0801);
+                Failure::Unsupported
+            }
+            _ => {
+                put16(&mut s.bytes, s.central[1] + 10, 99);
+                Failure::Unsupported
+            }
+        };
+        assert_eq!(list(s.bytes), Err(expected));
+    }
+}
+
+#[test]
+fn zip_listing_retains_local_central_dos_time_validation() {
+    for repeated in [false, true] {
+        let mut s = sample(&[
+            Spec::stored("a"),
+            Spec::stored(if repeated { "a" } else { "b" }),
+        ]);
+        put16(&mut s.bytes, s.local[1] + 12, 0x5021);
+        put16(&mut s.bytes, s.central[1] + 14, 0x5021);
+        assert!(list(s.bytes.clone()).is_ok());
+        put16(&mut s.bytes, s.central[1] + 14, 0x5022);
+        assert_eq!(list(s.bytes), Err(Failure::Integrity));
+    }
+}
+
+#[test]
+fn zip_listing_retains_extended_timestamp_parser_validation() {
+    for repeated in [false, true] {
+        let mut entry = Spec::stored(if repeated { "a" } else { "b" });
+        entry.local_extra = vec![0x55, 0x54, 5, 0, 1, 0, 0, 0, 0];
+        entry.central_extra = entry.local_extra.clone();
+        assert!(list(sample(&[Spec::empty("a"), entry.clone()]).bytes).is_ok());
+        for local in [false, true] {
+            let mut bad = entry.clone();
+            let field = if local {
+                &mut bad.local_extra
+            } else {
+                &mut bad.central_extra
+            };
+            *field = vec![0x55, 0x54, 0, 0];
+            assert_eq!(
+                list(sample(&[Spec::empty("a"), bad]).bytes),
+                Err(Failure::Integrity)
+            );
+        }
+        entry.local_extra = vec![0x55, 0x54, 2, 0, 1, 0];
+        assert!(list(sample(&[Spec::empty("a"), entry]).bytes).is_err());
+    }
+}
+
+#[test]
+fn zip_duplicate_listing_does_not_claim_payload_crc_verification() {
+    let mut s = sample(&[Spec::stored("a"), Spec::stored("a")]);
+    s.bytes[s.data[0]] ^= 1;
+    s.bytes[s.data[1]] ^= 1;
+    let entries = list(s.bytes).unwrap();
+    assert_eq!(entries.len(), 2);
+    assert!(entries.iter().all(|entry| entry["Verification"] == 0));
 }
 
 #[test]

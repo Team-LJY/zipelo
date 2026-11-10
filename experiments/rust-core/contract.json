@@ -45,7 +45,7 @@
         "14": "protocol error",
         "15": "observed UnexpectedEof only, not inferred from a generic ZIP error",
         "16": "unclassified engine or I/O failure",
-        "17": "duplicate names would be collapsed by zip crate",
+        "17": "extraction rejects duplicate names before zip crate metadata can collapse them",
         "18": "local/central or adapter metadata mismatch"
     },
     "supported": {
@@ -81,8 +81,8 @@
     },
     "policyDifferences": [
         "v1 uses strict ZIP32 structural preflight and local/central consistency, unlike the older permissive listing implementation",
-        "exact duplicate names fail explicitly before zip crate metadata can collapse them; old C# listing can expose them with separate IDs",
-        "metadata read budget is cumulative across preflight, crate indexing and consistency validation; existing per-parser C# limits may accept some larger metadata archives",
+        "v1 preserves duplicate names, full count and central-directory ordinal IDs; v2 still rejects exact duplicate names before emitting any item",
+        "metadata read budget counts actual preflight reads for v1 and also crate indexing/consistency reads for v2; the same cumulative 2 MiB cap applies",
         "v1 processed budget charges input length once as the C# listing does; v2 charges actual reads and decoded output, read counts depend on library",
         "ZIP library CRC failures may be generic InvalidData; do not relabel all of them as actual EOF or a precise parser phase",
         "first Deflate stream with trailing packed garbage or another stream requires explicit comparison against frozen C# fixtures; no backend acceptance claim is made before execution"
@@ -107,7 +107,7 @@
         "comparisonExecution": false,
         "rustfmt": "1.99.1 existing installation: syntax/format check only; not type-check or build",
         "cargoLock": "Imported exact centrally generated lock from c9a2747d; SHA256 verified. Current manifest differs only by explicit test target. New-head locked offline build and tests remain pending.",
-        "directUnitSource": "location approval pending: common rule requires root tests/; implementation assignment allows crate-local tests"
+        "directUnitSource": "tests/rust-worker-unit/: explicit worker_unit target; 85 named tests, 84 assertions and one non-normative policy observation. New source not executed."
     },
     "centralCommands": [
         "cargo tree --locked --manifest-path experiments/rust-core/Cargo.toml --edges normal,build,dev,features --target x86_64-unknown-linux-gnu",
@@ -132,10 +132,20 @@
     ],
     "metadataAccounting": {
         "logicalStructure": "ZIP32 entry count, names, extras, local/central and packed boundaries are structural guards, not read counters.",
-        "readScope": "MAX_METADATA counts actual Source reads only while metadata_mode=true: preflight, ZipArchive indexing and header consistency/metadata checks. Repeated reads in that phase count again.",
+        "readScope": "EOCD full count and cumulative declared sizes count every duplicate. Metadata cap remains 2097152 actual read bytes; listing no longer performs redundant ZipArchive indexing reads.",
         "disabledAt": "open() disables metadata_mode after checking all by_index_data records and before extract() calls archive.by_index. Later item-open metadata rereads are not counted against MAX_METADATA.",
         "remainingLimits": "v2 later reads still charge processed bytes and obey Remote request/range caps; decoded output charges processed/output separately. v1 list_accounting charges input length once, not each repeated read.",
         "failureLatch": "Rejecting a metadata request larger than the remaining allowance latches the shared Budget before inner Read. Smaller retries, metadata disable, shared Sources and frame completion cannot clear it.",
         "evidence": "Direct source regression only; zip 9.5 catching this error and completing successfully has not been observed. No demonstrated total-budget bypass is claimed."
+    },
+    "duplicateListing": {
+        "scope": "Listing uses the validated central/local ZIP32 index without name deduplication; extraction retains duplicate rejection before BeginItem.",
+        "validation": "All existing structural, range, subset and numeric budget limits retained. ExtendedTimestamp::try_from_reader and DateTime::try_from_msdos from locked zip 9.5.0 preserve extra-field parsing and normalized local/central DOS time equality previously performed by ZipArchive.",
+        "ordering": "Normal and duplicate names use central-directory ordinal entry IDs, including empty entries and central order different from physical local order.",
+        "budget": "EOCD full count and cumulative declared sizes count every duplicate. Metadata cap remains 2097152 actual read bytes; listing no longer performs redundant ZipArchive indexing reads.",
+        "crc": "Listing reads no payload for verification; Verification=0. Duplicate extraction still fails before any BeginItem.",
+        "knownFailure": "Central cb05c264: 77 assertion passes, 1 malformed Deflate classification failure, 1 non-normative packed-tail observation. Integrity expectation unchanged. This new source has not been built or run.",
+        "newCases": 6,
+        "changedExistingCase": "zip_listing_preserves_duplicate_ids_count_and_central_order"
     }
 }

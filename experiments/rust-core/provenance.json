@@ -31,9 +31,14 @@
                 "Cargo.toml",
                 "src/read/zip_archive.rs",
                 "src/read/zipfile.rs",
-                "src/result.rs"
+                "src/result.rs",
+                "src/read/mod.rs",
+                "src/types.rs",
+                "src/extra_fields/extra_field.rs",
+                "src/extra_fields/extended_timestamp.rs",
+                "src/datetime.rs"
             ],
-            "use": "public adapter API and dependency configuration"
+            "use": "Pinned public adapter, timestamp parser and DOS-time API; source comparison of checks moved from ZipArchive listing to bounded preflight. No dependency implementation copied."
         }
     ],
     "directDependencies": [
@@ -92,5 +97,10 @@
         "manifestComparison": "Package, dependencies and features identical to sourceCommit; only explicit worker_unit test target added",
         "verification": "TOML parsing, exact byte hash and direct dependency versions checked; current-head locked offline build and execution pending",
         "centralReportedBuild": "SourceCommit only: Rust/Cargo 1.99.1 locked offline build exit 0, warnings 0, errors 0. Not independently rerun and not applicable to later heads."
+    },
+    "duplicateListing": {
+        "sourceBaseline": "cb05c26486e31346d5534bfe7248d85951caea66",
+        "checks": "All existing structural, range, subset and numeric budget limits retained. ExtendedTimestamp::try_from_reader and DateTime::try_from_msdos from locked zip 9.5.0 preserve extra-field parsing and normalized local/central DOS time equality previously performed by ZipArchive.",
+        "execution": "Central cb05c264: 77 assertion passes, 1 malformed Deflate classification failure, 1 non-normative packed-tail observation. Integrity expectation unchanged. This new source has not been built or run."
     }
 }
