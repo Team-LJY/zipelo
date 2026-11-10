@@ -1,0 +1,89 @@
+{
+    "schemaVersion": 1,
+    "implementation": "zipelo-rust-typed-deflate",
+    "baseline": "9626abbf22f3a4c66a996e64601694ed5fe98763",
+    "scope": "Separate candidate only. Nonencrypted ZIP32 Deflate via zip by_index_raw and zlib-rs public Inflate, one decode. No publication, live supervisor or product connection.",
+    "sourceBoundary": {
+        "unchanged": "All PR28 files including original manifest/lock, fixtures and 85 original named tests remain byte-identical. Budget, Source, Frames, Remote and JSON modules are referenced by path.",
+        "derived": "main.rs, error.rs and zip_adapter.rs derive from PR28. ZIP extras/preflight/open/list bodies are identical; only preflight comment changes. Stored body retains original read/CRC path and Failure classification.",
+        "evidence": "typed_deflate::decode and zip_adapter::extract_with_evidence return Error::Backend(InflateError), Input(io::Error), Host(Failure) or an explicit adapter cause. extract is a compatibility wrapper for unchanged original tests.",
+        "serialization": "CLI only emits legacy numeric exits, no detailed error record or stderr diagnostic. DataError/CRC/size/tail map to Integrity exit 12. Dictionary ID and input io::Error details survive in-process only. PR30 profile is not expanded to accept candidate identity or exits."
+    },
+    "dependencyPolicy": {
+        "directExisting": [
+            "zlib-rs =0.6.8 default-features=false rust-allocator",
+            "crc32fast =1.5.4 default-features=false std"
+        ],
+        "registryPackages": 40,
+        "linuxResolvedRegistryPackages": 25,
+        "registryAndChecksumsUnchanged": true,
+        "linuxFeaturesUnchanged": true,
+        "lockChange": "Root package renamed and two existing dependencies directly referenced; no registry record changes.",
+        "baseLockSha256": "92f7b05d7da086b4b8c6b596755ba6233129e5bac8b060b9c6b3aa63fe17fecf"
+    },
+    "decoder": {
+        "input": "zip raw reader bounded by validated packed size; at most 65536 bytes per Read. Source still charges actual reads including metadata and Remote keeps its request/range limits.",
+        "output": "Fixed 65536-byte buffer, expected size and cumulative actual byte limits checked before emit. Frames charges caller output/processed limits before Data serialization. CRC checked before EndItem/EndJob; earlier Data remains provisional.",
+        "progress": "Use total_in/total_out deltas after each successful backend call. Check deltas against buffers. BufError is not corruption; progress continues, exhausted input without StreamEnd is Incomplete, zero progress with available input is NoProgress.",
+        "eof": "No zero-length Read used as EOF evidence. A bounded packed endpoint is separate from underlying read-zero or io::Error UnexpectedEof. The latter error is retained, not inferred as malformed.",
+        "end": "Require StreamEnd, consumed packed bytes exactly, actual size exactly and CRC match. Reject any packed bytes after first stream, including second streams.",
+        "limits": {
+            "actualPackedBytesPerExtraction": 16777216,
+            "actualDecodedDeflateBytesPerExtraction": 16777216,
+            "readAttemptsPerExtraction": 131072,
+            "inflateCallsPerExtraction": 131072,
+            "inputBufferBytes": 65536,
+            "outputBufferBytes": 65536
+        },
+        "cancellation": "decode checkpoint supports cooperative caller cancellation before reads/calls/emits and final success; concrete worker supplies existing Budget deadline checks only. No new IPC cancel channel. Backend/input/emit errors return immediately; failed Work cannot be reused.",
+        "allocation": "Inflate::new(false,15) is infallible in signature and may panic on init failure. MemError covers only a returned backend allocation error; OOM/abort/panic recovery and global heap/CPU caps are not established.",
+        "security": "No unsafe adapter code, codec implementation, crypto, fork, internal zlib feature, string classification or re-decoding."
+    },
+    "newExitCodes": {
+        "19": "backend StreamError",
+        "20": "backend MemError",
+        "21": "backend NeedDict (ID not on wire)",
+        "22": "caller checkpoint Cancelled; no worker IPC cancellation added",
+        "23": "bounded input ended without StreamEnd; not a synthetic io::Error UnexpectedEof"
+    },
+    "policyDifferences": [
+        "Trailing packed bytes and concatenated streams are always rejected. PR28 acceptance observation is retained, not rewritten into a passing expectation.",
+        "Additional cumulative read/call cap may reject valid streams requiring many short reads/calls. Hard maximums are not derived from claimed header size.",
+        "Declared size exceeds remaining adapter limit fails early; actual size and caller Frames budget still checked.",
+        "Typed raw input io::Error InvalidData/InvalidInput/UnexpectedEof does not alone become Integrity. Embedded host Failure remains intact. Stored and metadata legacy classification unchanged.",
+        "New exits and binary identity require explicit future host profile; existing C# EngineFailure behavior and 16 comparison failures are not resolved."
+    ],
+    "validation": {
+        "build": false,
+        "testExecution": false,
+        "workerExecution": false,
+        "static": "rustfmt syntax/format check only, exact baseline blob comparison, locked/offline metadata package/checksum/feature comparison. No type-check or runtime pass claimed.",
+        "originalNamedTests": 85,
+        "newNamedTests": 28,
+        "injectedOnly": [
+            "StreamError/MemError/NeedDict enum mapping",
+            "no-progress policy helper"
+        ],
+        "actualBackendTestsPending": [
+            "malformed [7,0]",
+            "every split boundary and small outputs",
+            "empty and incomplete streams",
+            "compressed and uncompressed Deflate blocks"
+        ],
+        "remaining": [
+            "central build and all tests",
+            "independent adversarial review",
+            "Windows installation approval",
+            "frozen 7 unverified conditions",
+            "16 old host classification failures",
+            "execveat EACCES unresolved; no retry",
+            "C# preserved"
+        ]
+    },
+    "centralCommands": [
+        "sha256sum -c experiments/rust-typed-deflate/SHA256SUMS",
+        "cargo metadata --locked --offline --format-version 1 --manifest-path experiments/rust-typed-deflate/Cargo.toml",
+        "cargo build --locked --offline --manifest-path experiments/rust-typed-deflate/Cargo.toml",
+        "cargo test --locked --offline --manifest-path experiments/rust-typed-deflate/Cargo.toml --test worker_unit -- --nocapture"
+    ]
+}

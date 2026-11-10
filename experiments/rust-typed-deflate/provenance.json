@@ -1,0 +1,50 @@
+{
+    "baseline": "9626abbf22f3a4c66a996e64601694ed5fe98763",
+    "originalGitBlobs": {
+        "experiments/rust-core/provenance.json": "41d10d0c7be4eab1fb7516d8c315764dac3fa2de",
+        "experiments/rust-core/contract.json": "7a93f65bdef2689578be20935422c1255947bd16",
+        "experiments/rust-core/Cargo.toml": "e6845e976ded06ea201d8534917d99271345d643",
+        "experiments/rust-core/SHA256SUMS": "d04ced2bfa8d510f202d8659f231e3f1604a2068",
+        "experiments/rust-core/Cargo.lock": "2fd89340deeb61e7b8861388437b8c8bec22cc1e",
+        "experiments/rust-core/src/main.rs": "fb864d95dda3321500f73be6a2cf822c1194992d",
+        "experiments/rust-core/src/zip_adapter.rs": "9ea8a9179aa869260822570d9fb8ff5aa2bdc79f",
+        "experiments/rust-core/src/wire.rs": "36f425adebfc3c8cb4f91e8e9913b0fc98dc02eb",
+        "experiments/rust-core/src/budget.rs": "6b0bd8d92d6bf5397411c29b19506ff6924c428d",
+        "experiments/rust-core/src/error.rs": "4d18e4a9a3e25adf8545e0f1d586036a69909c9c",
+        "experiments/rust-core/src/json_wire.rs": "d05f0834b643ea3344137ccd9365e8b47adb65d6",
+        "tests/rust-worker-unit/contract.json": "782ce218c7062be6313f62ae0ee6d0c882954867",
+        "tests/rust-worker-unit/main.rs": "c67a21d395841a78e33952ddaa08f57a040e7ed7",
+        "tests/rust-worker-unit/protocol.rs": "0d682ef32462dbf1a774d9b0ef9b8e5e9cfd9e76",
+        "tests/rust-worker-unit/SHA256SUMS": "845b09a04fda2593047f9dad56dcb53f22e2bb54",
+        "tests/rust-worker-unit/review.rs": "1623448fa7a0edbc68d11a54c5fa39a538da049c",
+        "tests/rust-worker-unit/archive.rs": "f9d0e9a047e36b4d55bc296a83f17c0a304e2ed4",
+        "tests/rust-worker-unit/support.rs": "d8a6968fdba6d24dd80a79acf5eef41abe9fa78a",
+        "tests/rust-worker-unit/bounds.rs": "9777e52a05ea31f17aa9e585604ff47da5c7b276"
+    },
+    "derivedFiles": {
+        "main.rs": {
+            "originalPath": "experiments/rust-core/src/main.rs",
+            "sourceSha256": "c999cbaa8bbaa9739e63e72b6253fcb24a1690543eb9736859d94349ffabb6b8",
+            "candidateSha256": "11974593624bf674753816123093c2a6d1e355c5fe784fee9d9e535ad2d09b9b",
+            "diff": "--- PR28/main.rs\n+++ candidate/main.rs\n@@ -1,18 +1,22 @@\n #![forbid(unsafe_code)]\n \n+#[path = \"../../rust-core/src/budget.rs\"]\n mod budget;\n mod error;\n+#[path = \"../../rust-core/src/json_wire.rs\"]\n mod json_wire;\n+mod typed_deflate;\n+#[path = \"../../rust-core/src/wire.rs\"]\n mod wire;\n mod zip_adapter;\n \n use std::{io, process::ExitCode};\n \n use budget::{Budget, Source};\n-use error::Result;\n+use typed_deflate::Error;\n use wire::{Frames, Remote};\n \n-fn streaming() -> Result<()> {\n+fn streaming() -> Result<(), Error> {\n     let stdin = io::stdin();\n     let stdout = io::stdout();\n     let stderr = io::stderr();\n@@ -24,13 +28,13 @@\n     let mut frames = Frames::new(stdout.lock(), config.id, budget.clone())?;\n     frames.begin()?;\n     // stderr는 범위 요청 전용임. 실패는 종료 코드로 구별함.\n-    zip_adapter::extract(source, &budget, &mut frames)\n+    zip_adapter::extract_with_evidence(source, &budget, &mut frames)\n }\n \n fn main() -> ExitCode {\n     let args: Vec<_> = std::env::args_os().skip(1).take(2).collect();\n     let result = if args.is_empty() {\n-        json_wire::run(&mut io::stdin().lock(), &mut io::stdout().lock())\n+        json_wire::run(&mut io::stdin().lock(), &mut io::stdout().lock()).map_err(Error::Host)\n     } else if args.len() == 1 && args[0] == \"--extract-stream-v2\" {\n         streaming()\n     } else {\n@@ -38,6 +42,6 @@\n     };\n     match result {\n         Ok(()) => ExitCode::SUCCESS,\n-        Err(failure) => ExitCode::from(failure.exit_code()),\n+        Err(failure) => ExitCode::from(failure.failure().exit_code()),\n     }\n }\n"
+        },
+        "error.rs": {
+            "originalPath": "experiments/rust-core/src/error.rs",
+            "sourceSha256": "5e18da4f1c6d3c20f061ac7482df819937d1a85876ced00557cc9728e798ae9d",
+            "candidateSha256": "c6c1cb25b2bb5f6eb7b41a5f68801ec10a18dd07f32bed01bc64c7165d1c74b5",
+            "diff": "--- PR28/error.rs\n+++ candidate/error.rs\n@@ -12,6 +12,11 @@\n     Engine,\n     DuplicateName,\n     MetadataMismatch,\n+    DeflateStream,\n+    DeflateMemory,\n+    DeflateDictionary(u32),\n+    Cancelled,\n+    DeflateIncomplete,\n }\n \n pub type Result<T> = std::result::Result<T, Failure>;\n@@ -28,6 +33,11 @@\n             Self::Engine => 16,\n             Self::DuplicateName => 17,\n             Self::MetadataMismatch => 18,\n+            Self::DeflateStream => 19,\n+            Self::DeflateMemory => 20,\n+            Self::DeflateDictionary(_) => 21,\n+            Self::Cancelled => 22,\n+            Self::DeflateIncomplete => 23,\n         }\n     }\n \n@@ -36,8 +46,17 @@\n             Self::Unsupported => 2,\n             Self::UnsupportedEntry => 4,\n             Self::Budget => 7,\n-            Self::Integrity | Self::Truncated | Self::MetadataMismatch => 10,\n-            Self::Protocol | Self::Engine | Self::DuplicateName => 12,\n+            Self::Integrity\n+            | Self::Truncated\n+            | Self::MetadataMismatch\n+            | Self::DeflateIncomplete => 10,\n+            Self::Protocol\n+            | Self::Engine\n+            | Self::DuplicateName\n+            | Self::DeflateStream\n+            | Self::DeflateMemory\n+            | Self::DeflateDictionary(_)\n+            | Self::Cancelled => 12,\n         }\n     }\n \n@@ -52,6 +71,11 @@\n             Self::Engine => \"EngineFailure\",\n             Self::DuplicateName => \"DuplicateNameWouldBeCollapsed\",\n             Self::MetadataMismatch => \"LocalCentralOrAdapterMismatch\",\n+            Self::DeflateStream => \"DeflateStreamState\",\n+            Self::DeflateMemory => \"DeflateMemory\",\n+            Self::DeflateDictionary(_) => \"DeflateDictionaryRequired\",\n+            Self::Cancelled => \"Cancelled\",\n+            Self::DeflateIncomplete => \"DeflateInputEndedBeforeStreamEnd\",\n         }\n     }\n }\n"
+        },
+        "zip_adapter.rs": {
+            "originalPath": "experiments/rust-core/src/zip_adapter.rs",
+            "sourceSha256": "78aa4c3fa77b933b8a05a913af13a22e9976131de8ed2192a946c6c18ba929ca",
+            "candidateSha256": "06694393bdebd90e3f8c49502a775004a0615c7e292e7a5354be3b7f3abdc747",
+            "diff": "--- PR28/zip_adapter.rs\n+++ candidate/zip_adapter.rs\n@@ -48,7 +48,7 @@\n     Ok(())\n }\n \n-// 할당 전 ZIP32 하위집합을 제한함. 압축 해독은 zip crate에 위임함.\n+// 할당 전 ZIP32 하위집합을 제한함.\n fn preflight<R: Read + Seek>(\n     source: &mut Source<R>,\n     budget: &Budget,\n@@ -305,16 +305,35 @@\n     Ok(results)\n }\n \n-pub fn extract<R: Read + Seek, W: Write>(\n+pub fn extract_with_evidence<R: Read + Seek, W: Write>(\n     source: Source<R>,\n     budget: &Budget,\n     output: &mut Frames<W>,\n-) -> Result<()> {\n+) -> std::result::Result<(), crate::typed_deflate::Error> {\n     let (mut archive, expected) = open(source, budget, true)?;\n     let mut buffer = [0; CHUNK];\n+    let mut work = crate::typed_deflate::Work::new(Default::default())?;\n     for (index, item) in expected.iter().enumerate() {\n         budget.check()?;\n         output.begin_item(index, item.size)?;\n+        if item.method == 8 {\n+            use crate::typed_deflate::{self, Error, Expected};\n+            let mut raw = archive.by_index_raw(index)?;\n+            typed_deflate::decode(\n+                &mut raw,\n+                Expected {\n+                    packed: item.packed,\n+                    size: item.size,\n+                    crc: item.crc,\n+                },\n+                &mut work,\n+                CHUNK,\n+                || budget.check().map_err(Error::Host),\n+                |bytes| output.data(bytes).map_err(Error::Host),\n+            )?;\n+            output.end_item()?;\n+            continue;\n+        }\n         let mut file = archive.by_index(index)?;\n         let mut actual = 0u64;\n         loop {\n@@ -324,17 +343,26 @@\n                 break;\n             }\n             if got as u64 > item.size - actual {\n-                return Err(Failure::Integrity);\n+                return Err(Failure::Integrity.into());\n             }\n             actual += got as u64;\n             output.data(&buffer[..got])?;\n         }\n         // EOF까지 읽어 zip crate의 CRC 검사 결과를 확인한 뒤 항목을 끝냄.\n         if actual != item.size {\n-            return Err(Failure::Integrity);\n+            return Err(Failure::Integrity.into());\n         }\n         output.end_item()?;\n     }\n     budget.check()?;\n-    output.complete()\n-}\n+    output.complete().map_err(crate::typed_deflate::Error::Host)\n+}\n+\n+// 기존 시험과 호스트의 분류 계약으로 변환함. 상세 근거는 별도 진입점에서 보존함.\n+pub fn extract<R: Read + Seek, W: Write>(\n+    source: Source<R>,\n+    budget: &Budget,\n+    output: &mut Frames<W>,\n+) -> Result<()> {\n+    extract_with_evidence(source, budget, output).map_err(|error| error.failure())\n+}\n"
+        }
+    },
+    "sharedModules": [
+        "budget.rs",
+        "wire.rs",
+        "json_wire.rs"
+    ],
+    "preflightOpenListUnchanged": true
+}

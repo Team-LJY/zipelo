@@ -1,0 +1,27 @@
+[package]
+name = "zipelo-rust-typed-deflate"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+license = "MIT"
+publish = false
+autotests = false
+autobenches = false
+autoexamples = false
+
+[dependencies]
+# ZIP 파싱과 CRC 검증 및 Deflate 해독을 위임함.
+zip = { version = "=9.5.0", default-features = false, features = ["deflate-flate2-zlib-rs"] }
+# 기존 JSON IPC를 처리함. derive와 별도 async 계층을 사용하지 않음.
+serde_json = { version = "=1.0.145", default-features = false, features = ["std"] }
+# 기존 byte[] 표현을 크기 검사 후 해독함.
+base64 = { version = "=0.22.1", default-features = false, features = ["std"] }
+
+zlib-rs = { version = "=0.6.8", default-features = false, features = ["rust-allocator"] }
+crc32fast = { version = "=1.5.4", default-features = false, features = ["std"] }
+
+[workspace]
+
+[[test]]
+name = "worker_unit"
+path = "../../tests/rust-typed-deflate/main.rs"
