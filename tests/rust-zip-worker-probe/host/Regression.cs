@@ -128,22 +128,41 @@ internal static class Regression
                 worker, workerHash, dotnet, dotnetHash, "", area, preservationInvocation);
             var report = new Observation { JobId = Guid.NewGuid().ToString(), CleanupConfirmed = true };
             var injected = false;
-            try
+            var expectedFailure = new IOException("합성 보존 검사 I/O 실패");
+            var observedFailure = false;
+            using var lifetime = new CaseLifetime();
+            var token = CaseLifetime.Token;
+            Check.That(ReferenceEquals(CaseLifetime.Current, lifetime) &&
+                token.CanBeCanceled && !token.IsCancellationRequested, "새 회귀 수명 범위가 필요함");
+            var body = Task.Run(() => Cases.Run(plan, report, point =>
             {
-                await Cases.Run(plan, report, point =>
+                if (point == stage)
                 {
-                    if (point == stage)
-                    {
-                        injected = true;
-                        throw new IOException("합성 보존 검사 I/O 실패");
-                    }
-                });
+                    injected = true;
+                    throw expectedFailure;
+                }
+            }));
+            try { await body.WaitAsync(TimeSpan.FromSeconds(45)); }
+            catch (IOException error) when (ReferenceEquals(error, expectedFailure))
+            {
+                observedFailure = true;
             }
-            catch (IOException) { }
+            finally
+            {
+                var stopped = await lifetime.StopAsync(body, plan.Case.Id, false);
+                if (!stopped || !body.IsCompleted || !token.IsCancellationRequested)
+                {
+                    var failure = new InvalidOperationException("회귀 수명 종료 미확인");
+                    Safety.Fail(report, failure);
+                    throw failure;
+                }
+            }
             cleanup.Add(report);
             return stage == "normal"
-                ? !injected && report.CleanupConfirmed && !report.StopRequired
-                : injected && !report.CleanupConfirmed && report.StopRequired && report.Verdict == "fail";
+                ? body.IsCompletedSuccessfully && !injected && !observedFailure &&
+                    report.CleanupConfirmed && !report.StopRequired
+                : body.IsFaulted && injected && observedFailure && !report.CleanupConfirmed &&
+                    report.StopRequired && report.Verdict == "fail";
         }
         Record("cleanup.source-io", await Preservation("source"));
         Record("cleanup.marker-io", await Preservation("marker"));

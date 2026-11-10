@@ -382,6 +382,30 @@
             "addedRegressions": 17,
             "actualFrozenProducerCases": 1,
             "executed": false
+        },
+        "lifetimeFix": {
+            "parentHead": "6647e447efd9b27a90a85d6bef0d6feaaafd4da9",
+            "strengthenedExistingRegressions": 4,
+            "addedRegressions": 0,
+            "executed": false
+        },
+        "parentCentralLifetimeValidation": {
+            "head": "6647e447efd9b27a90a85d6bef0d6feaaafd4da9",
+            "source": "central report",
+            "windowsOfflineBuild": {
+                "reportedWarnings": 0,
+                "reportedErrors": 0
+            },
+            "linuxDirectRegressions": {
+                "registered": 55,
+                "result": "aborted at cleanup.source-io",
+                "error": "InvalidOperationException: missing CaseLifetime scope",
+                "freshBoundedExitCode": -6,
+                "ownedProcessExitConfirmed": true,
+                "allPassed": false
+            },
+            "fullComparisonExecuted": false,
+            "appliesToNewHead": false
         }
     },
     "limits": [

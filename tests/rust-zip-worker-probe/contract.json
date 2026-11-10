@@ -111,7 +111,9 @@
         "centralParentEvidence": "중앙 보고: frozen 43파일 원본 대조 일치, host/C# worker offline 컴파일 경고 0/오류 0. 전체 비교 미실행. 새 head에는 적용하지 않음.",
         "newHeadValidation": "source static only; no restore/build/direct-regression execution/comparison execution",
         "diagnosticStartFixParent": "b995ef1373fb4171767464a8bfbb91427b55a65b",
-        "diagnosticStartFix": "known first diagnostic.start is validated separately; frozen producer lifecycle and synthetic negative regression sources added; execution remains central-only"
+        "diagnosticStartFix": "known first diagnostic.start is validated separately; frozen producer lifecycle and synthetic negative regression sources added; execution remains central-only",
+        "lifetimeFixParent": "6647e447efd9b27a90a85d6bef0d6feaaafd4da9",
+        "centralLifetimeFailure": "중앙 보고: 6647e447 Windows offline 빌드 경고 0/오류 0. Linux 직접 회귀는 cleanup.source-io에서 수명 scope 누락 InvalidOperationException으로 중단됨. bounded 재현 exit -6 및 소유 프로세스 종료 확인. 등록 55개를 통과로 집계하지 않으며 전체 비교 미시작임."
     },
     "peerEvidence": {
         "planJson": "PascalCase Job/Mode; shared camelCase result writer unchanged; actual frozen reader used by regression",
@@ -211,7 +213,7 @@
             "candidate.rust-kind-rejected"
         ],
         "actualFrozenReader": "two bounded child processes invoke unchanged FakeWorker.Run; Pascal Job/Mode produces unsupported exit 2 plus matching PID, camelCase produces 71 before PID",
-        "cleanup": "Cases.Run finally source/marker/tree I/O fault probes produce real stop observations consumed by the same runner.run_schedule; normal preservation and late exception regressions also included",
+        "cleanup": "Each of the four Cases.Run preservation probes creates a fresh frozen CaseLifetime before Task.Run, verifies an uncancelled token, waits at most 45 seconds, and always drains the same body with StopAsync (25-second bound). Unconfirmed drain aborts the regression suite. Only the exact injected IOException is expected; completed body and preservation/cleanup/stop observations remain separately required. The real stop observations feed the unchanged runner.run_schedule checks; the late-exception regression also remains.",
         "scope": "source only; helper/trace/identity regressions do not replace 137 functional observations or Windows cleanup.sequence24",
         "diagnosticStart": {
             "added": 17,
@@ -219,6 +221,15 @@
             "synthetic": 16,
             "actualProducerFlow": "unchanged Runtime TryStart -> actual StreamingZipWorkerClient pre-cancelled operation -> cleanup -> StopAsync within 1 second -> Status=2/Dropped=0 -> same Evidence.Parse",
             "limitations": "pre-cancelled operation does not start a worker or exercise filesystem publication; generated diagnostic remains local under external regression supervision; not executed by author"
+        },
+        "lifetimeScope": {
+            "strengthenedExistingCases": 4,
+            "addedCases": 0,
+            "guardUnchanged": true,
+            "scopePerProbe": true,
+            "externalSupervisionUnchanged": true,
+            "workerLimit": "These blocked preservation probes do not launch a worker; lifetime draining is not worker execution evidence.",
+            "executedByAuthor": false
         }
     }
 }
