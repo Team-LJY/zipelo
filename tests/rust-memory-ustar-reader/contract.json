@@ -1,0 +1,1120 @@
+{
+    "schema_version": 1,
+    "branch": "fix/rust-memory-ustar-regressions",
+    "source_commit": "d37fc59a1e54ed616442f0488600815f9b38336f",
+    "source_tree": "95759346dd8db66633f912ed682326f86b17c1df",
+    "baseline_commit": "018e7593ecb2b3a7ae0bc17a440ecf2c0de8b4dd",
+    "source_pins": {
+        "831bc6b4cf4b47f87eb89cd020496910eeb16d1e": {
+            "experiments/rust-memory-ustar-reader/Cargo.lock": "2a5d774e8cd96caa426d2d97d9c112062a57c156a026ae588932bced0af015ae",
+            "experiments/rust-memory-ustar-reader/Cargo.toml": "08f2cb43c2f541c4420deab0c6097ce732cd7ca6e32f9895c9cbc48dc7722734",
+            "experiments/rust-memory-ustar-reader/LICENSE": "0714945e52a4d5b560c02c9a18478519f8c4e2572cbf87bd6d52adcfb2b63c62",
+            "experiments/rust-memory-ustar-reader/THIRD-PARTY-NOTICES.txt": "e69c525e5915bcffaa7a3e0a2148f5ff6e778547667fd881a95d8466924f65d5",
+            "experiments/rust-memory-ustar-reader/contract.json": "3f428c34185bc1388ea8dfe2c02e5cafda4e89079eaca1eee364885edbfebec5",
+            "experiments/rust-memory-ustar-reader/dependencies.json": "7c793eb80dbc167fddc8c0660123507fc80c6ebb763cbd06821f6b95735b9271",
+            "experiments/rust-memory-ustar-reader/src/budget.rs": "5d511a2519ed26e0fa8fb84b2d8cc0479679e9c3b5815a3c0e20790a283c923e",
+            "experiments/rust-memory-ustar-reader/src/header.rs": "263c2a610d522c0f5bf24ceef14be184735b4858a40277963252bae439d4112e",
+            "experiments/rust-memory-ustar-reader/src/lib.rs": "be88d6f563659b987868051bc634bf378de7668ec6b48f7a65602ca17d4cea96",
+            "experiments/rust-memory-ustar-reader/SHA256SUMS": "a36c205e3d25209c3c85cd704e1d55f5206214e07ca758385a34853aecd44faa"
+        },
+        "b60c23a85cb9c3ec894661c227d06c9d47abfdeb": {
+            "experiments/rust-memory-ustar-reader/Cargo.lock": "2a5d774e8cd96caa426d2d97d9c112062a57c156a026ae588932bced0af015ae",
+            "experiments/rust-memory-ustar-reader/Cargo.toml": "08f2cb43c2f541c4420deab0c6097ce732cd7ca6e32f9895c9cbc48dc7722734",
+            "experiments/rust-memory-ustar-reader/LICENSE": "0714945e52a4d5b560c02c9a18478519f8c4e2572cbf87bd6d52adcfb2b63c62",
+            "experiments/rust-memory-ustar-reader/THIRD-PARTY-NOTICES.txt": "e69c525e5915bcffaa7a3e0a2148f5ff6e778547667fd881a95d8466924f65d5",
+            "experiments/rust-memory-ustar-reader/contract.json": "7f071297e1d213bb8399ac7bb271b45b98644c8f6bf1278f62e41d592f3540c6",
+            "experiments/rust-memory-ustar-reader/dependencies.json": "7c793eb80dbc167fddc8c0660123507fc80c6ebb763cbd06821f6b95735b9271",
+            "experiments/rust-memory-ustar-reader/src/budget.rs": "5d511a2519ed26e0fa8fb84b2d8cc0479679e9c3b5815a3c0e20790a283c923e",
+            "experiments/rust-memory-ustar-reader/src/header.rs": "263c2a610d522c0f5bf24ceef14be184735b4858a40277963252bae439d4112e",
+            "experiments/rust-memory-ustar-reader/src/lib.rs": "9b57f771c1d89ffc74aea604d7f3476202ad62914c91a5246802706294e5bfcd",
+            "experiments/rust-memory-ustar-reader/SHA256SUMS": "6cf5a57c5282c65235aa1deeb1d2ff0ad148e720d1178635e036628469690463"
+        },
+        "d37fc59a1e54ed616442f0488600815f9b38336f": {
+            "experiments/rust-memory-ustar-reader/Cargo.lock": "2a5d774e8cd96caa426d2d97d9c112062a57c156a026ae588932bced0af015ae",
+            "experiments/rust-memory-ustar-reader/Cargo.toml": "08f2cb43c2f541c4420deab0c6097ce732cd7ca6e32f9895c9cbc48dc7722734",
+            "experiments/rust-memory-ustar-reader/LICENSE": "0714945e52a4d5b560c02c9a18478519f8c4e2572cbf87bd6d52adcfb2b63c62",
+            "experiments/rust-memory-ustar-reader/THIRD-PARTY-NOTICES.txt": "e4d82397ea8ad7780bfcf97344548f2a7784e2ae6384441e54193b351bf8dad6",
+            "experiments/rust-memory-ustar-reader/contract.json": "21cb673b63a14af1641406d8adb20cfcfd47adfad1ce15ff3c7c2d9840077b06",
+            "experiments/rust-memory-ustar-reader/dependencies.json": "7c793eb80dbc167fddc8c0660123507fc80c6ebb763cbd06821f6b95735b9271",
+            "experiments/rust-memory-ustar-reader/src/budget.rs": "5d511a2519ed26e0fa8fb84b2d8cc0479679e9c3b5815a3c0e20790a283c923e",
+            "experiments/rust-memory-ustar-reader/src/header.rs": "263c2a610d522c0f5bf24ceef14be184735b4858a40277963252bae439d4112e",
+            "experiments/rust-memory-ustar-reader/src/lib.rs": "9b57f771c1d89ffc74aea604d7f3476202ad62914c91a5246802706294e5bfcd",
+            "experiments/rust-memory-ustar-reader/SHA256SUMS": "a7cf6f6ad510173bf9ccbf0245ad20fd06cad08bcab4cc601031006e95305d28"
+        }
+    },
+    "baseline_blobs": [
+        {
+            "path": "src/Zipelo.Core/JobBudget.cs",
+            "git_blob": "339bd7d050d5328f0288922543691ca65eaf7f68"
+        },
+        {
+            "path": "src/Zipelo.Core/OutputPathPolicy.cs",
+            "git_blob": "2137722b9d8313116fb1ad1423a9a9cc1495f9e5"
+        },
+        {
+            "path": "src/Zipelo.Worker/Tar/UstarReader.cs",
+            "git_blob": "029564826ec038fe66b5007006e663fe6df6a17e"
+        },
+        {
+            "path": "tests/tar-stream-reader/Program.cs",
+            "git_blob": "b5ffd58474cb7560ef68675d5c102479feb62766"
+        },
+        {
+            "path": "tests/tar-stream-reader/contract.json",
+            "git_blob": "8794e88ed0955e5e307133b4c62a7dac575d3673"
+        }
+    ],
+    "selection_error_difference": {
+        "original": "C# select 예외는 즉시 전파되지만 831bc6b4는 선택 오류 후에도 AfterSelection checkpoint를 호출함. 이는 읽기 전용 대조로 확인한 차이이며 실행 재현이 아님.",
+        "corrected_source_observed": "b60c23a85cb9c3ec894661c227d06c9d47abfdeb",
+        "corrected_files": [
+            "experiments/rust-memory-ustar-reader/src/lib.rs",
+            "experiments/rust-memory-ustar-reader/contract.json",
+            "experiments/rust-memory-ustar-reader/SHA256SUMS"
+        ],
+        "oracle": "callbacks::callback_error_stops_before_after_checkpoint는 원래 선택 오류의 소유 객체를 보존하고 선택 오류 뒤의 모든 checkpoint 호출이 없음을 기대함. 831bc6b4에서 실패할 것으로 정적 분석되며 기대값을 완화하지 않음. 성공 선택의 AfterSelection 취소와 주입 Deadline 검사는 기존 전체 checkpoint 회귀에 유지함.",
+        "integration": "시험 브랜치의 원래 base 831bc6b4와 기존 test head 10aa746f는 보존함. 최종 production 기준은 d37fc59a이며 b60c23a8 대비 실행 코드와 API 및 lock은 같고 고지/계약/manifest만 변경됨. 총괄이 지정할 고정 통합 head에서 별도 실행하며 현재 동적 통과를 선언하지 않음."
+    },
+    "test_target": "memory_ustar_reader",
+    "test_count": 150,
+    "baseline_count": 103,
+    "applicability_counts": {
+        "preserved": 78,
+        "adapted": 7,
+        "not_applicable": 18
+    },
+    "applicability": [
+        {
+            "csharp": "list",
+            "status": "preserved",
+            "rust": [
+                "format::list_validates_all_entries"
+            ],
+            "note": ""
+        },
+        {
+            "csharp": "selected.hash.chunks",
+            "status": "adapted",
+            "rust": [
+                "selection::selected_payload_and_full_input_hash",
+                "callbacks::read_checkpoints_cover_both_passes_with_bounded_steps"
+            ],
+            "note": "FragmentedStream과 sink 청크 대신 완료 payload와 공개 checkpoint 간격을 확인함."
+        },
+        {
+            "csharp": "bcl.ustar.prefix",
+            "status": "adapted",
+            "rust": [
+                "names::prefix_join"
+            ],
+            "note": "동일 prefix 기대값을 합성 정상 USTAR로 확인함. BCL writer와의 상호운용은 미검증임."
+        },
+        {
+            "csharp": "empty.archive",
+            "status": "preserved",
+            "rust": [
+                "format::empty_archive"
+            ],
+            "note": ""
+        },
+        {
+            "csharp": "zero.trailing.blocks",
+            "status": "preserved",
+            "rust": [
+                "format::zero_trailing_blocks_hashed"
+            ],
+            "note": ""
+        },
+        {
+            "csharp": "directory.after.child",
+            "status": "preserved",
+            "rust": [
+                "names::directory_after_child"
+            ],
+            "note": ""
+        },
+        {
+            "csharp": "linux.case.distinct",
+            "status": "preserved",
+            "rust": [
+                "names::linux_case_distinct"
+            ],
+            "note": ""
+        },
+        {
+            "csharp": "header.checksum.not.content",
+            "status": "preserved",
+            "rust": [
+                "format::payload_is_not_authenticated_by_header_checksum"
+            ],
+            "note": ""
+        },
+        {
+            "csharp": "checksum",
+            "status": "preserved",
+            "rust": [
+                "format::checksum_mismatch"
+            ],
+            "note": ""
+        },
+        {
+            "csharp": "truncated.header",
+            "status": "preserved",
+            "rust": [
+                "format::truncated_header"
+            ],
+            "note": ""
+        },
+        {
+            "csharp": "truncated.body",
+            "status": "preserved",
+            "rust": [
+                "format::truncated_body"
+            ],
+            "note": ""
+        },
+        {
+            "csharp": "end.missing",
+            "status": "preserved",
+            "rust": [
+                "format::missing_end"
+            ],
+            "note": ""
+        },
+        {
+            "csharp": "end.single",
+            "status": "preserved",
+            "rust": [
+                "format::single_end"
+            ],
+            "note": ""
+        },
+        {
+            "csharp": "end.second.nonzero",
+            "status": "preserved",
+            "rust": [
+                "format::second_end_nonzero"
+            ],
+            "note": ""
+        },
+        {
+            "csharp": "trailing.nonzero",
+            "status": "preserved",
+            "rust": [
+                "format::trailing_nonzero"
+            ],
+            "note": ""
+        },
+        {
+            "csharp": "trailing.partial",
+            "status": "preserved",
+            "rust": [
+                "format::trailing_partial"
+            ],
+            "note": ""
+        },
+        {
+            "csharp": "padding.nonzero",
+            "status": "preserved",
+            "rust": [
+                "format::padding_nonzero"
+            ],
+            "note": ""
+        },
+        {
+            "csharp": "size.huge.octal",
+            "status": "preserved",
+            "rust": [
+                "format::size_huge_octal"
+            ],
+            "note": ""
+        },
+        {
+            "csharp": "size.base256.valid",
+            "status": "preserved",
+            "rust": [
+                "format::size_base256_valid_control"
+            ],
+            "note": ""
+        },
+        {
+            "csharp": "size.base256",
+            "status": "preserved",
+            "rust": [
+                "format::size_base256"
+            ],
+            "note": ""
+        },
+        {
+            "csharp": "size.negative.valid",
+            "status": "preserved",
+            "rust": [
+                "format::size_negative_valid_control"
+            ],
+            "note": ""
+        },
+        {
+            "csharp": "size.negative",
+            "status": "preserved",
+            "rust": [
+                "format::size_negative"
+            ],
+            "note": ""
+        },
+        {
+            "csharp": "size.invalid.digit.valid",
+            "status": "preserved",
+            "rust": [
+                "format::size_invalid_digit_valid_control"
+            ],
+            "note": ""
+        },
+        {
+            "csharp": "size.invalid.digit",
+            "status": "preserved",
+            "rust": [
+                "format::size_invalid_digit"
+            ],
+            "note": ""
+        },
+        {
+            "csharp": "size.internal.terminator.valid",
+            "status": "preserved",
+            "rust": [
+                "format::size_internal_terminator_valid_control"
+            ],
+            "note": ""
+        },
+        {
+            "csharp": "size.internal.terminator",
+            "status": "preserved",
+            "rust": [
+                "format::size_internal_terminator"
+            ],
+            "note": ""
+        },
+        {
+            "csharp": "directory.nonzero",
+            "status": "preserved",
+            "rust": [
+                "format::directory_nonzero"
+            ],
+            "note": ""
+        },
+        {
+            "csharp": "version",
+            "status": "preserved",
+            "rust": [
+                "format::version"
+            ],
+            "note": ""
+        },
+        {
+            "csharp": "gnu.magic",
+            "status": "preserved",
+            "rust": [
+                "format::gnu_magic"
+            ],
+            "note": ""
+        },
+        {
+            "csharp": "linkname.on.file",
+            "status": "preserved",
+            "rust": [
+                "format::linkname_on_file"
+            ],
+            "note": ""
+        },
+        {
+            "csharp": "reserved.bytes",
+            "status": "preserved",
+            "rust": [
+                "format::reserved_bytes"
+            ],
+            "note": ""
+        },
+        {
+            "csharp": "name.hidden.after.nul",
+            "status": "preserved",
+            "rust": [
+                "format::name_hidden_after_nul"
+            ],
+            "note": ""
+        },
+        {
+            "csharp": "invalid.utf8",
+            "status": "preserved",
+            "rust": [
+                "format::invalid_utf8_name"
+            ],
+            "note": ""
+        },
+        {
+            "csharp": "type.x",
+            "status": "preserved",
+            "rust": [
+                "format::type_pax_local"
+            ],
+            "note": ""
+        },
+        {
+            "csharp": "type.g",
+            "status": "preserved",
+            "rust": [
+                "format::type_pax_global"
+            ],
+            "note": ""
+        },
+        {
+            "csharp": "type.L",
+            "status": "preserved",
+            "rust": [
+                "format::type_gnu_long_name"
+            ],
+            "note": ""
+        },
+        {
+            "csharp": "type.K",
+            "status": "preserved",
+            "rust": [
+                "format::type_gnu_long_link"
+            ],
+            "note": ""
+        },
+        {
+            "csharp": "type.S",
+            "status": "preserved",
+            "rust": [
+                "format::type_gnu_sparse"
+            ],
+            "note": ""
+        },
+        {
+            "csharp": "type.1",
+            "status": "preserved",
+            "rust": [
+                "format::type_hard_link"
+            ],
+            "note": ""
+        },
+        {
+            "csharp": "type.2",
+            "status": "preserved",
+            "rust": [
+                "format::type_symbolic_link"
+            ],
+            "note": ""
+        },
+        {
+            "csharp": "type.3",
+            "status": "preserved",
+            "rust": [
+                "format::type_character_device"
+            ],
+            "note": ""
+        },
+        {
+            "csharp": "type.4",
+            "status": "preserved",
+            "rust": [
+                "format::type_block_device"
+            ],
+            "note": ""
+        },
+        {
+            "csharp": "type.6",
+            "status": "preserved",
+            "rust": [
+                "format::type_fifo"
+            ],
+            "note": ""
+        },
+        {
+            "csharp": "type.7",
+            "status": "preserved",
+            "rust": [
+                "format::type_contiguous"
+            ],
+            "note": ""
+        },
+        {
+            "csharp": "type.V",
+            "status": "preserved",
+            "rust": [
+                "format::type_volume"
+            ],
+            "note": ""
+        },
+        {
+            "csharp": "type.?",
+            "status": "preserved",
+            "rust": [
+                "format::type_unknown"
+            ],
+            "note": ""
+        },
+        {
+            "csharp": "path.../a",
+            "status": "preserved",
+            "rust": [
+                "names::reject_parent"
+            ],
+            "note": ""
+        },
+        {
+            "csharp": "path./root",
+            "status": "preserved",
+            "rust": [
+                "names::reject_absolute"
+            ],
+            "note": ""
+        },
+        {
+            "csharp": "path.a//b",
+            "status": "preserved",
+            "rust": [
+                "names::reject_empty_segment"
+            ],
+            "note": ""
+        },
+        {
+            "csharp": "path.a/./b",
+            "status": "preserved",
+            "rust": [
+                "names::reject_dot"
+            ],
+            "note": ""
+        },
+        {
+            "csharp": "path.a/../b",
+            "status": "preserved",
+            "rust": [
+                "names::reject_parent_segment"
+            ],
+            "note": ""
+        },
+        {
+            "csharp": "path.a\\b",
+            "status": "preserved",
+            "rust": [
+                "names::reject_backslash"
+            ],
+            "note": ""
+        },
+        {
+            "csharp": "path.",
+            "status": "preserved",
+            "rust": [
+                "names::reject_empty"
+            ],
+            "note": ""
+        },
+        {
+            "csharp": "collision.53",
+            "status": "preserved",
+            "rust": [
+                "names::conflict_duplicate"
+            ],
+            "note": ""
+        },
+        {
+            "csharp": "collision.54",
+            "status": "preserved",
+            "rust": [
+                "names::conflict_directory_file_same"
+            ],
+            "note": ""
+        },
+        {
+            "csharp": "collision.55",
+            "status": "preserved",
+            "rust": [
+                "names::conflict_parent_first"
+            ],
+            "note": ""
+        },
+        {
+            "csharp": "collision.56",
+            "status": "preserved",
+            "rust": [
+                "names::conflict_child_first"
+            ],
+            "note": ""
+        },
+        {
+            "csharp": "windows.case.collision",
+            "status": "not_applicable",
+            "rust": [
+                "names::windows_policy_unsupported"
+            ],
+            "note": "Windows 정책 전체를 Unsupported로 거부함. 원래 Windows 세부 기대값의 통과가 아님."
+        },
+        {
+            "csharp": "windows.device",
+            "status": "not_applicable",
+            "rust": [
+                "names::windows_policy_unsupported"
+            ],
+            "note": "Windows 정책 전체를 Unsupported로 거부함. 원래 Windows 세부 기대값의 통과가 아님."
+        },
+        {
+            "csharp": "windows.drive",
+            "status": "not_applicable",
+            "rust": [
+                "names::windows_policy_unsupported"
+            ],
+            "note": "Windows 정책 전체를 Unsupported로 거부함. 원래 Windows 세부 기대값의 통과가 아님."
+        },
+        {
+            "csharp": "unselected.unsafe",
+            "status": "preserved",
+            "rust": [
+                "names::unselected_unsafe_path_blocks_selection"
+            ],
+            "note": ""
+        },
+        {
+            "csharp": "input.limit",
+            "status": "preserved",
+            "rust": [
+                "budget::input_one_below_required"
+            ],
+            "note": ""
+        },
+        {
+            "csharp": "entries.limit",
+            "status": "preserved",
+            "rust": [
+                "budget::entries_one_below_required"
+            ],
+            "note": ""
+        },
+        {
+            "csharp": "metadata.limit",
+            "status": "preserved",
+            "rust": [
+                "budget::metadata_one_below_required"
+            ],
+            "note": ""
+        },
+        {
+            "csharp": "processed.first.pass",
+            "status": "preserved",
+            "rust": [
+                "budget::processed_one_below_required"
+            ],
+            "note": ""
+        },
+        {
+            "csharp": "processed.second.pass.cumulative",
+            "status": "preserved",
+            "rust": [
+                "budget::processed_second_pass_one_below"
+            ],
+            "note": ""
+        },
+        {
+            "csharp": "output.limit",
+            "status": "preserved",
+            "rust": [
+                "budget::output_limit_below_first_selected_file"
+            ],
+            "note": ""
+        },
+        {
+            "csharp": "entries.hard.cap",
+            "status": "preserved",
+            "rust": [
+                "budget::entry_hard_cap_over"
+            ],
+            "note": ""
+        },
+        {
+            "csharp": "input.hard.cap",
+            "status": "preserved",
+            "rust": [
+                "budget::input_hard_cap_over"
+            ],
+            "note": ""
+        },
+        {
+            "csharp": "selection.duplicate",
+            "status": "preserved",
+            "rust": [
+                "selection::reject_duplicate"
+            ],
+            "note": ""
+        },
+        {
+            "csharp": "selection.unknown",
+            "status": "preserved",
+            "rust": [
+                "selection::reject_unknown"
+            ],
+            "note": ""
+        },
+        {
+            "csharp": "cancel.before.read",
+            "status": "adapted",
+            "rust": [
+                "callbacks::cancellation_at_every_checkpoint_returns_no_completed"
+            ],
+            "note": "CancellationToken 대신 Start checkpoint 중단을 포함함."
+        },
+        {
+            "csharp": "cancel.during.read",
+            "status": "adapted",
+            "rust": [
+                "callbacks::cancellation_at_every_checkpoint_returns_no_completed"
+            ],
+            "note": "Stream 읽기 취소 대신 메모리 읽기 checkpoint 중단임."
+        },
+        {
+            "csharp": "cancel.sink",
+            "status": "not_applicable",
+            "rust": [
+                "callbacks::final_checkpoint_failure_discards_accumulated_results"
+            ],
+            "note": "sink가 없는 완료 반환 API임. 별도 최종 중단 시험은 sink 취소 동등성 증거가 아님."
+        },
+        {
+            "csharp": "duration.cumulative",
+            "status": "adapted",
+            "rust": [
+                "callbacks::injected_deadline_at_every_checkpoint_is_budget"
+            ],
+            "note": "TestTime을 주입할 공개 API가 없음. Deadline 신호 분류만 확인하며 실제 누적 시계 만료는 미검증임."
+        },
+        {
+            "csharp": "input.changed.between.passes",
+            "status": "not_applicable",
+            "rust": [],
+            "note": "독점 소유 Box 입력은 안전한 공개 API로 외부에서 변경할 수 없음. SHA 불일치 분기 미검증임."
+        },
+        {
+            "csharp": "input.unselected.changed",
+            "status": "not_applicable",
+            "rust": [],
+            "note": "외부 입력 변경 불가함. 선택하지 않은 bytes를 포함한 정상 SHA 계산은 별도 확인함."
+        },
+        {
+            "csharp": "single.use",
+            "status": "adapted",
+            "rust": [
+                "selection::separate_owned_requests_have_separate_usage"
+            ],
+            "note": "Request 입력을 값으로 소비함. 재사용 reader 인스턴스 예외를 같은 방식으로 재현하지 않음."
+        },
+        {
+            "csharp": "metadata.exact.boundary",
+            "status": "preserved",
+            "rust": [
+                "budget::metadata_per_pass_not_cumulative"
+            ],
+            "note": ""
+        },
+        {
+            "csharp": "input.limit.exact",
+            "status": "preserved",
+            "rust": [
+                "budget::input_exact_limit"
+            ],
+            "note": ""
+        },
+        {
+            "csharp": "sink.failure.propagates",
+            "status": "not_applicable",
+            "rust": [
+                "callbacks::callback_error_preserves_owned_identity_and_source"
+            ],
+            "note": "sink가 없음. 새 선택 콜백 오류 원형 보존은 별도 계약임."
+        },
+        {
+            "csharp": "nonseekable.rejected",
+            "status": "not_applicable",
+            "rust": [],
+            "note": "Stream API가 없음."
+        },
+        {
+            "csharp": "invalid.limits",
+            "status": "adapted",
+            "rust": [
+                "budget::zero_input_invalid",
+                "budget::zero_metadata_invalid",
+                "budget::zero_entries_invalid",
+                "budget::zero_duration_invalid",
+                "budget::zero_processed_invalid",
+                "budget::zero_output_invalid"
+            ],
+            "note": "생성자 예외 대신 read의 InvalidRequest를 확인하며 새 공개 한도 6개를 모두 검사함."
+        },
+        {
+            "csharp": "long.exact.Linux",
+            "status": "preserved",
+            "rust": [
+                "names::long_conflict_exact"
+            ],
+            "note": ""
+        },
+        {
+            "csharp": "long.parent.first.Linux",
+            "status": "preserved",
+            "rust": [
+                "names::long_conflict_parent_first"
+            ],
+            "note": ""
+        },
+        {
+            "csharp": "long.child.first.Linux",
+            "status": "preserved",
+            "rust": [
+                "names::long_conflict_child_first"
+            ],
+            "note": ""
+        },
+        {
+            "csharp": "long.directory.file.same.Linux",
+            "status": "preserved",
+            "rust": [
+                "names::long_conflict_directory_file_same"
+            ],
+            "note": ""
+        },
+        {
+            "csharp": "long.siblings.directories.Linux.False",
+            "status": "preserved",
+            "rust": [
+                "names::long_siblings_directories_false"
+            ],
+            "note": ""
+        },
+        {
+            "csharp": "long.siblings.directories.Linux.True",
+            "status": "preserved",
+            "rust": [
+                "names::long_siblings_directories_true"
+            ],
+            "note": ""
+        },
+        {
+            "csharp": "long.maximum.siblings.Linux",
+            "status": "preserved",
+            "rust": [
+                "names::long_maximum_siblings"
+            ],
+            "note": ""
+        },
+        {
+            "csharp": "long.exact.Windows",
+            "status": "not_applicable",
+            "rust": [
+                "names::windows_policy_unsupported"
+            ],
+            "note": "Windows 이름 정책 동등성 미검증임."
+        },
+        {
+            "csharp": "long.parent.first.Windows",
+            "status": "not_applicable",
+            "rust": [
+                "names::windows_policy_unsupported"
+            ],
+            "note": "Windows 이름 정책 동등성 미검증임."
+        },
+        {
+            "csharp": "long.child.first.Windows",
+            "status": "not_applicable",
+            "rust": [
+                "names::windows_policy_unsupported"
+            ],
+            "note": "Windows 이름 정책 동등성 미검증임."
+        },
+        {
+            "csharp": "long.directory.file.same.Windows",
+            "status": "not_applicable",
+            "rust": [
+                "names::windows_policy_unsupported"
+            ],
+            "note": "Windows 이름 정책 동등성 미검증임."
+        },
+        {
+            "csharp": "long.siblings.directories.Windows.False",
+            "status": "not_applicable",
+            "rust": [
+                "names::windows_policy_unsupported"
+            ],
+            "note": "Windows 이름 정책 동등성 미검증임."
+        },
+        {
+            "csharp": "long.siblings.directories.Windows.True",
+            "status": "not_applicable",
+            "rust": [
+                "names::windows_policy_unsupported"
+            ],
+            "note": "Windows 이름 정책 동등성 미검증임."
+        },
+        {
+            "csharp": "long.maximum.siblings.Windows",
+            "status": "not_applicable",
+            "rust": [
+                "names::windows_policy_unsupported"
+            ],
+            "note": "Windows 이름 정책 동등성 미검증임."
+        },
+        {
+            "csharp": "long.case.parent.windows.False",
+            "status": "not_applicable",
+            "rust": [
+                "names::windows_policy_unsupported"
+            ],
+            "note": "Windows 이름 정책 동등성 미검증임."
+        },
+        {
+            "csharp": "long.case.parent.linux.False",
+            "status": "preserved",
+            "rust": [
+                "names::long_case_parent_distinct_false"
+            ],
+            "note": ""
+        },
+        {
+            "csharp": "long.case.parent.windows.True",
+            "status": "not_applicable",
+            "rust": [
+                "names::windows_policy_unsupported"
+            ],
+            "note": "Windows 이름 정책 동등성 미검증임."
+        },
+        {
+            "csharp": "long.case.parent.linux.True",
+            "status": "preserved",
+            "rust": [
+                "names::long_case_parent_distinct_true"
+            ],
+            "note": ""
+        },
+        {
+            "csharp": "long.case.exact.windows",
+            "status": "not_applicable",
+            "rust": [
+                "names::windows_policy_unsupported"
+            ],
+            "note": "Windows 이름 정책 동등성 미검증임."
+        },
+        {
+            "csharp": "long.case.exact.linux",
+            "status": "preserved",
+            "rust": [
+                "names::long_case_exact_distinct"
+            ],
+            "note": ""
+        }
+    ],
+    "oracle": "기존 C# Program.cs의 기대값과 UstarReader.cs/OutputPathPolicy.cs/JobBudget.cs의 실제 제어 흐름을 대조함. 새 API 차이를 명시하며 production contract 문구만 정답으로 삼지 않음.",
+    "scope": [
+        "정상 합성 USTAR와 기존 구조적 거부 회귀만 사용함. 일반 파일과 디렉터리, Linux 한글/Jamo 원문과 대소문자, prefix 및 필드 경계를 검사함.",
+        "파일 시스템, 사용자 archive, worker, 게시, UI, GNU/PAX/sparse, 암호와 복구 구현은 사용하지 않음.",
+        "별도 Cargo test target은 ../../experiments/rust-memory-ustar-reader path dependency의 공개 read API만 호출함. production 복사와 공개 hook 추가가 없음.",
+        "sha2 0.10.9 std/force-soft를 기존 의존성과 동일하게 사용함. SHA256 기대값은 sha2 공개 Digest API로 전체 bytes에서 계산함. 실제 reader와 다른 SHA 구현의 교차 검증은 아님.",
+        "오류를 Err로 관찰하고 성공 결과가 반환되지 않음을 확인함. heap zeroization이나 OS 메모리 회수는 검증하지 않음."
+    ],
+    "unverified_boundaries": [
+        "컴파일과 시험 실행, 런타임 시험 발견 수, 통합 head, 독립 실행 검증은 미완료임.",
+        "USTAR name 100 bytes와 prefix 155 bytes 사이에는 /가 들어감. 경로 전체 최대 256 UTF8 bytes, 구성요소 최대 155 bytes이므로 4096 UTF16 units와 255/256 UTF8 구성요소 경계를 공개 read로 도달할 수 없음. 필드 100/155 bytes, 합성 경로 256 bytes와 비BMP UTF16 계산만 시험함.",
+        "octal 필드 최대 12자리로 i64 overflow 분기는 도달 불가함. 원래 숫자 문법, base256/음수/invalid digit/중간 종결과 input보다 큰 선언 크기 거부를 검사함.",
+        "1024 entries로 metadata 최대 524288 bytes, 입력 16 MiB와 최대 두 순회로 processed 최대 32 MiB임. metadata hard cap 1 MiB와 processed hard cap 128 MiB는 동적 경계 도달 불가함. caller 축소 한도의 정확한 값/1초과를 검사함.",
+        "입력 16 MiB에는 헤더와 종료 블록이 포함되어 선택 출력 16 MiB 정확한 hard cap에 도달할 수 없음. 작은 output caller 한도와 누적 출력 실패만 검사함.",
+        "독점 소유 입력 때문에 안전한 공개 API로 순회 간 bytes/목록 변경과 SHA 불일치를 주입할 수 없음. 정상 두 순회의 처리량과 전체 입력 digest만 확인함.",
+        "Stop::Deadline은 주입 신호임. 실제 Instant 기한, 선택 콜백의 실제 경과 시간 누적, duration 300초 clamp는 실행 검증하지 않음.",
+        "Allocation 오류를 만들기 위한 allocator hook이나 극단 메모리 소비를 추가하지 않음. fallible reserve 경로와 OOM 복구는 동적 미검증임.",
+        "Windows 이름 정책은 Unsupported임. 기존 Stream I/O, 분할 읽기, nonseekable, 외부 변경과 sink 계약은 직접 적용하지 않음.",
+        "subtle 사용의 실제 타이밍, 컴파일러/하드웨어 보장, 전체 heap/CPU 한도, 임의 callback 강제 중단은 검증하지 않음.",
+        "기존 보류된 ZIP 보안 재현 3건과 execveat, Windows 설치, VM, main 병합과 C# 삭제를 수행하지 않음."
+    ],
+    "execution": {
+        "status": "not_run",
+        "build": false,
+        "tests": false,
+        "discovered": null,
+        "passed": null,
+        "failed": null,
+        "ignored": null,
+        "filtered": null,
+        "reason": "고정 통합 head 이후 별도 배정 전이므로 실행하지 않음. 150은 소스 선언 수이며 실행 발견 수가 아님.",
+        "future_command": "cargo +1.99.1 test --manifest-path tests/rust-memory-ustar-reader/Cargo.toml --locked --offline --test memory_ustar_reader --target-dir tests/rust-memory-ustar-reader/target -- --test-threads=1",
+        "prerequisite": "총괄의 고정 통합 head 배정과 source/test manifest 검증 후에만 실행함."
+    },
+    "observed_followup": {
+        "head": "d37fc59a1e54ed616442f0488600815f9b38336f",
+        "difference": "b60c23a8 이후 notices/contract/SHA256SUMS 3파일 고지 수정이며 실행 코드와 lock은 같음. 이 head의 고정 hash는 읽기 전용 정적 확인용이며 시험 브랜치 parent를 바꾸지 않음."
+    },
+    "test_names": [
+        "budget::entries_exact_limit",
+        "budget::entries_one_below_required",
+        "budget::entry_hard_cap_over",
+        "budget::input_exact_limit",
+        "budget::input_hard_cap_exact",
+        "budget::input_hard_cap_over",
+        "budget::input_one_below_required",
+        "budget::metadata_below_first_header",
+        "budget::metadata_exact_limit",
+        "budget::metadata_one_below_required",
+        "budget::metadata_per_pass_not_cumulative",
+        "budget::output_exact_limit",
+        "budget::output_failure_after_prior_file_returns_no_completed",
+        "budget::output_limit_below_first_selected_file",
+        "budget::output_one_below_required",
+        "budget::output_reservation_before_body_read",
+        "budget::processed_exact_limit",
+        "budget::processed_one_below_required",
+        "budget::processed_second_pass_exact",
+        "budget::processed_second_pass_one_below",
+        "budget::unselected_large_file_does_not_charge_output",
+        "budget::zero_duration_invalid",
+        "budget::zero_entries_invalid",
+        "budget::zero_input_invalid",
+        "budget::zero_metadata_invalid",
+        "budget::zero_output_invalid",
+        "budget::zero_processed_invalid",
+        "callbacks::callback_error_preserves_owned_identity_and_source",
+        "callbacks::callback_error_stops_before_after_checkpoint",
+        "callbacks::cancellation_at_every_checkpoint_returns_no_completed",
+        "callbacks::cancellation_before_selection_prevents_callback",
+        "callbacks::empty_selection_after_callback_cancellation_still_fails",
+        "callbacks::final_checkpoint_failure_discards_accumulated_results",
+        "callbacks::injected_deadline_at_every_checkpoint_is_budget",
+        "callbacks::read_checkpoints_cover_both_passes_with_bounded_steps",
+        "callbacks::selection_can_request_cancellation_before_second_pass",
+        "format::checksum_grammar_rejects_internal_terminator",
+        "format::checksum_mismatch",
+        "format::device_fields_allow_empty",
+        "format::device_major_nonzero",
+        "format::device_minor_nonzero",
+        "format::directory_nonzero",
+        "format::empty_archive",
+        "format::gname_hidden_after_nul",
+        "format::gnu_magic",
+        "format::invalid_utf8_gname",
+        "format::invalid_utf8_name",
+        "format::invalid_utf8_prefix",
+        "format::invalid_utf8_uname",
+        "format::linkname_on_file",
+        "format::list_validates_all_entries",
+        "format::missing_end",
+        "format::name_hidden_after_nul",
+        "format::nul_regular_file_type",
+        "format::numeric_fields_allow_full_width_octal",
+        "format::numeric_fields_allow_leading_space_and_zero_device",
+        "format::numeric_fields_reject_terminator_then_digit",
+        "format::numeric_fields_require_digits",
+        "format::padding_nonzero",
+        "format::payload_is_not_authenticated_by_header_checksum",
+        "format::prefix_hidden_after_nul",
+        "format::reserved_bytes",
+        "format::second_end_nonzero",
+        "format::single_end",
+        "format::size_base256",
+        "format::size_base256_valid_control",
+        "format::size_huge_octal",
+        "format::size_internal_terminator",
+        "format::size_internal_terminator_valid_control",
+        "format::size_invalid_digit",
+        "format::size_invalid_digit_valid_control",
+        "format::size_negative",
+        "format::size_negative_valid_control",
+        "format::trailing_nonzero",
+        "format::trailing_partial",
+        "format::truncated_body",
+        "format::truncated_header",
+        "format::type_block_device",
+        "format::type_character_device",
+        "format::type_contiguous",
+        "format::type_fifo",
+        "format::type_gnu_long_link",
+        "format::type_gnu_long_name",
+        "format::type_gnu_sparse",
+        "format::type_hard_link",
+        "format::type_pax_global",
+        "format::type_pax_local",
+        "format::type_symbolic_link",
+        "format::type_unknown",
+        "format::type_volume",
+        "format::uname_hidden_after_nul",
+        "format::unselected_damage_blocks_selection",
+        "format::version",
+        "format::zero_trailing_blocks_hashed",
+        "names::conflict_child_first",
+        "names::conflict_directory_file_same",
+        "names::conflict_duplicate",
+        "names::conflict_parent_first",
+        "names::directory_after_child",
+        "names::directory_first",
+        "names::directory_rejects_repeated_trailing_slash",
+        "names::directory_removes_one_trailing_slash",
+        "names::directory_without_trailing_slash",
+        "names::korean_and_jamo_original_bytes",
+        "names::linux_accepts_windows_reserved_and_trailing_characters",
+        "names::linux_case_distinct",
+        "names::long_case_exact_distinct",
+        "names::long_case_parent_distinct_false",
+        "names::long_case_parent_distinct_true",
+        "names::long_conflict_child_first",
+        "names::long_conflict_directory_file_same",
+        "names::long_conflict_exact",
+        "names::long_conflict_parent_first",
+        "names::long_maximum_siblings",
+        "names::long_siblings_directories_false",
+        "names::long_siblings_directories_true",
+        "names::maximum_header_name_and_prefix_bytes",
+        "names::prefix_join",
+        "names::prefix_siblings",
+        "names::reject_absolute",
+        "names::reject_backslash",
+        "names::reject_dot",
+        "names::reject_empty",
+        "names::reject_empty_segment",
+        "names::reject_file_trailing_slash",
+        "names::reject_parent",
+        "names::reject_parent_segment",
+        "names::supplementary_characters_preserve_utf16_units",
+        "names::unselected_unsafe_path_blocks_selection",
+        "names::utf8_header_field_boundaries_preserve_text",
+        "names::utf8_rejects_overlong_surrogate_and_out_of_range",
+        "names::utf8_split_at_name_boundary",
+        "names::utf8_split_at_prefix_boundary",
+        "names::windows_policy_unsupported",
+        "selection::decimal_ids_are_exact_above_nine",
+        "selection::directory_only_still_scans_twice",
+        "selection::empty_selected_file_is_present",
+        "selection::empty_selection_scans_once",
+        "selection::reject_duplicate",
+        "selection::reject_empty_id",
+        "selection::reject_excess",
+        "selection::reject_leading_space",
+        "selection::reject_leading_zero",
+        "selection::reject_plus",
+        "selection::reject_trailing_space",
+        "selection::reject_unknown",
+        "selection::reverse_selection_keeps_archive_order",
+        "selection::selected_payload_and_full_input_hash",
+        "selection::selection_after_complete_first_pass",
+        "selection::separate_owned_requests_have_separate_usage"
+    ],
+    "static_validation": {
+        "toolchain": "Rust/Cargo/rustfmt 1.99.1",
+        "rustfmt_check_exit": 0,
+        "metadata_command": "cargo +1.99.1 metadata --manifest-path tests/rust-memory-ustar-reader/Cargo.toml --locked --offline --format-version 1 --filter-platform x86_64-unknown-linux-gnu",
+        "metadata_exit": 0,
+        "lock_unchanged": true,
+        "registry_records_unchanged": 11,
+        "linux_selected_registry_packages": 10,
+        "static_check_exit": 0,
+        "static_source_head": "d37fc59a1e54ed616442f0488600815f9b38336f",
+        "baseline_files_matched": 5,
+        "declared_tests": 150,
+        "compile_check": "not_run",
+        "test_execution": "not_run",
+        "note": "정적 검사는 시험 소스와 hash 및 Cargo graph만 확인함. runtime 발견 수와 통과 수가 아님."
+    },
+    "original_branch_base_commit": "831bc6b4cf4b47f87eb89cd020496910eeb16d1e",
+    "original_branch_base_tree": "6471620dc4367d8f752f81b2f07e8f8978473ed6"
+}

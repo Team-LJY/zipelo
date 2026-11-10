@@ -1,0 +1,17 @@
+[package]
+name = "zipelo-app-core-memory-regressions"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.99"
+license = "MIT"
+publish = false
+autotests = false
+
+[[test]]
+name = "app_core_public_api"
+path = "main.rs"
+
+[dependencies]
+app_core = { package = "zipelo-app-core-memory", path = "../../experiments/rust-app-core-memory" }
+
+[workspace]

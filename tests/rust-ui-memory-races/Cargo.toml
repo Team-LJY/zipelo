@@ -1,0 +1,17 @@
+[package]
+name = "zipelo-ui-memory-races"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.99"
+license = "MIT"
+publish = false
+autotests = false
+
+[workspace]
+
+[dependencies]
+core_memory = { package = "zipelo-app-core-memory", path = "../../experiments/rust-app-core-memory" }
+
+[[test]]
+name = "races"
+path = "races.rs"

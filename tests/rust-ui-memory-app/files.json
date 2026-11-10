@@ -1,0 +1,23 @@
+[
+    "experiments/rust-ui-memory-app/Cargo.lock",
+    "experiments/rust-ui-memory-app/Cargo.toml",
+    "experiments/rust-ui-memory-app/LICENSE",
+    "experiments/rust-ui-memory-app/THIRD-PARTY-NOTICES.txt",
+    "experiments/rust-ui-memory-app/src/app.rs",
+    "experiments/rust-ui-memory-app/src/controller.rs",
+    "experiments/rust-ui-memory-app/src/lib.rs",
+    "experiments/rust-ui-memory-app/src/runtime.rs",
+    "experiments/rust-ui-memory-app/src/transport.rs",
+    "tests/rust-ui-memory-app/contract.json",
+    "tests/rust-ui-memory-app/dependencies.json",
+    "tests/rust-ui-memory-app/dependency_audit.py",
+    "tests/rust-ui-memory-app/files.json",
+    "tests/rust-ui-memory-app/fixtures/payload.txt",
+    "tests/rust-ui-memory-app/fixtures/sample.gz",
+    "tests/rust-ui-memory-app/fixtures/sample.tar",
+    "tests/rust-ui-memory-app/license-supplement.json",
+    "tests/rust-ui-memory-app/reference-ui.lock",
+    "tests/rust-ui-memory-app/regressions.rs",
+    "tests/rust-ui-memory-app/sources.json",
+    "tests/rust-ui-memory-app/static_check.py"
+]

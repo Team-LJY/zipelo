@@ -1,0 +1,20 @@
+[package]
+name = "zipelo-file-snapshot-regressions"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.99"
+license = "MIT"
+publish = false
+autotests = false
+autoexamples = false
+autobenches = false
+
+[[test]]
+name = "snapshot_public_api"
+path = "main.rs"
+
+[dependencies]
+snapshot = { package = "zipelo-file-snapshot", path = "../../experiments/rust-file-snapshot" }
+libc = { version = "=0.2.191", default-features = false, features = ["std"] }
+
+[workspace]

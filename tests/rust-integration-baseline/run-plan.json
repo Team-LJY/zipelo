@@ -1,0 +1,96 @@
+{
+    "schema": 1,
+    "state": "검토 대기. 후보 tree에서 compile/discovery/runtime을 실행하지 않음",
+    "branch": "features/rust-integration-baseline",
+    "steps": [
+        {
+            "stage": "identity",
+            "required": "고정 candidate commit/tree 및 sources.json의 295개 path/mode/type/blob와 SHA256SUMS 검증. main 144개 전부 일치해야 함. 최초 차이에서 중단"
+        },
+        {
+            "stage": "static",
+            "required": "새 격리 검증 checkout에서 원본 static_check.py와 dependency audit, rustfmt --check 및 명시적 기존 toolchain의 cargo metadata --locked --offline. source/lock/fixture 변경 금지. 설치/restore 없음"
+        },
+        {
+            "stage": "headless",
+            "groups": [
+                {
+                    "path": "tests/rust-app-core-memory",
+                    "target": "app_core_public_api",
+                    "expected": 67
+                },
+                {
+                    "manifest": "experiments/rust-memory-zip-create/Cargo.toml",
+                    "targets": {
+                        "lib": 11,
+                        "memory_zip_create": 42
+                    }
+                },
+                {
+                    "path": "tests/rust-memory-ustar-reader",
+                    "expected": 150
+                },
+                {
+                    "path": "tests/rust-memory-gzip-reader",
+                    "expected": 303
+                },
+                {
+                    "manifest": "experiments/rust-ui-memory-app/Cargo.toml",
+                    "target": "ui_memory",
+                    "expected": 31
+                },
+                {
+                    "path": "tests/rust-ui-memory-races",
+                    "expected": 14,
+                    "filtered_each": 13
+                },
+                {
+                    "path": "tests/rust-file-snapshot",
+                    "target": "snapshot_public_api",
+                    "expected": 72,
+                    "filtered_each": 71
+                }
+            ],
+            "required": "실제 경로/target은 고정 Cargo manifest와 각 계약으로 확정 후 실행함. compile no-run -> exact unique discovery 계약 대조 -> 각 사례 1회 직렬 실행. 기존 검증 기록을 후보 tree 결과로 합산하지 않음"
+        },
+        {
+            "stage": "gui",
+            "required": "headless 성공 및 별도 실행 검토 뒤 원래 GUI graph locked/offline build. 분리 Xvfb의 시험 harness cancel -> retract -> close 각 1회. 각 장벽 60초, 외부 210초/정리15초 기존 상한 유지. 화면/frame/exit/정리 근거가 있는 전이만 통과. production 바이너리 결과와 구분"
+        },
+        {
+            "stage": "record",
+            "required": "명령/exit/raw stdout+stderr hash/binary hash/정확한 발견/실행/통과/실패/ignored/filtered 이름과 입력 전후 hash 및 잔류/소유 process 정리 기록. 첫 실패 중단. 임의 수정/재실행 없음"
+        }
+    ],
+    "bounds": "기존 각 계약의 컴파일/사례/로그/합성 데이터 상한을 유지함. 현재 cohort flock을 사용하고 공유 cache 변경은 잠금함",
+    "historical_evidence": [
+        {
+            "path": "tests/rust-app-core-memory/validation-6e6e7061/report.json",
+            "scope": "67 + 11/42/150/303 작성자 기존 결과"
+        },
+        {
+            "path": "tests/rust-ui-memory-app/validation-f6aa3879/report.json",
+            "scope": "31 작성자 기존 결과"
+        },
+        {
+            "path": "tests/rust-ui-memory-races/validation-cd0a9070/result-audit.json",
+            "scope": "14 작성자 기존 결과"
+        },
+        {
+            "path": "tests/rust-ui-memory-gui-races/validation-f5983ff1/result-audit.json",
+            "scope": "Xvfb 3시나리오 기존 결과"
+        },
+        {
+            "path": "tests/rust-file-snapshot/validation-a02146e1/result-audit.json",
+            "scope": "72 작성자 기존 결과"
+        }
+    ],
+    "limitations": [
+        "제품 snapshot->UI 연결 없음",
+        "메모리 thread는 OS worker가 아님",
+        "파일 게시 미포함",
+        "Windows/Ubuntu24/실제 사용자 display/IME/전체 접근성 미검증",
+        "기존 16실패/7미검증 및 execveat EACCES 보류를 유지함",
+        "main merge 없음"
+    ]
+}

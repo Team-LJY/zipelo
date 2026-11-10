@@ -1,0 +1,35 @@
+{
+    "direct": [
+        {
+            "name": "zlib-rs",
+            "version": "0.6.8",
+            "default_features": false,
+            "features": [
+                "rust-allocator"
+            ],
+            "license": "Zlib",
+            "source": "registry+https://github.com/rust-lang/crates.io-index",
+            "archive_sha256": "b268e58e7c693d7c271f93ffc4ba3b380412554231c85bf61ca7af91042a4112",
+            "verified_archive_source_files": {
+                "Cargo.toml": "85e89ef7d52508403f921caba72bb16545815e928083b6ab4ffecb8bf65c96b6",
+                "LICENSE": "e72111c52b7d96ebe25348dee19f0744f444d3c95ae6b1ecb6ccaecc5bce05ba",
+                "src/lib.rs": "30eeb6cf4b939db03130340b4ed83432c1710085445dfab12c820b8acc90708f",
+                "src/stable.rs": "ba6f0d5ce10aaa274b30103bc86c0766068b2dc62d7faafced1df8c782c0c703",
+                "src/crc32.rs": "2e5fde22a4fc26bd7a9e87a8716c7c7a381d8ee2da8763e8440c8cec0049681b"
+            }
+        }
+    ],
+    "selected_external_transitive": [],
+    "selected_features": [
+        "zlib-rs/rust-allocator"
+    ],
+    "not_selected": [
+        "std",
+        "c-allocator",
+        "arbitrary",
+        "quickcheck",
+        "__internal-api"
+    ],
+    "lock_external_packages": 1,
+    "notice_scope": "Single selected external package for this candidate, not final all-platform product distribution notices."
+}

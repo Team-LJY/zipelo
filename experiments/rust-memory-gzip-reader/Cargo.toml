@@ -1,0 +1,14 @@
+[package]
+name = "zipelo-memory-gzip-reader"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+zlib-rs = { version = "=0.6.8", default-features = false, features = ["rust-allocator"] }
+
+[workspace]

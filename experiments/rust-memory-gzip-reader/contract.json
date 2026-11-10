@@ -1,0 +1,137 @@
+{
+    "schema_version": 1,
+    "base_head": "018e7593ecb2b3a7ae0bc17a440ecf2c0de8b4dd",
+    "csharp_reference": {
+        "head": "f56324c98468076c57e18255ac1661a66fe26f84",
+        "pr": 18,
+        "paths": [
+            "tests/gzip-history-integration-probe/BoundaryProbe.cs",
+            "tests/gzip-history-integration-probe/PendingValidation.cs",
+            "tests/gzip-history-integration-probe/contract.json"
+        ]
+    },
+    "provenance": {
+        "implementation": "New Rust implementation of the C# boundary/budget behavior. No source inclusion or dependency on another candidate. Root MIT license applies.",
+        "api_reference": "PR33 90eafe0b4dcda137e90c78685b64abefa6f33357 experiments/rust-typed-deflate/src/typed_deflate.rs and cached zlib-rs 0.6.8 public API",
+        "differences_from_pr33": [
+            "No ZIP/JSON/base64, crc32fast, cfg-if, path source inclusion, provisional sink or expected ZIP size",
+            "Actual failed decode output charged before backend error propagation",
+            "No 131072-call ceiling; continuation requires consumed input or produced output"
+        ]
+    },
+    "api": {
+        "read": "read(Request { input: Box<[u8]>, selected: bool }, &mut Budget, FnMut(Checkpoint) -> Result<(), Stop<E>>) -> Result<Completed, Error<E>>",
+        "budget": "Budget::new(Limits), limits(), usage(), elapsed(). Caller retains the same mutable Budget across retries; no reset API. Instant starts at construction.",
+        "completed": "Boundary { header_bytes, deflate_bytes, read_ahead_bytes, inflated_bytes, crc32, member_bytes, offered_bytes }; bytes: Option<Vec<u8>>; cumulative usage snapshot",
+        "unselected": "None output still fully decodes and verifies. Some(empty Vec) distinguishes selected empty payload.",
+        "ownership": "Input consumed by ownership. Output stays private until successful final check after decoder drop. Failure drops all temporary output but retains budget charges. No early sink or user-controlled decoder injection."
+    },
+    "format": [
+        "Single GZip member only; exact magic, CM=8, reserved flags clear",
+        "Consume MTIME/XFL/OS and FTEXT without interpreting them",
+        "FEXTRA u16 length and exact bytes; FNAME/FCOMMENT terminated byte fields, never paths or Unicode strings",
+        "FHCRC lower 16 bits of zlib-rs CRC32 over preceding header bytes",
+        "Raw Inflate::new(false,15); typed Status and InflateError; no dictionary supplied",
+        "Actual StreamEnd consumed-input position defines trailer. Re-read read-ahead without duplicate input charge",
+        "Trailer little-endian CRC32 then ISIZE modulo 2^32 then exact EOF; reject concatenated members and any trailing bytes including zero"
+    ],
+    "limits": {
+        "input_per_call": 16777216,
+        "processed_cumulative": 134217728,
+        "selected_output_cumulative": 16777216,
+        "metadata_cumulative": 1048576,
+        "duration_seconds": 300,
+        "chunk_bytes": 65536,
+        "caller_limits": "Clamp to hard caps. u64 byte limits allow zero; zero duration invalid. Caller may only lower effective caps.",
+        "zero": "Input=0 rejects nonempty before parsing; metadata=0 rejects first header attempt; processed=0 rejects first input charge; output=0 still allows unselected decoding and selected empty payload.",
+        "metadata": "Each attempted header byte is charged, including FHCRC; trailer excluded. Metadata charge can survive truncated input.",
+        "processed": "Header input + bytes offered to decoder including read-ahead + any fresh trailer bytes + all decoded bytes, selected or not. Input high-water is per call; processed survives retries.",
+        "failed_output": "Validate total_out delta <=65536 then charge actual delta even on decoder Err. A decoded overrun remains in usage and future checks reject. Input/output/metadata charges that would exceed limits fail before increment.",
+        "allocation": "Charge selected output before try_reserve_exact and append; failure retains charge. Buffer size <=65536. No total allocator-memory or panic/OOM recovery guarantee."
+    },
+    "precedence": [
+        "Start checkpoint (Cancelled/Deadline/Callback(E)) then shared processed/time check then input-length cap",
+        "Ordinary header check then metadata charge then byte check/EOF/input charge. FHCRC metadata charge precedes byte check as in C#",
+        "BeforeInflate checkpoint/time check; new offered-input charge before decoder call",
+        "After decoder: invalid total_out delta => Boundary; valid actual decoded charge overrun => Budget; backend Err => Backend(original InflateError); only successful backend return reaches AfterInflate checkpoint/time check",
+        "Successful call then consumed-input validation, CRC update, selected-output charge/reserve/copy, AfterOutput checkpoint",
+        "StreamEnd checks, trailer CRC mismatch => Crc before Size before TrailingData; final decoder drop then BeforeReturn checkpoint/time check",
+        "Any callback Stop::Callback(E) returned unchanged. No later checkpoints after an error. Returned first error retained through normal decoder drop."
+    ],
+    "progress": {
+        "rule": "Each continued decoder call must consume >0 input or produce >0 output. Refill at exhausted window only, <=65536 bytes. Empty-input drain allowed for pending output. Zero progress without StreamEnd becomes Truncated if input exhausted, otherwise NoProgress.",
+        "finite": "Input <=16MiB; all output charged against cumulative128MiB (at most one chunk observed overrun). No repeated zero-progress calls and no arbitrary call-count ceiling.",
+        "limitations": "Typed backend has no IsNeedingInput property; zero-progress classification uses supplied/consumed positions. Exact SharpZipLib malformed-stream consumption and failure-cost identity is not claimed."
+    },
+    "checkpoint": {
+        "stages": [
+            "Start",
+            "Header",
+            "BeforeInflate",
+            "AfterInflate",
+            "AfterOutput",
+            "Trailer",
+            "BeforeReturn"
+        ],
+        "ordering": "Callback first, then Instant/processed check. Stop::Cancelled takes precedence over elapsed deadline at that check. Callback failure retains E; injected Stop::Deadline maps Budget.",
+        "granularity": "Header checked per byte, raw input and output at <=64KiB, after output and after decoder cleanup. Callback time counts; callback/codec cannot be forcibly interrupted.",
+        "observability": "Checkpoints expose usage, not provisional output. Stage calls are Rust API seams, not a claim of identical C# token poll counts."
+    },
+    "errors": {
+        "reader": [
+            "InvalidRequest",
+            "Header",
+            "Truncated",
+            "Boundary",
+            "Crc",
+            "Size",
+            "TrailingData",
+            "Budget",
+            "NoProgress",
+            "Allocation",
+            "Cancelled"
+        ],
+        "backend": "InflateError re-export, preserved NeedDict { dict_id }, StreamError, DataError, MemError",
+        "callback": "Original generic E preserved; no message matching, catch/default or blanket unwind handling",
+        "cleanup": "zlib-rs Drop runs decoder cleanup but does not expose its return status. No external sink Dispose in this API; no claim that cleanup failures, panic or OOM are recovered."
+    },
+    "tests": {
+        "status": "No regression execution in this implementation task. Separate regression owner to be assigned after fixed source head.",
+        "preserve": [
+            "Normal/header options/FHCRC/CRC/ISIZE/truncation/trailing member rejection",
+            "Budget exact boundaries/zero limits/failure charging/shared retries/cancellation/deadline/final-result discard"
+        ],
+        "adapt": [
+            "Partial feed and drain become adapter behavior cases, no arbitrary feed size public argument",
+            "Sink cancellation becomes checkpoint cancellation; HashSink becomes test hashing of Completed bytes",
+            "SharpZipLib backend failure becomes original typed zlib-rs error with separately tested counter/precedence behavior"
+        ],
+        "not_directly_applicable": [
+            "Mutable backing array with owned Box input",
+            "External sink/Dispose exception and injected inflater counter corruption",
+            "C# assembly identity, CLI, filesystem/Stream I/O"
+        ],
+        "not_claimed": [
+            "Existing C# 184+162 test counts or equivalent passes",
+            "Independent execution, Windows, full-product acceptance, performance or vulnerability-free dependency"
+        ]
+    },
+    "out_of_scope": [
+        "tar.gz/TAR interpretation",
+        "multiple members",
+        "disk publishing",
+        "worker/IPC/UI",
+        "encryption",
+        "main merge",
+        "C# deletion"
+    ],
+    "validation": {
+        "toolchain": "Rust/Cargo 1.99.1",
+        "build": "cargo +1.99.1 build --lib --locked --offline --manifest-path experiments/rust-memory-gzip-reader/Cargo.toml",
+        "target_directory": "tests/memory-gzip-build/target",
+        "build_exit": 0,
+        "regression_tests_executed": 0,
+        "format": "cargo +1.99.1 fmt --manifest-path experiments/rust-memory-gzip-reader/Cargo.toml",
+        "security_advisories": "Not checked in this implementation pass; no current advisory or vulnerability-free claim"
+    }
+}

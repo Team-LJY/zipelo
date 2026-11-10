@@ -1,0 +1,30 @@
+[package]
+name = "zipelo-ui-memory-app"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.99"
+license = "MIT"
+publish = false
+autotests = false
+
+[workspace]
+
+[lib]
+doctest = false
+
+[features]
+default = []
+ui = ["dep:eframe"]
+
+[dependencies]
+core_memory = { package = "zipelo-app-core-memory", path = "../rust-app-core-memory" }
+eframe = { version = "=0.37.0", optional = true, default-features = false, features = ["accesskit", "clipboard", "glow", "system_fonts", "wayland", "x11"] }
+
+[[bin]]
+name = "zipelo-ui-memory-app"
+path = "src/app.rs"
+required-features = ["ui"]
+
+[[test]]
+name = "ui_memory"
+path = "../../tests/rust-ui-memory-app/regressions.rs"
