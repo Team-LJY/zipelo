@@ -1,0 +1,54 @@
+{
+    "kind": "author source/static only",
+    "commands": [
+        {
+            "command": [
+                "rustfmt",
+                "+1.99.1",
+                "--edition",
+                "2024",
+                "experiments/rust-file-publication/src/lib.rs",
+                "experiments/rust-file-publication/src/linux.rs"
+            ],
+            "exit_code": 0,
+            "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+            "command": [
+                "rustfmt",
+                "+1.99.1",
+                "--edition",
+                "2024",
+                "--check",
+                "experiments/rust-file-publication/src/lib.rs",
+                "experiments/rust-file-publication/src/linux.rs"
+            ],
+            "exit_code": 0,
+            "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+            "command": [
+                "cargo",
+                "+1.99.1",
+                "metadata",
+                "--locked",
+                "--offline",
+                "--format-version",
+                "1",
+                "--manifest-path",
+                "experiments/rust-file-publication/Cargo.toml"
+            ],
+            "exit_code": 0,
+            "stdout_sha256": "22874e27b6910977181b21cc2fba7547531ae3ca782c86bab5dacd7f5017081b",
+            "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+    ],
+    "structural_checks": "passed; syntax/shape assertions, not typecheck or runtime evidence",
+    "rust_compile": false,
+    "publication_executed": false,
+    "regression_execution": false,
+    "dependency_archive_and_source_check": "libc 0.2.191 checksum and 452 cached regular files matched",
+    "limits": "No current advisory audit or filesystem support verification"
+}
