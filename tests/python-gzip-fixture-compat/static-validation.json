@@ -1,0 +1,196 @@
+{
+    "schema": 1,
+    "state": "python_static_checks_passed",
+    "base_head": "f7fc8cbece281e2f9a6374b4640ca4dd9d321fbc",
+    "base_tree": "ab5574289f537a4028a3abf092e4634cb9b89282",
+    "modified_files": [
+        "tests/rust-app-core-memory/SHA256SUMS",
+        "tests/rust-app-core-memory/generate_fixtures.py"
+    ],
+    "new_files": [
+        "tests/python-gzip-fixture-compat/overlay.json",
+        "tests/python-gzip-fixture-compat/verify.py",
+        "tests/python-gzip-fixture-compat/static-validation.json",
+        "tests/python-gzip-fixture-compat/SHA256SUMS"
+    ],
+    "checks": [
+        {
+            "environment": "host",
+            "fixture_and_overlay_check": {
+                "state": "passed",
+                "scope": "Python-only fixture bytes/provenance and fixed overlay verification; no Rust compile/run",
+                "base_head": "f7fc8cbece281e2f9a6374b4640ca4dd9d321fbc",
+                "base_tree": "ab5574289f537a4028a3abf092e4634cb9b89282",
+                "python": "3.14.4 (main, Aug 20 2026, 10:41:58) [GCC 15.2.0]",
+                "zlib_runtime": "1.3.1",
+                "base_paths_verified": 305,
+                "unchanged_base_paths": 303,
+                "changed_paths": [
+                    "tests/rust-app-core-memory/SHA256SUMS",
+                    "tests/rust-app-core-memory/generate_fixtures.py"
+                ],
+                "fixtures_hex_sha256": "b57d63624622ad0d17a0902a48bf9a514d1cb67be99d87d831bca4984d485e37",
+                "fixtures_json_sha256": "a1201119b4e74c9466affe0907025ae04ca24afb5d08aa55540fc42385cfe400",
+                "exact_bytes_and_json_equal": true,
+                "gzip_members_verified": 2,
+                "inputs_unchanged": true,
+                "rust_compiled": false,
+                "rust_executed": false
+            },
+            "unchanged_core_static_check": {
+                "source_head": "23b8d1c615f24f42469138fcc63e7fce7cda4f24",
+                "source_pins_verified": 69,
+                "manifest_sha256": "0c8a155a9b14c886b3c46f002e35a6f795d7b5a815c8ea7ed87526d3574cff30",
+                "declared": 67,
+                "selected_registry_packages": null,
+                "rust_compiled": false,
+                "runtime_discovered": null,
+                "runtime_executed": 0,
+                "fixture_stdlib_verification": true,
+                "inputs_unchanged": true
+            },
+            "native_checker_helper_tests_passed": 9,
+            "commands": [
+                {
+                    "argv": [
+                        "/usr/bin/python3",
+                        "-B",
+                        "tests/python-gzip-fixture-compat/verify.py"
+                    ],
+                    "cwd": "/home/user/projects/zipelo/tests/python-gzip-fixture-compat/validation-host/c",
+                    "exit": 0,
+                    "duration_seconds": 0.06062793799992505,
+                    "stdout_sha256": "b26c95ea637656791de1d6649deaefd3e9e07b0a9bc12981c980abc522ab0675",
+                    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                    "stdout_bytes": 812,
+                    "stderr_bytes": 0
+                },
+                {
+                    "argv": [
+                        "/usr/bin/python3",
+                        "-B",
+                        "tests/rust-app-core-memory/static_check.py",
+                        "--manifest-sha256",
+                        "0c8a155a9b14c886b3c46f002e35a6f795d7b5a815c8ea7ed87526d3574cff30"
+                    ],
+                    "cwd": "/home/user/projects/zipelo/tests/python-gzip-fixture-compat/validation-host/c",
+                    "exit": 0,
+                    "duration_seconds": 0.05417774899979122,
+                    "stdout_sha256": "0808164c77bab6d10130b0d8a3213834c18ba9533191636d9b86bd5532554a9e",
+                    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                    "stdout_bytes": 365,
+                    "stderr_bytes": 0
+                },
+                {
+                    "argv": [
+                        "/usr/bin/python3",
+                        "-B",
+                        "tests/rust-app-core-memory/static_check_helper_tests.py"
+                    ],
+                    "cwd": "/home/user/projects/zipelo/tests/python-gzip-fixture-compat/validation-host/c",
+                    "exit": 0,
+                    "duration_seconds": 1.4344941700001073,
+                    "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                    "stderr_sha256": "3c6cc1a67560b93d5f5856c2df5b5461dd0bddc9437b09f34eda4e9c9e0336ec",
+                    "stdout_bytes": 0,
+                    "stderr_bytes": 1176
+                }
+            ]
+        },
+        {
+            "environment": "ubuntu24",
+            "fixture_and_overlay_check": {
+                "state": "passed",
+                "scope": "Python-only fixture bytes/provenance and fixed overlay verification; no Rust compile/run",
+                "base_head": "f7fc8cbece281e2f9a6374b4640ca4dd9d321fbc",
+                "base_tree": "ab5574289f537a4028a3abf092e4634cb9b89282",
+                "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]",
+                "zlib_runtime": "1.3",
+                "base_paths_verified": 305,
+                "unchanged_base_paths": 303,
+                "changed_paths": [
+                    "tests/rust-app-core-memory/SHA256SUMS",
+                    "tests/rust-app-core-memory/generate_fixtures.py"
+                ],
+                "fixtures_hex_sha256": "b57d63624622ad0d17a0902a48bf9a514d1cb67be99d87d831bca4984d485e37",
+                "fixtures_json_sha256": "a1201119b4e74c9466affe0907025ae04ca24afb5d08aa55540fc42385cfe400",
+                "exact_bytes_and_json_equal": true,
+                "gzip_members_verified": 2,
+                "inputs_unchanged": true,
+                "rust_compiled": false,
+                "rust_executed": false
+            },
+            "unchanged_core_static_check": {
+                "source_head": "23b8d1c615f24f42469138fcc63e7fce7cda4f24",
+                "source_pins_verified": 69,
+                "manifest_sha256": "0c8a155a9b14c886b3c46f002e35a6f795d7b5a815c8ea7ed87526d3574cff30",
+                "declared": 67,
+                "selected_registry_packages": null,
+                "rust_compiled": false,
+                "runtime_discovered": null,
+                "runtime_executed": 0,
+                "fixture_stdlib_verification": true,
+                "inputs_unchanged": true
+            },
+            "native_checker_helper_tests_passed": 9,
+            "commands": [
+                {
+                    "argv": [
+                        "/usr/bin/python3",
+                        "-B",
+                        "tests/python-gzip-fixture-compat/verify.py"
+                    ],
+                    "cwd": "/work/g",
+                    "exit": 0,
+                    "duration_seconds": 0.06128367699966475,
+                    "stdout_sha256": "67dc65be2e5a781611c59af0a177b6e38b44e23c080f768c371fbe30630a23b2",
+                    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                    "stdout_bytes": 810,
+                    "stderr_bytes": 0
+                },
+                {
+                    "argv": [
+                        "/usr/bin/python3",
+                        "-B",
+                        "tests/rust-app-core-memory/static_check.py",
+                        "--manifest-sha256",
+                        "0c8a155a9b14c886b3c46f002e35a6f795d7b5a815c8ea7ed87526d3574cff30"
+                    ],
+                    "cwd": "/work/g",
+                    "exit": 0,
+                    "duration_seconds": 0.053824678000637505,
+                    "stdout_sha256": "0808164c77bab6d10130b0d8a3213834c18ba9533191636d9b86bd5532554a9e",
+                    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                    "stdout_bytes": 365,
+                    "stderr_bytes": 0
+                },
+                {
+                    "argv": [
+                        "/usr/bin/python3",
+                        "-B",
+                        "tests/rust-app-core-memory/static_check_helper_tests.py"
+                    ],
+                    "cwd": "/work/g",
+                    "exit": 0,
+                    "duration_seconds": 0.9235151720004069,
+                    "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                    "stderr_sha256": "f0fc6f693c225d34e802724d0f1d8f5337aca98e654a75a79cd92f9452d252c6",
+                    "stdout_bytes": 0,
+                    "stderr_bytes": 1176
+                }
+            ]
+        }
+    ],
+    "unchanged_original_files": 303,
+    "rust_source_test_files_unchanged": 53,
+    "frozen_fixture_hex_json_unchanged": true,
+    "original_native_static_checker_unchanged": true,
+    "historical_manifest_source_pins_and_execution_logs_unchanged": true,
+    "rust_expected_total_unchanged": 690,
+    "rust_compile_discover_execute": false,
+    "dependencies_changed": false,
+    "installation_or_network_change": false,
+    "remaining_owned_test_processes": [],
+    "limits": "Exact equality recorded on Python3.14.4/zlib1.3.1 and Python3.12.3/zlib1.3 only. No proof of identical compression across every future Python/zlib release.",
+    "future_gate": "Review fixed PR head/tree before a new Rust compile/run assignment; use this explicit overlay instead of rewriting historical pins."
+}

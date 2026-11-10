@@ -1,0 +1,21 @@
+[package]
+name = "zipelo-gzip-file-job-regressions"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.99"
+license = "MIT"
+publish = false
+autotests = false
+autoexamples = false
+autobenches = false
+
+[[test]]
+name = "file_job_public_api"
+path = "main.rs"
+
+[dependencies]
+job = { package = "zipelo-gzip-file-job", path = "../../experiments/rust-gzip-file-job" }
+libc = { version = "=0.2.191", default-features = false, features = ["std"] }
+sha2 = { version = "=0.10.9", default-features = false, features = ["std", "force-soft"] }
+
+[workspace]

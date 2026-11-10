@@ -1,0 +1,3506 @@
+{
+    "schema": 1,
+    "branch": "features/rust-verified-integration",
+    "base": {
+        "head": "f7fc8cbece281e2f9a6374b4640ca4dd9d321fbc",
+        "tree": "ab5574289f537a4028a3abf092e4634cb9b89282",
+        "count": 305
+    },
+    "inputs": [
+        {
+            "pr": 54,
+            "head": "5ff9b434d303ddda1689baabe6b1e6085854f9ae",
+            "base": "8600cee802bc08bfad171278133a22d94b64b597",
+            "base_ref": "features/rust-ui-system-fonts",
+            "tree": "f78b6936c5da550cc5b5756dd18fc63b7141dd1e",
+            "parents": [
+                "8600cee802bc08bfad171278133a22d94b64b597"
+            ]
+        },
+        {
+            "pr": 55,
+            "head": "287aaeb93f7e362d3b87354e8e372fcdd3ade146",
+            "base": "4c6ae4b3a7ab12a992598e94e7b02f3a167fbbd4",
+            "base_ref": "features/rust-gzip-file-job",
+            "tree": "472bbe201f41b86e60a6380aef02c516b75cc369",
+            "parents": [
+                "4c6ae4b3a7ab12a992598e94e7b02f3a167fbbd4"
+            ]
+        },
+        {
+            "pr": 56,
+            "head": "6eb499b9a4c33205ae4562c30879088e72a5252d",
+            "base": "f7fc8cbece281e2f9a6374b4640ca4dd9d321fbc",
+            "base_ref": "main",
+            "tree": "9fb81538ba780cbc00d90e8ebe9d4a7d1064a465",
+            "parents": [
+                "f7fc8cbece281e2f9a6374b4640ca4dd9d321fbc"
+            ]
+        }
+    ],
+    "input_tree": "822d1b0914ff6644d654d62b1e83b36d846731b0",
+    "count": 376,
+    "added_count": 71,
+    "preserved_base_count": 302,
+    "replacements": [
+        {
+            "path": "experiments/rust-ui-memory-app/src/app.rs",
+            "before": {
+                "path": "experiments/rust-ui-memory-app/src/app.rs",
+                "origin": "base",
+                "blob": "715ba9d662e507ad8a11b232edcefcf86276a14a",
+                "mode": "100644",
+                "sha256": "1cddb84c6a8c5e4188be79220c92532351e51979d7ad0edbc0a12ac5381ed72c"
+            },
+            "after": {
+                "path": "experiments/rust-ui-memory-app/src/app.rs",
+                "origin": 54,
+                "blob": "31cbd6e783de8a081a1948d47d43635da255ebfa",
+                "mode": "100644",
+                "sha256": "5bef670594b8edf6d9b979871da56447342c92126fd56c6acd9eb7e3a9cece95"
+            }
+        },
+        {
+            "path": "tests/rust-app-core-memory/generate_fixtures.py",
+            "before": {
+                "path": "tests/rust-app-core-memory/generate_fixtures.py",
+                "origin": "base",
+                "blob": "9cffa6f45fa063fcc77d0b48796bb42a38e938a8",
+                "mode": "100644",
+                "sha256": "203566ae81a254f4006924b74a3433a18b465950e5f1c9acb69e807809643534"
+            },
+            "after": {
+                "path": "tests/rust-app-core-memory/generate_fixtures.py",
+                "origin": 56,
+                "blob": "f0e89ea50d7e6178a4e4f6d3e29e8af6c6f63640",
+                "mode": "100644",
+                "sha256": "a358a8480c9f3addfcf9ab7572f31858ce59828436a1765faa6e427cfb062e11"
+            }
+        },
+        {
+            "path": "tests/rust-app-core-memory/SHA256SUMS",
+            "before": {
+                "path": "tests/rust-app-core-memory/SHA256SUMS",
+                "origin": "base",
+                "blob": "d2545fab5e8472abe8a49f2ba491d02d9cf27278",
+                "mode": "100644",
+                "sha256": "9855466588a5a145c70d3db49ca0e372aeb20f0142520df318954b424884d95e"
+            },
+            "after": {
+                "path": "tests/rust-app-core-memory/SHA256SUMS",
+                "origin": 56,
+                "blob": "278ee9a537cfe0777fb53f1227f95330dc6a1d04",
+                "mode": "100644",
+                "sha256": "0c8a155a9b14c886b3c46f002e35a6f795d7b5a815c8ea7ed87526d3574cff30"
+            }
+        }
+    ],
+    "conflicts": [],
+    "deleted": [],
+    "entries": [
+        {
+            "path": ".gitignore",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "e2a7b9460d928b2fe52286d4a492f7ac30f46800",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "assets/download-pending.svg",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "1fb42fd6cc0c0113a168f6d87812ab35c8db8315",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "docs/CORE_FIXES.md",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "71014bd740ee466912464ac321e50d1cf15510ab",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "docs/ENGINE_REVIEW.md",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "a9abd2b4c47fa05b3f91e0db7477c3d90a458191",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "docs/LINUX_PARENT_IDENTITY.md",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "266babc44b134e350d9cb6eef1d5f7638fee7f97",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "docs/LOCAL_ARCHIVE_OPEN.md",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "5fed5f4b3da9ae58023a165d95e26ea617a6ba9b",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "docs/PLANS.md",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "222319906feac600e64c965d4d70390b60de1f2e",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "docs/PLATFORM_SUPPORT.md",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "52fe2260b83ff547b1164b53cbe8f905ba1df118",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "docs/RUNTIME_SECURITY_REVIEW.md",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "52db3dcc7a65b26bf1e479f930f71c7834003228",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "docs/SECURITY_REVIEW.md",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "c61fc7f457bb2a80ae49f9df9ccbf6d063d83d4a",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "docs/UBUNTU_UI.md",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "bdbde23c2be9a08ea2b6bf1048f48b18fc15332f",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "docs/UI_CORE_HANDOFF.md",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "72e7b3ea03f40425effc221c9eafbffef06749ed",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "docs/WORKER_STREAM_PROTOCOL.md",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "2b5ccce575d7fe48affcaf1a11740992c50867a3",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "docs/ZIP_EXTRACTION.md",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "f167bbca9dd54c322114d70467b574c79e69f573",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "docs/ZIP_PUBLICATION.md",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "87db420cb820c46059936c14c0e27dde8ac3ce52",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "docs/ZIP_RUNTIME.md",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "1fa539b4a5afef9813c66f938d654f01c32b1edf",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "experiments/rust-app-core-memory/Cargo.lock",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "37b438af0cb4997dc0e9745e3985e77e31dbb3d0",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "experiments/rust-app-core-memory/Cargo.toml",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "625f39eb96a492a2f4673b1e9065f6331e73a3e9",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "experiments/rust-app-core-memory/contract.json",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "716afdb8b471ef0e5403ba9a5c4a25f9a01e70e5",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "experiments/rust-app-core-memory/dependencies.json",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "3e550f1fbc0331f27972a3cafd412d87cf11611d",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "experiments/rust-app-core-memory/LICENSE",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "5014abac33298592fd3450b51a9b414191e1aabc",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "experiments/rust-app-core-memory/SHA256SUMS",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "526e870c3e8667de26bbb3ad408521cb33df22e9",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "experiments/rust-app-core-memory/sources.json",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "74a3dec78cc76fe45aa7822e07549ec130657604",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "experiments/rust-app-core-memory/src/lib.rs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "3bea6de7efe5657614a4747f2b071abe35de21d9",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "experiments/rust-app-core-memory/THIRD-PARTY-NOTICES.txt",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "951447a0637ecc008123dbc2e8a8743741144d83",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "experiments/rust-file-publication/Cargo.lock",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "207c18a163029bf5059414e443d47340f701973e",
+            "sources": [
+                55
+            ]
+        },
+        {
+            "path": "experiments/rust-file-publication/Cargo.toml",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "769cad258dde0179ea8e32bd3d13a7579a791497",
+            "sources": [
+                55
+            ]
+        },
+        {
+            "path": "experiments/rust-file-publication/contract.json",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "e348369c0f9f0f0bb5bab9b26b4ed4659aac134b",
+            "sources": [
+                55
+            ]
+        },
+        {
+            "path": "experiments/rust-file-publication/dependencies.json",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "85b978be36080547024565031bc6a433e6a4b321",
+            "sources": [
+                55
+            ]
+        },
+        {
+            "path": "experiments/rust-file-publication/LICENSE",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "5014abac33298592fd3450b51a9b414191e1aabc",
+            "sources": [
+                55
+            ]
+        },
+        {
+            "path": "experiments/rust-file-publication/SHA256SUMS",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "b77cca2d6328d6c4512e3c62a65ca0b032937836",
+            "sources": [
+                55
+            ]
+        },
+        {
+            "path": "experiments/rust-file-publication/src/lib.rs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "19dcc817be97c8cbb18cb863b98ce6524e164406",
+            "sources": [
+                55
+            ]
+        },
+        {
+            "path": "experiments/rust-file-publication/src/linux.rs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "75a7194329af66458195b08e64d3e96a08495110",
+            "sources": [
+                55
+            ]
+        },
+        {
+            "path": "experiments/rust-file-publication/static-validation.json",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "7ac04313d01dd90ac905275c2e08cd2991789656",
+            "sources": [
+                55
+            ]
+        },
+        {
+            "path": "experiments/rust-file-publication/THIRD-PARTY-NOTICES.txt",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "fba3cf10cd0ff76bb025c1ff9cee6f17b4844197",
+            "sources": [
+                55
+            ]
+        },
+        {
+            "path": "experiments/rust-file-snapshot/Cargo.lock",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "f78b06aafe24e649c3b8dbf1e80f84875665916d",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "experiments/rust-file-snapshot/Cargo.toml",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "5f13cef3e22861c18da16a0aa45ed990a448d1bf",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "experiments/rust-file-snapshot/contract.json",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "93c7b53f2441eee3d98db58dcca8ece47b1094d6",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "experiments/rust-file-snapshot/dependencies.json",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "cf8c2f473069573ba29b9cf278d7a09eac83adca",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "experiments/rust-file-snapshot/LICENSE",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "5014abac33298592fd3450b51a9b414191e1aabc",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "experiments/rust-file-snapshot/SHA256SUMS",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "76201cbad9d40111091cb320744f59bb07b4bc65",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "experiments/rust-file-snapshot/src/lib.rs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "b119facbf8cef61cb1877b7cef9f921f4d63d311",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "experiments/rust-file-snapshot/src/linux.rs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "ed9af89904de5a4b44673b098e944b35faa3075f",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "experiments/rust-file-snapshot/THIRD-PARTY-NOTICES.txt",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "c18cb9011479d97d247bf403c128e5923fa769c9",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "experiments/rust-gzip-file-job/Cargo.lock",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "ac727b854d6d077e6e82cd6f2a6ec8687fb90a0a",
+            "sources": [
+                55
+            ]
+        },
+        {
+            "path": "experiments/rust-gzip-file-job/Cargo.toml",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "e8b16d664942b3f6782e0daa27d3965eabfa7716",
+            "sources": [
+                55
+            ]
+        },
+        {
+            "path": "experiments/rust-gzip-file-job/contract.json",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "f1f7ec8d84b644486d46e084dd64509f7e1925ce",
+            "sources": [
+                55
+            ]
+        },
+        {
+            "path": "experiments/rust-gzip-file-job/dependencies.json",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "552885ea312260dc2e289366f14407c605e3c8d9",
+            "sources": [
+                55
+            ]
+        },
+        {
+            "path": "experiments/rust-gzip-file-job/LICENSE",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "5014abac33298592fd3450b51a9b414191e1aabc",
+            "sources": [
+                55
+            ]
+        },
+        {
+            "path": "experiments/rust-gzip-file-job/SHA256SUMS",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "c7ac5be9104abbe123d3cd66762a3f046dade0f0",
+            "sources": [
+                55
+            ]
+        },
+        {
+            "path": "experiments/rust-gzip-file-job/source-pins.json",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "a080b5d20ca65f1f8d14d6321faa626fe8ac5217",
+            "sources": [
+                55
+            ]
+        },
+        {
+            "path": "experiments/rust-gzip-file-job/src/lib.rs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "e7f1ee35efb71a1022c52a2e2e44b35780ae98e4",
+            "sources": [
+                55
+            ]
+        },
+        {
+            "path": "experiments/rust-gzip-file-job/src/types.rs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "58f1966f7b9b20a15a27cdc11ac217fbfd1ab9e5",
+            "sources": [
+                55
+            ]
+        },
+        {
+            "path": "experiments/rust-gzip-file-job/static-validation.json",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "8ba55e6b262a3fb2677bac8a022e3583f08b914f",
+            "sources": [
+                55
+            ]
+        },
+        {
+            "path": "experiments/rust-gzip-file-job/THIRD-PARTY-NOTICES.txt",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "93ab1f0bd590597015c867ce9ee7dee5a01b1a1d",
+            "sources": [
+                55
+            ]
+        },
+        {
+            "path": "experiments/rust-memory-gzip-reader/Cargo.lock",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "a638f9b00ea1d76a99ccd93ea465ef9df4163c7a",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "experiments/rust-memory-gzip-reader/Cargo.toml",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "1b1b77e23d39cde1f05e55f73b62f68cf77dd9c6",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "experiments/rust-memory-gzip-reader/contract.json",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "02729ca349d5629b1a9fcd7040441db2e2660065",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "experiments/rust-memory-gzip-reader/dependencies.json",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "bf9da9b737d9d574d5e31fb8343f844b61e4c192",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "experiments/rust-memory-gzip-reader/LICENSE",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "5014abac33298592fd3450b51a9b414191e1aabc",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "experiments/rust-memory-gzip-reader/SHA256SUMS",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "e248c4827c2fb2e82a5e92f80deb0d744209c65c",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "experiments/rust-memory-gzip-reader/src/budget.rs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "0fa6fd1cdb541896540b7003168e5db71c11cb4b",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "experiments/rust-memory-gzip-reader/src/lib.rs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "1811dfc7ec0917da607727e7942b5a268ac7330a",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "experiments/rust-memory-gzip-reader/THIRD-PARTY-NOTICES.txt",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "f56aa8d736e78465701ac62fa5ad26d4d7dc05c9",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "experiments/rust-memory-ustar-reader/Cargo.lock",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "4016006d7b01deb8efebff0e1d44218a0dd4b376",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "experiments/rust-memory-ustar-reader/Cargo.toml",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "42de96e4aa4c89a243ad988fa7a7f724ff70dc01",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "experiments/rust-memory-ustar-reader/contract.json",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "8ae86c21671984209bc30973605d61327259aa16",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "experiments/rust-memory-ustar-reader/dependencies.json",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "f9d8b8d2f82f758894ad2698c50107b2341fb183",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "experiments/rust-memory-ustar-reader/LICENSE",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "5014abac33298592fd3450b51a9b414191e1aabc",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "experiments/rust-memory-ustar-reader/SHA256SUMS",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "b8868532047fb561fc9fc987b1cbbb9c8daab298",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "experiments/rust-memory-ustar-reader/src/budget.rs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "1eab0733b90b66fc12b5db2931fb7dcb08d80c13",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "experiments/rust-memory-ustar-reader/src/header.rs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "d278d372076b40715c6f73e1f0c67b54293566ca",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "experiments/rust-memory-ustar-reader/src/lib.rs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "ce8e3b751a53a66f5d0cfaab15ffdeea92fae98f",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "experiments/rust-memory-ustar-reader/THIRD-PARTY-NOTICES.txt",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "8540c10d9c03253ce1ed31142fe98229ab6d90cf",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "experiments/rust-memory-zip-create/Cargo.lock",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "aed6fe07391fce292edebb5206f98a617d2c4376",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "experiments/rust-memory-zip-create/Cargo.toml",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "899e96fbbd98053ff521d7f29aa2b682fccafb08",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "experiments/rust-memory-zip-create/contract.json",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "6be643ca9603b688f705eae172bb276d4afff35a",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "experiments/rust-memory-zip-create/SHA256SUMS",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "b6738fe846fa737f5cacd53147a1492e917b73d5",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "experiments/rust-memory-zip-create/src/lib.rs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "08cea1778ec21e4403f752901de9bfc7fa1ee8c9",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "experiments/rust-memory-zip-create/src/storage.rs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "1b61dd18f5e41e86ffdde752fc6ebc828a2c1b8c",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "experiments/rust-ui-memory-app/Cargo.lock",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "ac33c507896385a564b5c43c7c0ee5038b8e2777",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "experiments/rust-ui-memory-app/Cargo.toml",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "eb63fb6b15134eccce5223f35ee82e300ffc4d25",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "experiments/rust-ui-memory-app/LICENSE",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "5014abac33298592fd3450b51a9b414191e1aabc",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "experiments/rust-ui-memory-app/src/app.rs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "31cbd6e783de8a081a1948d47d43635da255ebfa",
+            "sources": [
+                54
+            ]
+        },
+        {
+            "path": "experiments/rust-ui-memory-app/src/controller.rs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "2adeae347a3309f33ea6ee546565239167285747",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "experiments/rust-ui-memory-app/src/lib.rs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "0f0f5e2bcbaccb8a2ca21336e4061ae784f22c0d",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "experiments/rust-ui-memory-app/src/runtime.rs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "1389c589ab7e8c54b97e170ba1f36304ef3a07e8",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "experiments/rust-ui-memory-app/src/system_font.rs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "1dbe29039a1fde2686366422eb04c30a4068f7bc",
+            "sources": [
+                54
+            ]
+        },
+        {
+            "path": "experiments/rust-ui-memory-app/src/transport.rs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "39c50acd5d1943009483f9198d3a7e0a9fe2a903",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "experiments/rust-ui-memory-app/THIRD-PARTY-NOTICES.txt",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "e8bbe2fcdbd2fc0e7a7755f581c0776de54ec2d9",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "LICENSE",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "5014abac33298592fd3450b51a9b414191e1aabc",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "README.md",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "39ba037fdcab91d1be64622328b1db88ba1f55d3",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "src/Zipelo.Core/ArchiveContracts.cs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "824df6a63f24abf3abfa1517534978e78d20df87",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "src/Zipelo.Core/ArchiveJob.cs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "9da5ac64166f554d3b5bec1a0883a4c7519a1505",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "src/Zipelo.Core/EngineContext.cs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "2be57080632563c998857f37ebcb2c677aa14506",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "src/Zipelo.Core/JobBudget.cs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "339bd7d050d5328f0288922543691ca65eaf7f68",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "src/Zipelo.Core/OutputPathPolicy.cs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "2137722b9d8313116fb1ad1423a9a9cc1495f9e5",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "src/Zipelo.Core/Zipelo.Core.csproj",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "4ac43012b1e508a0a2abb29f5ba548073e41bb19",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "src/Zipelo.Desktop/app.manifest",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "95aee939fe74536af487ce632db4421a739acecb",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "src/Zipelo.Desktop/App.xaml",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "4901ecbf8c4f7f03a38148f1ec2b83600ed33761",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "src/Zipelo.Desktop/App.xaml.cs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "d182390d7e5c0478bc0a3c2031c98eafc37e853c",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "src/Zipelo.Desktop/ArchiveOpenArguments.cs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "79f01b4f5650728b80e91893b927fcd3d4ab87e4",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "src/Zipelo.Desktop/CoreWorkspace.cs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "617877d985a72bfd9c77eb6833de6c689a0db94e",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "src/Zipelo.Desktop/CreationWorkspace.cs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "d0ecf699a948c1dcbc7f6bc4a0ff32c3acecb5b7",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "src/Zipelo.Desktop/MainWindow.xaml",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "16a91b9d66f44d1e7e198d6558e7a0800e213552",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "src/Zipelo.Desktop/MainWindow.xaml.cs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "0f899bd886fd7db275d95fb27958a287720dfad9",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "src/Zipelo.Desktop/PasswordWindow.xaml",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "2e06cf63a06ae684c3590194480ed5fa3a308333",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "src/Zipelo.Desktop/PasswordWindow.xaml.cs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "42a019f151fc1dcba0233ec755c706a388b01951",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "src/Zipelo.Desktop/Properties/PublishProfiles/WindowsX64.pubxml",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "f6e99599fe4a0bd319170697f1735f601eaf9990",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "src/Zipelo.Desktop/WorkerDeployment.targets",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "d3b168d3491bfb1c80313eb64f4460706de8245b",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "src/Zipelo.Desktop/WorkspaceMessages.cs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "6f595d683d8d83618ef809fb4cb10908d93a1dbf",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "src/Zipelo.Desktop/WorkspacePort.cs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "a158dd0288319fc21168db264f800a92a7007856",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "src/Zipelo.Desktop/ZipCreationWorkflow.cs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "3efe8549b4fc6d7c27f84b3bcc29f4ab11f291ae",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "src/Zipelo.Desktop/Zipelo.Desktop.csproj",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "fe674648255ed26485a08d6e02001a89846a0c0b",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "src/Zipelo.Desktop/ZipExtractionWorkflow.cs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "edf9b9895e4d8e36d87f7422dfd9ea6cd6a99ebb",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "src/Zipelo.Desktop/ZipWorkerWorkspace.cs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "6311538270ee67c967b982214c20c3d37c585a0f",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "src/Zipelo.Runtime/LinuxFolderPublication.cs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "8e8ad800cda65e51644c5982c7aa34bca27a3483",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "src/Zipelo.Runtime/LinuxPublication.cs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "52b43495becdf7f30280d579bca0c79ca143cb80",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "src/Zipelo.Runtime/NewFolderPublisher.cs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "3caa30eca46918f77a1ac29c03f12993e60b05d1",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "src/Zipelo.Runtime/NewZipPublisher.cs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "4c6e34f289700f40f342f1bc3fde351de3c234a2",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "src/Zipelo.Runtime/PendingFolderPublication.cs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "fb4f2b498740032a84a5aef57ca5007ff714b0ce",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "src/Zipelo.Runtime/Streaming/WorkerStreamChannel.cs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "7c2053a1f8d00f49f0365eecc4729c4df0e94d0c",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "src/Zipelo.Runtime/Streaming/WorkerStreamContract.cs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "5b15d7dc3feb7be303473f088f8d1d0604d665a3",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "src/Zipelo.Runtime/Streaming/WorkerStreamValidator.cs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "9543c4d0ed5ac32355f0e8e33544ae5711c83534",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "src/Zipelo.Runtime/WindowsFolderGuard.cs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "41bbac6e6a530ddd29b61cb3f03aa2c08f4590f2",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "src/Zipelo.Runtime/WindowsFolderPublication.cs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "03c97d5bfcf06d1471d4553b726a27924d6631ab",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "src/Zipelo.Runtime/WindowsPublication.cs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "8d996d9e6c07f615ba7d1487281e862ecd8a3def",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "src/Zipelo.Runtime/WorkerPlatform.cs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "f4c7f85691a65c57dda910a4f42889e3a9feb60c",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "src/Zipelo.Runtime/WorkerProtocol.cs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "3d6bd65c01002cef64b9be8ee7c13b5004dd0c96",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "src/Zipelo.Runtime/Zipelo.Runtime.csproj",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "67416c08e263ad27c9bb5a4c29f39683f7061263",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "src/Zipelo.Runtime/ZipExtraction.cs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "15d157ffba9ec2bc6d68ce546dad4d967264959f",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "src/Zipelo.Runtime/ZipWorkerClient.cs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "bfaaa54f7c97ec0f5cf8b41d377c513ac61c425c",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "src/Zipelo.Ubuntu/App.axaml",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "eb4990471aeaf2f95933b20a0faa64ad3373e61c",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "src/Zipelo.Ubuntu/App.axaml.cs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "1eaa7618b98a0e5bed96f38f416d3a263cd85f70",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "src/Zipelo.Ubuntu/MainWindow.axaml",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "9adadffffec51b327c87ba0696366d80eae82e42",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "src/Zipelo.Ubuntu/MainWindow.axaml.cs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "9e58b2430d8a3ee074b25dc94fa6f0a2d89f9c84",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "src/Zipelo.Ubuntu/Program.cs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "01bccf005744b0f3febd7aab17fc943dc1cb54c6",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "src/Zipelo.Ubuntu/Properties/PublishProfiles/LinuxX64.pubxml",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "05b76dd94a6e59eb44bc53dd5bc2acbb24ee999f",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "src/Zipelo.Ubuntu/UbuntuWorkspace.cs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "84595ac4c56725fa2b6bdd3dc589af058e0f708d",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "src/Zipelo.Ubuntu/WorkerDeployment.targets",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "f1553b4683b23949c9cb713ae658a30642878b87",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "src/Zipelo.Ubuntu/Zipelo.Ubuntu.csproj",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "719281e021e50b9fb9b0f411fc17518ab0e6c5b5",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "src/Zipelo.Worker/BoundedMemoryOutput.cs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "694a953eb2d5e8e36c389336058e0314c46fe929",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "src/Zipelo.Worker/BuiltInZipEngine.cs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "5374834e8f219a8618153a829fd30d9f57df217a",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "src/Zipelo.Worker/Program.cs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "d9bc6d42aaf7eb1d18e42b9c45dec6616f04de34",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "src/Zipelo.Worker/Tar/UstarReader.cs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "029564826ec038fe66b5007006e663fe6df6a17e",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "src/Zipelo.Worker/Zipelo.Worker.csproj",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "8d3550174cc99560a59acc6f69c6f621d6b9cf8d",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "src/Zipelo.Worker/ZipExtractor.cs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "2a4df0c40f5c35a101d95cf00e236700f2963e2e",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/extraction/check_extraction_fixtures.py",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "e706b3d4544ee82573205cb4890349daf55e756d",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/extraction/coverage.json",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "e21c76eb5c3e1a3aef224df3fbbe7f1051baaf88",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/extraction/fixture_factory.py",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "2ae07dd9ca70a84b8dac5c0c69f8c6c73276d1d8",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/extraction/fixtures.json",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "9880275c366006aec3a5e9b32d48ebb5e571306f",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/extraction/fixtures/absolute-drive.zip",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "7d6ec928c4463923404136cc91bc6312b3125ed5",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/extraction/fixtures/absolute-posix.zip",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "66418938a31b7cefc6334f09315714296f36519c",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/extraction/fixtures/absolute-unc.zip",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "16442b54c9d6e147c043073542dab3204fdef3eb",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/extraction/fixtures/backslash-traversal.zip",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "443991c7055457916e626f20861a622d56e40e4e",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/extraction/fixtures/bad-header-crc.zip",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "bdf5c84974318f1b1dfc8af793f9d837b8641cb3",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/extraction/fixtures/bad-payload-crc.zip",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "565141e52c3402c364c2470a6cf78b77cce5f173",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/extraction/fixtures/case-distinct.zip",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "962f8b5e23e10646a9cde08e45a4b737cd366ea1",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/extraction/fixtures/child-before-file.zip",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "1acae8ac583f639c40ec20aacfa0abebd8d5185d",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/extraction/fixtures/cumulative.zip",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "89033750b225c162cb09dfecdf37b9157b9e6714",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/extraction/fixtures/duplicate.zip",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "9f8e6ca3b9acac50f5c5edadc21ba1a0ddfda4fb",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/extraction/fixtures/file-before-child.zip",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "1cf1452b0302cab924a233fc46733b71917f02d0",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/extraction/fixtures/length-larger.zip",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "44e813082c7938cc13dc51b3ec8bcd1f83d295b9",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/extraction/fixtures/length-smaller.zip",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "d014cccd5cac277f5f21d4dd08f33170cc116412",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/extraction/fixtures/linux-names.zip",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "aba8825579b037f6349ce4d14a8b270c4166ec2b",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/extraction/fixtures/local-central-length.zip",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "8a304afc3adbd1511d9f06cea84988dbba93d57d",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/extraction/fixtures/normal-deflated.zip",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "181d31a2f0ad4e5766e2ab534f5209822a79c914",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/extraction/fixtures/normal-stored.zip",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "15890d40fd881e72b01d515038b2e58cf6aacaf3",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/extraction/fixtures/special-fifo.zip",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "c8ae82b1eef90333c876488d11eaa49777fc2280",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/extraction/fixtures/symlink.zip",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "826e0324a578beb37e46b7d6e68712d961be4f81",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/extraction/fixtures/traversal.zip",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "947052d707a095c5d2212b4b351b8e52f00844aa",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/extraction/fixtures/truncated.zip",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "277461c63ff1d17f193360421ed7ae91cea9cef0",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/extraction/fixtures/unix-hardlink.zip",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "e127cab0188de7cbabaae2efcfede40980bfa3e9",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/extraction/folder_publication_review.json",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "dd748ca30fbbb8c9cf2a435869c83b5ebb209d25",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/frontend/check_desktop.py",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "fb3cc086ca27c205274eb17bfb2aaa6621b5877c",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/gzip-boundary-probe/Program.cs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "5ad9c6ba629f36032f2cc163b71a14eca86b041e",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/gzip-history-integration-probe/BoundaryProbe.cs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "b8ac8c447611da941f7b678e5d8b1fff297f4380",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/gzip-history-integration-probe/BudgetRegression.cs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "31dcd37d280722e56a6bacb99f8978615b0f67cd",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/gzip-history-integration-probe/contract.json",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "035ff86220f862396336cee8aa4fb2724115ba49",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/gzip-history-integration-probe/FinalizationRegression.cs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "f70864627541314440cc7fe413c2e91528c63e7b",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/gzip-history-integration-probe/IntegrationProgram.cs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "16b7d1e36267ee881916e620126a77cd48806bc5",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/gzip-history-integration-probe/PendingValidation.cs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "3160f5ca588f9093932606a7096786bc4468a1f0",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/python-gzip-fixture-compat/overlay.json",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "276caf743e103adec299dcbb7235b29415a2aada",
+            "sources": [
+                56
+            ]
+        },
+        {
+            "path": "tests/python-gzip-fixture-compat/SHA256SUMS",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "16f725129d743c57b03af219be87951321b43bef",
+            "sources": [
+                56
+            ]
+        },
+        {
+            "path": "tests/python-gzip-fixture-compat/static-validation.json",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "b7a4938d63ac5bf01af577e0e4fecf7629e2d58a",
+            "sources": [
+                56
+            ]
+        },
+        {
+            "path": "tests/python-gzip-fixture-compat/verify.py",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "53de31ba78e7dd4c642b80da1958633addfb0a6a",
+            "sources": [
+                56
+            ]
+        },
+        {
+            "path": "tests/run_checks.py",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "9bdb335fa43da57d2637772182a419cf754fa2af",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/runtime/ExtractionPublicationTests.cs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "2610a201a56691dd8fb0943e03f2e7848b27f712",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/runtime/ExtractionTests.cs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "3cc57a7bf3680f30564ac10de1e9727d70d864a4",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/runtime/FolderConcurrencyTests.cs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "1bf0308aadc3f487e782345bb829785533bf01ad",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/runtime/FolderEnvironment.cs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "16938e33776a24b3c53af567c813b7b814e7dd8c",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/runtime/Program.cs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "29ff2970fa25ba420b79eb9bd4839aa7334f8e62",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/runtime/ProtocolPeer.cs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "38df416094e1302366ab705d628810e219f02c98",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/runtime/PublicationTests.cs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "6c70111cd0425a063f3ec5da0d82486c1ea0e8f8",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/runtime/RuntimeTests.cs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "5dd054c1619f6207e8bc861e885ab1cd04d2b5cc",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/runtime/TestWorkerLaunch.cs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "c41a87c06bf75b3b3398b89173e6a98a38266c65",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/runtime/Zipelo.RuntimeTests.csproj",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "ccbdc87b719247b450b6f0a27807f31e45a5023e",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-app-core-memory/Cargo.lock",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "eae7e57816ef72adaaab9fe93aec5fec5e46bece",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-app-core-memory/Cargo.toml",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "8c332016cc02e7b4773a49ad0dc13467946a6430",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-app-core-memory/contract.json",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "dd1753a95ad0a79bc8dd4cfe01cf2d5696305891",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-app-core-memory/control.rs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "0879cc8098006940a1167838fb8fa73ba43b3096",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-app-core-memory/delivery.rs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "e8e0ca1e12f083a3f7379b2566d20571936b0865",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-app-core-memory/fixtures.hex",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "eb5b850d53aecc10faceda06487aedcf11b9d69b",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-app-core-memory/fixtures.json",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "c99006473c972a379ab4d67d976bf52598d5b4d8",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-app-core-memory/generate_fixtures.py",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "f0e89ea50d7e6178a4e4f6d3e29e8af6c6f63640",
+            "sources": [
+                56
+            ]
+        },
+        {
+            "path": "tests/rust-app-core-memory/gzip.rs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "3b21be1be14692411c9fc5d3fd65d9c8af4f9c43",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-app-core-memory/main.rs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "28c2a657317d6de7f9b8d3793be45cea47191622",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-app-core-memory/send.rs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "1af0dbbfb93d201f04e97cf4bb0f525cae8945e6",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-app-core-memory/SHA256SUMS",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "278ee9a537cfe0777fb53f1227f95330dc6a1d04",
+            "sources": [
+                56
+            ]
+        },
+        {
+            "path": "tests/rust-app-core-memory/source-pins.json",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "c56a528a156935c9d0ab237b025f5c4fbc3ca2a5",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-app-core-memory/static_check_helper_tests.py",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "33fb25cd2caa5ce18f4db49fbee1407dcc6ee7be",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-app-core-memory/static_check.py",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "4ed2f9ff1368a0143760f5280a818c9221ec2149",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-app-core-memory/support.rs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "ad496fbf5491cb6429832b81340ebe4644d1f3d8",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-app-core-memory/ustar.rs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "73cc673b350b9039db7e7067c6a900759374f112",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-app-core-memory/zip.rs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "fb0e1a0f4864fb75c855407c33d6ba2b23814353",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-file-publication/boundaries.rs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "8015e1a2625396ca751c5061c98069b22810219b",
+            "sources": [
+                55
+            ]
+        },
+        {
+            "path": "tests/rust-file-publication/Cargo.lock",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "8ed1897013ff1a614a688f1c48d6f5e130f43fae",
+            "sources": [
+                55
+            ]
+        },
+        {
+            "path": "tests/rust-file-publication/Cargo.toml",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "0aa3254aed62345fc19131cbfade46463a99243f",
+            "sources": [
+                55
+            ]
+        },
+        {
+            "path": "tests/rust-file-publication/concurrency.rs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "3dfe60f7b3723c3f5de34ef569ffac8cda5d21de",
+            "sources": [
+                55
+            ]
+        },
+        {
+            "path": "tests/rust-file-publication/contract.json",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "e04fba5496be674eae36a8d2351231fbf8db3249",
+            "sources": [
+                55
+            ]
+        },
+        {
+            "path": "tests/rust-file-publication/control.rs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "0711e1a9d1cf5c4c5088f98503c6b903cd4e6cba",
+            "sources": [
+                55
+            ]
+        },
+        {
+            "path": "tests/rust-file-publication/main.rs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "e3e17265bd01ca812955e4b80059544d439492d5",
+            "sources": [
+                55
+            ]
+        },
+        {
+            "path": "tests/rust-file-publication/models.rs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "86d83398e98119d3bc37f3fec4a510ac09152729",
+            "sources": [
+                55
+            ]
+        },
+        {
+            "path": "tests/rust-file-publication/namespace.rs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "e19f4c437126aded0bc35ad5dd2b620574e022a9",
+            "sources": [
+                55
+            ]
+        },
+        {
+            "path": "tests/rust-file-publication/paths.rs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "07d0193c90a4daa82e4948ed567b708770c8042b",
+            "sources": [
+                55
+            ]
+        },
+        {
+            "path": "tests/rust-file-publication/run-plan.json",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "dd9fc9780a4a89b48ffad747af649a5c7afebd01",
+            "sources": [
+                55
+            ]
+        },
+        {
+            "path": "tests/rust-file-publication/SHA256SUMS",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "d6fe18963d9090f9213fa549c604bef8f1b02eba",
+            "sources": [
+                55
+            ]
+        },
+        {
+            "path": "tests/rust-file-publication/source-pins.json",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "f518e707b2472498c5e0a3d04ad4a5b53815124a",
+            "sources": [
+                55
+            ]
+        },
+        {
+            "path": "tests/rust-file-publication/static_check_helper_tests.py",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "cd2d2303fcc7a7b1ff20916949f7a248e312fe49",
+            "sources": [
+                55
+            ]
+        },
+        {
+            "path": "tests/rust-file-publication/static_check.py",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "e3fdf2bac3d1f10f5dd3a014d3f482b371b394dc",
+            "sources": [
+                55
+            ]
+        },
+        {
+            "path": "tests/rust-file-publication/support.rs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "ef7c2c546d8a518ecb397d7639e4cc1ae2e3ca2e",
+            "sources": [
+                55
+            ]
+        },
+        {
+            "path": "tests/rust-file-snapshot/boundaries.rs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "b901e5499ca5a6ebf0c7f3f2f7dfd4afb008a14f",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-file-snapshot/Cargo.lock",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "142da773c8ad8230daf94d358d0d60ba6dee9a97",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-file-snapshot/Cargo.toml",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "1c2fad21cf4725cc1184762646a40b6eeb7de341",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-file-snapshot/contract.json",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "bb5c342a9b9812380d8f08296013449ecab57a98",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-file-snapshot/control.rs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "876810cdabe09ca26795b28e64e264d387556258",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-file-snapshot/main.rs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "72407c900a704c52b650e0b8ba81f9578d6a5f25",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-file-snapshot/mutations.rs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "9a0bc858aeff8eba53d75faae34fef3d903cda32",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-file-snapshot/paths.rs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "996ef55eb50a0611396482df1ce433b6add7a662",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-file-snapshot/SHA256SUMS",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "6a84e1dfadc2f65c4db2720b0b1c919526ca8e25",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-file-snapshot/source-pins.json",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "c67975080795265ef1bcecef4b38790929398f25",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-file-snapshot/static_check_helper_tests.py",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "e0ff64f8e9b4a56e552f41f0966f481aa5563028",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-file-snapshot/static_check.py",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "ea8054688e292030a390bea58a65e7669cd38bc6",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-file-snapshot/support.rs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "752fec696adbde8ebf048b2d65eec0941d03b3fa",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-gzip-file-job/Cargo.lock",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "daa9fdd3788dc00f77bbc33816cf34cd2c43a945",
+            "sources": [
+                55
+            ]
+        },
+        {
+            "path": "tests/rust-gzip-file-job/Cargo.toml",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "9c8b835167a6355ffbcf290557eb5b43cc53510a",
+            "sources": [
+                55
+            ]
+        },
+        {
+            "path": "tests/rust-gzip-file-job/concurrency.rs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "2917e7ca27b41a490ba62f88a85ea752c5e4efbb",
+            "sources": [
+                55
+            ]
+        },
+        {
+            "path": "tests/rust-gzip-file-job/contract.json",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "e72a00aff7a3665a9c6381edb834d903cd2dddf8",
+            "sources": [
+                55
+            ]
+        },
+        {
+            "path": "tests/rust-gzip-file-job/control.rs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "f28d11778224786f9a89481ad27138b22b11964e",
+            "sources": [
+                55
+            ]
+        },
+        {
+            "path": "tests/rust-gzip-file-job/fixtures.rs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "9eada968dc0b11562d3fc60074720e8993c50d72",
+            "sources": [
+                55
+            ]
+        },
+        {
+            "path": "tests/rust-gzip-file-job/invalid.rs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "c0f1acc22202ef84dd7ebfa7b8a25448f6bb9b8c",
+            "sources": [
+                55
+            ]
+        },
+        {
+            "path": "tests/rust-gzip-file-job/limits.rs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "c90e7c0efb060ce127790fd27333fe707a784806",
+            "sources": [
+                55
+            ]
+        },
+        {
+            "path": "tests/rust-gzip-file-job/main.rs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "cad4c4fb184be2d111d8b62c2f3d927789f62a94",
+            "sources": [
+                55
+            ]
+        },
+        {
+            "path": "tests/rust-gzip-file-job/namespace.rs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "4843944784abedffc7250ff833fe5e04d2d9a6f6",
+            "sources": [
+                55
+            ]
+        },
+        {
+            "path": "tests/rust-gzip-file-job/run-plan.json",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "12608ae3791fe1dcd47fc3d0a5b9d52980171b74",
+            "sources": [
+                55
+            ]
+        },
+        {
+            "path": "tests/rust-gzip-file-job/SHA256SUMS",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "dda7614a6f8668b550626e6937877b4085243342",
+            "sources": [
+                55
+            ]
+        },
+        {
+            "path": "tests/rust-gzip-file-job/source-pins.json",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "677516d8f4eaf0bf8afc74e3d2b21c3f9691f6bb",
+            "sources": [
+                55
+            ]
+        },
+        {
+            "path": "tests/rust-gzip-file-job/static_check_helper_tests.py",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "cd2d2303fcc7a7b1ff20916949f7a248e312fe49",
+            "sources": [
+                55
+            ]
+        },
+        {
+            "path": "tests/rust-gzip-file-job/static_check.py",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "1ee1e0d5f9459de9b0566fdf8a5bf9dc427f06f4",
+            "sources": [
+                55
+            ]
+        },
+        {
+            "path": "tests/rust-gzip-file-job/success.rs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "b88dd46b822e960da54ac9b6479b68e0ea6a3334",
+            "sources": [
+                55
+            ]
+        },
+        {
+            "path": "tests/rust-gzip-file-job/support.rs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "b0eb1712a8a67ebfd8077ac2c01f21f5b09733cd",
+            "sources": [
+                55
+            ]
+        },
+        {
+            "path": "tests/rust-integration-baseline/run-plan.json",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "89eabfc1f19a402ab84666233a704e464288ec10",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-integration-baseline/SHA256SUMS",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "e0e32c99b5401562a8abcc0a7ebe6335d82d8413",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-integration-baseline/sources.json",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "495e32eb6eb40a81d95935385b4c9bef01732692",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-memory-gzip-reader/budgets.rs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "0ec6e8818c277600841f4f37d069a5acce1c306e",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-memory-gzip-reader/Cargo.lock",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "46a7653b949febc573a3429aa7811b8c34508dc6",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-memory-gzip-reader/Cargo.toml",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "b803e4a1c2495736b3758e4d993e40a86ef7f50d",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-memory-gzip-reader/checkpoints.rs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "5fa98cc9affaa4554562308663716ea5b2841636",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-memory-gzip-reader/contract.json",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "c6d4feae43bd9e67ffd1009b3b0dff653f7952ff",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-memory-gzip-reader/fixtures.hex",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "80e41d988d8d13c45b54d640468ca4939e84d7fa",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-memory-gzip-reader/fixtures.json",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "d52a90d943151d7ba2c9dc1da76addccd661e4e4",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-memory-gzip-reader/format.rs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "302adf4151f5f5c8100133eab82ad6f5e72003d5",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-memory-gzip-reader/generate_fixtures.py",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "e48f324c331e429312c434761b1f40920957ca0d",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-memory-gzip-reader/main.rs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "de62741b5834c691c67a0a606417237d3a45108b",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-memory-gzip-reader/SHA256SUMS",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "cb0292aab9f320eca2fd4b3395c10f84ca898ff6",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-memory-gzip-reader/static_check_helper_tests.py",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "e5ab9c60a4107c6ed21995f35d4b2a695de86e1d",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-memory-gzip-reader/static_check.py",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "74f7ca66d71692e7bec4f690ab6595d5344b0dfb",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-memory-gzip-reader/support.rs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "b0a0bd05bc3f7d331fad375cbb0d0eddbd825b48",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-memory-ustar-reader/budget.rs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "60ccf1de5f9f17ec0ad9e569fbe167241ea2472d",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-memory-ustar-reader/callbacks.rs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "3676cc4adda6596d4ea6d14741e70268bded1356",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-memory-ustar-reader/Cargo.lock",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "62a03ba78153130ca889b63c7be046264f8ede1f",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-memory-ustar-reader/Cargo.toml",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "1dc8fe5f69638e504c6f88a4ba4f1562b285f39f",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-memory-ustar-reader/contract.json",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "08b8b17997818ee2685149f2cc0781cf2da1982a",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-memory-ustar-reader/format.rs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "80eecfd680669804add50ea14195eacd21de3a3e",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-memory-ustar-reader/main.rs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "b993568c08adcfd0be8648108432e3e3219961dd",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-memory-ustar-reader/names.rs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "89c9df6bf935b7084aa24fedd3cd6ccf18307b23",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-memory-ustar-reader/selection.rs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "e35f28c7c7897bda7270ad4a9f9bb925fd8d2c8e",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-memory-ustar-reader/SHA256SUMS",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "0093ed9578bab969ea69bb332d36fb5d980c4846",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-memory-ustar-reader/static_check.py",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "ebeb48b3c016a57b0e883a4de409c99800a6b2f0",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-memory-ustar-reader/support.rs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "a280942626fab1e193d3d6ed8ca87d139c9b1d4e",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-memory-zip-create/api.rs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "7f8ff939763613aa35c226e5884085a6965e8c6e",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-memory-zip-create/contract.json",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "9d154572a4f76db6ee702d70c7f39923f7af21ff",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-memory-zip-create/lifecycle.rs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "09c271403d06557cf98151929e538ee22dc43921",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-memory-zip-create/limits.rs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "727b74081ebe164942a2a570c5cfa7c18e96d313",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-memory-zip-create/names.rs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "7545050d770bb62be53cbd492d2f5d901065fb5f",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-memory-zip-create/roundtrip.rs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "ed0cc4a0aa775c65215cd5f3671b6932ab927094",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-memory-zip-create/SHA256SUMS",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "b3fa66b24d8878f42a324df91440f7845dd88aa5",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-memory-zip-create/storage.rs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "08aefae839d9ede99396062e17d670d8b8ee3efe",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-memory-zip-create/support.rs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "a1bba5fd57e8edbe29df6d13c7597583a9e4c3cc",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-ui-memory-app/contract.json",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "c6be500af1528649e3ee599dbd9bf0e8aa1e5e84",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-ui-memory-app/dependencies.json",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "974263c30900ca5c97e430006a07188c477fb302",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-ui-memory-app/dependency_audit.py",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "9f1fdd3425a79dde475b76705545f0ace4e98a74",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-ui-memory-app/files.json",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "d8a83b43bfcf0b6c056a42f4f2c54fced4af5c9a",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-ui-memory-app/fixtures/payload.txt",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "4420a227971404a8d65c92a95cd96868822e9082",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-ui-memory-app/fixtures/sample.gz",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "2c3647b19081c0fc72243f847412fbbd67c12e71",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-ui-memory-app/fixtures/sample.tar",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "6e3bf5fb02e4686b69d8e88be0d2f68df4c7dd0c",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-ui-memory-app/license-supplement.json",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "4ea3c4e4af294beb1f7216252ad2892addb2153a",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-ui-memory-app/reference-ui.lock",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "8ece34821ead493e020bcdc07996d1a51ae94bcb",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-ui-memory-app/regressions.rs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "7bd471cf648854e5b8c534c4aa0658d1259f2f9f",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-ui-memory-app/SHA256SUMS",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "3a181927e444a8653bd0ac55ff3141faee92d2e1",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-ui-memory-app/sources.json",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "fc1e788191ed5bf0f74e6b150a1f7d62e18163bc",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-ui-memory-app/static_check.py",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "76cf33d6efdff8113c3d2b0cab13fcc8ab3b91d7",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-ui-memory-gui-races/Cargo.lock",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "44ab52021965c4e71f0ab6fefd0539b59e1d03d6",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-ui-memory-gui-races/Cargo.toml",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "e92f0bf40b8e3946c263a8bedae8c7f41fdb39be",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-ui-memory-gui-races/contract.json",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "83aa9130c7f0d3ae88b5ff27b8a1ec0af965b048",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-ui-memory-gui-races/gates.rs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "bb3bb0df1d3144f54c5f3d9f475465526ff82bc1",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-ui-memory-gui-races/LICENSE",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "5014abac33298592fd3450b51a9b414191e1aabc",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-ui-memory-gui-races/main.rs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "08fbd63458c74fd24e801e0e78809c0d26af2034",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-ui-memory-gui-races/run-plan.json",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "7b8854d8222982a7160042cfe9fb9fecca156e50",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-ui-memory-gui-races/SHA256SUMS",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "54e0b24895e08d8f87d5a3fc2dfbc57723e1e0eb",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-ui-memory-gui-races/sources.json",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "077f97fb71634318df7fb4f106764cd62c82d674",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-ui-memory-gui-races/static_check.py",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "95353578ad367821132127e3e8ead609f4db7c8a",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-ui-memory-races/assembly.rs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "ea5becadb60bac08385fb0f2a148412f65c6b9f3",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-ui-memory-races/Cargo.lock",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "f2b18cad2d81bcf5703b8ed5abd6d50fe846ab76",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-ui-memory-races/Cargo.toml",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "ddabe0cfcd5a85543b728c4ede7ede9f8ab2b458",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-ui-memory-races/contract.json",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "60274396d0aaf85c0a294a4c0c55e63bc881f011",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-ui-memory-races/LICENSE",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "5014abac33298592fd3450b51a9b414191e1aabc",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-ui-memory-races/races.rs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "85a09f46faca8b69bbbc0bf3dcfd85a5b40b4691",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-ui-memory-races/run_reviewed.py",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "d0e7d110856b1f8b3a89d5e03a8fdb3f793a70bf",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-ui-memory-races/SHA256SUMS",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "058ed59f27b3c942c104f71bc87f8d9b103f7aab",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-ui-memory-races/sources.json",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "8beaaa14ebb3fe75f6eab267c544cc792ce9c672",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-ui-memory-races/static_check.py",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "c676817f19e7082f37a83f0a67a2de8f8c899ed4",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/rust-ui-system-font-regressions/Cargo.lock",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "48a630d0cf585999c65784ffbe17c4fbbd0b7adb",
+            "sources": [
+                54
+            ]
+        },
+        {
+            "path": "tests/rust-ui-system-font-regressions/Cargo.toml",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "7b75a65b48361c210ca7c4312bb72315dd3a39ff",
+            "sources": [
+                54
+            ]
+        },
+        {
+            "path": "tests/rust-ui-system-font-regressions/contract.json",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "ea40662b7621d26b0702abf72bc76afc234ed44e",
+            "sources": [
+                54
+            ]
+        },
+        {
+            "path": "tests/rust-ui-system-font-regressions/linux_loader.rs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "4950433b3b723ad2abac84bae9c8e2ccc1084e00",
+            "sources": [
+                54
+            ]
+        },
+        {
+            "path": "tests/rust-ui-system-font-regressions/review.json",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "4b811901fcd89675f9c99489340d5fea4284d6e2",
+            "sources": [
+                54
+            ]
+        },
+        {
+            "path": "tests/rust-ui-system-font-regressions/run-plan.json",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "5a3748e724b3658ba46a27d1556b92c37d4f5086",
+            "sources": [
+                54
+            ]
+        },
+        {
+            "path": "tests/rust-ui-system-font-regressions/SHA256SUMS",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "978f0deee125f534e68feb1ba08434e008102755",
+            "sources": [
+                54
+            ]
+        },
+        {
+            "path": "tests/rust-ui-system-font-regressions/source-pins.json",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "8955f4ba53a1520a9e66b14e6e019850e800b958",
+            "sources": [
+                54
+            ]
+        },
+        {
+            "path": "tests/rust-ui-system-font-regressions/static_check.py",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "3e4b79382e94c64322386c8632e1251a2816f1c5",
+            "sources": [
+                54
+            ]
+        },
+        {
+            "path": "tests/rust-ui-system-fonts/contract.json",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "7449ce3649a0c92d04be0553b90bc06c0ea9b826",
+            "sources": [
+                54
+            ]
+        },
+        {
+            "path": "tests/rust-ui-system-fonts/SHA256SUMS",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "b4da374d81a8ded161bbae6a874fe6a29d9863b9",
+            "sources": [
+                54
+            ]
+        },
+        {
+            "path": "tests/rust-ui-system-fonts/sources.json",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "62cae50416a370477e4192c577b262410672cddf",
+            "sources": [
+                54
+            ]
+        },
+        {
+            "path": "tests/security/.gitignore",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "1b1d800e0e23be56d0033cc63be92095b4d1c780",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/security/check_fixtures.py",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "c42379fb2975857968576cb798480a6342a7dc9a",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/security/check_runner.py",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "6f93cf301298c85818f3d739ae84e41c9135df54",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/security/CoreRegressions.cs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "75ac40bfccdb83e5cee5af69fcc0ef080f02b59a",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/security/CoreTests.cs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "4ddb06f0a3956f167ec85a9d3ea6529c78265220",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/security/coverage.json",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "ee896064b16e338fd1f757b2714503e18b9df049",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/security/fixture_factory.py",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "d28070a564b551788914786928cf8fce03655008",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/security/fixtures/backslash-traversal.zip",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "81942ec2927f8c9e4094581997038b064b3ed1b4",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/security/fixtures/bad-crc.zip",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "6951853208c87bb4b6d302325c225795d1128e08",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/security/fixtures/case-collision.zip",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "962f8b5e23e10646a9cde08e45a4b737cd366ea1",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/security/fixtures/normal.zip",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "8d5f5bccb9bea385169202ba520335fb70745598",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/security/fixtures/parent-collision.zip",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "0da9f7be108feffe8235ba95ee92b62957291618",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/security/fixtures/symlink.zip",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "826e0324a578beb37e46b7d6e68712d961be4f81",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/security/fixtures/traversal.zip",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "3fa35c7e63f1dde485345cdee93ca7e31252a44d",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/security/fixtures/truncated.zip",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "ea2ac8a4bb4b212ec4923619acad6540535cf7f9",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/security/NuGet.Config",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "22dfa4f9498cfbf80e70ac0bbcd66ec6c3ec2fbb",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/security/platform_matrix.json",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "88bf5f5d4f4c65f30344d2a91232c2a16ea2e7aa",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/security/PlatformRegressions.cs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "b57115d42999ab9df22aa63e2e2a8192f12dda36",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/security/Program.cs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "cbbb355095004fa7fd3eee30419ef7eeb1ed9437",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/security/TestSupport.cs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "90f80f9be772ae4f21be55372cb9bbb09678dfd7",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/security/Zipelo.SecurityTests.csproj",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "528399bbf121264f8bb86674665b0d0e97679225",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/stream-protocol/ChannelTests.cs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "fc75c1f6b683b42aae06f84c1a0a291825d72dba",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/stream-protocol/contract.json",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "322c6ffd12714ed0a0da80b570d09492f709fcc4",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/stream-protocol/ControlledStream.cs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "f0e7a08d70dc98aa5995b4bea73a67b77899ac17",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/stream-protocol/NuGet.Config",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "22dfa4f9498cfbf80e70ac0bbcd66ec6c3ec2fbb",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/stream-protocol/Program.cs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "39547492ea17a491729c83f2a8682c1dd4477ecd",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/stream-protocol/TestSupport.cs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "21e6bb3a06c2cdcc09a3c6d4acb9a159455d1650",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/stream-protocol/ValidatorTests.cs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "1f025ce19429ef94b0b5aec4e724943014d829eb",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/stream-protocol/Zipelo.StreamProtocolTests.csproj",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "75d2b2d5901ee4659443ea3bfaff87f73ef96be6",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/tar-stream-reader/contract.json",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "8794e88ed0955e5e307133b4c62a7dac575d3673",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/tar-stream-reader/Program.cs",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "b5ffd58474cb7560ef68675d5c102479feb62766",
+            "sources": [
+                "main"
+            ]
+        },
+        {
+            "path": "tests/tar-stream-reader/Zipelo.TarReaderTests.csproj",
+            "type": "blob",
+            "mode": "100644",
+            "sha": "2fce5c5ae8544967b5df8ee1ef01bb8378bbc4fd",
+            "sources": [
+                "main"
+            ]
+        }
+    ],
+    "excluded": [
+        "새 worker-session 구현",
+        "Rust build/run",
+        "main merge",
+        "draft 해제",
+        "사용자 파일/OS worker/held probe/권한 변경"
+    ],
+    "historical_pins": "과거 source/test pin 및 기록을 그대로 보존함. 원래 snapshot의 검사와 통과는 해당 head에만 귀속됨. PR56 overlay는 단독 후보 설명이며 이 통합 tree의 보존 증거로 사용하지 않음. 새 overlay만 3개 교체를 명시함",
+    "plan_contract_blobs": {
+        "tests/rust-app-core-memory/contract.json": "dd1753a95ad0a79bc8dd4cfe01cf2d5696305891",
+        "tests/rust-file-publication/contract.json": "e04fba5496be674eae36a8d2351231fbf8db3249",
+        "tests/rust-file-snapshot/contract.json": "bb5c342a9b9812380d8f08296013449ecab57a98",
+        "tests/rust-gzip-file-job/contract.json": "e72a00aff7a3665a9c6381edb834d903cd2dddf8",
+        "tests/rust-memory-gzip-reader/contract.json": "c6d4feae43bd9e67ffd1009b3b0dff653f7952ff",
+        "tests/rust-memory-ustar-reader/contract.json": "08b8b17997818ee2685149f2cc0781cf2da1982a",
+        "tests/rust-memory-zip-create/contract.json": "9d154572a4f76db6ee702d70c7f39923f7af21ff",
+        "tests/rust-ui-memory-app/contract.json": "c6be500af1528649e3ee599dbd9bf0e8aa1e5e84",
+        "tests/rust-ui-memory-races/contract.json": "60274396d0aaf85c0a294a4c0c55e63bc881f011",
+        "tests/rust-ui-system-font-regressions/contract.json": "ea40662b7621d26b0702abf72bc76afc234ed44e"
+    }
+}

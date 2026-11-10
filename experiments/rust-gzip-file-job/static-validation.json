@@ -1,0 +1,256 @@
+{
+    "commands": [
+        {
+            "command": [
+                "rustfmt",
+                "+1.99.1",
+                "--edition",
+                "2024",
+                "src/lib.rs",
+                "src/types.rs"
+            ],
+            "exit_code": 0,
+            "stdout": "",
+            "stderr": ""
+        },
+        {
+            "command": [
+                "rustfmt",
+                "+1.99.1",
+                "--check",
+                "--edition",
+                "2024",
+                "src/lib.rs",
+                "src/types.rs"
+            ],
+            "exit_code": 0,
+            "stdout": "",
+            "stderr": ""
+        },
+        {
+            "command": [
+                "cargo",
+                "+1.99.1",
+                "generate-lockfile",
+                "--offline"
+            ],
+            "exit_code": 0,
+            "stdout": "",
+            "stderr": "     Locking 14 packages to highest Rust 1.99 compatible versions\n"
+        },
+        {
+            "command": [
+                "cargo",
+                "+1.99.1",
+                "metadata",
+                "--locked",
+                "--offline",
+                "--format-version",
+                "1"
+            ],
+            "exit_code": 0,
+            "stdout": null,
+            "stderr": ""
+        }
+    ],
+    "resolved_packages": [
+        {
+            "name": "block-buffer",
+            "version": "0.10.4",
+            "license": "MIT OR Apache-2.0",
+            "source": "registry+https://github.com/rust-lang/crates.io-index"
+        },
+        {
+            "name": "cfg-if",
+            "version": "1.0.5",
+            "license": "MIT OR Apache-2.0",
+            "source": "registry+https://github.com/rust-lang/crates.io-index"
+        },
+        {
+            "name": "cpufeatures",
+            "version": "0.2.17",
+            "license": "MIT OR Apache-2.0",
+            "source": "registry+https://github.com/rust-lang/crates.io-index"
+        },
+        {
+            "name": "crypto-common",
+            "version": "0.1.7",
+            "license": "MIT OR Apache-2.0",
+            "source": "registry+https://github.com/rust-lang/crates.io-index"
+        },
+        {
+            "name": "digest",
+            "version": "0.10.7",
+            "license": "MIT OR Apache-2.0",
+            "source": "registry+https://github.com/rust-lang/crates.io-index"
+        },
+        {
+            "name": "generic-array",
+            "version": "0.14.7",
+            "license": "MIT",
+            "source": "registry+https://github.com/rust-lang/crates.io-index"
+        },
+        {
+            "name": "libc",
+            "version": "0.2.191",
+            "license": "MIT OR Apache-2.0",
+            "source": "registry+https://github.com/rust-lang/crates.io-index"
+        },
+        {
+            "name": "sha2",
+            "version": "0.10.9",
+            "license": "MIT OR Apache-2.0",
+            "source": "registry+https://github.com/rust-lang/crates.io-index"
+        },
+        {
+            "name": "typenum",
+            "version": "1.20.1",
+            "license": "MIT OR Apache-2.0",
+            "source": "registry+https://github.com/rust-lang/crates.io-index"
+        },
+        {
+            "name": "version_check",
+            "version": "0.9.5",
+            "license": "MIT/Apache-2.0",
+            "source": "registry+https://github.com/rust-lang/crates.io-index"
+        },
+        {
+            "name": "zipelo-file-publication",
+            "version": "0.1.0",
+            "license": "MIT",
+            "source": null
+        },
+        {
+            "name": "zipelo-file-snapshot",
+            "version": "0.1.0",
+            "license": "MIT",
+            "source": null
+        },
+        {
+            "name": "zipelo-gzip-file-job",
+            "version": "0.1.0",
+            "license": "MIT",
+            "source": null
+        },
+        {
+            "name": "zipelo-memory-gzip-reader",
+            "version": "0.1.0",
+            "license": "MIT",
+            "source": null
+        },
+        {
+            "name": "zlib-rs",
+            "version": "0.6.8",
+            "license": "Zlib",
+            "source": "registry+https://github.com/rust-lang/crates.io-index"
+        }
+    ],
+    "selected_features": {
+        "block-buffer": [],
+        "cfg-if": [],
+        "cpufeatures": [],
+        "crypto-common": [
+            "std"
+        ],
+        "digest": [
+            "alloc",
+            "block-buffer",
+            "core-api",
+            "default",
+            "std"
+        ],
+        "generic-array": [
+            "more_lengths"
+        ],
+        "libc": [
+            "std"
+        ],
+        "sha2": [
+            "force-soft",
+            "std"
+        ],
+        "typenum": [],
+        "version_check": [],
+        "zipelo-file-publication": [],
+        "zipelo-file-snapshot": [],
+        "zipelo-gzip-file-job": [],
+        "zipelo-memory-gzip-reader": [],
+        "zlib-rs": [
+            "rust-allocator"
+        ]
+    },
+    "targets": [
+        {
+            "kind": [
+                "lib"
+            ],
+            "crate_types": [
+                "lib"
+            ],
+            "name": "zipelo_gzip_file_job",
+            "edition": "2024",
+            "doc": true,
+            "doctest": false,
+            "test": true
+        }
+    ],
+    "rust_compilation": false,
+    "rust_execution": false,
+    "network_restore": false,
+    "source_checks": {
+        "one_snapshot_call": true,
+        "one_gzip_read_call": true,
+        "one_gzip_budget": true,
+        "one_publication_call": true,
+        "source_to_decode_owned_handoff": true,
+        "select_output": true,
+        "publish_exact_owned_output": true,
+        "final_native_budget_accounting": true,
+        "native_final_usage_accounting": true,
+        "native_publication_report_returned": true,
+        "no_postcommit_observer": true,
+        "callback_before_flag_poll": true,
+        "native_cancel_before_front_flag": true,
+        "no_dangerous_adapter_operations": true,
+        "no_product_published_type": true,
+        "no_inline_test_code": true,
+        "no_source_path_reopen": true,
+        "typed_stage_errors": true,
+        "private_observation_fields": true
+    },
+    "source_check_scope": "Syntax and structural assertions plus manual control-flow review; not Rust type checking or executed behavior.",
+    "inherited_union_blob_mode_sha256_verified": 331,
+    "local_path_dependency_input_files_verified": [
+        "experiments/rust-file-snapshot/Cargo.lock",
+        "experiments/rust-file-snapshot/Cargo.toml",
+        "experiments/rust-file-snapshot/LICENSE",
+        "experiments/rust-file-snapshot/SHA256SUMS",
+        "experiments/rust-file-snapshot/THIRD-PARTY-NOTICES.txt",
+        "experiments/rust-file-snapshot/contract.json",
+        "experiments/rust-file-snapshot/dependencies.json",
+        "experiments/rust-file-snapshot/src/lib.rs",
+        "experiments/rust-file-snapshot/src/linux.rs",
+        "experiments/rust-memory-gzip-reader/Cargo.lock",
+        "experiments/rust-memory-gzip-reader/Cargo.toml",
+        "experiments/rust-memory-gzip-reader/LICENSE",
+        "experiments/rust-memory-gzip-reader/SHA256SUMS",
+        "experiments/rust-memory-gzip-reader/THIRD-PARTY-NOTICES.txt",
+        "experiments/rust-memory-gzip-reader/contract.json",
+        "experiments/rust-memory-gzip-reader/dependencies.json",
+        "experiments/rust-memory-gzip-reader/src/budget.rs",
+        "experiments/rust-memory-gzip-reader/src/lib.rs",
+        "experiments/rust-file-publication/Cargo.lock",
+        "experiments/rust-file-publication/Cargo.toml",
+        "experiments/rust-file-publication/LICENSE",
+        "experiments/rust-file-publication/SHA256SUMS",
+        "experiments/rust-file-publication/THIRD-PARTY-NOTICES.txt",
+        "experiments/rust-file-publication/contract.json",
+        "experiments/rust-file-publication/dependencies.json",
+        "experiments/rust-file-publication/src/lib.rs",
+        "experiments/rust-file-publication/src/linux.rs",
+        "experiments/rust-file-publication/static-validation.json"
+    ],
+    "cached_registry_source_files_verified": 661,
+    "main_merge": false,
+    "user_files_processed": false
+}

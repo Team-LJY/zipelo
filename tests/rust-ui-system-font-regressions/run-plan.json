@@ -1,0 +1,94 @@
+{
+    "schema": "zipelo.ui-system-font-run-plan.v1",
+    "gate": "No Rust compile/discovery/run or GUI build before fixed head/manifest review. Source parsing, rustfmt, offline lock/metadata and static checks only now.",
+    "preflight": [
+        "Use current room blocking exclusive flock for every write/build/cache access. Recheck git status and pinned inputs inside lock.",
+        "Verify 95 source Git blobs/modes/SHA256 and new manifest. Use installed Rust 1.99.1 and existing cache, locked/offline only.",
+        "Dedicated target and fresh exclusive validation directory under this tests path, canonical and owned. Refuse reuse after failure.",
+        "Native Linux only. Record installed Noto file metadata/size <=32MiB and SHA256 before/after; never save font bytes.",
+        "Original UI full manifest remains a pre-PR52 historical pin. source-pins.json is the explicit new overlay; do not weaken or claim passage of the old full check against changed app.rs."
+    ],
+    "groups": [
+        {
+            "name": "linux_loader",
+            "manifest": "tests/rust-ui-system-font-regressions/Cargo.toml",
+            "target": "linux_system_font",
+            "exact_names": [
+                "linux_loader_preserves_installed_bytes_and_korean_face_index"
+            ],
+            "count": 1,
+            "filtered_per_case": 0
+        },
+        {
+            "name": "ui_reuse",
+            "manifest": "experiments/rust-ui-memory-app/Cargo.toml",
+            "target": "ui_memory",
+            "count": 31,
+            "filtered_per_case": 30,
+            "exact_names": [
+                "atomic_generation_replacement_rejects_old_selection",
+                "cancellation_after_terminal_does_not_rewrite_success",
+                "cancellation_before_work_returns_real_cancelled_result",
+                "close_cancel_retraction_keeps_existing_cancel_request",
+                "close_confirmation_does_not_cancel_and_can_be_retracted",
+                "close_waits_for_join_and_preserves_terminal",
+                "completed_during_confirmation_still_requires_choice",
+                "completion_receiver_loss_recovers_payload_from_join",
+                "controller_rejects_real_foreign_terminal_without_applying_payload",
+                "disconnected_progress_preserves_first_missing_sequence",
+                "error_retry_uses_new_operation_and_clears_previous_payload",
+                "full_completion_channel_returns_ownership_instead_of_dropping",
+                "full_queue_is_transport_failure_not_user_cancel",
+                "gzip_default_queue_fits_without_ui_drain",
+                "gzip_preview_preserves_original_bytes",
+                "headless_values_satisfy_thread_transfer_bounds",
+                "joined_task_without_received_terminal_is_delivery_failure",
+                "native_gzip_callback_error_survives_simultaneous_queue_full",
+                "normal_frame_controls_retain_running_handle_until_explicit_join",
+                "original_observer_error_beats_disconnected_queue",
+                "original_observer_error_beats_full_queue",
+                "original_observer_error_still_delivers_its_raw_event_when_possible",
+                "oversized_queue_is_rejected_without_spawning",
+                "progress_gap_keeps_real_terminal_but_cannot_apply_payload",
+                "repeated_cancel_sets_request_once",
+                "repeated_start_is_rejected_until_join_even_if_thread_finished",
+                "thread_panic_is_joined_without_synthesized_terminal",
+                "ui_event_wrapper_excludes_old_operation_before_current_sequence",
+                "ustar_default_queue_fits_without_ui_drain",
+                "ustar_exact_ids_and_content_limitation_are_retained",
+                "zip_default_queue_fits_without_ui_drain"
+            ]
+        }
+    ],
+    "commands": [
+        "python3 -B tests/rust-ui-system-font-regressions/static_check.py <fixed-manifest-sha256>",
+        "cargo test --manifest-path <group-manifest> --locked --offline --test <group-target> --no-run --message-format=json",
+        "<unique-group-binary> --list --format terse",
+        "<unique-group-binary> --exact <name> --test-threads=1 --nocapture"
+    ],
+    "order": "Group1 compile/discover/run then group2. Validate complete unique exact discovery sets, run sorted names once. Require 1 passed/0 failed/0 ignored/0 measured and the per-group filtered count. Stop first error, missing record, timeout or changed input; no retry or expectation/source change.",
+    "bounds": {
+        "compile_seconds": 120,
+        "discovery_seconds": 30,
+        "per_case_seconds": 30,
+        "per_command_log_bytes": 8388608,
+        "font_file_bytes": 33554432,
+        "font_vectors_nominal_bytes": 100663296,
+        "termination_grace_seconds": 2,
+        "reap_grace_seconds": 5,
+        "cleanup_observation_seconds": 10,
+        "parallel_cases": 1
+    },
+    "supervision": "Parent streams capped raw logs. Deadline/overflow signals only owned process group, then bounded wait/reap and pipe EOF. Never assert signals interrupt uninterruptible I/O. Unconfirmed state is failure.",
+    "cleanup": "No font/production writes or new fixtures. Retain own logs and target artifacts, verify owned children ended. Never erase failed or historical evidence.",
+    "evidence": "Record argv/cwd/allowlisted env, toolchain, binaries SHA256, source/font before-after hashes, exact discovered/executed/filtered names, raw logs, PIDs/wait/EOF/residuals and evidence class. Loader is real file-read evidence; UI is reused headless regression; AppCreation errors stay static-only.",
+    "deferred_gui": "Production GUI build and separated Xvfb startup/rendering need a later explicit execution scope. PR47 harness has its own loader and cannot validate this loader.",
+    "forbidden": [
+        "System font move/permission change/copy/bundle",
+        "mount/privilege workaround",
+        "fake Windows cfg execution",
+        "network/install/download",
+        "real archives or OS worker/held probes",
+        "changes outside owned tests"
+    ]
+}

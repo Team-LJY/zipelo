@@ -1,0 +1,90 @@
+{
+    "schema": 1,
+    "package": "zipelo-file-publication",
+    "status": "source-static-only",
+    "base_head": "23b8d1c615f24f42469138fcc63e7fce7cda4f24",
+    "scope": [
+        "experiments/rust-file-publication/"
+    ],
+    "tests_owner": "bugfix role; separate root tests path after API review",
+    "api": {
+        "entry": "Publication::new() -> (Publication, Cancellation); Publication::publish(self, Request, checkpoint) -> Report<E>",
+        "input": "Immutable borrowed byte slice, absolute parent Path, single OsStr leaf, bounded Limits. No source-file access and no input validation/worker evidence.",
+        "callbacks": [
+            "Opening (twice)",
+            "Writing before each write",
+            "Verifying before sync and every read, including EOF probe",
+            "BeforeCommit after byte/metadata checks and procfs setup"
+        ],
+        "output": "Report { outcome, usage, cleanup }. Outcome::Committed requires private FileCommitReceipt obtained only after linkat returns zero. No caller bool, public receipt constructor, Default, or Deserialize.",
+        "receipt": "Parent and file device/inode plus length. Caller retains requested leaf separately. Identities are observations, not permanent identities after inode reuse. No bytes/hash or archive validity claim."
+    },
+    "limits": {
+        "payload_bytes": 16777216,
+        "scratch_bytes": 65536,
+        "default_duration_seconds": 30,
+        "max_duration_seconds": 300,
+        "max_reserved_read_write_bytes": 134217728,
+        "max_read_write_calls": 131072,
+        "memory": "Borrow input without copying; fixed 64KiB scratch, bounded path allocations (parent<=4095 bytes, leaf<=255), at most 4 File handles. Does not bound caller's existing allocations, callbacks, allocator internals or filesystem/kernel memory.",
+        "accounting": "Reserve full requested read/write length and one attempt before each syscall; never refund on short/zero/error/EOF. Actual transferred bytes separately counted. EOF probe reserves 1 byte. open/metadata/sync/link counters are adapter attempts; metadata is std File::metadata. lseek and close excluded from IO byte/call budgets; close attempts/failures in Cleanup.",
+        "termination": "Cooperative elapsed-time check at checkpoints before commit. No hard deadline for callback, blocking syscall, sync or close. Postcommit sync/close are not interrupted by cancellation or elapsed limit. Per invocation usage; upper job layer must aggregate retries."
+    },
+    "linux": {
+        "parent": "Reject nonabsolute, empty/repeated/trailing components, dot/dotdot, NUL, oversized paths. Root '/' is lexical-valid but must pass owner/mode and filesystem checks. openat2 O_RDONLY|O_DIRECTORY|O_CLOEXEC|O_NONBLOCK|O_NOCTTY and RESOLVE_NO_SYMLINKS; no fallback.",
+        "trust": "fstat directory, effective UID owner, no group/other write bits. Only an exclusively managed destination directory with trusted same-UID actors is in scope. This is not an ACL, LSM, namespace, root or same-user adversary sandbox. No permission/security setting changes. Ancestors may move; no persistent pathname guarantee.",
+        "filesystem": "fstatfs magic 0xef53 (ext family, not proof specifically ext4) or 0x58465342 (XFS) only. Unknown/network/overlay/tmpfs rejected before temp creation. Actual O_TMPFILE support still required. Source-only: no mounted filesystem support verified.",
+        "temporary": "openat(held_parent, '.', O_TMPFILE|O_RDWR|O_CLOEXEC, 0600), without O_EXCL. fstat regular, nlink=0, euid owner, same st_dev. No named staging file.",
+        "verification": "Bounded raw write with positive short-write accumulation; zero write is WriteZero. fsync_file before lseek and exact chunk readback/EOF check. Native errors including EINTR preserved without raw IO retries. Final fstat checks same identity, regular type, nlink=0 and length. Readback is not archive validation, security isolation or protection from privileged/same-UID fd manipulation.",
+        "procfs": "openat2('/proc', O_PATH|O_DIRECTORY|O_CLOEXEC, RESOLVE_NO_SYMLINKS); fstatfs PROC_SUPER_MAGIC. Open numeric getpid()/fd relative to held proc root using BENEATH|NO_SYMLINKS|NO_XDEV. Keep all fds owned. Actual link source is numeric temp fd relative to proc fd directory with AT_SYMLINK_FOLLOW. Require trusted procfs for this PID namespace. No alternate /proc mount or launcher.",
+        "commit": "linkat(held_proc_fd_directory, numeric_temp_fd, held_parent, leaf, AT_SYMLINK_FOLLOW) exactly once after CAS. Existing leaf of any kind, including symlink/directory, is EEXIST; never truncate, overwrite, merge, rename or delete. No fallback on EXDEV, ENOSYS, unsupported FS/procfs or other error.",
+        "namespace": "Success belongs to held parent object and leaf at link return, not to the original parent pathname. Parent rename/replacement may cause commit into moved original directory; unlinked parent may fail. No postcheck can prove the original pathname persists; no later namespace stability claim."
+    },
+    "cancellation": {
+        "state": "Per-publication private Arc<AtomicU8>: Pending -> Cancelled by request CAS, or Pending -> Committing by commit CAS, then Finished at Publication drop. SeqCst defines a total decision order.",
+        "before": "A cancellation CAS winning before begin_commit prevents linkat. Stop::Cancelled also stops before link. Callback(E) is returned unchanged, including when callback also requests cancellation. Native IO failures are returned before a later checkpoint and are not overwritten by cancellation.",
+        "after": "Committing wins: requests return TooLate until publication drops; link syscall result preserved, no callbacks after CAS. Success cannot become cancelled and no unlink rollback exists. A late request after returned report is Finished.",
+        "abandon": "Dropping unused Publication marks Finished without completion proof. Panic before commit unwinds RAII but returns no report; panic/abort and forced process death are not verified cleanup. Callback is trusted application code and may block or panic."
+    },
+    "outcomes": {
+        "NotCommitted": "All pre-link failures, including unsupported platform/filesystem, cancellation, original callback or IO error, and linkat EEXIST. Preserves errno without flattening to archive failure. This is an operation observation, not assertion that no other actor changed destination.",
+        "CommitUncertain": "Any non-EEXIST linkat error is conservatively uncertain, including EXDEV/EINTR/ENOENT. Original io::Error retained, no receipt minted, no automatic retry/unlink. This deliberately overclassifies some definite failures pending later syscall-specific review.",
+        "Committed": "linkat returned zero. Private file-layer receipt exists even if parent fsync or close fails. Not OS worker, archive validation or product Published success.",
+        "durability": "File fsync failure is precommit failure. After link success, parent fsync success is FileAndParentSynced, otherwise ParentSyncFailed(original error). Two successful fsync returns are reported, not a guarantee against faulty storage or arbitrary crash recovery.",
+        "cleanup": "All acquired fds are explicitly close'd once on every normal return. Order temporary, proc fd directory, proc root, parent. Fixed four-slot failures retain resource and original errno separately. Never retry close (including EINTR), never unlink any name. Unlinked O_TMPFILE normally ceases to exist after last reference, but successful close is not physical deletion proof; close failure is not reported as confirmed cleanup. Panic path uses File RAII with unobserved close errors."
+    },
+    "diagnostics": "No stored full path, file content or raw byte Debug on Request/receipt/Report. Callback E and io::Error may carry caller-controlled data; consumers must redact rather than log raw Debug. No external transmission.",
+    "validation": {
+        "completed": [
+            "rustfmt syntax/format only",
+            "locked/offline metadata and offline lock generation",
+            "inline structural/static assertions and manifest hashes",
+            "cached libc archive checksum, cached regular file equality and license texts"
+        ],
+        "not_performed": [
+            "Rust compile or typecheck",
+            "tests/discovery",
+            "publication/filesystem syscalls from candidate",
+            "worker execution",
+            "Windows",
+            "GUI",
+            "CVE/advisory audit"
+        ],
+        "future": "Synthetic files only in fresh task-owned directory on supported filesystem. Regression owner uses root tests/. Distinguish injected errors from real syscalls, parent replacement from persistence, EEXIST preservation, short/zero writes, verification mismatch, sync errors, cancellation/commit CAS order, late cancellation and close failures. Missing supported filesystem is unsupported, not authorization to mount/install/change environment."
+    },
+    "references": [
+        "https://man7.org/linux/man-pages/man2/openat2.2.html",
+        "https://man7.org/linux/man-pages/man2/open.2.html",
+        "https://man7.org/linux/man-pages/man2/linkat.2.html",
+        "https://man7.org/linux/man-pages/man2/fsync.2.html",
+        "https://man7.org/linux/man-pages/man2/close.2.html"
+    ],
+    "preservation": [
+        "PR42/43/44/46 frozen",
+        "C# unchanged",
+        "No worker/execveat EACCES retry or bypass",
+        "No folder publication or product UI",
+        "No main merge",
+        "No old evidence rewritten"
+    ]
+}

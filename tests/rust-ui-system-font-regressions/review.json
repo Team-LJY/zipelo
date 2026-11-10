@@ -1,0 +1,29 @@
+{
+    "source_head": "8600cee802bc08bfad171278133a22d94b64b597",
+    "base_head": "f7fc8cbece281e2f9a6374b4640ca4dd9d321fbc",
+    "scope": "PR52 app/loader diff, caller path, dependency/lock preservation and existing 31 UI regressions",
+    "findings": [
+        {
+            "kind": "static-preservation",
+            "location": "experiments/rust-ui-memory-app/src/app.rs:160",
+            "evidence": "Reversing only module import, load expression, FontData bytes and index changes reconstructs the exact base app hash. AppCreation mapping precedes run_native."
+        },
+        {
+            "kind": "static-preservation",
+            "location": "experiments/rust-ui-memory-app/src/system_font.rs:12",
+            "evidence": "Linux path and face_index=1 preserved; fs::read returns original I/O error through ?."
+        },
+        {
+            "kind": "coverage-gap",
+            "location": "tests/rust-ui-system-fonts/contract.json",
+            "evidence": "Planned missing/unreadable owned-fixture cases lack a path/read injection seam. This regression contract leaves them unverified."
+        },
+        {
+            "kind": "static-only-platform",
+            "location": "experiments/rust-ui-memory-app/src/system_font.rs:25",
+            "evidence": "Windows var_os, absolute Disk prefix and Malgun/index0 reviewed as source only; no native support claim."
+        }
+    ],
+    "optional_minimum_seam": "If runtime error coverage is required later, frontend can provide an internal reader/path injection boundary retaining the fixed default plus a test-callable pre-run_native initialization path reusing the original AppCreation mapping. Proposal only; no production hook added or requested here.",
+    "conclusion": "No confirmed defect found within this limited diff review. Explicit error/platform coverage gaps remain; this is not overall safety assurance."
+}
