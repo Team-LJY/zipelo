@@ -1,0 +1,154 @@
+{
+    "schemaVersion": 1,
+    "productionHead": "df292b44ac4da78ab5e27576a6e226991b1db2c5",
+    "productionPr": "https://github.com/Team-LJY/zipelo/pull/35",
+    "productionSha256": {
+        "Cargo.lock": "bb094be9b047cc7a9100492e1e7aa69ddbbc2a3d8bf2c4e8eaa49024160fd2c3",
+        "Cargo.toml": "26fcf2d89f9078f3fce6500212c19f9ff630338b568c753f611944297ebafba5",
+        "SHA256SUMS": "6737037c8b906ffdad418c8e8b817dfae5b06049da784e11254771ba0d619a48",
+        "contract.json": "2b6d84bb571df34b34ae608864ec88502ffc1439298756499a47b309a9c9d225",
+        "src/lib.rs": "3b2019fd963600155fd4dc01f55fef7f3e5c8ceec944a36597de984d5a8b7e8b",
+        "src/storage.rs": "cc4e74eb52f1016792857aebdddf2c52430fbddc6714117edc9d843d5a2b65df"
+    },
+    "branch": "fix/rust-memory-zip-create-regressions",
+    "ownership": {
+        "production": "backend; no edits by this test change",
+        "tests": "bugfix; only tests/rust-memory-zip-create/",
+        "integration": "manager and backend; new combined head required"
+    },
+    "tests": {
+        "publicApiFunctions": 42,
+        "privateStorageFunctions": 11,
+        "totalFunctions": 53,
+        "functions": {
+            "api.rs": [],
+            "lifecycle.rs": [
+                "input_checkpoints_partition_bytes_into_at_most_64k",
+                "stored_cancel_at_every_observed_checkpoint_returns_no_artifact",
+                "deflate_cancel_at_every_observed_checkpoint_returns_no_artifact",
+                "stored_injected_deadline_at_every_observed_checkpoint_is_sticky",
+                "deflate_injected_deadline_at_every_observed_checkpoint_is_sticky",
+                "cancellation_at_return_discards_finished_zip",
+                "budget_failure_blocks_cleanup_callbacks_and_preserves_cause",
+                "invalid_timeout_rejected_before_callbacks",
+                "cancellation_at_start_precedes_unsupported_option"
+            ],
+            "limits.rs": [
+                "caller_input_exact_and_one_over",
+                "aggregate_input_not_just_each_entry_is_bounded",
+                "hard_input_limit_and_larger_caller_cannot_bypass",
+                "zero_input_budget_allows_empty_file_only",
+                "artifact_counts_as_one_additional_entry",
+                "hard_input_count_1024_and_one_over",
+                "output_exact_and_one_byte_over_caller_budget",
+                "stored_output_hard_limit_exact_and_one_over",
+                "processed_is_input_plus_zip_without_rewrite_double_charge",
+                "processed_budget_covers_all_input_before_writer_creation",
+                "central_directory_overflow_is_checked_before_write_and_return",
+                "zero_output_or_processed_budget_cannot_publish_empty_file",
+                "maximal_caller_values_do_not_overflow_small_creation"
+            ],
+            "names.rs": [
+                "rejects_root_drive_backslash_and_dot_components",
+                "rejects_every_ascii_control_and_windows_dangerous_character",
+                "rejects_reserved_stems_case_extensions_and_trimmed_spaces",
+                "rejects_trailing_space_dot_and_space_only_components",
+                "rejects_unicode_including_korean_and_decomposed_names",
+                "component_255_accepted_256_rejected",
+                "full_name_1024_accepted_1025_rejected",
+                "safe_ascii_punctuation_and_nonreserved_stems_remain_accepted",
+                "exact_and_ascii_case_duplicates_conflict",
+                "ancestor_collision_is_rejected_in_both_orders_and_cases",
+                "common_prefix_without_separator_is_not_a_collision",
+                "sibling_directory_case_spelling_is_preserved"
+            ],
+            "roundtrip.rs": [
+                "stored_empty_file_roundtrip",
+                "deflate_empty_file_roundtrip",
+                "stored_preserves_order_contents_crc_method_and_fixed_time",
+                "deflate_preserves_order_contents_crc_method_and_fixed_time",
+                "default_method_is_deflate",
+                "csharp_ascii_hello_fixture_roundtrip",
+                "empty_archive_is_invalid",
+                "unsupported_flags_stop_before_input_or_output"
+            ],
+            "storage.rs": [
+                "memory_storage_patch_does_not_double_charge_extent",
+                "memory_storage_budget_failure_precedes_allocation_and_is_sticky",
+                "memory_storage_processed_failure_precedes_extension",
+                "memory_storage_checked_processed_sum_rejects_overflow",
+                "memory_storage_seek_modes_preserve_bytes_and_reject_holes",
+                "memory_storage_cancelled_patch_is_atomic_and_latched",
+                "memory_storage_expired_real_clock_rejects_patch_without_callback",
+                "memory_storage_injected_deadline_remains_after_callback_recovers",
+                "memory_storage_first_failure_dominates_later_clock_and_callback",
+                "memory_storage_typed_failure_survives_io_and_zip_wrapping",
+                "memory_storage_drop_cannot_clear_preexisting_failure"
+            ],
+            "support.rs": []
+        },
+        "parameterizedScenarios": "Multiple cases per function; function count is not a run/pass count."
+    },
+    "wiringRequired": {
+        "status": "Not applied. Backend owns production manifest and private module connection.",
+        "cargoTomlAppend": "[[test]]\nname = \"memory_zip_create\"\npath = \"../../tests/rust-memory-zip-create/api.rs\"\n",
+        "storageRsAppend": "#[cfg(test)]\n#[path = \"../../../tests/rust-memory-zip-create/storage.rs\"]\nmod memory_zip_storage_tests;\n",
+        "privateAccess": "Tests compile as a child module of production storage, not a copied implementation. No public test hooks or production exports needed."
+    },
+    "oracles": [
+        "Roundtrip through existing zip reader with known CRC 0xcbf43926 for ASCII 123456789 and CRC 0 for empty files.",
+        "Inspect only newly generated normal ZIP structures: local/central CRC and lengths, no ZIP64 sentinels/extra fields, expected count and final footer adjacency. No malformed EOCD fixture or old blocked reproduction.",
+        "Compare stored and deflated order/name/content/CRC/method/fixed DOS time. Same Rust output used to calculate small exact budgets; never compare full C# ZIP bytes.",
+        "Private sink tests inspect bytes, position and capacity before/after failed writes; force first errors without real allocator failure.",
+        "For each successful trace checkpoint, separately inject Cancelled or Deadline, require Err and no later callbacks. Covers Input, patch Write/Seek, Finish and Return actually observed by that trace."
+    ],
+    "csharpEvidence": [
+        {
+            "path": "tests/runtime/RuntimeTests.cs:218",
+            "mapping": "hello.txt bytes [7,8,9], processed/output/entry failure cases; copied intent only, original unchanged."
+        },
+        {
+            "path": "tests/runtime/RuntimeTests.cs:239",
+            "mapping": "ASCII case duplicate and ancestor conflicts. Linux-only allowed names/backslash behavior deliberately not claimed as parity."
+        },
+        {
+            "path": "src/Zipelo.Core/OutputPathPolicy.cs:53",
+            "mapping": "ASCII reserved stems, component length, controls, trailing dot/space; Unicode excluded."
+        }
+    ],
+    "staticReview": {
+        "productionReviewed": [
+            "src/lib.rs",
+            "src/storage.rs"
+        ],
+        "observations": [
+            "Private storage checks input + maximum logical extent before reserve/resize. Rewrites do not double charge.",
+            "Gate first failure is sticky; pre-existing gate failure blocks later callbacks and storage writes/seeks/flushes.",
+            "Owned inputs are moved and then dropped; no recovery/zeroization guarantee.",
+            "Upstream ZipWriter::finish consumes writer and may implicitly finalize again before backend-only failure is returned. stderr and all backend cleanup work are not suppressed; existing contract discloses this limitation."
+        ],
+        "newConfirmedDefects": [],
+        "conclusion": "Static source review and regression sources only. No dynamic correctness or vulnerability-free claim."
+    },
+    "validation": {
+        "rustfmt": "Installed 1.99.1 rustfmt format and check completed. Default stable shim initially lacked rustfmt; no installation or toolchain settings changed.",
+        "localProductionMatchesFixedRemoteBlobs": true,
+        "build": false,
+        "typeCheck": false,
+        "testExecution": false,
+        "runLimitations": [
+            "42 public tests and 11 private tests are not yet wired or executed.",
+            "Callback Deadline tests prove injected stop behavior only. Private expired-Instant test initializes an already expired deadline and preexisting sink state; it is not an elapsed-wait or concurrent timing test.",
+            "Allocation and Engine wrapping checks are type-mapping tests, not actual allocator/OOM or codec failure reproductions.",
+            "No hard CPU/heap/preemption, worker/process/filesystem/IPC/UI, Windows execution, full C# parity or product acceptance validation."
+        ]
+    },
+    "centralCommandsAfterWiring": [
+        "sha256sum -c tests/rust-memory-zip-create/SHA256SUMS",
+        "cargo +1.99.1 build --locked --offline --manifest-path experiments/rust-memory-zip-create/Cargo.toml --lib --target-dir tests/rust-memory-zip-create/target",
+        "cargo +1.99.1 test --locked --offline --manifest-path experiments/rust-memory-zip-create/Cargo.toml --lib --target-dir tests/rust-memory-zip-create/target -- --test-threads=1",
+        "cargo +1.99.1 test --locked --offline --manifest-path experiments/rust-memory-zip-create/Cargo.toml --test memory_zip_create --target-dir tests/rust-memory-zip-create/target -- --test-threads=1"
+    ],
+    "centralRules": "Verify exact integrated head and all files first. Require discovery of 42 public and 11 private tests; zero tests is not a pass. Report each run and fixed head separately. Stop on mismatched source or unexpected targets.",
+    "preserved": "No existing source, fixture, expectation, lock, PR28-34 head, security reproduction or execveat action changed. No download/install/build/test execution/VM/user archive/merge/C# deletion."
+}
