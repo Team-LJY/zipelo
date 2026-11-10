@@ -1,0 +1,22 @@
+[package]
+name = "zipelo-worker-session-regressions"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+publish = false
+autotests = false
+autobenches = false
+autoexamples = false
+
+[workspace]
+
+[dependencies]
+zipelo-rust-worker-session-model = { path = "../../experiments/rust-worker-session-model" }
+
+[[test]]
+name = "worker_session_baseline"
+path = "../rust-worker-session-model/main.rs"
+
+[[test]]
+name = "worker_session_regressions"
+path = "main.rs"
