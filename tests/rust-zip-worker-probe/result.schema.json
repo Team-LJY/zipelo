@@ -1,0 +1,199 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "Zipelo comparison child observation",
+    "type": "object",
+    "required": [
+        "caseId",
+        "implementation",
+        "sourceCommit",
+        "binarySha256",
+        "inputSha256",
+        "osPolicy",
+        "jobId",
+        "state",
+        "error",
+        "injection",
+        "faultKind",
+        "observedCause",
+        "coverageLayer",
+        "detail",
+        "injectionConfirmed",
+        "causeVerified",
+        "published",
+        "cleanupConfirmed",
+        "inputUnchanged",
+        "existingTargetUnchanged",
+        "sourcePositionVerified",
+        "diagnosticsComplete",
+        "stopRequired",
+        "schemaVersion",
+        "verdict",
+        "workerExitConfirmed",
+        "workerStarted",
+        "workerExitCode",
+        "outputBytes",
+        "processedBytes",
+        "elapsedMilliseconds",
+        "entries"
+    ],
+    "additionalProperties": false,
+    "properties": {
+        "caseId": {
+            "type": "string"
+        },
+        "implementation": {
+            "type": "string"
+        },
+        "sourceCommit": {
+            "type": "string"
+        },
+        "binarySha256": {
+            "type": "string"
+        },
+        "inputSha256": {
+            "type": "string"
+        },
+        "osPolicy": {
+            "type": "string"
+        },
+        "jobId": {
+            "type": "string"
+        },
+        "state": {
+            "type": "string"
+        },
+        "error": {
+            "type": "string"
+        },
+        "injection": {
+            "type": "string"
+        },
+        "faultKind": {
+            "type": "string"
+        },
+        "observedCause": {
+            "type": "string"
+        },
+        "coverageLayer": {
+            "type": "string"
+        },
+        "detail": {
+            "type": "string"
+        },
+        "injectionConfirmed": {
+            "type": "boolean"
+        },
+        "causeVerified": {
+            "type": "boolean"
+        },
+        "published": {
+            "type": "boolean"
+        },
+        "cleanupConfirmed": {
+            "type": "boolean"
+        },
+        "inputUnchanged": {
+            "type": "boolean"
+        },
+        "existingTargetUnchanged": {
+            "type": "boolean"
+        },
+        "sourcePositionVerified": {
+            "type": "boolean"
+        },
+        "diagnosticsComplete": {
+            "type": "boolean"
+        },
+        "stopRequired": {
+            "type": "boolean"
+        },
+        "schemaVersion": {
+            "const": 1
+        },
+        "verdict": {
+            "enum": [
+                "pass",
+                "fail",
+                "blocked"
+            ]
+        },
+        "workerExitConfirmed": {
+            "type": [
+                "boolean",
+                "null"
+            ]
+        },
+        "workerStarted": {
+            "type": [
+                "boolean",
+                "null"
+            ]
+        },
+        "workerExitCode": {
+            "type": [
+                "integer",
+                "null"
+            ]
+        },
+        "outputBytes": {
+            "type": "integer",
+            "minimum": 0
+        },
+        "processedBytes": {
+            "type": "integer",
+            "minimum": 0
+        },
+        "elapsedMilliseconds": {
+            "type": "number",
+            "minimum": 0
+        },
+        "entries": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "required": [
+                    "name",
+                    "kind",
+                    "length",
+                    "sha256",
+                    "crc32",
+                    "id",
+                    "verification"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                    "name": {
+                        "type": "string"
+                    },
+                    "kind": {
+                        "type": "string"
+                    },
+                    "length": {
+                        "type": "integer"
+                    },
+                    "sha256": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "crc32": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
+                    },
+                    "id": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "verification": {
+                        "type": "string"
+                    }
+                }
+            }
+        }
+    }
+}

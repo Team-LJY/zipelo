@@ -1,0 +1,7 @@
+<Project>
+    <PropertyGroup>
+        <IsPackable>false</IsPackable>
+        <Deterministic>true</Deterministic>
+        <DefineConstants>$(DefineConstants);ZIPELO_STREAM_DIAGNOSTICS</DefineConstants>
+    </PropertyGroup>
+</Project>

@@ -1,0 +1,414 @@
+{
+    "schema_version": 1,
+    "base_commit": "626483e8935aaa03d5a34feebc61be2f9180b80d",
+    "dependency": {
+        "pr": "https://github.com/Team-LJY/zipelo/pull/10",
+        "head": "06e5d6c17318349ea96efef81a9e7d8f54c1e1a1",
+        "files": {
+            "src/Zipelo.Runtime/Streaming/ZipStreamIndex.cs": "981bcdecc754f68aca0bcb39fc6f6db1e779c72798a58bcb9d83a96963a96468",
+            "src/Zipelo.Runtime/Streaming/ExtractionWire.cs": "f64c47add55bf7499227ce65921e1e4241cd51425336052f402b9381c086129f",
+            "src/Zipelo.Runtime/Streaming/HandleReadStream.cs": "1ec38e3698b87d0caf60c474d3d2632dd232d53f9b00bea434861aa627bcda1b",
+            "src/Zipelo.Runtime/PendingFolderPublication.Streaming.cs": "9ba2e3441560ee40997b3c42f10ef9a1670c8058a834637d51a11ba28bc3d0f9",
+            "src/Zipelo.Worker/RemoteSnapshotStream.cs": "b21e6705e1345bbf15b3d8c88b81beeadf6382b08e45b2b78b78b53641d7d5dd",
+            "src/Zipelo.Worker/StreamingZipExtractor.cs": "a0a2600e5c1255fac7de39023d9e9efdf24c4be47e55a544af0abd418f221bac",
+            "src/Zipelo.Runtime/Streaming/StreamingZipWorkerClient.cs": "5fc0945a2b60f28f3a378cb69398cacab965314108e2cbc35234cefe1c693fb5",
+            "src/Zipelo.Runtime/PendingFolderPublication.cs": "2701cfbea1d5d26f25ddb5c8af2555f6a9812d4cc602a7d3c4385ad1a18c8647",
+            "src/Zipelo.Worker/Program.cs": "adb9f68a77a86f57399462f4a6cbc3c591e41cb0e4964dec66a1fe0441f72fec",
+            "docs/STREAMING_EXTRACTION.md": "c19abfce34453850a5819acf14ada4c24db0731b1eb078719ac01d34e3424d7a",
+            "src/Zipelo.Runtime/Streaming/StreamingExtractionDiagnostics.cs": "52e3b492c49f802b6f0839f4d9f33ddbf4c8b958049978c6147c45b1ce1e1b4c",
+            "src/Zipelo.Runtime/WindowsFolderPublication.cs": "26d4c9d24286c7eec6d5dee37457e7e9fa587ec620ee08c7ec4dc9596674aee3",
+            "src/Zipelo.Runtime/WindowsPublication.cs": "170bf2a4cad401241e7eb324ab9c9acdb9b1f7a4cbf8147e301d00696366b720"
+        },
+        "policy_head": "069bdef56cd4f74294a76cffbd2a4ab4ac16d43b",
+        "policy_document_git_blob": "8e4bdb057942a9edffa0073e57b5a49cfad0ff05",
+        "previous_code_head": "624be260489b0be96f5f9a2132c3ae36d2a27b3f",
+        "previous_diagnostics_head": "4736301ff80e85c5d555b2c4a582ea38ca2411be",
+        "reference_scope": "head와 files는 현재 고정한 제품 소스의 원격 바이트/Git blob/SHA-256 대조 기준이며 실행 통과를 뜻하지 않음. policy_head는 유지되는 Deflate 정책의 과거 기준, previous_code_head와 previous_diagnostics_head는 이전 코드/진단 검토의 과거 기준임. 실제 실행 후보와 결과는 중앙 manifest에서 별도로 고정함 previous_cleanup_diagnostics_head는 노드별 정리 진단의 과거 기준임.",
+        "previous_cleanup_diagnostics_head": "dca92ee10f5af1f159a4650f38aee3e3c1650d6f"
+    },
+    "api": "StreamingZipWorkerClient.ExtractToNewFolderAsync / --extract-stream-v2",
+    "count": 72,
+    "cases": [
+        "real.empty",
+        "real.empty-items",
+        "real.stored",
+        "real.deflate",
+        "real.nested",
+        "source.position",
+        "source.writable",
+        "source.nonseek",
+        "source.oversize",
+        "source.content-change",
+        "source.length-change",
+        "budget.entries",
+        "budget.output",
+        "budget.processed",
+        "zip.traversal",
+        "zip.duplicate",
+        "zip.crc",
+        "zip.truncated",
+        "zip.deflate_tail_garbage_small",
+        "zip.deflate_tail_garbage_large",
+        "zip.deflate_tail_second_small",
+        "zip.deflate_tail_second_large",
+        "zip.deflate_tail_bad_crc",
+        "zip.deflate_tail_bad_length",
+        "zip.deflate_tail_overlap",
+        "peer.valid",
+        "peer.range-valid",
+        "peer.version",
+        "peer.wrong-job",
+        "peer.wrong-item",
+        "peer.sequence",
+        "peer.wrong-length",
+        "peer.huge-chunk",
+        "peer.truncated-header",
+        "peer.truncated-body",
+        "peer.crc",
+        "peer.missing-item",
+        "peer.extra-item",
+        "peer.short-data",
+        "peer.duplicate-chunk",
+        "peer.early-eof",
+        "peer.failed-end",
+        "peer.cancelled-end",
+        "peer.trailing",
+        "peer.nonzero",
+        "peer.unsupported",
+        "peer.range-version",
+        "peer.range-id",
+        "peer.range-sequence",
+        "peer.range-offset",
+        "peer.range-count",
+        "peer.range-reserved",
+        "peer.range-budget",
+        "cancel.before_snapshot",
+        "cancel.snapshot_read",
+        "cancel.silent",
+        "cancel.pause-data",
+        "deadline.silent",
+        "deadline.no-eof",
+        "deadline.no-exit",
+        "cleanup.input_foreign",
+        "cleanup.output_foreign",
+        "destination.file",
+        "destination.directory",
+        "destination.link",
+        "path.parent_link",
+        "path.parent_replacement",
+        "publication.v1_normal",
+        "publication.common_normal",
+        "publication.common_parent_replaced",
+        "publication.common_parent_missing",
+        "publication.common_parent_link"
+    ],
+    "commands": {
+        "build_tests": "dotnet build tests/streaming-extraction/Zipelo.StreamingExtractionTests.csproj -c Release --configfile tests/streaming-extraction/NuGet.Config --artifacts-path tests/streaming-extraction/.work/test-artifacts -o tests/streaming-extraction/.work/app -p:UseAppHost=false --disable-build-servers",
+        "build_worker": "dotnet build src/Zipelo.Worker/Zipelo.Worker.csproj -c Release --configfile tests/streaming-extraction/NuGet.Config --artifacts-path tests/streaming-extraction/.work/worker-artifacts -o tests/streaming-extraction/.work/app -p:UseAppHost=false --disable-build-servers",
+        "list": "dotnet tests/streaming-extraction/.work/app/Zipelo.StreamingExtractionTests.dll --list",
+        "run": "dotnet tests/streaming-extraction/.work/app/Zipelo.StreamingExtractionTests.dll --sandbox-parent <absolute-existing-tests-sandbox-directory>",
+        "self_contained": "중앙 SDK에서 테스트와 Worker를 동일 RID/Configuration/런타임의 별도 출력으로 게시하고 동일 이름 공유 파일의 해시 일치를 확인한 뒤 시험 app 출력에 Worker 산출물을 조립함. OS 앱호스트를 직접 실행하며 PATH에서 실행파일을 탐색하지 않음. Linux는 기존 실행 권한이 필요함",
+        "run_stored": "dotnet tests/streaming-extraction/.work/app/Zipelo.StreamingExtractionTests.dll --sandbox-parent <absolute-existing-tests-sandbox-directory> --case real.stored",
+        "run_nested": "dotnet tests/streaming-extraction/.work/app/Zipelo.StreamingExtractionTests.dll --sandbox-parent <absolute-existing-tests-sandbox-directory> --case real.nested",
+        "run_deflate_tail": "dotnet tests/streaming-extraction/.work/app/Zipelo.StreamingExtractionTests.dll --sandbox-parent <absolute-existing-tests-sandbox-directory> --case zip.deflate_tail_garbage_small",
+        "run_selected": "dotnet tests/streaming-extraction/.work/app/Zipelo.StreamingExtractionTests.dll --sandbox-parent <absolute-existing-tests-sandbox-directory> --case real.stored --case real.nested --case zip.deflate_tail_garbage_small",
+        "list_selected": "dotnet tests/streaming-extraction/.work/app/Zipelo.StreamingExtractionTests.dll --list --case zip.deflate_tail_garbage_small --case real.nested --case real.stored",
+        "build_tests_diagnostics": "dotnet build tests/streaming-extraction/Zipelo.StreamingExtractionTests.csproj -c Release --configfile tests/streaming-extraction/NuGet.Config --artifacts-path tests/streaming-extraction/.work/diagnostic-test-artifacts -o tests/streaming-extraction/.work/diagnostic-app -p:UseAppHost=false --disable-build-servers -p:DefineConstants=ZIPELO_STREAM_DIAGNOSTICS",
+        "build_worker_diagnostics": "dotnet build src/Zipelo.Worker/Zipelo.Worker.csproj -c Release --configfile tests/streaming-extraction/NuGet.Config --artifacts-path tests/streaming-extraction/.work/diagnostic-worker-artifacts -o tests/streaming-extraction/.work/diagnostic-app -p:UseAppHost=false --disable-build-servers -p:DefineConstants=ZIPELO_STREAM_DIAGNOSTICS",
+        "run_diagnostics": "dotnet tests/streaming-extraction/.work/diagnostic-app/Zipelo.StreamingExtractionTests.dll --sandbox-parent <absolute-existing-tests-sandbox-directory> --diagnostics",
+        "run_stored_diagnostics": "dotnet tests/streaming-extraction/.work/diagnostic-app/Zipelo.StreamingExtractionTests.dll --sandbox-parent <absolute-existing-tests-sandbox-directory> --case real.stored --diagnostics",
+        "run_nested_diagnostics": "dotnet tests/streaming-extraction/.work/diagnostic-app/Zipelo.StreamingExtractionTests.dll --sandbox-parent <absolute-existing-tests-sandbox-directory> --case real.nested --diagnostics",
+        "run_deflate_tail_diagnostics": "dotnet tests/streaming-extraction/.work/diagnostic-app/Zipelo.StreamingExtractionTests.dll --sandbox-parent <absolute-existing-tests-sandbox-directory> --case zip.deflate_tail_garbage_small --diagnostics",
+        "run_selected_diagnostics": "dotnet tests/streaming-extraction/.work/diagnostic-app/Zipelo.StreamingExtractionTests.dll --sandbox-parent <absolute-existing-tests-sandbox-directory> --case real.stored --case real.nested --case zip.deflate_tail_garbage_small --diagnostics"
+    },
+    "assertions": [
+        "완료는 Published=true, Error=None, 정상 Worker 종료 0, 정확한 항목 내용/목록, 입력/출력 정리 성공이 모두 필요함",
+        "오류/취소/기한/비정상 종료/EOF 누락 시 결과를 게시하지 않음. 일반 실패는 임시 트리도 남지 않아야 함",
+        "모든 실제 파일 입력의 내용, 호출자 Stream 수명/Position과 기존 표식을 검사함",
+        "미소유 파일을 임시 입력/출력 트리에 주입하면 해당 파일은 보존되고 정리 실패와 정확한 임시 이름을 반환해야 함",
+        "부모 교체가 실제 성공하면 이동된 부모와 대체된 부모 어느 쪽에도 게시하지 않고 실패해야 함. OS가 교체 자체를 막으면 BLOCKED로 구분함",
+        "가짜 peer는 시험 앱의 고정 경로에서 실행하며 작업 ID와 일치하는 peer.json이 있는 시험 소유 CWD에서만 제어 파일을 사용함. 입력 ZIP 위치나 PATH에서 실행파일을 찾지 않음",
+        "새 파일만 포함하며 기존 98+46 등록/기대값과 제품 파일을 수정하지 않음"
+    ],
+    "bounds": {
+        "fixture_entry_bytes": 131073,
+        "fixture_entries": 8,
+        "default_peer_payload": 65537,
+        "range_budget": "64 KiB 응답 버퍼를 재사용하는 최대 769회 요청, 실제 파일은 66 KiB 미만, 누적 범위 트래픽 48 MiB 경계 시험",
+        "io": "호스트 원본 읽기 64 KiB 이내 검사. 전체 입력 초과는 작은 Stream의 선언 Length=16777217만 사용함",
+        "time": "사례 성공 기한 45초 유지, 작업 15초, 가짜 peer 12초, 장벽 5초, 기한 사례 2초. 사례 종료 시 취소 콜백/실제 작업/Worker 종료 확인에 별도 최대 25초만 사용하며 늦은 완료는 시간 초과 실패를 바꾸지 않음",
+        "disk": "테스트가 새 GUID 하위 폴더만 생성하고 기존 부모 권한을 바꾸지 않음. Linux 새 폴더를 0700으로 생성함. 모든 결과는 검토용으로 남기며 재귀 삭제하지 않음",
+        "fixture_suffix_bytes": 65540
+    },
+    "validation": {
+        "static": "passed: JSON/XML, unchanged 72 registrations/order/fixtures/expectations and 15/45/25 second limits, default runner equivalence, diagnostic API/opt-in/fixed file/1 second stop/status/drop handling and two-file scope; not C# compilation",
+        "compile": "not_run for current diagnostics integration: local SDK absent; historical f7ad4ec2 Windows compilation does not validate this candidate",
+        "windows": "manager reported original f7ad4ec2 before candidate: 4 passed, real.nested timeout, 67 unexecuted; another run passed real.nested then timed out at zip.deflate_tail_garbage_small (18 passed, 1 failed, 53 unexecuted). Current selection/lifetime candidate not_run",
+        "ubuntu": "read original round14-before log: 68 passed, 4 parent identity failures, 0 blocked; real.nested passed. Current selection/lifetime candidate not_run",
+        "fixture_formula": "passed: Python zlib independently decoded both manually encoded raw Stored block formulas (9/65535 decoded bytes); this did not execute the C# fixture or product"
+    },
+    "suspected_product_issue": {
+        "case": "path.parent_replacement",
+        "evidence": "고정 PR #10의 LinuxFolderPublication은 열린 부모 fd의 identity만 확인하고 최종 게시 때 원래 목적지 경로가 그 fd에 계속 연결되는지 재확인하지 않음. 부모 이동 후 같은 경로를 교체하면 이동된 디렉터리로 게시하면서 Published=true를 반환할 가능성이 있음",
+        "status": "reproduced in original round14-before Ubuntu26 log: streaming parent replacement and three common publication parent cases failed because publication was accepted",
+        "expected": "교체가 성공한 경우 실패하고 양쪽 부모의 기존 표식을 보존함",
+        "owner": "backend"
+    },
+    "remaining_conditions": [
+        "Windows NTFS와 Linux ext4/XFS, 부모 쓰기 권한 조건이 필요함. 기존 게시 API의 빈 폴더 사전검사가 실패하면 전체를 BLOCKED하고 성공으로 세지 않음",
+        "Windows symlink/부모 이동 주입이 거절되면 해당 사례는 BLOCKED, 전체 종료 코드는 3임. 권한 설정을 변경하지 않음",
+        "실제 디스크 부족, 네이티브 write/fsync/rename 실패와 삭제 syscall 오류의 결정적 주입점은 없어 미검증. 미소유 자식에 의한 정리 실패는 별도 검사임",
+        "동일 사용자에 의한 아주 짧은 파일/부모 교체의 모든 타이밍은 보장하지 않음. 정상 EOF 뒤 최종 게시 직전의 결정적 취소/경합 시험 진입점도 없음",
+        "원본 두 번 읽기 중 불일치/Length 변화는 검사하나 변경 후 복구 및 두 번 같은 혼합 상태 관찰의 원자성은 제품이 보장하지 않음",
+        "2 MiB 메타데이터, 65536 범위 요청/출력 프레임, 4096 노드와 정확한 16 MiB 입출력 전체 경계는 이 작은 통합 묶음에서 직접 소진하지 않음. 축소 JobLimits와 이전 프로토콜 검사를 별도 근거로 구분함",
+        "대용량 성능/OS 자원 격리/비협조적 사용자 Stream 강제 중단은 미검증이며 완료라고 주장하지 않음",
+        "공용 게시 부모 변경 검사는 실제 내부 객체를 reflection으로 호출함. 공개 v1 PublishAsync 중간 주입과 검사/rename 사이 경합은 별도 시험 진입점이 없어 미검증임"
+    ],
+    "files": [
+        "tests/streaming-extraction/Zipelo.StreamingExtractionTests.csproj",
+        "tests/streaming-extraction/NuGet.Config",
+        "tests/streaming-extraction/ZipFixture.cs",
+        "tests/streaming-extraction/TestArea.cs",
+        "tests/streaming-extraction/FakeWorker.cs",
+        "tests/streaming-extraction/SourceStreams.cs",
+        "tests/streaming-extraction/ExtractionCases.cs",
+        "tests/streaming-extraction/Program.cs",
+        "tests/streaming-extraction/contract.json",
+        "tests/streaming-extraction/PublicationCases.cs",
+        "tests/streaming-extraction/CaseLifetime.cs"
+    ],
+    "deflate_tail_policy": {
+        "source": "https://github.com/Team-LJY/zipelo/blob/069bdef56cd4f74294a76cffbd2a4ab4ac16d43b/docs/STREAMING_EXTRACTION.md",
+        "dependency_note": "Deflate 정책은 069bdef5로 고정함. 현재 dependency.head 4736301f는 기본 비활성 진단을 추가했으며 최신 구현 해시는 dependency.files에 기록함",
+        "expected": "packed 범위 안 첫 raw Deflate 출력만 게시함. 후행 garbage/두 번째 스트림 자체는 허용하되 다음 정상 ZIP 항목의 내용/범위, 원본, 길이/CRC와 게시 조건을 보존해야 함",
+        "fixtures": "garbage 7/65537바이트와 독립 최종 Stored Deflate 스트림 14/65540바이트를 첫 Deflate 뒤에 추가함. local/central packed 길이와 후속 레코드 오프셋을 함께 계산하고 실행 전 경계를 확인함",
+        "read_ahead": "작은 후행 데이터와 64 KiB 초과 후행 데이터를 구분함. 실제 내부 버퍼 크기/소비량은 관측하지 않으며 Stream.Position으로 정확한 Deflate 소비를 증명하지 않음",
+        "controls": "길이/CRC를 local/central 양쪽에서 함께 변조해 해제 내용 불일치를 검사함. packed 길이만 1바이트 늘려 다음 local 레코드 침범도 거절해야 함. 기존 60개 기대값은 유지함",
+        "limits": "성공 4개는 실제 첫 출력+후속 ZIP 항목의 합을 MaxOutputBytes로 사용함. 각 입력은 67 KiB 미만이며 suffix 포함 원본을 보존하고 ProcessedBytes가 전체 입력의 복사/양쪽 재읽기 합계 이상인지 검사함",
+        "risk": "후행 바이트 의미/무결성을 검증하지 않아 숨은 데이터와 다른 도구의 해석 차이가 가능함. 성공은 ZIP 전체 인증/정규화가 아니며 CRC도 암호학적 인증이 아님",
+        "observation": "각 새 사례는 게시/오류/검증 항목 수/실제 출력량/Worker 종료 상태를 OBSERVE로 기록한 뒤 고정 기대값을 검사함. 허용 또는 거절 중 하나면 통과하는 검사는 아님",
+        "execution": "not_run: 로컬 SDK 없음. 정적 정책 대조와 fixture 구조 확인은 실제 C# 또는 Windows/Ubuntu 결과를 대체하지 않음"
+    },
+    "common_publication": {
+        "scope": "v1 NewFolderPublisher.PublishAsync 정상 대조 1개, v1/v2 공용 PendingFolderPublication의 정상 대조 1개와 부모 교체/소실/외부 링크 전환 거절 3개",
+        "injection": "공개 API에 결정적 중간 훅이 없어 시험 코드에서 실제 Runtime 내부 게시 객체를 reflection으로 생성함. Initialize/WriteAsync/Verify가 완료된 뒤 부모를 이동하고 동기 Publish를 호출함. 제품 코드는 복사/수정하지 않으며 reflection 멤버 누락은 실패임",
+        "guarantees": "게시 직전 이미 교체된 경로는 거절하고 원래/이동된 부모 양쪽에 결과를 게시하지 않음. 외부 sentinel, 이동된 부모의 기존 표식, 대체된 부모의 표식/링크와 원본 fixture를 보존함. 실패 시 실제 Abort로 소유 임시 항목을 정리하고 정리 실패를 숨기지 않음",
+        "v1_limit": "공용 객체의 동일 Publish 경로와 공개 v1 정상 동작을 분리 검증함. 공개 PublishAsync 호출 중 교체를 주입하거나 v1 전체 Worker 해제/오류 변환을 결정적으로 실행하는 검사는 아님",
+        "race_limit": "교체 완료부터 Publish 호출까지 시험 스레드가 순서를 통제함. 재개방/동일성 검사와 rename 사이의 정확한 TOCTOU 경합, 같은 사용자의 일시 이동 후 복원 또는 모든 동시 변경을 원자적으로 차단하는 보장은 검증하지 않음",
+        "platform": "Windows가 열린 부모 이동 또는 링크 생성을 거절하면 BLOCKED임. 권한 변경 없이 새 GUID 시험 트리 안에서만 이동/링크 생성함",
+        "fixture": "1 KiB 파일 1개, 새 시험 부모/이동 부모/외부 sentinel 폴더만 사용함",
+        "required_product_fix": {
+            "pr": "https://github.com/Team-LJY/zipelo/pull/13",
+            "branch": "fix/linux-parent-identity",
+            "head": "eb243b6b2a049b95f4f9a74075f3b09aac7c4152",
+            "status": "원격 head 확인, 제품 수정은 테스트 PR에 포함하지 않으며 통합 실행은 중앙 검증에 남음"
+        },
+        "validation": "not_run: SDK absent; public v1/common phase/OS results pending central validation"
+    },
+    "case_lifetime": {
+        "finding": "기존 WaitAsync(45초)는 대기만 종료하며 default 토큰의 실제 추출 작업을 취소하지 않았음. Main이 반환해도 Worker 종료와 임시 정리는 보장하지 못했음",
+        "action": "사례마다 AsyncLocal 수명 범위를 두고 기존 호출 토큰과 보호 토큰을 연결함. 실제 제품 Task와 작업 ID를 추적함. 공개 v1/공용 게시에도 보호 토큰을 전달함. 사례 본문은 Task.Run으로 호출해 첫 await 이전의 동기 구간도 바깥 대기 범위 안에 둠",
+        "shutdown": "성공/실패/차단/45초 초과 뒤 CancelAsync로 취소하고 사례 본문, 콜백, 등록된 실제 제품 Task를 합계 25초 안에서 기다림. 성공적으로 반환한 제품 결과의 WorkerExitConfirmed를 추가 확인하고 입력/출력 정리 실패와 임시 이름을 보고함",
+        "fail_closed": "45초 초과는 늦게 성공하거나 정리가 끝나도 FAIL/124를 유지함. 작업 또는 Worker 종료가 확인되지 않으면 SHUTDOWN_UNCONFIRMED와 미실행 수를 기록하고 후속 사례를 실행하지 않음. 이 경우 진행 중 작업의 토큰/현재 폴더를 먼저 폐기/복원하지 않음",
+        "cleanup": "테스트가 기존 폴더를 재귀 삭제하거나 임시 트리 정리를 성공으로 꾸미지 않음. 소유 임시 정리는 제품 경로에 맡기며 명시적 정리 실패 사례의 보존 기대값은 유지함. 스냅샷 취소 사례의 장벽 오류도 finally에서 제품 작업을 기다린 뒤 입력 Stream을 닫음",
+        "limits": "취소 요청과 제한된 종료 확인이지 강제 종료 보장이 아님. API가 실제 Task를 반환하지 않거나 취소를 무시하면 Worker PID/handle을 테스트에 노출하지 않아 안전한 강제 종료를 할 수 없음. 전역 프로세스 열거/임의 PID 종료를 하지 않고 중앙 감독자가 해당 실행의 잔류 프로세스를 확인해야 함. WorkerExitConfirmed는 제품 결과 계약의 확인이며 독립 OS 프로세스 열거 증명은 아님",
+        "references": [
+            "https://learn.microsoft.com/en-us/dotnet/api/system.threading.tasks.task.waitasync",
+            "https://learn.microsoft.com/en-us/dotnet/api/system.threading.cancellationtokensource.cancelasync"
+        ],
+        "validation": "not_run: 새 보호 코드 C# 컴파일, 실제 timeout 후 취소/정리/Worker 종료 및 두 OS 실행은 중앙 검증 필요"
+    },
+    "nested_fixture_review": {
+        "names": [
+            "folder/",
+            "folder/a",
+            "b"
+        ],
+        "method": "Stored, UTF-8 flag 0x0800, ZIP32, nonencrypted, no extra fields/data descriptor",
+        "bytes": 285,
+        "output_bytes": 3,
+        "local_offsets": [
+            0,
+            37,
+            77
+        ],
+        "central_offset": 109,
+        "central_bytes": 154,
+        "crc32": [
+            "00000000",
+            "b6cc4292",
+            "4b0bbe37"
+        ],
+        "expected": "디렉터리 1개와 파일 2개, 검증 항목 수 3, 출력 3바이트, 정확한 트리/원본/기존 표식 보존, 정상 Worker 종료/정리 뒤 게시",
+        "evidence": "ZipFixture.Build와 ZipStreamIndex 및 CreateStreamingEntry의 디렉터리 재사용/파일 경계 계약을 정적으로 대조함. C# Stored 생성 공식을 독립 Python struct로 번역한 285바이트를 zipfile로 목록/내용/CRC 검증함. C# fixture 실행을 대체하지 않음",
+        "formula_sha256": "b99d92f199b3e58e52732de1a15b78f72c52db13716b7d73399f25349831616f",
+        "regression": "real.nested fixture/기대값과 제품 기한을 변경하지 않음. 중앙에서 확인한 45초 실패는 그대로 남음"
+    },
+    "selection": {
+        "syntax": "--case <정확한 등록 이름>을 반복할 수 있음. --list와 --sandbox-parent 실행에 같은 선택 규칙을 적용함",
+        "default": "--case가 없으면 기존 Cases의 72개를 기존 등록 순서 그대로 실행함",
+        "allowlist": "기존 Cases 배열에 StringComparison.Ordinal로 정확히 일치하는 이름만 허용함. wildcard/정규식/임의 코드/추가 실행파일/경로 선택은 없음. --diagnostics는 별도의 무값 진단 플래그임",
+        "order": "선택 인수의 입력 순서와 무관하게 기존 Cases 배열 순서를 유지함. 중복과 미등록 이름, 잘못된 인수 쌍은 종료 2로 거절함",
+        "isolation": "선택 검사는 별도 프로세스 호출마다 새 GUID 시험 루트를 생성함. 잘못된 선택과 --list는 시험 루트 생성/플랫폼 사전검사/Worker 실행 전에 끝남",
+        "counts": "전체 등록 수, 선택 수, 제외 수를 구분하고 미실행 수는 선택된 사례 중 실행하지 못한 수만 셈",
+        "deadlines": "기존 15초 작업 예산, 45초 사례 실패 기준과 최대 25초 취소/종료 확인을 보존함",
+        "stop": "종료 미확인 또는 시간 초과이면 124로 종료하며 다음 선택 사례를 실행하지 않음. 별도 호출도 중앙 감독자가 이전 실제 Worker 종료를 확인하기 전에는 시작하지 않아야 함",
+        "diagnostics": "--diagnostics를 명시할 때만 PR #10 head 4736301f의 공개 진단 API를 호출함. --list와 조합하거나 중복 지정하면 종료 2임. 로그 경로나 실행 코드를 인수로 받지 않음",
+        "validation": "정적 등록/순서/수명 제어 대조만 수행함. SDK 부재로 새 선택 파서의 C# 컴파일과 실행은 중앙 검증 필요",
+        "central_checks": [
+            {
+                "args": [
+                    "--list"
+                ],
+                "exit": 0,
+                "count": 72
+            },
+            {
+                "args": [
+                    "--list",
+                    "--case",
+                    "real.stored"
+                ],
+                "exit": 0,
+                "cases": [
+                    "real.stored"
+                ]
+            },
+            {
+                "args": [
+                    "--list",
+                    "--case",
+                    "real.nested"
+                ],
+                "exit": 0,
+                "cases": [
+                    "real.nested"
+                ]
+            },
+            {
+                "args": [
+                    "--list",
+                    "--case",
+                    "zip.deflate_tail_garbage_small"
+                ],
+                "exit": 0,
+                "cases": [
+                    "zip.deflate_tail_garbage_small"
+                ]
+            },
+            {
+                "args": [
+                    "--list",
+                    "--case",
+                    "zip.deflate_tail_garbage_small",
+                    "--case",
+                    "real.nested",
+                    "--case",
+                    "real.stored"
+                ],
+                "exit": 0,
+                "cases": [
+                    "real.stored",
+                    "real.nested",
+                    "zip.deflate_tail_garbage_small"
+                ]
+            },
+            {
+                "args": [
+                    "--list",
+                    "--case"
+                ],
+                "exit": 2
+            },
+            {
+                "args": [
+                    "--list",
+                    "--case",
+                    "real.*"
+                ],
+                "exit": 2
+            },
+            {
+                "args": [
+                    "--list",
+                    "--case",
+                    "Real.nested"
+                ],
+                "exit": 2
+            },
+            {
+                "args": [
+                    "--list",
+                    "--case",
+                    "../real.nested"
+                ],
+                "exit": 2
+            },
+            {
+                "args": [
+                    "--list",
+                    "--case",
+                    "real.nested",
+                    "--case",
+                    "real.nested"
+                ],
+                "exit": 2
+            },
+            {
+                "args": [
+                    "--list",
+                    "--worker",
+                    "arbitrary-program"
+                ],
+                "exit": 2
+            },
+            {
+                "args": [
+                    "--list",
+                    "--case",
+                    "real.nested",
+                    "unexpected"
+                ],
+                "exit": 2
+            }
+        ]
+    },
+    "diagnostics": {
+        "product_head": "06e5d6c17318349ea96efef81a9e7d8f54c1e1a1",
+        "product_contract": "https://github.com/Team-LJY/zipelo/pull/10",
+        "compile": "Runtime을 포함한 테스트/Worker 양쪽 검증 빌드에 -p:DefineConstants=ZIPELO_STREAM_DIAGNOSTICS를 전달함. 일반 출력과 별도 diagnostic 출력/중간 폴더를 사용함. 프로젝트 기본 설정은 바꾸지 않음",
+        "opt_in": "명시적 --diagnostics 없이는 진단 API 시작/종료를 호출하지 않고 파일도 만들지 않음. 일반 Runtime 빌드에서 이 플래그를 쓰면 IsEnabled=false를 확인해 시험 루트 생성/Worker 실행 전에 종료 2임",
+        "file": "기존 링크 검사와 새 GUID 시험 루트 생성 후 해당 루트의 고정 stream-diagnostics.tsv만 지정함. 임의 로그 경로 옵션/환경 변수가 없음. 부모가 시험 소유이고 실행 중 교체되지 않는 환경이 필요하며 동일 사용자에 의한 부모 이동까지 원자적으로 막는다는 보장은 없음",
+        "start": "StreamingExtractionDiagnostics.TryStart(path)는 프로세스당 한 번만 호출하며 전체 선택 사례를 하나의 Start/Stop 세션으로 감쌈. Stop 이후 같은 프로세스에서 재시작할 수 없으므로 반복 재현은 새 프로세스를 사용함. true는 시작 요청 수락일 뿐 파일 개방 성공이 아님. false이면 사례를 실행하지 않고 종료 2임",
+        "correlation": "진단 모드에서만 시험 stdout에 등록 사례 이름과 Stopwatch.GetTimestamp()의 BEGIN/END를 남김. Runtime TSV의 단조 ticks/job ID와 대응할 수 있음. Worker stdout/stderr에는 텍스트를 추가하지 않으며 가짜 Worker 모드의 조기 분기를 유지함",
+        "stop": "실행 종료 또는 실패 후 finally에서 StopAsync().WaitAsync(TimeSpan.FromSeconds(1))로 최대 1초만 기다림. 이는 15초 작업/45초 사례/25초 종료 확인 예산과 분리됨. Status와 Dropped를 항상 시험 stdout에 보고하며 대기 예외는 타입만 기록함",
+        "integrity": "완료 대기 성공, Status=2, Dropped=0인 경우만 logComplete=true임. 사례 종료 124는 닫힌 로그도 보수적으로 불완전 표시함. 값은 종료 시점의 상태 관찰이며 독립 OS Worker 종료나 누락 없는 전체 실행 증명이 아님",
+        "exit": "사례 결과가 성공 0인데 진단이 불완전하면 전체 종료 2로 보고함. 기존 실패 1/설정 실패 2/차단 3/시간 초과 또는 종료 미확인 124는 보존함. 진단 실패로 제품 실패를 성공 처리하지 않음",
+        "bounds": "제품 계약: 큐 1024건, 프로세스 전체 기록 시도 16384건, 한 줄 512바이트, 파일 4 MiB. 기록 시도 한도 초과는 Status를 바꾸지 않고 Dropped만 증가시킬 수 있으므로 Status=2여도 Dropped가 양수이면 불완전함. 포화/쓰기 실패는 상태와 Dropped로 관찰함. background 쓰기 스레드의 강제 중단은 하지 않으며 멈춘 파일시스템에서 잔류할 수 있음",
+        "validation": "과거 4736301ff80e85c5d555b2c4a582ea38ca2411be에서 API/분기/예산을 정적으로 대조함. dca92ee10f5af1f159a4650f38aee3e3c1650d6f의 원격 12개 파일 대조 뒤, 현재 06e5d6c17318349ea96efef81a9e7d8f54c1e1a1까지 변경된 WindowsFolderPublication/WindowsPublication 두 파일의 원격 바이트/Git blob/SHA-256을 추가 대조함. 실행 통과를 뜻하지 않으며 실제 후보/결과는 중앙 manifest에서 구분함",
+        "central_checks": [
+            "일반 빌드 + 진단 옵션 없음: 기본 72개/선택 실행과 동일하며 진단 파일 없음",
+            "일반 빌드 + --diagnostics: 종료 2, 새 시험 루트/Worker 없음",
+            "진단 빌드 + 진단 옵션 없음: 진단 파일 없음",
+            "진단 빌드 + 각 단일 사례 + --diagnostics: 새 GUID 아래 고정 파일, 사례 BEGIN/END, 실제 process.started PID, Status/Dropped 확인",
+            "--list --diagnostics 및 --diagnostics 중복: 종료 2, 새 시험 루트/Worker 없음",
+            "--diagnostics <임의 경로>: 종료 2, 임의 경로 접근/실행 없음",
+            "전체 진단 실행: 기존 72개 순서/기대값/15초/45초 보존, 한도 도달 시 불완전 표시",
+            "시간 초과/Worker 종료 미확인: 124 보존, 후속 선택 사례 미실행, 로그 종료 최대 1초와 불완전 표시 확인"
+        ],
+        "cancellation_interpretation": "operation.cancelled는 deadline 전용 표시가 아님. 정상 성공 정리와 range 오류에서도 내부 Cancel이 호출됨. 기록 값은 caller token 취소 여부일 뿐이며 0을 deadline 증거로 해석하지 않음. 앞선 단계, 단조 경과 시간과 별도 종료 결과를 함께 대조함",
+        "process_identity": "process.started의 PID는 Process.Start가 반환한 process.Id임. 실행파일 표시는 시작 의도와 경로 문자열 해시이며 실행파일 내용 해시나 OS가 확인한 실제 이미지/명령행이 아님. 실제 이미지/명령행과 잔류 Worker 여부는 중앙 검증에서 별도로 확인함"
+    },
+    "cleanup_probe": {
+        "project": "tests/streaming-extraction/cleanup-probe/Zipelo.CleanupProbe.csproj",
+        "contract": "tests/streaming-extraction/cleanup-probe/contract.json",
+        "cases": [
+            "cleanup.empty",
+            "cleanup.sync",
+            "cleanup.async",
+            "cleanup.sequence24"
+        ],
+        "default_registration": "별도 진단 전용 실행기이며 이 계약의 72개 기본 등록에는 추가하지 않음",
+        "status": "이번 24작업 사례는 정적 검토만 수행함. 실제 컴파일/실행 미검증이며 146d85a1 단일 3종의 중앙 결과는 별도 계약의 과거 기준으로만 기록함"
+    }
+}

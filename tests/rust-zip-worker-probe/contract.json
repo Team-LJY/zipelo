@@ -1,0 +1,105 @@
+{
+    "schemaVersion": 1,
+    "stage": "source-only",
+    "casesFile": "cases.json",
+    "conditions": 80,
+    "classification": {
+        "extractAndProtection": 48,
+        "list": 9,
+        "hostFaultPeer": 16,
+        "unavailable": 7
+    },
+    "plannedObservations": 137,
+    "candidateScope": "unencrypted single-disk ZIP32 Stored/Deflate",
+    "boundaries": {
+        "workerDestinationPath": false,
+        "wholeArchiveLibraryExtract": false,
+        "independentHostValidation": true,
+        "ratioLimit": "not_implemented_in_Core",
+        "rawInflaterCheckpoints": "not_required",
+        "peerCases": "host validation only; never Rust decoder evidence",
+        "causeCases": "reject outcome and format-versus-actual-EOF attribution are separate; missing attribution blocks cause acceptance"
+    },
+    "fixtures": {
+        "mainSamples": 22,
+        "pr12DerivedSamples": 15,
+        "total": 37,
+        "sourceWriterUnchanged": true,
+        "prepareOnce": true,
+        "commonBundleRequired": true,
+        "commonBundleSha256Required": true,
+        "originalManifestMustMatch": true,
+        "regenerationOnEachOs": false,
+        "expectedOutput": "synthetic source bytes, never C# decoder output"
+    },
+    "timeoutsSeconds": {
+        "job": 15,
+        "deadlinePeer": 2,
+        "operation": 45,
+        "cancellationDrain": 25,
+        "diagnosticDrain": 1,
+        "externalCase": 75,
+        "externalKillObservation": 5,
+        "startGate": 10
+    },
+    "ownership": {
+        "windows": "unnamed Job with kill-on-close; child waits for assignment gate; inherited descendants must stay in Job",
+        "linux": "fresh session; /proc session members; bounded kill of owned groups only",
+        "notASandbox": true,
+        "retainedTestArtifacts": "source.zip, marker, observations, diagnostics and successful synthetic results remain for central inspection; host temporary directories must be absent",
+        "stopOn": "timeout, unconfirmed worker/owned process exit, unexpected temporary residue, diagnostic failure; no next case"
+    },
+    "resultRules": {
+        "pass": "expected outcome plus exact preservation/tree/length/hash/CRC checks and observed injection; supervisor exit confirmation required",
+        "blocked": "unavailable injection, live link privilege failure or missing decoder cause attribution; never pass",
+        "failure": "unexpected error, timeout, crash, missing result, cleanup failure or mismatched output",
+        "integrity": "BudgetExceeded/EngineFailure/Timeout are not accepted as proof of ZIP format rejection",
+        "list": "ordered names/kinds/sizes/entry-index IDs and NotChecked verification; duplicate names remain visible",
+        "sourcePosition": "v1 List consumes its private input stream; v2 Extract restores initial position",
+        "osPolicy": "Windows case-fold/reserved/drive names blocked; Linux case-distinct/backslash/colon legal names preserved"
+    },
+    "centralCommands": [
+        "기존 승인 환경에서 새 폴더의 SHA256SUMS와 provenance origins gitBlob/sha256을 먼저 대조함.",
+        "dotnet build tests/rust-zip-worker-probe/frozen/src/Zipelo.Worker/Zipelo.Worker.csproj --configfile tests/rust-zip-worker-probe/NuGet.Config",
+        "dotnet build tests/rust-zip-worker-probe/host/Zipelo.RustComparison.csproj --configfile tests/rust-zip-worker-probe/NuGet.Config",
+        "dotnet build tests/rust-zip-worker-probe/corpus/Zipelo.ComparisonCorpus.csproj --configfile tests/rust-zip-worker-probe/NuGet.Config",
+        "중앙에서 config.example.json을 시험 소유 경로에 복사하고 실제 절대경로/바이너리/전체 산출물 해시 및 Rust lock 정보를 채움.",
+        "python3 tests/rust-zip-worker-probe/runner.py prepare --config <actual-config> --work-parent <absolute-tests/rust-zip-worker-probe>",
+        "python3 tests/rust-zip-worker-probe/runner.py run --config <actual-config> --work-parent <absolute-tests/rust-zip-worker-probe> --bundle <same-bundle.json> --bundle-sha256 <pinned-hash>",
+        "Windows에서는 기존 python 실행기 명령으로 동일 명령을 사용함. 양 OS의 bundle 바이트와 SHA256이 같아야 함.",
+        "신규 설치/복원 네트워크 접근은 이 계약으로 승인하지 않음. 기존 SDK/reference packs만 사용함."
+    ],
+    "performance": {
+        "mode": "--performance, fullAcceptance=true required; current seven unavailable conditions prevent acceptance",
+        "warmupPerCase": 1,
+        "measuredRepetitions": 5,
+        "alternatingImplementations": true,
+        "statistics": [
+            "median",
+            "min",
+            "max"
+        ],
+        "elapsed": "process launch through host CRC/path verification/publication/cleanup/exit; listing is an end-to-end startup proxy",
+        "rss": "50ms concurrent process RSS sum; shared pages may be counted twice; not OS-independent absolute measure",
+        "idle": "one-shot worker N/A; future unchanged host idle requires stable no-job phase",
+        "installedSize": "measure installer/download bytes separately from installed app plus required runtimes, codecs, resources and notices; prerequisite-present/absent separately; no numbers generated",
+        "sameConditions": [
+            "hardware",
+            "OS and filesystem",
+            "input bundle hash",
+            "safety checks",
+            "Release/build configuration",
+            "runtime prerequisites",
+            "cache state recorded"
+        ],
+        "limit": "tiny regression corpus is not representative large-archive throughput"
+    },
+    "knownGates": [
+        "Windows FileDispositionInfo cleanup hang unresolved",
+        "cleanup.sequence24 unverified; reference contract preserved, not rerun",
+        "exact prepublication/real-output cancellation and concurrent publication barriers unavailable",
+        "decoder EOF versus format error not exposed separately by current host",
+        "runtime and Cargo.lock/dependency/license resolution remain central validation"
+    ],
+    "supervisorNote": "강제 종료로 잔류를 없앴더라도 사례 통과로 세지 않음. fixture 작성도 외부 감독 자식에서 수행함."
+}

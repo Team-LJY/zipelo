@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+        <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="../frozen/src/Zipelo.Runtime/Zipelo.Runtime.csproj" />
+        <Compile Include="Program.cs" />
+        <Compile Include="Cases.cs" />
+        <Compile Include="../shared/Models.cs" />
+        <Compile Include="../shared/Check.cs" />
+        <Compile Include="../frozen/pr12/ZipFixture.cs" />
+        <Compile Include="../frozen/pr12/FakeWorker.cs" />
+        <Compile Include="../frozen/pr12/CaseLifetime.cs" />
+    </ItemGroup>
+</Project>

@@ -1,0 +1,46 @@
+{
+    "schemaVersion": 1,
+    "sourceManifestSha256": "REPLACE_WITH_SHA256SUMS_SHA256",
+    "dotnet": {
+        "path": "ABSOLUTE_EXISTING_DOTNET_PATH",
+        "sha256": "REPLACE"
+    },
+    "host": {
+        "path": "ABSOLUTE_ZIPELO_RUSTCOMPARISON_DLL",
+        "sha256": "REPLACE",
+        "sourceCommit": "REPLACE_WITH_COMPARISON_PR_HEAD"
+    },
+    "corpus": {
+        "path": "ABSOLUTE_ZIPELO_COMPARISONCORPUS_DLL",
+        "sha256": "REPLACE"
+    },
+    "implementations": [
+        {
+            "name": "csharp",
+            "path": "ABSOLUTE_FROZEN_ZIPELO_WORKER_DLL",
+            "sha256": "REPLACE",
+            "sourceCommit": "06e5d6c17318349ea96efef81a9e7d8f54c1e1a1"
+        },
+        {
+            "name": "rust",
+            "path": "ABSOLUTE_RUST_WORKER",
+            "sha256": "REPLACE",
+            "sourceCommit": "REPLACE_WITH_RUST_PR_HEAD"
+        }
+    ],
+    "artifacts": [
+        {
+            "path": "ABSOLUTE_EACH_LOADED_DLL_EXECUTABLE_DEPS_RUNTIME_CONFIG_AND_NATIVE_FILE",
+            "sha256": "REPLACE"
+        }
+    ],
+    "rustBuild": {
+        "toolchain": "REPLACE",
+        "target": "REPLACE",
+        "features": [
+            "deflate-flate2-zlib-rs"
+        ],
+        "manifestSha256": "REPLACE",
+        "lockSha256": "REPLACE"
+    }
+}

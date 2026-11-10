@@ -1,0 +1,450 @@
+{
+    "schemaVersion": 1,
+    "repository": "Team-LJY/zipelo",
+    "branch": "fix/rust-zip-worker-comparison",
+    "baseCommit": "018e7593ecb2b3a7ae0bc17a440ecf2c0de8b4dd",
+    "sourceSelection": {
+        "core": "main exact source",
+        "runtime": "PR10 exact full Runtime tree",
+        "csharpWorker": "PR10 exact full Worker tree",
+        "pr12": "unchanged fixture/peer/lifetime and reference contracts",
+        "pythonFixtures": "main exact writer/manifest"
+    },
+    "preservation": "모든 frozen 파일은 해당 고정 commit의 바이트 그대로임. 기존 프로젝트/source/fixture/PR과 experiments/rust-core는 변경하지 않음.",
+    "assembly": "frozen/src의 원본 csproj 상대 참조를 보존함. 새 host는 frozen Runtime만 참조하며 source와 fixture는 tests 아래에만 존재함.",
+    "buildProperties": "새 상위 Directory.Build.props가 IsPackable=false, Deterministic=true, ZIPELO_STREAM_DIAGNOSTICS를 설정함. 원본 프로젝트 파일은 바꾸지 않음.",
+    "origins": [
+        {
+            "path": "src/Zipelo.Core/ArchiveContracts.cs",
+            "dest": "frozen/src/Zipelo.Core/ArchiveContracts.cs",
+            "gitBlob": "824df6a63f24abf3abfa1517534978e78d20df87",
+            "commit": "018e7593ecb2b3a7ae0bc17a440ecf2c0de8b4dd",
+            "sha256": "8dcfa7ac7287b326abf2b755352fbc4e2f494326a6557688a87a6dc6874987a5",
+            "bytes": 4150
+        },
+        {
+            "path": "src/Zipelo.Core/ArchiveJob.cs",
+            "dest": "frozen/src/Zipelo.Core/ArchiveJob.cs",
+            "gitBlob": "9da5ac64166f554d3b5bec1a0883a4c7519a1505",
+            "commit": "018e7593ecb2b3a7ae0bc17a440ecf2c0de8b4dd",
+            "sha256": "5510ad4cf73d5c689def68aeda28d69cd9a97ff103b694c8c9fb557729136f8e",
+            "bytes": 5627
+        },
+        {
+            "path": "src/Zipelo.Core/EngineContext.cs",
+            "dest": "frozen/src/Zipelo.Core/EngineContext.cs",
+            "gitBlob": "2be57080632563c998857f37ebcb2c677aa14506",
+            "commit": "018e7593ecb2b3a7ae0bc17a440ecf2c0de8b4dd",
+            "sha256": "dfe432962117e663f1c34155184c47a4dc78ec34ce198c165ecf50003f8cfa30",
+            "bytes": 8915
+        },
+        {
+            "path": "src/Zipelo.Core/JobBudget.cs",
+            "dest": "frozen/src/Zipelo.Core/JobBudget.cs",
+            "gitBlob": "339bd7d050d5328f0288922543691ca65eaf7f68",
+            "commit": "018e7593ecb2b3a7ae0bc17a440ecf2c0de8b4dd",
+            "sha256": "878caa4469642b2e03f375872ce29eadea3d6fa0d4b6f34b6bf5e0fb8dfa008f",
+            "bytes": 2929
+        },
+        {
+            "path": "src/Zipelo.Core/OutputPathPolicy.cs",
+            "dest": "frozen/src/Zipelo.Core/OutputPathPolicy.cs",
+            "gitBlob": "2137722b9d8313116fb1ad1423a9a9cc1495f9e5",
+            "commit": "018e7593ecb2b3a7ae0bc17a440ecf2c0de8b4dd",
+            "sha256": "c4df09afc59d00560f3cef8e05c00925b78c8162c4b074b4d1c244e77ec4b509",
+            "bytes": 3356
+        },
+        {
+            "path": "src/Zipelo.Core/Zipelo.Core.csproj",
+            "dest": "frozen/src/Zipelo.Core/Zipelo.Core.csproj",
+            "gitBlob": "4ac43012b1e508a0a2abb29f5ba548073e41bb19",
+            "commit": "018e7593ecb2b3a7ae0bc17a440ecf2c0de8b4dd",
+            "sha256": "4a5119f64ab563257bdd5ccc395360ce8964a62ea3ed3fd4aba7a056be1a5e6c",
+            "bytes": 281
+        },
+        {
+            "path": "src/Zipelo.Runtime/LinuxFolderPublication.cs",
+            "dest": "frozen/src/Zipelo.Runtime/LinuxFolderPublication.cs",
+            "gitBlob": "8da1da01e8d3e168acf752cd14875abb46a3cb99",
+            "commit": "06e5d6c17318349ea96efef81a9e7d8f54c1e1a1",
+            "sha256": "6840730b865afa73bf1cbd1494c936b56f9cc3b2b74f958694785c02ee61f2d8",
+            "bytes": 12443
+        },
+        {
+            "path": "src/Zipelo.Runtime/LinuxPublication.cs",
+            "dest": "frozen/src/Zipelo.Runtime/LinuxPublication.cs",
+            "gitBlob": "52b43495becdf7f30280d579bca0c79ca143cb80",
+            "commit": "06e5d6c17318349ea96efef81a9e7d8f54c1e1a1",
+            "sha256": "ef684bf291b7af4a23ec21b2877b2559fd57aaad3eef802c6dba9097fd5f0505",
+            "bytes": 3698
+        },
+        {
+            "path": "src/Zipelo.Runtime/NewFolderPublisher.cs",
+            "dest": "frozen/src/Zipelo.Runtime/NewFolderPublisher.cs",
+            "gitBlob": "3caa30eca46918f77a1ac29c03f12993e60b05d1",
+            "commit": "06e5d6c17318349ea96efef81a9e7d8f54c1e1a1",
+            "sha256": "fe77406a2f7716f740fe52f4296b8639043806060a75983b759fec674eb2169e",
+            "bytes": 3595
+        },
+        {
+            "path": "src/Zipelo.Runtime/NewZipPublisher.cs",
+            "dest": "frozen/src/Zipelo.Runtime/NewZipPublisher.cs",
+            "gitBlob": "4c6e34f289700f40f342f1bc3fde351de3c234a2",
+            "commit": "06e5d6c17318349ea96efef81a9e7d8f54c1e1a1",
+            "sha256": "fc2a302f05b2e773ff4b8c87baf55e6133b7dbc6f5ca5ab75418c516c033c916",
+            "bytes": 5526
+        },
+        {
+            "path": "src/Zipelo.Runtime/PendingFolderPublication.Streaming.cs",
+            "dest": "frozen/src/Zipelo.Runtime/PendingFolderPublication.Streaming.cs",
+            "gitBlob": "61d0ec54969f2c94aa721374d19a80f4794285a4",
+            "commit": "06e5d6c17318349ea96efef81a9e7d8f54c1e1a1",
+            "sha256": "9ba2e3441560ee40997b3c42f10ef9a1670c8058a834637d51a11ba28bc3d0f9",
+            "bytes": 2777
+        },
+        {
+            "path": "src/Zipelo.Runtime/PendingFolderPublication.cs",
+            "dest": "frozen/src/Zipelo.Runtime/PendingFolderPublication.cs",
+            "gitBlob": "58b910adc9ddb918b0df351371ab5911fef85429",
+            "commit": "06e5d6c17318349ea96efef81a9e7d8f54c1e1a1",
+            "sha256": "2701cfbea1d5d26f25ddb5c8af2555f6a9812d4cc602a7d3c4385ad1a18c8647",
+            "bytes": 4638
+        },
+        {
+            "path": "src/Zipelo.Runtime/Streaming/ExtractionWire.cs",
+            "dest": "frozen/src/Zipelo.Runtime/Streaming/ExtractionWire.cs",
+            "gitBlob": "315f1f58242ad709ad285e0853d287cb7ae6c399",
+            "commit": "06e5d6c17318349ea96efef81a9e7d8f54c1e1a1",
+            "sha256": "f64c47add55bf7499227ce65921e1e4241cd51425336052f402b9381c086129f",
+            "bytes": 7064
+        },
+        {
+            "path": "src/Zipelo.Runtime/Streaming/HandleReadStream.cs",
+            "dest": "frozen/src/Zipelo.Runtime/Streaming/HandleReadStream.cs",
+            "gitBlob": "83e3151937f6b002da71a0806df676e5e54517ef",
+            "commit": "06e5d6c17318349ea96efef81a9e7d8f54c1e1a1",
+            "sha256": "1ec38e3698b87d0caf60c474d3d2632dd232d53f9b00bea434861aa627bcda1b",
+            "bytes": 1635
+        },
+        {
+            "path": "src/Zipelo.Runtime/Streaming/StreamingExtractionDiagnostics.cs",
+            "dest": "frozen/src/Zipelo.Runtime/Streaming/StreamingExtractionDiagnostics.cs",
+            "gitBlob": "3ee84ad027fad6a2ec9981d48015a6d3814235a8",
+            "commit": "06e5d6c17318349ea96efef81a9e7d8f54c1e1a1",
+            "sha256": "52e3b492c49f802b6f0839f4d9f33ddbf4c8b958049978c6147c45b1ce1e1b4c",
+            "bytes": 5857
+        },
+        {
+            "path": "src/Zipelo.Runtime/Streaming/StreamingZipWorkerClient.cs",
+            "dest": "frozen/src/Zipelo.Runtime/Streaming/StreamingZipWorkerClient.cs",
+            "gitBlob": "ca21bc6bc4d984490db0695b751fb1703e1c50a5",
+            "commit": "06e5d6c17318349ea96efef81a9e7d8f54c1e1a1",
+            "sha256": "5fc0945a2b60f28f3a378cb69398cacab965314108e2cbc35234cefe1c693fb5",
+            "bytes": 22782
+        },
+        {
+            "path": "src/Zipelo.Runtime/Streaming/WorkerStreamChannel.cs",
+            "dest": "frozen/src/Zipelo.Runtime/Streaming/WorkerStreamChannel.cs",
+            "gitBlob": "7c2053a1f8d00f49f0365eecc4729c4df0e94d0c",
+            "commit": "06e5d6c17318349ea96efef81a9e7d8f54c1e1a1",
+            "sha256": "4109e345138763df3ecec0368755660b5891349567908ac7ddb996b38ca94046",
+            "bytes": 8355
+        },
+        {
+            "path": "src/Zipelo.Runtime/Streaming/WorkerStreamContract.cs",
+            "dest": "frozen/src/Zipelo.Runtime/Streaming/WorkerStreamContract.cs",
+            "gitBlob": "5b15d7dc3feb7be303473f088f8d1d0604d665a3",
+            "commit": "06e5d6c17318349ea96efef81a9e7d8f54c1e1a1",
+            "sha256": "0e8e8c21478224d6ed861e50a5ec310dce8b6af522ce3d66e4f899a926cf7a94",
+            "bytes": 1831
+        },
+        {
+            "path": "src/Zipelo.Runtime/Streaming/WorkerStreamValidator.cs",
+            "dest": "frozen/src/Zipelo.Runtime/Streaming/WorkerStreamValidator.cs",
+            "gitBlob": "9543c4d0ed5ac32355f0e8e33544ae5711c83534",
+            "commit": "06e5d6c17318349ea96efef81a9e7d8f54c1e1a1",
+            "sha256": "933e93fc4d4cae7ac9e1bc0621ed0598994ff057ff0c320c7dc5f7cc59ada09a",
+            "bytes": 8161
+        },
+        {
+            "path": "src/Zipelo.Runtime/Streaming/ZipStreamIndex.cs",
+            "dest": "frozen/src/Zipelo.Runtime/Streaming/ZipStreamIndex.cs",
+            "gitBlob": "b32faf70fb3076b677a5ea5e5fd912b779d8c8a7",
+            "commit": "06e5d6c17318349ea96efef81a9e7d8f54c1e1a1",
+            "sha256": "981bcdecc754f68aca0bcb39fc6f6db1e779c72798a58bcb9d83a96963a96468",
+            "bytes": 9618
+        },
+        {
+            "path": "src/Zipelo.Runtime/WindowsFolderGuard.cs",
+            "dest": "frozen/src/Zipelo.Runtime/WindowsFolderGuard.cs",
+            "gitBlob": "41bbac6e6a530ddd29b61cb3f03aa2c08f4590f2",
+            "commit": "06e5d6c17318349ea96efef81a9e7d8f54c1e1a1",
+            "sha256": "8924c914edbf246a4335c89bdecea0f099c7d76701c1430192a6a51066112df7",
+            "bytes": 7507
+        },
+        {
+            "path": "src/Zipelo.Runtime/WindowsFolderPublication.cs",
+            "dest": "frozen/src/Zipelo.Runtime/WindowsFolderPublication.cs",
+            "gitBlob": "5e5883b1587c9b527de3d39511ff30abd689066f",
+            "commit": "06e5d6c17318349ea96efef81a9e7d8f54c1e1a1",
+            "sha256": "26d4c9d24286c7eec6d5dee37457e7e9fa587ec620ee08c7ec4dc9596674aee3",
+            "bytes": 4734
+        },
+        {
+            "path": "src/Zipelo.Runtime/WindowsPublication.cs",
+            "dest": "frozen/src/Zipelo.Runtime/WindowsPublication.cs",
+            "gitBlob": "2bed25179acca21e7d1e278d257e37a08c06b867",
+            "commit": "06e5d6c17318349ea96efef81a9e7d8f54c1e1a1",
+            "sha256": "170bf2a4cad401241e7eb324ab9c9acdb9b1f7a4cbf8147e301d00696366b720",
+            "bytes": 12274
+        },
+        {
+            "path": "src/Zipelo.Runtime/WorkerPlatform.cs",
+            "dest": "frozen/src/Zipelo.Runtime/WorkerPlatform.cs",
+            "gitBlob": "f4c7f85691a65c57dda910a4f42889e3a9feb60c",
+            "commit": "06e5d6c17318349ea96efef81a9e7d8f54c1e1a1",
+            "sha256": "08fa3b50c77a2d52de44038e0958af26cd04b18ba773c5e4b6e197953bd6a577",
+            "bytes": 620
+        },
+        {
+            "path": "src/Zipelo.Runtime/WorkerProtocol.cs",
+            "dest": "frozen/src/Zipelo.Runtime/WorkerProtocol.cs",
+            "gitBlob": "3d6bd65c01002cef64b9be8ee7c13b5004dd0c96",
+            "commit": "06e5d6c17318349ea96efef81a9e7d8f54c1e1a1",
+            "sha256": "582232bdddad14388858eb669fbcd6c4948f2c514273997bdab7af7b0f696a2f",
+            "bytes": 2775
+        },
+        {
+            "path": "src/Zipelo.Runtime/ZipExtraction.cs",
+            "dest": "frozen/src/Zipelo.Runtime/ZipExtraction.cs",
+            "gitBlob": "15d157ffba9ec2bc6d68ce546dad4d967264959f",
+            "commit": "06e5d6c17318349ea96efef81a9e7d8f54c1e1a1",
+            "sha256": "a7fcbd766dc0df71483ceb19bbf6fc02c4964d3ae290e368a92bb64ddfac3625",
+            "bytes": 4406
+        },
+        {
+            "path": "src/Zipelo.Runtime/ZipWorkerClient.cs",
+            "dest": "frozen/src/Zipelo.Runtime/ZipWorkerClient.cs",
+            "gitBlob": "bfaaa54f7c97ec0f5cf8b41d377c513ac61c425c",
+            "commit": "06e5d6c17318349ea96efef81a9e7d8f54c1e1a1",
+            "sha256": "5df676f75957cf081237671585ce6ad2098c6f8c8ed1392efece28960a3ebbd0",
+            "bytes": 8998
+        },
+        {
+            "path": "src/Zipelo.Runtime/Zipelo.Runtime.csproj",
+            "dest": "frozen/src/Zipelo.Runtime/Zipelo.Runtime.csproj",
+            "gitBlob": "67416c08e263ad27c9bb5a4c29f39683f7061263",
+            "commit": "06e5d6c17318349ea96efef81a9e7d8f54c1e1a1",
+            "sha256": "ccddaa1e9b6cc1cf686577f03a957c845e6c6abcc28ecb7cd4f27008e10a2619",
+            "bytes": 387
+        },
+        {
+            "path": "src/Zipelo.Worker/BoundedMemoryOutput.cs",
+            "dest": "frozen/src/Zipelo.Worker/BoundedMemoryOutput.cs",
+            "gitBlob": "694a953eb2d5e8e36c389336058e0314c46fe929",
+            "commit": "06e5d6c17318349ea96efef81a9e7d8f54c1e1a1",
+            "sha256": "a2ba58a623cb1e523c75c619ed7aff926d5ee93d31341131e7925fd802b8d777",
+            "bytes": 2499
+        },
+        {
+            "path": "src/Zipelo.Worker/BuiltInZipEngine.cs",
+            "dest": "frozen/src/Zipelo.Worker/BuiltInZipEngine.cs",
+            "gitBlob": "5374834e8f219a8618153a829fd30d9f57df217a",
+            "commit": "06e5d6c17318349ea96efef81a9e7d8f54c1e1a1",
+            "sha256": "55c47ea901cbb3434563a6d6e6549dcdc0df9fd1add8a0a5fb3497d936196d27",
+            "bytes": 5179
+        },
+        {
+            "path": "src/Zipelo.Worker/Program.cs",
+            "dest": "frozen/src/Zipelo.Worker/Program.cs",
+            "gitBlob": "29db356dadf07af417be5b1fc9318566480f3150",
+            "commit": "06e5d6c17318349ea96efef81a9e7d8f54c1e1a1",
+            "sha256": "adb9f68a77a86f57399462f4a6cbc3c591e41cb0e4964dec66a1fe0441f72fec",
+            "bytes": 2717
+        },
+        {
+            "path": "src/Zipelo.Worker/RemoteSnapshotStream.cs",
+            "dest": "frozen/src/Zipelo.Worker/RemoteSnapshotStream.cs",
+            "gitBlob": "0748d8794f54fdbf8ff2ce49118cb1d38dd4297d",
+            "commit": "06e5d6c17318349ea96efef81a9e7d8f54c1e1a1",
+            "sha256": "b21e6705e1345bbf15b3d8c88b81beeadf6382b08e45b2b78b78b53641d7d5dd",
+            "bytes": 3683
+        },
+        {
+            "path": "src/Zipelo.Worker/StreamingZipExtractor.cs",
+            "dest": "frozen/src/Zipelo.Worker/StreamingZipExtractor.cs",
+            "gitBlob": "67760bc623eb2d8d6937455b4643dea1e9ff088d",
+            "commit": "06e5d6c17318349ea96efef81a9e7d8f54c1e1a1",
+            "sha256": "a0a2600e5c1255fac7de39023d9e9efdf24c4be47e55a544af0abd418f221bac",
+            "bytes": 3351
+        },
+        {
+            "path": "src/Zipelo.Worker/ZipExtractor.cs",
+            "dest": "frozen/src/Zipelo.Worker/ZipExtractor.cs",
+            "gitBlob": "2a4df0c40f5c35a101d95cf00e236700f2963e2e",
+            "commit": "06e5d6c17318349ea96efef81a9e7d8f54c1e1a1",
+            "sha256": "f25abc6ceb49af9e63d71cd5def28530057734d73d9618f316d41d31fe30da61",
+            "bytes": 10092
+        },
+        {
+            "path": "src/Zipelo.Worker/Zipelo.Worker.csproj",
+            "dest": "frozen/src/Zipelo.Worker/Zipelo.Worker.csproj",
+            "gitBlob": "8d3550174cc99560a59acc6f69c6f621d6b9cf8d",
+            "commit": "06e5d6c17318349ea96efef81a9e7d8f54c1e1a1",
+            "sha256": "30bb76161c7c6e9761d41b05d2c5e7a28123be3f5f578cc4b62398ceb978a5ba",
+            "bytes": 430
+        },
+        {
+            "path": "tests/streaming-extraction/ZipFixture.cs",
+            "dest": "frozen/pr12/ZipFixture.cs",
+            "gitBlob": "de20212c6e4b7a1aa8f2a946cb66186ef32ed54b",
+            "commit": "35f1bdfd99b527f4f4f77f8c64ae4cb9b82afe57",
+            "sha256": "394f76e6181f52b09deee56a1105dc19289b858f53dc605396494ae010953c10",
+            "bytes": 6987
+        },
+        {
+            "path": "tests/streaming-extraction/FakeWorker.cs",
+            "dest": "frozen/pr12/FakeWorker.cs",
+            "gitBlob": "d2c18354d051ec8e63acba2b4c276c63d327ff20",
+            "commit": "35f1bdfd99b527f4f4f77f8c64ae4cb9b82afe57",
+            "sha256": "81f5909dbbf9de8e0c80965b191e3f741a9f045e909e4c9bf1397297f1dead7d",
+            "bytes": 7616
+        },
+        {
+            "path": "tests/streaming-extraction/CaseLifetime.cs",
+            "dest": "frozen/pr12/CaseLifetime.cs",
+            "gitBlob": "995b7983838db80a2682dd8e67079cc6fe5e8b6a",
+            "commit": "35f1bdfd99b527f4f4f77f8c64ae4cb9b82afe57",
+            "sha256": "af13821ec2f7b5102d0c3bdd52c51f13f71e8b15709125980eb4e4b5a779dd11",
+            "bytes": 4988
+        },
+        {
+            "path": "tests/streaming-extraction/contract.json",
+            "dest": "frozen/pr12/contract.json",
+            "gitBlob": "80d94cda298d1b1c8b5e6b407c382298d177d4b0",
+            "commit": "35f1bdfd99b527f4f4f77f8c64ae4cb9b82afe57",
+            "sha256": "ff25ad6f53622bfc59247710eef3f55b20fd92d78020496ddef7dc52d76a9851",
+            "bytes": 34558
+        },
+        {
+            "path": "tests/streaming-extraction/cleanup-probe/contract.json",
+            "dest": "frozen/pr12/cleanup-probe/contract.json",
+            "gitBlob": "d7d4a5d44ca3dfd1696bfedd041876a183cdfe60",
+            "commit": "35f1bdfd99b527f4f4f77f8c64ae4cb9b82afe57",
+            "sha256": "1ae5411c353ec7580b3812c78e524b0f9770682dc9071be15e9d71743b1aafd9",
+            "bytes": 16703
+        },
+        {
+            "path": "tests/extraction/fixture_factory.py",
+            "dest": "frozen/tests/extraction/fixture_factory.py",
+            "gitBlob": "2ae07dd9ca70a84b8dac5c0c69f8c6c73276d1d8",
+            "commit": "018e7593ecb2b3a7ae0bc17a440ecf2c0de8b4dd",
+            "sha256": "34ad974794c1618ebadaaf71220a56ef3d200967f8ee75c1ef14c73c8a2b6fa3",
+            "bytes": 6090
+        },
+        {
+            "path": "tests/extraction/fixtures.json",
+            "dest": "frozen/tests/extraction/fixtures.json",
+            "gitBlob": "9880275c366006aec3a5e9b32d48ebb5e571306f",
+            "commit": "018e7593ecb2b3a7ae0bc17a440ecf2c0de8b4dd",
+            "sha256": "4b53eaa45477b6a9327a1b32b7160222635a9f6bf671ba510bb606aabc36fe4a",
+            "bytes": 4752
+        },
+        {
+            "path": "LICENSE",
+            "dest": "frozen/LICENSE",
+            "gitBlob": "5014abac33298592fd3450b51a9b414191e1aabc",
+            "commit": "018e7593ecb2b3a7ae0bc17a440ecf2c0de8b4dd",
+            "sha256": "0714945e52a4d5b560c02c9a18478519f8c4e2572cbf87bd6d52adcfb2b63c62",
+            "bytes": 1078
+        }
+    ],
+    "status": {
+        "staticOnly": true,
+        "restored": false,
+        "built": false,
+        "executed": false,
+        "windowsCleanupSequence24": "unverified"
+    },
+    "limits": [
+        "Runtime은 PR10 고정 사본임. main 최신 Runtime과 같은 바이너리로 취급하지 않음.",
+        "호스트 사전 거부는 Rust decoder 실행 근거가 아님.",
+        "PR12 원본 계약은 참조 자료이며 이 harness의 사례 수와 합산하지 않음.",
+        "생성 corpus/raw/로그/바이너리는 PR에 포함하지 않음."
+    ],
+    "fileList": [
+        "Directory.Build.props",
+        "NuGet.Config",
+        "cases.json",
+        "config.example.json",
+        "contract.json",
+        "corpus/Program.cs",
+        "corpus/Zipelo.ComparisonCorpus.csproj",
+        "frozen/LICENSE",
+        "frozen/pr12/CaseLifetime.cs",
+        "frozen/pr12/FakeWorker.cs",
+        "frozen/pr12/ZipFixture.cs",
+        "frozen/pr12/cleanup-probe/contract.json",
+        "frozen/pr12/contract.json",
+        "frozen/src/Zipelo.Core/ArchiveContracts.cs",
+        "frozen/src/Zipelo.Core/ArchiveJob.cs",
+        "frozen/src/Zipelo.Core/EngineContext.cs",
+        "frozen/src/Zipelo.Core/JobBudget.cs",
+        "frozen/src/Zipelo.Core/OutputPathPolicy.cs",
+        "frozen/src/Zipelo.Core/Zipelo.Core.csproj",
+        "frozen/src/Zipelo.Runtime/LinuxFolderPublication.cs",
+        "frozen/src/Zipelo.Runtime/LinuxPublication.cs",
+        "frozen/src/Zipelo.Runtime/NewFolderPublisher.cs",
+        "frozen/src/Zipelo.Runtime/NewZipPublisher.cs",
+        "frozen/src/Zipelo.Runtime/PendingFolderPublication.Streaming.cs",
+        "frozen/src/Zipelo.Runtime/PendingFolderPublication.cs",
+        "frozen/src/Zipelo.Runtime/Streaming/ExtractionWire.cs",
+        "frozen/src/Zipelo.Runtime/Streaming/HandleReadStream.cs",
+        "frozen/src/Zipelo.Runtime/Streaming/StreamingExtractionDiagnostics.cs",
+        "frozen/src/Zipelo.Runtime/Streaming/StreamingZipWorkerClient.cs",
+        "frozen/src/Zipelo.Runtime/Streaming/WorkerStreamChannel.cs",
+        "frozen/src/Zipelo.Runtime/Streaming/WorkerStreamContract.cs",
+        "frozen/src/Zipelo.Runtime/Streaming/WorkerStreamValidator.cs",
+        "frozen/src/Zipelo.Runtime/Streaming/ZipStreamIndex.cs",
+        "frozen/src/Zipelo.Runtime/WindowsFolderGuard.cs",
+        "frozen/src/Zipelo.Runtime/WindowsFolderPublication.cs",
+        "frozen/src/Zipelo.Runtime/WindowsPublication.cs",
+        "frozen/src/Zipelo.Runtime/WorkerPlatform.cs",
+        "frozen/src/Zipelo.Runtime/WorkerProtocol.cs",
+        "frozen/src/Zipelo.Runtime/ZipExtraction.cs",
+        "frozen/src/Zipelo.Runtime/ZipWorkerClient.cs",
+        "frozen/src/Zipelo.Runtime/Zipelo.Runtime.csproj",
+        "frozen/src/Zipelo.Worker/BoundedMemoryOutput.cs",
+        "frozen/src/Zipelo.Worker/BuiltInZipEngine.cs",
+        "frozen/src/Zipelo.Worker/Program.cs",
+        "frozen/src/Zipelo.Worker/RemoteSnapshotStream.cs",
+        "frozen/src/Zipelo.Worker/StreamingZipExtractor.cs",
+        "frozen/src/Zipelo.Worker/ZipExtractor.cs",
+        "frozen/src/Zipelo.Worker/Zipelo.Worker.csproj",
+        "frozen/tests/extraction/fixture_factory.py",
+        "frozen/tests/extraction/fixtures.json",
+        "host/Cases.cs",
+        "host/Program.cs",
+        "host/Zipelo.RustComparison.csproj",
+        "process_scope.py",
+        "provenance.json",
+        "result.schema.json",
+        "runner.py",
+        "shared/Check.cs",
+        "shared/Models.cs",
+        "SHA256SUMS"
+    ],
+    "hashManifest": "SHA256SUMS lists every file except itself; its own SHA256 is reported in the PR.",
+    "projectReferences": {
+        "host/Zipelo.RustComparison.csproj": [
+            "frozen/src/Zipelo.Runtime/Zipelo.Runtime.csproj"
+        ],
+        "frozen/src/Zipelo.Runtime/Zipelo.Runtime.csproj": [
+            "frozen/src/Zipelo.Core/Zipelo.Core.csproj"
+        ],
+        "frozen/src/Zipelo.Worker/Zipelo.Worker.csproj": [
+            "frozen/src/Zipelo.Runtime/Zipelo.Runtime.csproj"
+        ],
+        "corpus/Zipelo.ComparisonCorpus.csproj": []
+    }
+}
