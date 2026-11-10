@@ -1,0 +1,102 @@
+{
+    "schema": "zipelo.rust-host-errors.candidate.v1",
+    "profile": "rust-zip32-v2-errors-1",
+    "base_head": "9626abbf22f3a4c66a996e64601694ed5fe98763",
+    "comparison_harness_head": "dde29069f89016111c3a023a89530045190dcb13",
+    "scope": {
+        "implemented": [
+            "incremental raw ZIP2 validator",
+            "ordered supervisor evidence collector",
+            "pure report classification from retained evidence",
+            "offline bounded raw capture CLI"
+        ],
+        "excluded": [
+            "process spawn and pipe ownership",
+            "ZXE2 configuration and ZXR2 range service",
+            "live supervisor integration",
+            "ZIP parsing or CRC verification",
+            "expected archive entry count verification",
+            "destination staging or publication",
+            "C# adapter",
+            "dependency changes"
+        ],
+        "success": "ProtocolCompletionObserved is raw protocol completion conditional on caller-attested lifecycle and identity. It is never archive integrity, extraction, filesystem safety, publication or product acceptance.",
+        "provenance": "All lifecycle and identity fields ending in attested are supplied by the trusted supervisor. Equality of supplied hashes is not independent hashing or execution identity verification."
+    },
+    "raw_contract": {
+        "format": "ZIP2 version 2 little-endian; exact existing 64-byte header, reserved bytes zero",
+        "job": "nonzero 16 bytes in .NET Guid wire byte order; CLI expects 32 hex digits of these bytes, not a canonical GUID string",
+        "sequence": "starts at 0 and increments once per accepted frame",
+        "item": "zero for BeginJob/EndJob; ordinal 1-based u32 little-endian followed by 12 zeros for each BeginItem; Data/EndItem must match active item",
+        "state": "BeginJob once, non-nested BeginItem/Data/EndItem, then EndJob payload [1]. Failed/Cancelled terminal statuses are outside this fixed Rust worker profile and rejected.",
+        "lengths": "BeginJob=0, BeginItem=8, Data=1..65536, EndItem=8, EndJob=1. Header lengths and cumulative reservation checked before payload consumption. Only header[64] and metadata[8] retained; no payload-sized allocation.",
+        "bounds": {
+            "frames": 65536,
+            "wire_bytes": 22020096,
+            "output_bytes": 16777216,
+            "items": 1024,
+            "supervisor_events": 131072,
+            "supervisor_chunk_bytes": 65536
+        },
+        "budget_note": "Output and wire accounting are separate from worker processed/input budgets. This candidate cannot independently observe source reads, elapsed time or compression ratio; supervisor HostFailure(Budget/Deadline) remains attributed to its caller.",
+        "eof": "Frame-boundary EOF may be an unfinished valid prefix. Partial header/payload is a raw protocol fault, not proof of archive truncation. Missing terminal resolved against exit evidence. Offline file EOF is not pipe EOF.",
+        "data_note": "Payload is discarded. Length accounting does not prove bytes, CRC or complete archive enumeration."
+    },
+    "supervisor_contract": {
+        "implementation_status": "API only; no live supervisor or transcript serializer implemented",
+        "trusted_boundary": "In-process caller owns each Session and serializes events from exactly one job and owned PID. Events must not be accepted directly from worker-controlled JSON, stderr, files or untrusted peers.",
+        "binding": "Supervisor must independently verify executable path, SHA256 against its fixed build manifest, source head, --extract-stream-v2 invocation and owned PID; prevent replacement between verification and execution. Binding stores that attestation; this crate does not hash or launch.",
+        "event_order": "observe(job, zero-based monotonically increasing sequence, Event). Stdout chunks <=65536 bytes, all raw bytes including buffered tail; StdoutEof only after actual read returned 0. NaturalExit only after observed OS wait status and no termination request; otherwise HostFailure before stop and ForcedOrSignalledExit as appropriate.",
+        "io_settled": "Confirm stdout, stdin/config, stderr/range service and all owned I/O tasks finished. IoSettled is not equivalent to stdout EOF. Do not call CleanupComplete before confirmed exit and IoSettled.",
+        "cleanup": "Supervisor closes owned handles, settles range service and temporary resources, verifies no owned process remains, then CleanupComplete; uncertainty stays unreported or CleanupFailed. CleanupFailed is sticky.",
+        "first_cause": "First confirmed raw/supervisor/worker cause remains latched. A worker cause becomes eligible only with valid frame prefix, boundary stdout EOF, natural exit and profile binding. Cleanup faults never erase it.",
+        "priority": "stop_required is the top-level safety veto regardless of outcome. Missing binding, unresolved termination/I/O/cleanup, invalid supervisor order or cleanup failure prohibit continuation. EOF absent without a separately established failure also blocks.",
+        "stop_and_drain": "After parser failure the supervisor must stop the worker and drain or close pipes under its bounded cleanup policy. It must not interpret ignored bytes as validation. Internal model is not a resource supervisor.",
+        "code_mapping": {
+            "10": "WorkerReported Unsupported",
+            "11": "WorkerReported UnsupportedEntry",
+            "12": "WorkerReported Integrity",
+            "13": "WorkerReported Budget",
+            "14": "WorkerReported Protocol",
+            "15": "WorkerReported ObservedUnexpectedEof",
+            "16": "WorkerReported UnknownEngineCause",
+            "17": "WorkerReported DuplicateName",
+            "18": "WorkerReported MetadataMismatch"
+        },
+        "contradictions": "Completed plus nonzero exit -> CompletionExitContradiction; exit 0 without Completed -> MissingCompletion; unknown code -> UnknownExit; forced/signal -> ForcedOrSignalledExit; partial or invalid frames take precedence over code mapping.",
+        "upstream_limit": "flate2 1.1.11 loses malformed decoder data/state/memory cause through InvalidInput. No string match or broad InvalidInput remapping is used; typed upstream preservation remains required."
+    },
+    "probe": {
+        "invocation": "zipelo-rust-host-errors CAPTURE JOB_WIRE_HEX_32",
+        "input": "Supervisor-owned immutable regular-file raw stdout capture, <=21 MiB. No transcript or lifecycle flags accepted.",
+        "output": "Debug summary of raw frame accounting, source=offline-capture, publication=false, process_evidence=unconfirmed, stop_required=true",
+        "exits": {
+            "1": "CLI, I/O or raw validation failure",
+            "2": "Capture inspected, process/pipe/cleanup evidence unconfirmed; never a pass exit"
+        },
+        "boundary": "External owner must bound process/file I/O lifetime and own the capture; this CLI has no cancellation, deadline, process tree or pipe supervision.",
+        "writes": "stdout/stderr only; no destination publication"
+    },
+    "central_execution": {
+        "status": "NOT BUILT OR RUN by implementing agent; rustfmt/static review only",
+        "working_directory": "repository root at candidate head",
+        "prerequisites": "Existing Rust/Cargo >=1.88 and linker; std only, no package installation or dependency download. Existing worker lock and sources untouched.",
+        "preparation": "CARGO_TARGET_DIR=tests/rust-host-errors/target cargo generate-lockfile --manifest-path experiments/rust-host-errors/Cargo.toml --offline",
+        "direct_tests": "CARGO_TARGET_DIR=tests/rust-host-errors/target cargo test --manifest-path experiments/rust-host-errors/Cargo.toml --locked --offline --test host_errors",
+        "probe_build": "CARGO_TARGET_DIR=tests/rust-host-errors/target cargo build --manifest-path experiments/rust-host-errors/Cargo.toml --locked --offline --bin zipelo-rust-host-errors",
+        "probe_example": "tests/rust-host-errors/target/debug/zipelo-rust-host-errors <owned-raw-capture> <32-wire-order-hex-digits>; expected exit 2 only means unconfirmed capture observation",
+        "evidence": "Record candidate head, new SHA256SUMS, toolchain, OS, target, generated candidate lock hash, test totals and actual exit codes. No Windows runtime or live worker classification claim from synthetic direct tests or captures.",
+        "direct_test_source_count": 51
+    },
+    "preservation": {
+        "existing_worker_lock_sha256": "92f7b05d7da086b4b8c6b596755ba6233129e5bac8b060b9c6b3aa63fe17fecf",
+        "unchanged": [
+            "PR28 and PR29 heads",
+            "C# sources and frozen harness",
+            "v1/v2 wire",
+            "old fixture and expectations",
+            "existing manifests and Cargo.lock"
+        ],
+        "failures": "Existing 8 shared classification cases and malformed direct assertion remain unresolved; this candidate does not reclassify frozen comparison results."
+    }
+}

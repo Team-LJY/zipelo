@@ -1,0 +1,7 @@
+3e27666dfae518e7dfdbe475ebbf4478a1932a22ec2e24142b03ba04dc897a82  experiments/rust-host-errors/Cargo.toml
+66685521806be3d5c3f027826c66f331439ad770fc3d0eb41e2d2946e9fb1c23  experiments/rust-host-errors/contract.json
+178c4a54c2b8bc2a61f8142cfb070ef9aa6a4251d40144c2aaecf9e0d5048899  experiments/rust-host-errors/src/evidence.rs
+464fd2c5ed7794dd09dc52d32d071af225013eb97ba03c87513c772da4e92fcd  experiments/rust-host-errors/src/lib.rs
+143487ef53b7ffbb98633c62cfa082230644bf39db582fd15f6147fb7a61256b  experiments/rust-host-errors/src/main.rs
+5e6bc341dd9c1515d0b8785f92f5570274f4014f391a3d80f3d5938dfe313d1c  experiments/rust-host-errors/src/stream.rs
+79d6775f0b2962a2e3732d20723c5deff79ea5243b0dec1a734bb78fa60afb15  tests/rust-host-errors/main.rs

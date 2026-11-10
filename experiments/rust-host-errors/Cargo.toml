@@ -1,0 +1,16 @@
+[package]
+name = "zipelo-rust-host-errors"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+license = "MIT"
+publish = false
+autotests = false
+autobenches = false
+autoexamples = false
+
+[workspace]
+
+[[test]]
+name = "host_errors"
+path = "../../tests/rust-host-errors/main.rs"
