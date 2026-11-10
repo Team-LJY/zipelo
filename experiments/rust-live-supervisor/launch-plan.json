@@ -1,0 +1,45 @@
+{
+    "schema": "zipelo.linux-worker-launch.plan.v1",
+    "status": "decisions only; syscall implementation and validation pending",
+    "worker_source": "9626abbf22f3a4c66a996e64601694ed5fe98763",
+    "approved_binary_sha256": "62e157e304b01cac7c99a8eb60a147066877cf141b0314db5cf1a76aab55a5f7",
+    "source_provenance": "Source head is the supplied origin of the approved binary digest, not inferred from executable bytes.",
+    "image_limit_bytes": 33554432,
+    "identity_steps": [
+        "Future OS adapter creates anonymous memfd with CLOEXEC and ALLOW_SEALING. Copy at most 32 MiB from an already opened source under launch deadline; reject empty/oversized image and every syscall failure.",
+        "Apply F_SEAL_WRITE|F_SEAL_GROW|F_SEAL_SHRINK|F_SEAL_SEAL, read back seals, then SHA256 the sealed bytes with sha2. Compare against the fixed approved digest. No hash subprocess or handwritten SHA.",
+        "Execute that same sealed fd with execveat(fd, empty path, argv, envp, AT_EMPTY_PATH). No pathname fallback or hash(path) identity claim. Scripts/interpreters are outside the fixed worker image profile.",
+        "Current inspect_image_candidate only hashes a memory slice. Even a match returns RequiresSealedFdAndOsLauncher; it never supplies a binding or execution permission."
+    ],
+    "fd_plan": [
+        "Create distinct CLOEXEC pipes; move every internal fd above 2 in parent before fork to avoid fd 0/1/2 collisions.",
+        "Only parent-owned stdin write/stdout read/stderr read/exec-status read endpoints become O_NONBLOCK. Child pipe ends remain blocking.",
+        "Prepare argv, envp and all fd decisions before fork. Child path must have no allocation, Rust formatting, panic, locks, filesystem enumeration or destructors.",
+        "Review exact child syscall path before implementation: dup2 owned ends to 0/1/2, close unwanted descriptors with a bounded and audited strategy, preserve sealed image and CLOEXEC exec-status writer until exec, then execveat. Report errno as four bytes with a reviewed bounded failure path and _exit.",
+        "Child exec-status EOF alone does not prove image execution: combine launch protocol, identity chain, actual wait status and raw worker evidence. Partial errno is failure.",
+        "Inherited-fd closure including unrelated descriptors, closed standard fds, close_range policy/kernel/LSM behavior and exec-status inheritance require direct child fixtures. No fallback that leaks fds."
+    ],
+    "signal_plan": "Future adapter must handle parent SIGPIPE without process-global surprises, preserve/restore signal state, and restore intended child mask/dispositions before exec. Exact pthread_sigmask/sigtimedwait and child syscall path remains unimplemented; no blocking reader thread or detached helper.",
+    "environment": [
+        "LANG=C",
+        "LC_ALL=C",
+        "TZ=UTC"
+    ],
+    "loader_trust": "Clear inherited environment including LD_*, PATH and user runtime configuration. A sealed ELF image does not seal its dynamic interpreter, shared libraries, system loader cache or system preload configuration; these remain trusted host inputs and must be recorded. No sandbox or general containment guarantee.",
+    "failure_policy": "seccomp/LSM/memfd/execveat/seal rejection is fail closed. No OS/cgroup/security setting changes or alternative pathname launch.",
+    "containment": "Only the fixed worker documented as not creating children is in scope. Process group signaling is not proof that escaped descendants are absent. General containment and escaped-child tests remain unverified.",
+    "references": [
+        {
+            "url": "https://man7.org/linux/man-pages/man2/memfd_create.2.html",
+            "basis": "Anonymous fd, CLOEXEC and sealing opt-in semantics."
+        },
+        {
+            "url": "https://man7.org/linux/man-pages/man2/execveat.2.html",
+            "basis": "AT_EMPTY_PATH executes by fd; CLOEXEC interpreter caveat."
+        },
+        {
+            "url": "https://man7.org/linux/man-pages/man7/signal-safety.7.html",
+            "basis": "Async-signal-safe boundary; does not by itself certify a Rust post-fork implementation."
+        }
+    ]
+}

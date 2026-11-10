@@ -1,0 +1,110 @@
+{
+    "schema": "zipelo.rust-live-supervisor.model.v1",
+    "status": "pure-model-only; live supervisor NOT implemented or validated",
+    "base_head": "cbb3c1e7ef9ee65497b3af79e6587fff0fc1b9d3",
+    "branch": "features/rust-live-supervisor",
+    "path_dependency": {
+        "name": "zipelo-rust-host-errors",
+        "path": "../rust-host-errors",
+        "source_head": "cbb3c1e7ef9ee65497b3af79e6587fff0fc1b9d3",
+        "copied_validator": false
+    },
+    "scope": {
+        "implemented": [
+            "ZXE2 config encoder",
+            "bounded ZXR2 request/reply state machine",
+            "reactor scheduling and failure/cleanup model",
+            "PR30 Session integration without identity binding",
+            "approved digest comparison using sha2",
+            "launch requirements and live fixture plan"
+        ],
+        "unimplemented": [
+            "OS adapter",
+            "memfd allocation/copy/sealing/re-read hashing",
+            "fork/execveat",
+            "pipe creation and fd remapping",
+            "nonblocking poll loop and real cancellation source",
+            "SIGPIPE management",
+            "owned child wait/reap and cleanup syscalls",
+            "live CLI and child fixtures"
+        ],
+        "reason": "The post-fork fd/exec-status/signal boundary and bounded OS cleanup are not established by pure state-machine review. Use the explicitly allowed model fallback; do not substitute caller booleans for live identity.",
+        "outcome": "All model reports have live_verified=false, publication=false, stop_required=true. SettledModel only means synthetic lifecycle input satisfied the model. PR30 uses binding=None; no worker-reported classification or protocol success is promoted to live evidence.",
+        "no_publish": true,
+        "no_cli": true,
+        "no_unsafe_code": true
+    },
+    "range": {
+        "source": "PR28 experiments/rust-core/src/wire.rs at 9626abbf22f3a4c66a996e64601694ed5fe98763",
+        "input": "Owned synthetic Box<[u8]>, 22 bytes to 16 MiB. No file snapshot acquisition or atomic capture claim.",
+        "channels": {
+            "stdout": "ZIP2 handled only by PR30 Session",
+            "stderr": "48-byte ZXR2 binary range requests only; never text logging",
+            "stdin": "64-byte ZXE2 then exact echoed request header and snapshot payload"
+        },
+        "config": "ZXE2/version=2/JobId/input length/processed/output/entries/100ns duration ticks; matches worker caps. Duration below one tick rejected; fractional ticks rounded down.",
+        "requests": "Validate magic/version, nonzero matching JobId, sequence from 0, reserved zero, count 1..65536, checked offset+count within snapshot; reserve count and served bytes before response.",
+        "caps": {
+            "requests": 65536,
+            "per_request": 65536,
+            "total_served_bytes": 50331648
+        },
+        "memory": "One header[48] and one Reply cursor at a time. Reply payload borrows immutable owned snapshot; no second response or payload copy.",
+        "backpressure": "request_capacity is zero until configuration or current response is fully written. Adapter must limit each read to request_capacity; coalesced/pipelined requests rejected in this fixed one-request worker profile.",
+        "writes": "outbound returns one remaining header or payload slice. written accepts only positive actual-write count within that slice. EAGAIN/EINTR do not advance progress; zero write is a fault.",
+        "eof": "At request boundary accepted only after config and pending response complete. Partial header and outstanding reply are distinct faults. abort discards pending response without claiming bytes sent or EOF."
+    },
+    "reactor": {
+        "provenance": "All observation methods and elapsed values are synthetic inputs to a model, not a public proof API for a running child. No live entry point accepts PID, EOF, cleanup or observed hash options.",
+        "phases": [
+            "Launching",
+            "Running",
+            "Draining",
+            "Stopping",
+            "SettledModel",
+            "Blocked"
+        ],
+        "deadlines": "Launch, operation and cleanup each bounded to 0<duration<=300s. begin_turn uses monotonically increasing modeled elapsed Duration. A future adapter must derive this from Instant, not external input. Exec-status boundary EOF starts operation; observed reap starts bounded drain. First stop starts cleanup; later causes cannot extend it.",
+        "fairness": "Each begin_turn checks cancellation then deadline before replenishing quotas. Per-turn stdout and stdin quotas are 16384 bytes each, stderr 48, exec-status 4. Poll slice <=50ms; same-turn cancellation wins the defined observation tie. Earlier failure remains latched.",
+        "data": "stdout uses PR30 without copying validator and is discarded after validation. Stopping may drain stderr under quota without declaring those bytes valid range requests.",
+        "first_cause": "ModelReport.first retains detailed raw/range/reactor/exec/cancel/deadline reason. Range/reactor errors cannot fit PR30 HostCause precisely and are represented there as supervisor Io (Budget for range budget); detailed model reason is authoritative for this model.",
+        "kill": "request_kill is generated by explicit first failure/deadline state only, never by PR30's ordinary in-progress stop_required. kill_result(true) records only modeled signal acceptance and never reap.",
+        "cleanup": "All stdout/stderr/exec EOF observations, stdin closure, wait observation and fd closure are required before SettledModel. Closing readers is not EOF. Missing confirmations, kill/reap failure or cleanup expiry stay Blocked/CleanupFailed. No next-case reset is provided.",
+        "supervisor_gap": "This state machine does not prove read==0, wait status, fd closure, real time, ownership or child containment. Signalled/Exited observations remain synthetic.",
+        "inherited_limits": [
+            "PR30 malformed decoder cause loss unchanged",
+            "no CRC/ZIP decode/expected item count proof",
+            "no publication or products",
+            "no source processed-byte or compression ratio enforcement beyond worker config"
+        ],
+        "post_reap_range": "Buffered range bytes after modeled reap fail as OutstandingResponse before creating a reply that cannot be sent. Drain continues under cleanup quota; no kill of a reaped child."
+    },
+    "central": {
+        "build_status": "NOT BUILT; tests NOT RUN by implementing agent",
+        "allowed_preparation_completed": "cargo generate-lockfile --offline and cargo metadata --locked --offline --filter-platform x86_64-unknown-linux-gnu; no compilation or build scripts executed",
+        "root": "candidate repository root",
+        "build": "CARGO_TARGET_DIR=tests/rust-live-supervisor/target cargo build --manifest-path experiments/rust-live-supervisor/Cargo.toml --locked --offline --lib",
+        "test": "CARGO_TARGET_DIR=tests/rust-live-supervisor/target cargo test --manifest-path experiments/rust-live-supervisor/Cargo.toml --locked --offline --test supervisor_model",
+        "toolchain": "Existing Linux Rust/Cargo >=1.88 and linker. Implementation preparation used installed Cargo 1.99.1.",
+        "run": "No live run command or executable exists in this candidate. Only the model test target can be executed after central approval.",
+        "record": [
+            "candidate head",
+            "SHA256SUMS",
+            "Cargo.lock SHA256",
+            "Linux target and toolchain",
+            "actual build/test exit and totals",
+            "explicit model-only scope"
+        ],
+        "live_fixture_plan": "../../tests/rust-live-supervisor/live-fixture-plan.json",
+        "preserved": [
+            "existing PR28 through PR31 heads",
+            "C# and frozen source",
+            "fixtures and expectations",
+            "existing worker lock",
+            "existing 16 comparison classification failures",
+            "existing seven uninjected conditions",
+            "Windows installation approval pending"
+        ],
+        "direct_test_source_count": 46
+    }
+}

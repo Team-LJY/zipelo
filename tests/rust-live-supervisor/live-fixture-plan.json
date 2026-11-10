@@ -1,0 +1,75 @@
+{
+    "schema": "zipelo.live-supervisor.fixture-plan.v1",
+    "status": "plan only; no child fixtures implemented, built or run",
+    "model_tests": "main.rs imports candidate library and PR30 path dependency; no production parser copies",
+    "identities": "Future fake child has a separate synthetic executable digest/profile and separate API/report path. Never accept it through approved-worker digest or label it as the approved worker.",
+    "cases": [
+        {
+            "name": "approved-worker-normal",
+            "acceptance": "Owned synthetic ZIP snapshot; sealed approved image, real pipe/range/exit, discard output; no publication.",
+            "status": "unimplemented and unexecuted"
+        },
+        {
+            "name": "stdout-complete-hang",
+            "acceptance": "Actual Complete and read==0 before an owned child stays alive; operation expiry, bounded kill/wait/cleanup; never infer exit from EOF.",
+            "status": "unimplemented and unexecuted"
+        },
+        {
+            "name": "stderr-junk-flood",
+            "acceptance": "Real ZXR2 malformed bytes and sustained writes; verify quota fairness and deadline/cancel observation.",
+            "status": "unimplemented and unexecuted"
+        },
+        {
+            "name": "stdin-reader-stop",
+            "acceptance": "Child stops consuming config/reply; partial writes/EAGAIN remain bounded and cancellation is processed.",
+            "status": "unimplemented and unexecuted"
+        },
+        {
+            "name": "range-fragmentation",
+            "acceptance": "Split ZXR2 headers and echoed replies with actual short writes; exact original bytes and counters.",
+            "status": "unimplemented and unexecuted"
+        },
+        {
+            "name": "eof-exit-inversion",
+            "acceptance": "Child exit before unread pipe tail, and pipe EOF before exit; require independent observations.",
+            "status": "unimplemented and unexecuted"
+        },
+        {
+            "name": "fd-inheritance",
+            "acceptance": "Launch with fd 0/1/2 initially closed and unrelated sentinel fds; inspect child inherited descriptors without arbitrary closure claims.",
+            "status": "unimplemented and unexecuted"
+        },
+        {
+            "name": "digest-mismatch-path-replace",
+            "acceptance": "Reject wrong bytes; replace source path during bounded copy; only hash sealed copy and execute same fd. No live fixture implemented.",
+            "status": "unimplemented and unexecuted"
+        },
+        {
+            "name": "exec-failure",
+            "acceptance": "Inject reviewed execveat failure, partial status and early child death; no pathname fallback.",
+            "status": "unimplemented and unexecuted"
+        },
+        {
+            "name": "cancel-deadline-order",
+            "acceptance": "Deterministic barriers establish first cause before signal/pipe mutation; preserve it through cleanup errors.",
+            "status": "unimplemented and unexecuted"
+        },
+        {
+            "name": "kill-reap-fault",
+            "acceptance": "Controlled syscall-result injection separate from real kernel results; unconfirmed cleanup blocks later cases.",
+            "status": "unimplemented and unexecuted"
+        },
+        {
+            "name": "kernel-policy-denial",
+            "acceptance": "If memfd/seal/execveat is denied, record rejection and stop. Do not change settings to force success.",
+            "status": "unimplemented and unexecuted"
+        }
+    ],
+    "exclusions": [
+        "No live result inferred from model tests",
+        "No success inferred from kill acceptance or reader close",
+        "No Windows result",
+        "No escaped descendant containment proof",
+        "Existing 16 failures and seven conditions unchanged"
+    ]
+}
