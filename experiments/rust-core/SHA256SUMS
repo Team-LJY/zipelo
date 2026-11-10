@@ -1,4 +1,4 @@
-a7a321d73d406cf4371f8de07df25b903a8d52b25de6192a17d2b9264f2b3d33  experiments/rust-core/Cargo.toml
+a2535ac8b74e79ad1a8cd785c1abab438ad591430a4d19ea233ab29ddc80a4cb  experiments/rust-core/Cargo.toml
 425bbd625435d6af1bb19a30609075f4ec68d72bb68c6ed2113700f9ccd114f6  experiments/rust-core/contract.json
 4b2d21386a77c7e626f0945c20b11fc0849e193c0da5776ae07ab58de8c19dad  experiments/rust-core/provenance.json
 9558ac8c0d716fb50811c928d95945c6ee844e23ec5dc689e9fda7742cd1e1a9  experiments/rust-core/src/budget.rs

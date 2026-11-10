@@ -18,3 +18,7 @@ serde_json = { version = "=1.0.145", default-features = false, features = ["std"
 base64 = { version = "=0.22.1", default-features = false, features = ["std"] }
 
 [workspace]
+
+[[test]]
+name = "worker_unit"
+path = "../../tests/rust-worker-unit/main.rs"
