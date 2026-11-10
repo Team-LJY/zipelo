@@ -110,7 +110,7 @@
         "dependencies": "locked/offline metadata, 기존 registry 10 records 보존, subtle 2.6.1 하나 추가. Linux 선택 외부 패키지 10개, 전체 lock registry 11개. 각 cache archive checksum과 해제된 source 전체를 대조함.",
         "tests_executed": 0,
         "test_result": "미실행임. library build는 회귀 통과가 아님.",
-        "notices": "THIRD-PARTY-NOTICES.txt에 lock registry의 LICENSE/NOTICE 원문 19개를 보존함. 최종 제품 배포 고지 검토와 별개임.",
+        "notices": "THIRD-PARTY-NOTICES.txt의 LICENSE/NOTICE 19개와 dependencies.json은 Linux x86_64 선택 10개 package 범위임. lock 전체 registry 11개 중 미선택 libc는 inventory와 고지 묶음에 포함하지 않음. generic-array 0.14.7 LICENSE는 묶음 생성 시 CRLF가 LF로 정규화되어 원본 hash와 달랐으므로 해당 섹션의 CRLF 20개만 캐시 원본 bytes로 복원함. 원본 SHA256은 변경하지 않음. 최종 모든 플랫폼 배포 고지 완료를 의미하지 않음.",
         "security": "전체 advisory DB audit와 실제 타이밍 검증은 미실행임. 취약점 부재를 주장하지 않음."
     }
 }
