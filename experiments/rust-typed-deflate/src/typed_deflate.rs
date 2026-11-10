@@ -186,9 +186,10 @@ where
     let (mut start, mut end) = (0usize, 0usize);
     let (mut loaded, mut actual) = (0u64, 0u64);
     let mut crc = Hasher::new();
+    let mut input_ended = false;
     loop {
         checkpoint()?;
-        if start == end && loaded < expected.packed {
+        if !input_ended && start == end && loaded < expected.packed {
             if work.reads == work.limits.reads {
                 return Err(Error::Limit);
             }
@@ -199,9 +200,8 @@ where
             if got > wanted {
                 return Err(Error::InvalidAccounting);
             }
-            if got == 0 {
-                return Err(Error::Incomplete);
-            }
+            // 실제 EOF 뒤에도 같은 inflater의 잔여 출력을 비움. 다시 읽지 않음.
+            input_ended = got == 0;
             if got as u64 > work.limits.input - work.input {
                 return Err(Error::Limit);
             }
@@ -245,9 +245,12 @@ where
         check_progress(
             consumed as usize,
             produced as usize,
-            loaded == expected.packed && start == end,
+            input_ended || (loaded == expected.packed && start == end),
             ended,
         )?;
+        if ended && input_ended && loaded < expected.packed {
+            return Err(Error::Incomplete);
+        }
         if ended && decoder.total_in() != expected.packed {
             return Err(Error::Trailing);
         }

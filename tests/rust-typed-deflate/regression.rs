@@ -674,3 +674,184 @@ fn embedded_host_input_budget_is_preserved() {
     assert!(matches!(&error, Error::Input(_)));
     assert_eq!(error.failure(), Failure::Budget);
 }
+
+struct EndOnce<'a> {
+    bytes: &'a [u8],
+    eof: &'a Cell<bool>,
+    reads: usize,
+}
+
+impl Read for EndOnce<'_> {
+    fn read(&mut self, out: &mut [u8]) -> io::Result<usize> {
+        assert!(!out.is_empty());
+        assert!(!self.eof.get(), "EOF 뒤 다시 읽으면 안 됨");
+        self.reads += 1;
+        let count = out.len().min(self.bytes.len());
+        out[..count].copy_from_slice(&self.bytes[..count]);
+        self.bytes = &self.bytes[count..];
+        if count == 0 {
+            self.eof.set(true);
+        }
+        Ok(count)
+    }
+}
+
+#[test]
+fn physical_empty_eof_performs_bounded_drain_without_reread() {
+    let eof = Cell::new(false);
+    let mut reader = EndOnce {
+        bytes: &[],
+        eof: &eof,
+        reads: 0,
+    };
+    let mut work = Work::new(Limits::default()).unwrap();
+    let result = typed::decode(
+        &mut reader,
+        Expected {
+            packed: 1,
+            size: 0,
+            crc: 0,
+        },
+        &mut work,
+        1,
+        || Ok(()),
+        |_| panic!("빈 입력은 출력하지 않음"),
+    );
+    assert!(matches!(result, Err(Error::Incomplete)));
+    assert!(eof.get());
+    assert_eq!(reader.reads, 1);
+    assert_eq!(work.counts(), (0, 0, 1, 1));
+}
+
+#[test]
+fn physical_eof_drains_same_pending_output_as_bounded_endpoint() {
+    let data = b"abcabcabcabc".repeat(1000);
+    let packed = library_deflate(&data);
+    let mut saw_pending_output = false;
+    for end in 0..packed.len() {
+        let prefix = &packed[..end];
+        let entry = expected(prefix, data.len() as u64, crc32fast::hash(&data));
+        let (bounded_result, bounded_output, bounded_work) =
+            run(prefix, entry, Limits::default(), 1);
+        assert!(
+            matches!(bounded_result, Err(Error::Incomplete)),
+            "prefix={end}"
+        );
+        let eof = Cell::new(false);
+        let mut reader = EndOnce {
+            bytes: prefix,
+            eof: &eof,
+            reads: 0,
+        };
+        let mut work = Work::new(Limits::default()).unwrap();
+        let mut output = Vec::new();
+        let mut pending = 0usize;
+        let result = typed::decode(
+            &mut reader,
+            Expected {
+                packed: packed.len() as u64,
+                ..entry
+            },
+            &mut work,
+            1,
+            || Ok(()),
+            |part| {
+                if eof.get() {
+                    pending += part.len();
+                }
+                output.extend_from_slice(part);
+                Ok(())
+            },
+        );
+        assert!(matches!(result, Err(Error::Incomplete)), "prefix={end}");
+        assert!(eof.get());
+        assert_eq!(output, bounded_output, "prefix={end}");
+        assert_eq!(work.counts().3, bounded_work.counts().3, "prefix={end}");
+        assert_eq!(work.counts().2, bounded_work.counts().2 + 1);
+        saw_pending_output |= pending != 0;
+    }
+    assert!(
+        saw_pending_output,
+        "실제 backend의 EOF 뒤 잔여 출력 사례가 필요함"
+    );
+}
+
+#[test]
+fn physical_eof_drain_respects_call_budget() {
+    let eof = Cell::new(false);
+    let mut reader = EndOnce {
+        bytes: &[],
+        eof: &eof,
+        reads: 0,
+    };
+    let mut work = Work::new(Limits {
+        calls: 0,
+        ..Limits::default()
+    })
+    .unwrap();
+    let result = typed::decode(
+        &mut reader,
+        Expected {
+            packed: 1,
+            size: 0,
+            crc: 0,
+        },
+        &mut work,
+        1,
+        || Ok(()),
+        |_| panic!("한도 이후 출력하지 않음"),
+    );
+    assert!(matches!(result, Err(Error::Limit)));
+    assert!(eof.get());
+    assert_eq!(work.counts(), (0, 0, 1, 0));
+}
+
+#[test]
+fn physical_eof_drain_respects_checkpoint_cancellation() {
+    let eof = Cell::new(false);
+    let mut reader = EndOnce {
+        bytes: &[],
+        eof: &eof,
+        reads: 0,
+    };
+    let mut work = Work::new(Limits::default()).unwrap();
+    let result = typed::decode(
+        &mut reader,
+        Expected {
+            packed: 1,
+            size: 0,
+            crc: 0,
+        },
+        &mut work,
+        1,
+        || {
+            if eof.get() {
+                Err(Error::Cancelled)
+            } else {
+                Ok(())
+            }
+        },
+        |_| panic!("취소 이후 출력하지 않음"),
+    );
+    assert!(matches!(result, Err(Error::Cancelled)));
+    assert_eq!(work.counts(), (0, 0, 1, 0));
+}
+
+#[test]
+fn complete_stream_cannot_hide_missing_declared_packed_bytes() {
+    let packed = library_deflate(&DATA.repeat(500));
+    let data = DATA.repeat(500);
+    for chunk in [1, typed::CHUNK] {
+        let (result, _, _) = run(
+            &packed,
+            Expected {
+                packed: packed.len() as u64 + 1,
+                size: data.len() as u64,
+                crc: crc32fast::hash(&data),
+            },
+            Limits::default(),
+            chunk,
+        );
+        assert!(matches!(result, Err(Error::Trailing | Error::Incomplete)));
+    }
+}

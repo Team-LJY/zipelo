@@ -25,7 +25,7 @@
         "input": "zip raw reader bounded by validated packed size; at most 65536 bytes per Read. Source still charges actual reads including metadata and Remote keeps its request/range limits.",
         "output": "Fixed 65536-byte buffer, expected size and cumulative actual byte limits checked before emit. Frames charges caller output/processed limits before Data serialization. CRC checked before EndItem/EndJob; earlier Data remains provisional.",
         "progress": "Use total_in/total_out deltas after each successful backend call. Check deltas against buffers. BufError is not corruption; progress continues, exhausted input without StreamEnd is Incomplete, zero progress with available input is NoProgress.",
-        "eof": "No zero-length Read used as EOF evidence. A bounded packed endpoint is separate from underlying read-zero or io::Error UnexpectedEof. The latter error is retained, not inferred as malformed.",
+        "eof": "No zero-length Read used as EOF evidence. Latch physical read-zero without rereading, and drain the same inflater with empty input and nonempty output until StreamEnd or no progress, subject to unchanged call/output/cancellation limits. Missing declared packed bytes can never complete successfully. io::Error UnexpectedEof is retained immediately, not inferred as malformed.",
         "end": "Require StreamEnd, consumed packed bytes exactly, actual size exactly and CRC match. Reject any packed bytes after first stream, including second streams.",
         "limits": {
             "actualPackedBytesPerExtraction": 16777216,
@@ -59,7 +59,7 @@
         "workerExecution": false,
         "static": "rustfmt syntax/format check only, exact baseline blob comparison, locked/offline metadata package/checksum/feature comparison. No type-check or runtime pass claimed.",
         "originalNamedTests": 85,
-        "newNamedTests": 28,
+        "newNamedTests": 33,
         "injectedOnly": [
             "StreamError/MemError/NeedDict enum mapping",
             "no-progress policy helper"
@@ -68,7 +68,8 @@
             "malformed [7,0]",
             "every split boundary and small outputs",
             "empty and incomplete streams",
-            "compressed and uncompressed Deflate blocks"
+            "compressed and uncompressed Deflate blocks",
+            "physical early EOF pending-output drain compared to bounded endpoint; five additional EOF regressions"
         ],
         "remaining": [
             "central build and all tests",
