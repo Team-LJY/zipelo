@@ -103,7 +103,8 @@ internal static class LayoutCases
         foreach (var ancestor in visual.GetVisualAncestors().Prepend(visual))
         {
             UiSession.Check(ancestor.IsVisible, "hidden ancestor");
-            UiSession.Check(ancestor.RenderTransform is null, "unsupported transformed clip");
+            TransformGuard.RequireIdentity(ancestor.RenderTransform,
+                ancestor.GetType().FullName ?? ancestor.GetType().Name, (ancestor as Control)?.Name);
             if (ancestor.ClipToBounds) { visible = visible.Intersect(InWindow(ancestor, window)); }
             if (ancestor.Clip is not null)
             {
@@ -115,8 +116,11 @@ internal static class LayoutCases
         }
         return visible;
     }
+    internal static void AssertContained(Rect visible, Rect bounds) =>
+        UiSession.Check(Contains(visible, bounds), "control outside visible viewport");
+
     private static void FullyVisible(Visual visual, Window window) =>
-        UiSession.Check(Contains(VisibleRegion(visual, window), InWindow(visual, window)), "control outside visible viewport");
+        AssertContained(VisibleRegion(visual, window), InWindow(visual, window));
 
     private static void Report(string phase, UiSession ui)
     {

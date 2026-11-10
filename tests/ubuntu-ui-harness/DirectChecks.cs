@@ -1,5 +1,7 @@
 using System.Text.Json;
 using Avalonia;
+using Avalonia.Media;
+using Avalonia.Media.Transformation;
 
 namespace Zipelo.UbuntuUiHarness;
 
@@ -70,7 +72,54 @@ internal static class DirectChecks
             Reject(() => StartupObservation.AssertReplay(initial, initial with { Title = "changed" }));
             Reject(() => StartupObservation.AssertReplay(initial, initial with { Items = new object() }));
         });
-        UiSession.Check(passed == 10, "direct case count differs");
+        Trial("transform-null", () => TransformGuard.RequireIdentity(null));
+        Trial("transform-operations-identity", () => TransformGuard.RequireIdentity(TransformOperations.Identity));
+        Trial("transform-matrix-identity", () => TransformGuard.RequireIdentity(new MatrixTransform(Matrix.Identity)));
+        Trial("transform-translation-rejected", () => Reject(() =>
+            TransformGuard.RequireIdentity(new MatrixTransform(Matrix.CreateTranslation(1, 2)))));
+        Trial("transform-scale-rejected", () => Reject(() =>
+            TransformGuard.RequireIdentity(new MatrixTransform(Matrix.CreateScale(2, 1)))));
+        Trial("transform-rotation-rejected", () => Reject(() =>
+            TransformGuard.RequireIdentity(new MatrixTransform(Matrix.CreateRotation(0.25)))));
+        Trial("transform-skew-rejected", () => Reject(() =>
+            TransformGuard.RequireIdentity(new MatrixTransform(Matrix.CreateSkew(0.25, 0)))));
+        Trial("transform-nan-rejected", () => Reject(() =>
+            TransformGuard.RequireIdentity(new MatrixTransform(new Matrix(double.NaN, 0, 0, 1, 0, 0)))));
+        Trial("transform-infinity-rejected", () => Reject(() =>
+            TransformGuard.RequireIdentity(new MatrixTransform(new Matrix(1, 0, 0, 1, double.PositiveInfinity, 0)))));
+        Trial("transform-near-identity-rejected", () => Reject(() =>
+            TransformGuard.RequireIdentity(new MatrixTransform(Matrix.CreateScale(double.BitIncrement(1), 1)))));
+        Trial("transform-perspective-rejected", () => Reject(() =>
+            TransformGuard.RequireIdentity(new MatrixTransform(new Matrix(1, 0, 0.25, 0, 1, 0, 0, 0, 1)))));
+        Trial("identity-outside-window-rejected", () =>
+        {
+            TransformGuard.RequireIdentity(TransformOperations.Identity);
+            Reject(() => LayoutCases.AssertContained(new Rect(0, 0, 100, 100), new Rect(95, 20, 10, 10)));
+        });
+        Trial("identity-outside-ancestor-clip-rejected", () =>
+        {
+            TransformGuard.RequireIdentity(TransformOperations.Identity);
+            var visible = new Rect(0, 0, 100, 100).Intersect(new Rect(10, 10, 20, 20));
+            Reject(() => LayoutCases.AssertContained(visible, new Rect(25, 15, 10, 10)));
+        });
+        Trial("identity-inside-clipped-window", () =>
+        {
+            TransformGuard.RequireIdentity(TransformOperations.Identity);
+            var visible = new Rect(0, 0, 100, 100).Intersect(new Rect(10, 10, 20, 20));
+            LayoutCases.AssertContained(visible, new Rect(15, 15, 10, 10));
+        });
+        Trial("matrix-diagnostic-finite-json", () =>
+        {
+            var matrix = MatrixRecord.Capture(new Matrix(double.NaN, 0, 0, 1, double.PositiveInfinity, 0));
+            using var document = JsonDocument.Parse(JsonSerializer.Serialize(matrix));
+            var root = document.RootElement;
+            UiSession.Check(!matrix.AllFinite && !matrix.ExactIdentity &&
+                root.GetProperty("M11").ValueKind == JsonValueKind.Null &&
+                root.GetProperty("M31").ValueKind == JsonValueKind.Null, "nonfinite matrix diagnostic differs");
+            UiSession.Check(root.EnumerateObject().Where(property => property.Value.ValueKind == JsonValueKind.Number)
+                .All(property => double.IsFinite(property.Value.GetDouble())), "nonfinite matrix escaped into JSON");
+        });
+        UiSession.Check(passed == 25, "direct case count differs");
         Console.WriteLine(JsonSerializer.Serialize(new { kind = "direct-summary", passed,
             scope = "records-and-oracle-only-no-product-mutation-no-ui" }));
     }

@@ -1,5 +1,5 @@
 {
-    "schema": 3,
+    "schema": 4,
     "status": "source_authored_not_built_not_run",
     "basePr": 21,
     "baseHead": "678456dfb3d66e67168d43a1fd331f66cd5e37fc",
@@ -73,7 +73,7 @@
         "isDpiTest": false,
         "baseline": "창 기본960x720/최소640x500. 원 App Button/TextBlock/TextBox16, 명시적 제목32/20. 원 화면에 없는 ComboBox는 test-local probe16으로 분리함.",
         "application": "실현된 TextBlock/TemplatedControl에 로컬24/32 적용 후 실제값 전부 확인함. 긴 고정 상태는 시험용 공개 Text 속성 주입임.",
-        "geometry": "창 ClientSize 좌표로 실제 bounds 변환, 화면 origin과 RenderScaling 기록. 창/조상 ClipToBounds/사각형 Clip과 교차. 비사각형 clip/RenderTransform은 추정하지 않고 실패. 활성 Stop 전체 및 status ScrollContentPresenter가 보이는 범위 내에 있어야 함.",
+        "geometry": "창 ClientSize 좌표로 실제 bounds 변환, 화면 origin과 RenderScaling 기록. 창/조상 ClipToBounds/사각형 Clip과 교차. RenderTransform은 null 또는9성분이 모두 유한하고 정확히identity인 matrix만 허용함. 비사각형 clip/비identity는 명시적으로 실패. 활성 Stop 전체 및 status ScrollContentPresenter가 기존 허용오차 범위 내에 있어야 함.",
         "statusEnd": "최대Offset 오차1DIP 이하, 실제 status 하단0.5DIP strip이 조상 viewport/clip과 창 안에 있어야 함(허용오차1DIP). Stop 활성/유효가시성, 목록168DIP 이상. 물리 hit-test/전체glyph/접근성 인증은 아님."
     },
     "ownership": "Program이 MainWindow 반환 직후 참조를 소유하고 Closed를 구독함. UiSession 생성자는 할당만 수행. Initialize/Show/시험 실패에도 Task drain/창 Close 및 Closed+비가시성/fixture/해시 확인을 독립 시도함. 하나라도 미확인125. MainWindow 생성자 자체가 객체 반환 전에 실패한 내부 자원은 이 public 경로로 정리 인증할 수 없음.",
@@ -86,7 +86,7 @@
         "runnerChecks": 4,
         "runnerCommand": "python3 -m unittest discover -s tests/ubuntu-ui-harness -p runner_checks.py",
         "runnerExpected": "timeout leader 종료 뒤 후손 미정리125, 정리된timeout124, 정상 반환 뒤 후손잔류125, PID재사용은 신호 미전달. Mock 시험이며 실제 OS 후손 정리 증거가 아님.",
-        "recordAndOracleChecks": 10,
+        "recordAndOracleChecks": 25,
         "recordAndOracleNames": [
             "geometry-empty",
             "geometry-zero-width",
@@ -97,11 +97,28 @@
             "diagnostic-bounds",
             "replay-preserved",
             "replay-entry-before-guard",
-            "replay-state-change"
+            "replay-state-change",
+            "transform-null",
+            "transform-operations-identity",
+            "transform-matrix-identity",
+            "transform-translation-rejected",
+            "transform-scale-rejected",
+            "transform-rotation-rejected",
+            "transform-skew-rejected",
+            "transform-nan-rejected",
+            "transform-infinity-rejected",
+            "transform-near-identity-rejected",
+            "transform-perspective-rejected",
+            "identity-outside-window-rejected",
+            "identity-outside-ancestor-clip-rejected",
+            "identity-inside-clipped-window",
+            "matrix-diagnostic-finite-json"
         ],
-        "recordAndOracleCommand": "같은 run_case.py의 --case 대신 --direct. AppBuilder/Window/fixture 파일 생성 없이 같은 assembly의 레코드 및 oracle 직접 회귀10개 수행.",
+        "recordAndOracleCommand": "같은 run_case.py의 --case 대신 --direct. AppBuilder/Window/fixture 파일 생성 없이 같은 assembly의 직접25개(기존10+신규15) 수행.",
         "mutationContract": "제품은 수정하지 않음. 고정 OpenStartupAsync에서 startupHandled guard를 제거하면 유효 파일로 OpenArchiveCoreAsync가 재진입하여 ListAsync의 Invocations가 guard 전에2가 됨. Calls는1이어도 강화 oracle이 실패함. 직접 회귀는 실제 controlled workspace의 재진입 거부/Invocations2/Calls1과 이전 성공 snapshot을 조합해 가장 은폐된 재진입도 거부함. 제품 guard를 실제 제거해 실행했다는 주장이 아님.",
-        "scope": "새 직접10개, 초기화 probe2개, 기존 runner mock4개와 UI11개를 서로 합산하지 않음. 작성자 실행 없음."
+        "scope": "직접25개(기존10+추가15), 초기화 probe2개, 기존 runner mock4개와 UI11개를 서로 합산하지 않음. 추가 transform/clip 회귀는 public 타입과 동일 predicate의 직접 시험이며 실제 창 렌더링 증거가 아님. 작성자 실행 없음.",
+        "preservedRecordAndOracleChecks": 10,
+        "addedTransformChecks": 15
     },
     "execution": {
         "oneCasePerProcess": true,
@@ -121,7 +138,7 @@
         "display": "중앙이 소유한 별도 Xvfb DISPLAY 사용/정리. runner는 Xvfb를 생성하지 않으며 Xvfb PID/socket 잔류0은 중앙 별도 확인.",
         "build": "중앙만 기존 SDK10.0.403/offline feed로 restore 및 build --no-restore 수행. 기존 Avalonia11.3.9/의존성 보존. author는 정적 검토만 수행.",
         "sourceIntegrity": "source-inputs.json 제품8파일/SHA256SUMS 전체 harness/manifest/로드 DLL6개 시작과 종료 대조. 중앙은 fresh build 전체 입력과 DLL해시 별도 고정.",
-        "direct": "같은 supervisor에서 --case 대신 --direct. 같은 외부60초/정리125 계약 유지. 직접10개 전부 성공0, assertion1, source 정리 미확인125."
+        "direct": "같은 supervisor에서 --case 대신 --direct. 같은 외부60초/정리125 계약 유지. 직접25개 전부 성공0, assertion1, source 정리 미확인125."
     },
     "history": {
         "head": "9444a38efcd873677d8f953a0ef6bd094310f490",
@@ -165,6 +182,36 @@
                 "글리프 검사"
             ],
             "cleanup": "모든 실행 cleanupConfirmed/windowClosed/workspaceTasksReturned=true. timeout/정리미확인/잔류0"
+        },
+        {
+            "head": "c024783fb55de5942038a6ebd774b11ed505e863",
+            "build": "기존 offline build 경고0/오류0",
+            "direct": "기존직접10/10 통과",
+            "runnerMocks": "별도4/4 통과",
+            "startupUi": "9/9 통과",
+            "initializationProbes": "별도2/2 통과",
+            "integrity": "입력74/bin40 해시 불변",
+            "harnessDllSha256": "c1b3987978239633f23ddedbe7f1df6e0e2503db80790b711bbc2db3dcb6c586",
+            "fontCases": "font24/font32는 실제 적용 후 기본960x720 scale1의 Stop 검사에서 unsupported transformed clip으로 실패. 폰트값/overflow/maxOffset/list>=168/활성Stop 선행 검사는 통과. 최소640x500/최종clip/glyph검사는 미도달. 실패visual의 transform type/matrix가 없어 실제 실패 원인은 미확정.",
+            "finding": "비null identity까지 거부하는 시험기 결함은 소스로 확인됨. Fluent Button의 none은 TransformOperations.Identity가 될 수 있지만 해당 실패visual의 실제 transform 정체를 로그로 확인한 것은 아님.",
+            "cleanup": "시험/앱/Xvfb/socket 잔류0. 캡처 helper 한 건의 정체는 해당 UI 사례 exit0과 별개이며 소유PID 확인 뒤 정상 정리한 중앙 관찰임."
         }
-    ]
+    ],
+    "transformPolicy": {
+        "components": [
+            "M11",
+            "M12",
+            "M13",
+            "M21",
+            "M22",
+            "M23",
+            "M31",
+            "M32",
+            "M33"
+        ],
+        "allow": "null 또는 유한9성분이 정확히 [1,0,0,0,1,0,0,0,1]인 matrix. epsilon/반올림/근사 비교 없음.",
+        "reject": "translation/scale/rotation/skew/perspective/비유한 성분. 비identity를 AABB로 지원하지 않음.",
+        "diagnostic": "실패 visual type/name 및 transform type 각128자 이하와9성분 DTO. 비유한 성분은 null, AllFinite=false로 식별하고 유한 성분만 숫자로 기록함. 원시 Matrix/NaN/Infinity JSON 허용 없음.",
+        "geometryUnchanged": "기존 clip 교차/창 viewport/Stop 전체/상태 끝 노출 assertion 및 기존 위치 허용오차1DIP는 유지함. 위치 허용오차와 identity 판정은 별개임."
+    }
 }
