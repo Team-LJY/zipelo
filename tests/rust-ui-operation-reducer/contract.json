@@ -1,0 +1,126 @@
+{
+    "schema": 1,
+    "base": "63b80e3158c08b71ec70666a2a39216cd36752b1",
+    "branch": "features/rust-ui-operation-reducer",
+    "scope": "std-only 순수 UI reducer 후보임. 실제 UI/PR30 parser/worker/picker/파일/프로세스와 연결하지 않음",
+    "api": [
+        "Model::new(nonzero_namespace) -> Option<Model>",
+        "Model::reduce(&self, Input) -> Transition { state, effect: Option<MockEffect>, disposition }",
+        "operation/rows/selected/generation/close는 읽기 전용 조회임"
+    ],
+    "effects": "MockEffect::Start/Cancel/PermitClose는 호출자에게 반환하는 모의 값임. 실행/전달/정리 성공 증거가 아니며 실행기는 없음",
+    "ownership": "호출자는 모델별 단일 이벤트 순서를 소유하고 반환 state를 원자적으로 채택한 뒤 effect를 처리해야 함. 같은 이전 snapshot으로 중복 reduce하여 얻은 효과의 외부 exactly-once 실행을 보장하지 않음",
+    "identity": {
+        "ui": "UiOperationId(u64), serial 1부터 checked 증가함",
+        "job": "별도 MockJobId([u8;16]) = caller namespace 8bytes || serial.to_be_bytes() 8bytes. Guid 문자열이나 truncation을 사용하지 않음",
+        "collision": "한 모델의 serial이 감기지 않아 그 namespace 안에서는 단사임. namespace는 caller가 전체 모의 라우팅 영역에서 고유하게 배정하고 모델 재생성/분기에도 재사용하지 않아야 함. new는 0 namespace만 거부하며 서로 다른 모델의 namespace 재사용을 자동 탐지하지 못함. 같은 namespace+serial은 충돌하므로 고유 배정을 입증하지 못한 caller는 라우팅을 시작하면 안 됨. 실제 프로세스 identity를 입증하지 않음",
+        "envelope": "전체 Mapping과 zero-based 연속 sequence가 일치해야 함. 현재보다 작은 UI ID는 payload를 보지 않고 stale로 제외하여 현재 sequence/오류를 보존함. 미래 UI 또는 같은 UI의 다른 job은 Mapping fault임",
+        "overflow": "serial/generation checked_add 실패는 상태/효과 없이 각각 SerialOverflow/GenerationOverflow 거부임. sequence u64::MAX는 다음 값을 표현할 수 없어 해당 이벤트 수용 전 SequenceOverflow로 차단함. 경계 주입 코드는 root tests의 private 단위시험에만 있음"
+    },
+    "events": {
+        "sequence": "현재 중복/역전/누락은 Sequence 연결 오류임. 재정렬 buffer나 자동 복구 없음. 최초 link fault 뒤 모든 current 이벤트 수용을 막고 cleanup 확인을 새로 만들지 않음",
+        "terminal": "progress와 독립임. MockSuccess/MockCancelled/Failed를 한 번만 수용함. 같은 terminal 재전달은 DuplicateTerminal, 다른 terminal은 ConflictingTerminal임. 첫 terminal과 원래 실패 origin/classification/code는 보존함",
+        "progress": "표시만 갱신하며 완료를 만들지 않음. cancel 요청/terminal 뒤의 올바른 순번 progress는 버리고 순번만 소비함. 잘못된 순번은 여전히 연결 오류임",
+        "cancel_race": "취소 요청은 terminal/cleanup을 만들지 않음. 취소 요청 뒤 MockSuccess는 SuccessAfterCancel로 차단하고 성공을 채택하지 않음. MockCancelled 또는 원래 오류 terminal과 cleanup을 별도로 받아야 함",
+        "cleanup": "terminal 전에 Confirmed를 받을 수 있으나 terminal까지 기다림. CleanupFailed는 첫 원인과 별도 sticky veto로 보존함. 이후 Confirmed로 실패를 지우지 않음. Confirmed 뒤 Failed가 와도 retry/close 허용을 철회함",
+        "error": "최초 Reported/Cleanup/Connection 오류를 고정하고 terminal/cleanup_failed/link_fault도 각각 보존함. 실패 문자열은 origin 1~128 UTF-8 bytes, classification 1~256 bytes이며 넘으면 자르거나 대체하지 않고 InvalidEvidence로 거부함. 공통 backend 오류 타입 또는 PR30 증거 변환을 구현한 것이 아님"
+    },
+    "transition_table": [
+        {
+            "input": "StartMock",
+            "guard": "Open 및 operation 없음 또는 terminal+cleanup confirmed, cleanup failed/link fault 없음",
+            "state": "새 serial/mapping, progress/result/error 초기화, 목록/선택 제거",
+            "effect": "Start 한 번"
+        },
+        {
+            "input": "StartMock 반복 또는 unresolved operation",
+            "state": "기존 상태 보존, Busy",
+            "effect": "없음"
+        },
+        {
+            "input": "RequestCancel",
+            "guard": "terminal/link fault 없고 아직 요청 안 함",
+            "state": "cancel_requested latch",
+            "effect": "Cancel 한 번"
+        },
+        {
+            "input": "RequestCancel 반복/terminal 뒤",
+            "state": "추가 요청 없음. terminal 뒤 CancelAfterTerminal",
+            "effect": "없음"
+        },
+        {
+            "input": "RequestClose",
+            "guard": "operation 없음 또는 settled",
+            "state": "MockClosed",
+            "effect": "PermitClose 한 번"
+        },
+        {
+            "input": "RequestClose",
+            "guard": "작업 unresolved",
+            "state": "Confirming",
+            "effect": "없음"
+        },
+        {
+            "input": "KeepOpen",
+            "guard": "아직 MockClosed 아님",
+            "state": "Open, 이미 요청한 cancel은 유지",
+            "effect": "없음"
+        },
+        {
+            "input": "ConfirmCloseCancel",
+            "guard": "Confirming",
+            "state": "WaitingForCleanup, 필요하면 cancel latch",
+            "effect": "terminal 이전이고 미요청이면 Cancel"
+        },
+        {
+            "input": "마지막 terminal 또는 cleanup",
+            "guard": "WaitingForCleanup 및 양쪽 확인, 실패한 cleanup/link fault 없음",
+            "state": "MockClosed",
+            "effect": "PermitClose"
+        },
+        {
+            "input": "MockClosed 뒤 command",
+            "state": "Closed 거부",
+            "effect": "없음"
+        },
+        {
+            "input": "MockClosed 뒤 current envelope",
+            "state": "여전히 순번/상충 결과 검사. 모의 닫기 상태는 유지",
+            "effect": "없음"
+        }
+    ],
+    "listing": {
+        "identity": "RowKey(operation, generation, RowId). 교체마다 checked generation 증가, 선택 초기화. 옛 operation 목록과 옛 generation 선택은 거부함",
+        "limits": "100000행, nonzero 고유 RowId, 이름당 최대 4096 UTF-8 bytes. 문자열은 경로나 파일로 해석하지 않음",
+        "text": "한국어/Jamo/NFC 여부와 원문 bytes를 변경하지 않음",
+        "keys": "InputArea::List에만 Navigation을 적용함. Text/Other는 InputNotList로 제외함. 실제 focus/IME/접근성 동작의 검증이 아님"
+    },
+    "cost_limits": "reduce는 기존 state를 clone함. 목록 크기에 비례하는 복사/할당 비용이 있으며 전체 heap/CPU/할당 실패 회수 또는 100k 실제 renderer 성능을 보장하지 않음",
+    "dependencies": {
+        "external_packages": 0,
+        "lock_packages_including_root": 1,
+        "network_restore": false,
+        "license": "자체 코드 MIT, 저장소 LICENSE를 후보에 포함함"
+    },
+    "validation": {
+        "kind": "작성자 측 Linux 순수 모델 직접 시험",
+        "toolchain": "Rust/Cargo 1.99.1",
+        "discovered": 49,
+        "executed": 49,
+        "passed": 49,
+        "failed": 0,
+        "ignored": 0,
+        "filtered": 0,
+        "split": "private overflow 6개 + 공개 API 통합 43개. 기존 PR34 14개는 변경/재실행/합산하지 않음",
+        "checks": "rustfmt --check, Python AST/JSON, root-only lock, PR34 고정 10파일 전후 hash 일치",
+        "historical": "초기 rustfmt에서 시험 선언 fn 구문 오류를 수정한 뒤 첫 44개 실행이 통과함. 닫기 후 current 이벤트 관찰과 추가 5개 회귀 보완 후 최종 49개 실행을 수행함",
+        "command": "python3 tests/rust-ui-operation-reducer/validate.py",
+        "artifacts": "tests/rust-ui-operation-reducer/artifacts/ 아래 분리 stdout/stderr/target/report만 생성함. 해당 생성물은 PR에 올리지 않음",
+        "limits": "독립 검증, 실제 GUI/IME/Orca/NVDA/DPI/Windows/GL 성공, 실제 작업 중단이나 cleanup 증거가 아님"
+    },
+    "preservation": [
+        "PR34 63b80e31의 파일/14개 시험/lock/기준 blob 보존",
+        "실제 backend/PR30 공통 계약은 별도 합의 전 수정하지 않음",
+        "설치/네트워크 복원/GUI/VM/보류된 동작/게시/main 병합/C# 삭제 없음"
+    ]
+}

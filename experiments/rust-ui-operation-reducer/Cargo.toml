@@ -1,0 +1,14 @@
+[package]
+name = "zipelo-ui-operation-reducer"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+license = "MIT"
+publish = false
+autotests = false
+
+[workspace]
+
+[[test]]
+name = "operation_reducer"
+path = "../../tests/rust-ui-operation-reducer/reducer.rs"
