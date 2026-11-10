@@ -70,18 +70,13 @@ impl From<Failure> for io::Error {
     }
 }
 
-impl From<io::Error> for Failure {
-    fn from(value: io::Error) -> Self {
+impl From<&io::Error> for Failure {
+    fn from(value: &io::Error) -> Self {
         if let Some(failure) = value.get_ref().and_then(|e| e.downcast_ref::<Failure>()) {
             return *failure;
         }
         if let Some(failure) = value.get_ref().and_then(|e| e.downcast_ref::<ZipError>()) {
-            return match failure {
-                ZipError::UnsupportedArchive(_) | ZipError::CompressionMethodNotSupported(_) => {
-                    Self::Unsupported
-                }
-                _ => Self::Integrity,
-            };
+            return Self::from(failure);
         }
         match value.kind() {
             io::ErrorKind::UnexpectedEof => Self::Truncated,
@@ -91,8 +86,8 @@ impl From<io::Error> for Failure {
     }
 }
 
-impl From<ZipError> for Failure {
-    fn from(value: ZipError) -> Self {
+impl From<&ZipError> for Failure {
+    fn from(value: &ZipError) -> Self {
         match value {
             ZipError::Io(error) => Self::from(error),
             ZipError::UnsupportedArchive(_)
@@ -101,5 +96,17 @@ impl From<ZipError> for Failure {
             ZipError::DecompressedSizeLimitExceeded { .. } => Self::Budget,
             _ => Self::Integrity,
         }
+    }
+}
+
+impl From<io::Error> for Failure {
+    fn from(value: io::Error) -> Self {
+        Self::from(&value)
+    }
+}
+
+impl From<ZipError> for Failure {
+    fn from(value: ZipError) -> Self {
+        Self::from(&value)
     }
 }

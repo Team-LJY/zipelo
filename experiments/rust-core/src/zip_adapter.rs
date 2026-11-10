@@ -139,12 +139,12 @@ fn preflight<R: Read + Seek>(
         let unix_type = (attributes >> 16) & 0xf000;
         let kind = if unix_type == 0xa000 {
             2
+        } else if !matches!(unix_type, 0 | 0x4000 | 0x8000) {
+            4
         } else if name.ends_with('/') || unix_type == 0x4000 {
             1
-        } else if matches!(unix_type, 0 | 0x8000) {
-            0
         } else {
-            4
+            0
         };
         let crc = u32_at(&header, 16);
         if streaming

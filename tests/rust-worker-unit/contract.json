@@ -1,12 +1,12 @@
 {
     "schemaVersion": 1,
-    "baselineCommit": "c9a2747d0cf91294da5689902546550b1c578460",
+    "baselineCommit": "9b7891c3dba6c51f2ba8a120c9405bf7591ccb4e",
     "target": "worker_unit",
-    "namedTests": 66,
-    "assertionTests": 65,
+    "namedTests": 74,
+    "assertionTests": 73,
     "policyObservations": 1,
     "execution": "not built or executed; central validation required",
-    "moduleLinking": "main.rs #[path] imports the five existing worker modules from experiments/rust-core/src; no implementation copy and no production edits. The main process entry point is excluded.",
+    "moduleLinking": "main.rs #[path] imports the five existing worker modules from experiments/rust-core/src; no implementation copy and three reviewed production fixes. The main process entry point is excluded.",
     "groups": [
         {
             "id": "guid",
@@ -78,7 +78,11 @@
                 "json_pascalcase_numeric_enums_and_listing_crc_status",
                 "json_action_enum_and_field_case_rejected",
                 "json_limit_integer_overflow_and_invalid_job_rejected",
-                "failure_codes_and_actual_eof_classification"
+                "failure_codes_and_actual_eof_classification",
+                "errors_direct_and_nested_observed_eof_preserved",
+                "errors_direct_and_nested_budget_evidence_preserved",
+                "errors_generic_malformed_and_io_do_not_infer_eof_or_budget",
+                "errors_direct_and_wrapped_unsupported_classification_matches"
             ]
         },
         {
@@ -96,7 +100,9 @@
             "boundary": "100ns 정밀도, 300초 경계, 잘못된 상수 형식",
             "cases": [
                 "timespan_tick_precision_and_upper_boundary",
-                "timespan_invalid_syntax_and_components"
+                "timespan_invalid_syntax_and_components",
+                "duration_length_cap_rejects_long_colon_and_digit_inputs",
+                "duration_fixed_components_reject_extra_separators_within_cap"
             ]
         },
         {
@@ -149,7 +155,9 @@
                 "zip_reparse_directory_shape_and_nonempty_directory_rejected",
                 "zip_output_budget_is_cumulative_across_entries",
                 "zip_deflate_malformed_payload_never_completes",
-                "zip_deflate_packed_tail_has_explicit_observation"
+                "zip_deflate_packed_tail_has_explicit_observation",
+                "unix_special_empty_slash_entries_cannot_become_directories",
+                "unix_allowed_types_preserve_regular_and_directory_extraction"
             ]
         }
     ],
@@ -549,6 +557,54 @@
             "file": "archive.rs",
             "group": "zip-completion",
             "kind": "policy-observation"
+        },
+        {
+            "name": "unix_special_empty_slash_entries_cannot_become_directories",
+            "file": "review.rs",
+            "group": "zip-completion",
+            "kind": "assertion"
+        },
+        {
+            "name": "unix_allowed_types_preserve_regular_and_directory_extraction",
+            "file": "review.rs",
+            "group": "zip-completion",
+            "kind": "assertion"
+        },
+        {
+            "name": "duration_length_cap_rejects_long_colon_and_digit_inputs",
+            "file": "review.rs",
+            "group": "timespan",
+            "kind": "assertion"
+        },
+        {
+            "name": "duration_fixed_components_reject_extra_separators_within_cap",
+            "file": "review.rs",
+            "group": "timespan",
+            "kind": "assertion"
+        },
+        {
+            "name": "errors_direct_and_nested_observed_eof_preserved",
+            "file": "review.rs",
+            "group": "json",
+            "kind": "assertion"
+        },
+        {
+            "name": "errors_direct_and_nested_budget_evidence_preserved",
+            "file": "review.rs",
+            "group": "json",
+            "kind": "assertion"
+        },
+        {
+            "name": "errors_generic_malformed_and_io_do_not_infer_eof_or_budget",
+            "file": "review.rs",
+            "group": "json",
+            "kind": "assertion"
+        },
+        {
+            "name": "errors_direct_and_wrapped_unsupported_classification_matches",
+            "file": "review.rs",
+            "group": "json",
+            "kind": "assertion"
         }
     ],
     "provenance": {
@@ -559,9 +615,9 @@
         "dependencies": "Only existing crate dependencies, no added dev-dependencies"
     },
     "limits": [
-        "66 named Rust test functions; loop rows are subcases, not additional named tests.",
-        "65 assertion tests and one policy observation. Deflate packed-tail acceptance/rejection is printed with --nocapture and is not evidence of C# policy compatibility.",
-        "Production source is unchanged even if central tests fail. Do not rewrite expectations to match a failing candidate.",
+        "74 named Rust test functions; 8 new regressions, 66 existing functions preserved. Loop rows are subcases, not additional named tests.",
+        "73 assertion tests and one policy observation. Deflate packed-tail acceptance/rejection is printed with --nocapture and is not evidence of C# policy compatibility.",
+        "Production changes are limited to Unix type precedence, bounded duration parsing and borrowed nested-error classification. Existing test assertions are preserved; execution is pending.",
         "Allocator activity is not instrumented. Oversized JSON/Source/range requests are checked by no-body-read/no-request observations plus static preallocation review.",
         "21 MiB wire cap is unreachable through the public Frames API under current stricter caps: <=16 MiB data + <=65536*64 header bytes + <=1024*16 item metadata bytes +1 completion byte <21 MiB. No claimed direct branch hit.",
         "Generic crate integrity errors do not establish a precise parser step or actual EOF. Explicit short transport/Source reads are tested separately.",
@@ -578,5 +634,16 @@
         "Use centrally resolved actual Cargo.lock with matching dependency manifest; no handmade lock.",
         "Record new source head, lock hash, toolchain, target, command exit and external process cleanup.",
         "Old c9a2747d build results do not validate this test head. Stop on timeout and confirm owned process cleanup."
-    ]
+    ],
+    "reviewCorrections": {
+        "unixTypes": "Non-regular/non-directory Unix types remain special entries even with a trailing slash. Listing reports Kind=4; streaming rejects before BeginItem. Host independently blocks publication, not a demonstrated filesystem escape.",
+        "duration": "8..16 byte guard precedes iterator parsing; exactly three colon-separated components, no temporary Vec. Long-input tests allocate their own input; parser allocation claim is static, not allocator instrumentation.",
+        "nestedErrors": "Owned and borrowed io/ZipError conversions share classification; observed UnexpectedEof, embedded Failure and declared decompressed-size limit retain identity; messages never infer EOF/budget.",
+        "dependencyReachability": "Regression errors are constructed directly. Actual dependency reachability has not been executed.",
+        "separatePendingAssignments": [
+            "Metadata failure latch and metadata-mode contract follow-up are separate queued work.",
+            "Central Cargo.lock import is separate queued work; no lock is fabricated here."
+        ],
+        "oldBuild": "Coordinator reports c9a2747d Rust/Cargo 1.99.1 locked offline compile exit 0, no warnings/errors, after normal registry approval; not validation of 9b7891c3 or this correction head."
+    }
 }

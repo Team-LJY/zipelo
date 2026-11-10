@@ -27,14 +27,20 @@ fn positive(value: &Value, field: &str) -> Result<u64> {
 
 pub fn duration(text: &str) -> Result<Duration> {
     // 5분 이하의 .NET 상수 형식만 허용함.
-    let parts: Vec<_> = text.split(':').collect();
-    if parts.len() != 3 || parts[0] != "00" || parts[1].len() != 2 {
+    if !(8..=16).contains(&text.len()) {
         return Err(Failure::Protocol);
     }
-    let (seconds, fraction) = parts[2].split_once('.').unwrap_or((parts[2], ""));
+    let mut parts = text.split(':');
+    let hours = parts.next().ok_or(Failure::Protocol)?;
+    let minutes = parts.next().ok_or(Failure::Protocol)?;
+    let seconds = parts.next().ok_or(Failure::Protocol)?;
+    if parts.next().is_some() || hours != "00" || minutes.len() != 2 {
+        return Err(Failure::Protocol);
+    }
+    let (seconds, fraction) = seconds.split_once('.').unwrap_or((seconds, ""));
     if seconds.len() != 2
         || fraction.len() > 7
-        || !parts[1]
+        || !minutes
             .bytes()
             .chain(seconds.bytes())
             .chain(fraction.bytes())
@@ -42,7 +48,7 @@ pub fn duration(text: &str) -> Result<Duration> {
     {
         return Err(Failure::Protocol);
     }
-    let minutes = parts[1].parse::<u64>().map_err(|_| Failure::Protocol)?;
+    let minutes = minutes.parse::<u64>().map_err(|_| Failure::Protocol)?;
     let seconds = seconds.parse::<u64>().map_err(|_| Failure::Protocol)?;
     if minutes > 5 || seconds >= 60 {
         return Err(Failure::Protocol);
