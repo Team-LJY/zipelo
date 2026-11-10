@@ -419,3 +419,95 @@ fn native_gzip_callback_error_survives_simultaneous_queue_full() {
     assert!(terminal.cancellation_requested());
     assert!(!terminal.cancellation_forwarded());
 }
+
+#[test]
+fn controller_rejects_real_foreign_terminal_without_applying_payload() {
+    let (foreign, _) = core::Operation::start().unwrap();
+    let (sender, _events) = mpsc::sync_channel(DEFAULT_CAPACITY);
+    let foreign_terminal = runtime::execute(foreign, Action::Gzip, sender);
+    assert!(foreign_terminal.outcome.is_ok());
+    let mut c = Controller::default();
+    assert!(c.start(Action::Gzip));
+    finish(c.task.as_ref().unwrap());
+    c.terminal = Some(foreign_terminal);
+    c.poll();
+    assert_eq!(c.terminal_delivery, Some(core::Delivery::IgnoredStale));
+    assert_eq!(c.status, Status::DeliveryFailure);
+    assert!(c.rows().is_empty());
+    assert!(!c.select(c.task.as_ref().unwrap().id, c.generation, 0));
+    assert!(c.selected_bytes().is_none());
+    assert!(c.terminal.as_ref().unwrap().outcome.is_ok());
+    assert!(c.task.as_ref().unwrap().joined());
+}
+
+#[test]
+fn joined_task_without_received_terminal_is_delivery_failure() {
+    let mut c = Controller::default();
+    assert!(c.start(Action::Gzip));
+    finish(c.task.as_ref().unwrap());
+    let withheld = c
+        .task
+        .as_ref()
+        .unwrap()
+        .completion
+        .as_ref()
+        .unwrap()
+        .try_recv()
+        .unwrap();
+    assert!(withheld.outcome.is_ok());
+    c.poll();
+    assert_eq!(c.status, Status::DeliveryFailure);
+    assert!(c.terminal.is_none());
+    assert!(c.terminal_delivery.is_none());
+    assert!(c.rows().is_empty());
+    assert!(c.selected_bytes().is_none());
+}
+
+#[test]
+fn normal_frame_controls_retain_running_handle_until_explicit_join() {
+    use std::sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    };
+    struct RunningProbe(Arc<AtomicBool>);
+    impl Drop for RunningProbe {
+        fn drop(&mut self) {
+            self.0.store(true, Ordering::SeqCst);
+        }
+    }
+    let dropped = Arc::new(AtomicBool::new(false));
+    let worker_probe = dropped.clone();
+    let (ready, entered) = mpsc::sync_channel(1);
+    let (release, gate) = mpsc::sync_channel(1);
+    let task = Task::spawn_with(DEFAULT_CAPACITY, move |_, _| {
+        let _probe = RunningProbe(worker_probe);
+        ready.try_send(()).unwrap();
+        gate.recv_timeout(Duration::from_secs(5)).unwrap();
+        panic!("수명 회귀의 종료 경로");
+    })
+    .unwrap();
+    entered.recv_timeout(Duration::from_secs(5)).unwrap();
+    let id = task.id;
+    let mut c = Controller::default();
+    c.task = Some(task);
+    c.poll();
+    assert!(!c.start(Action::Zip));
+    assert!(c.cancel());
+    c.request_close();
+    c.confirm_close();
+    assert_eq!(c.close, CloseState::Waiting);
+    c.poll();
+    c.keep_open();
+    c.poll();
+    assert!(c.busy());
+    assert_eq!(c.task.as_ref().unwrap().id, id);
+    assert!(!c.task.as_ref().unwrap().joined());
+    assert!(!dropped.load(Ordering::SeqCst));
+    release.try_send(()).unwrap();
+    finish(c.task.as_ref().unwrap());
+    c.poll();
+    assert!(dropped.load(Ordering::SeqCst));
+    assert!(c.task.as_ref().unwrap().joined());
+    assert_eq!(c.status, Status::Panicked);
+    assert_eq!(c.close, CloseState::Open);
+}

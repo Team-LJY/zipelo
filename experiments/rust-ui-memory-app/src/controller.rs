@@ -27,6 +27,8 @@ pub struct Controller {
     pub task: Option<Task>,
     receiver: Option<core::Receiver>,
     pub terminal: Option<Completion>,
+    pub terminal_delivery: Option<core::Delivery>,
+    terminal_accepted: bool,
     pub close: CloseState,
     pub status: Status,
     pub generation: u64,
@@ -43,6 +45,8 @@ impl Default for Controller {
             task: None,
             receiver: None,
             terminal: None,
+            terminal_delivery: None,
+            terminal_accepted: false,
             close: CloseState::Open,
             status: Status::Idle,
             generation: 0,
@@ -81,6 +85,8 @@ impl Controller {
         self.generation = generation;
         self.selected = None;
         self.terminal = None;
+        self.terminal_delivery = None;
+        self.terminal_accepted = false;
         self.delivery_error = None;
         self.panic = None;
         self.spawn_error = None;
@@ -175,12 +181,30 @@ impl Controller {
                 }
             }
             if let Some(completion) = &self.terminal {
-                if let Err(error) = completion.outcome.validate(self.receiver.as_mut().unwrap()) {
-                    self.delivery_error.get_or_insert(error);
+                self.terminal_accepted = false;
+                match self
+                    .receiver
+                    .as_mut()
+                    .map(|receiver| completion.outcome.validate(receiver))
+                {
+                    Some(Ok(core::Delivery::Accepted)) => {
+                        self.terminal_delivery = Some(core::Delivery::Accepted);
+                        self.terminal_accepted = true;
+                    }
+                    Some(Ok(core::Delivery::IgnoredStale)) => {
+                        self.terminal_delivery = Some(core::Delivery::IgnoredStale);
+                    }
+                    Some(Err(error)) => {
+                        self.delivery_error.get_or_insert(error);
+                    }
+                    None => {}
                 }
                 self.status = if self.panic.is_some() {
                     Status::Panicked
-                } else if completion.delivery.is_some() || self.delivery_error.is_some() {
+                } else if !self.terminal_accepted
+                    || completion.delivery.is_some()
+                    || self.delivery_error.is_some()
+                {
                     Status::DeliveryFailure
                 } else if completion.outcome.is_ok() {
                     Status::Completed
@@ -198,7 +222,7 @@ impl Controller {
         }
     }
     pub fn rows(&self) -> Vec<&str> {
-        if self.status != Status::Completed {
+        if self.status != Status::Completed || !self.terminal_accepted {
             return Vec::new();
         }
         match self.terminal.as_ref().map(|c| &c.outcome) {
@@ -222,7 +246,7 @@ impl Controller {
         true
     }
     pub fn selected_bytes(&self) -> Option<&[u8]> {
-        if self.status != Status::Completed {
+        if self.status != Status::Completed || !self.terminal_accepted {
             return None;
         }
         let (operation, generation, index) = self.selected?;

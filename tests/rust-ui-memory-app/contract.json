@@ -19,14 +19,16 @@
         "raw": "모든 checkpoint Event를 순번 변경 없이 try_send함. 최초 전달 실패 이후 suffix는 보내지 않고 first_missing_sequence로 시작 위치를 보존함. 원래 observer Err를 반환 우선순위로 유지하며 전달 실패는 별도임",
         "receiver": "원본 연속 stream을 PR42 Receiver로 검증함. 누락/중복 오류는 sticky로 보존하고 재생성하지 않음. terminal은 원형 보존하되 transport 오류가 있으면 payload 목록/내용에 적용하지 않음",
         "completion": "용량 1 별도 채널로 Terminal 소유 이동. Full/Disconnected이면 반환된 값을 작업 스레드 반환값으로 소유하여 join으로 회수함. 복제하지 않음",
-        "mutex": "추가 공유 mutex를 사용하지 않아 자체 poison 경로 없음. 표준 채널 내부 구현 전체의 panic 회수를 주장하지 않음"
+        "mutex": "추가 공유 mutex를 사용하지 않아 자체 poison 경로 없음. 표준 채널 내부 구현 전체의 panic 회수를 주장하지 않음",
+        "terminal_acceptance": "Accepted만 실제 현재 결과의 완료/오류 분류와 payload 적용을 허용함. IgnoredStale는 원형 진단용 보존만 하며 현재 작업은 DeliveryFailure임. terminal 누락/Receiver 누락/검증 오류도 성공으로 처리하지 않음. payload 조회는 내부 accepted latch도 요구함"
     },
     "lifecycle": {
         "frame": "poll/try_recv/try_iter/is_finished만 사용하며 실행 중 join하지 않음. 완료 수신과 join 상태를 분리하고 원본 결과를 한 번 소유함",
         "close": "확인/취소 요청 후 대기/철회 구분. 철회해도 전송한 취소는 남음. 종료 확인 전 시작/재시작/실제 닫기 금지. 확인 중 먼저 완료돼도 선택은 유지함",
-        "drop": "정상 GUI frame은 busy Task를 제거하지 않음. 비정상 owner 폐기의 Drop은 취소 요청 후 동기 join하여 조용한 detach를 피함. 이 비정상 fallback은 기다릴 수 있으며 비선점 callback/OOM/강제 프로세스 종료에서 유한 종료를 보장하지 않음",
+        "drop": "정상 GUI frame은 busy Task를 제거하지 않음. 비정상 소유권 폐기나 앱 종료에서 Task::Drop은 취소 요청 후 동기 join하므로 blocking할 수 있음. 비차단 보장은 정상 poll/닫기 전이 범위임. 강제 종료/비선점 callback/OOM에서 유한 종료나 안전한 회수를 보장하지 않음",
         "panic": "JoinError 원형을 별도로 소유하며 Terminal이나 cleanup 성공을 합성하지 않음",
-        "cancel": "요청과 실제 native 반환을 구분함. 이미 완료된 성공을 뒤늦은 취소로 바꾸지 않음. 마지막 checkpoint와 Terminal 생성 사이 경합은 확정 검증하지 않음"
+        "cancel": "요청과 실제 native 반환을 구분함. 이미 완료된 성공을 뒤늦은 취소로 바꾸지 않음. 마지막 checkpoint와 Terminal 생성 사이 경합은 확정 검증하지 않음",
+        "normal_frame_regression": "gate로 실행 중인 스레드를 유지하고 poll/반복 시작/취소/닫기 확인/철회 뒤에도 같은 미join 핸들이 보존됨을 직접 회귀로 작성함. gate 해제 후 panic 종료와 명시적 poll_join을 확인함. 아직 실행하지 않았음"
     },
     "payload": {
         "ownership": "원본 typed Terminal이 bytes/목록/Usage/원래 오류를 소유함. GUI 문자열은 별도 제한된 표시임",
@@ -65,7 +67,7 @@
     },
     "validation": {
         "toolchain": "기존 Rust/Cargo/rustfmt 1.99.1 및 cache만 사용함",
-        "rust_tests_declared": 28,
+        "rust_tests_declared": 31,
         "names": [
             "zip_default_queue_fits_without_ui_drain",
             "ustar_default_queue_fits_without_ui_drain",
@@ -94,7 +96,10 @@
             "oversized_queue_is_rejected_without_spawning",
             "gzip_preview_preserves_original_bytes",
             "ui_event_wrapper_excludes_old_operation_before_current_sequence",
-            "native_gzip_callback_error_survives_simultaneous_queue_full"
+            "native_gzip_callback_error_survives_simultaneous_queue_full",
+            "controller_rejects_real_foreign_terminal_without_applying_payload",
+            "joined_task_without_received_terminal_is_delivery_failure",
+            "normal_frame_controls_retain_running_handle_until_explicit_join"
         ],
         "rust_tests_compiled": false,
         "rust_tests_discovered": false,
@@ -105,7 +110,8 @@
             "headless_lib": "Linux locked/offline exit 0",
             "gui": "Linux ui feature binary locked/offline exit 0",
             "rustfmt": "1.99.1 check exit 0",
-            "metadata": "Linux headless/GUI locked/offline exit 0. Windows 두 target headless/GUI 선택 감사 완료. 미캐시 iOS를 포함한 무필터 metadata는 offline 실패로 보존함"
+            "metadata": "Linux headless/GUI locked/offline exit 0. Windows 두 target headless/GUI 선택 감사 완료. 미캐시 iOS를 포함한 무필터 metadata는 offline 실패로 보존함",
+            "previous_head": "d188493ff6b82f4aef4c648405be07316da36eb0의 빌드와 이번 보완 source 빌드는 별도 로그로 구분함"
         }
     },
     "preservation": "새 두 디렉터리만 추가함. 기존 core/60개 원본/PR34/39/main/C# 수정 없음. 공유 로컬 Git 브랜치 전환/스테이징 없음"
