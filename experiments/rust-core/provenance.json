@@ -70,8 +70,8 @@
         }
     ],
     "transitivePlan": {
-        "codec": "flate2 -> zlib-rs selected by zip feature; no direct pin of transitives before actual Cargo resolution",
-        "verification": "central Cargo.lock checksums and target-specific normal/build/dev/feature graphs required; licenses and native dependencies reviewed separately",
+        "codec": "Locked flate2 1.1.11 -> zlib-rs 0.6.8; selected zip feature unchanged.",
+        "verification": "Lock bytes verified; active target-specific normal/build/dev/feature graphs and full license review remain separate central work.",
         "knownLicenses": {
             "flate2": "MIT OR Apache-2.0",
             "zlib-rs": "Zlib"
@@ -81,5 +81,16 @@
     "preservation": "all baseline C# code, tests, fixtures, project files and PRs unchanged",
     "syntheticOnly": true,
     "productReady": false,
-    "releaseReady": false
+    "releaseReady": false,
+    "cargoLock": {
+        "origin": "Actual central Cargo resolution, copied byte-for-byte without regeneration or manual edits",
+        "sourceCommit": "c9a2747d0cf91294da5689902546550b1c578460",
+        "sha256": "92f7b05d7da086b4b8c6b596755ba6233129e5bac8b060b9c6b3aa63fe17fecf",
+        "bytes": 9302,
+        "externalPackages": 40,
+        "totalPackagesIncludingWorker": 41,
+        "manifestComparison": "Package, dependencies and features identical to sourceCommit; only explicit worker_unit test target added",
+        "verification": "TOML parsing, exact byte hash and direct dependency versions checked; current-head locked offline build and execution pending",
+        "centralReportedBuild": "SourceCommit only: Rust/Cargo 1.99.1 locked offline build exit 0, warnings 0, errors 0. Not independently rerun and not applicable to later heads."
+    }
 }

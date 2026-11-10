@@ -106,11 +106,10 @@
         "unitExecution": false,
         "comparisonExecution": false,
         "rustfmt": "1.99.1 existing installation: syntax/format check only; not type-check or build",
-        "cargoLock": "not fabricated; central authorized dependency resolution required",
+        "cargoLock": "Imported exact centrally generated lock from c9a2747d; SHA256 verified. Current manifest differs only by explicit test target. New-head locked offline build and tests remain pending.",
         "directUnitSource": "location approval pending: common rule requires root tests/; implementation assignment allows crate-local tests"
     },
     "centralCommands": [
-        "cargo generate-lockfile --manifest-path experiments/rust-core/Cargo.toml",
         "cargo tree --locked --manifest-path experiments/rust-core/Cargo.toml --edges normal,build,dev,features --target x86_64-unknown-linux-gnu",
         "cargo tree --locked --manifest-path experiments/rust-core/Cargo.toml --edges normal,build,dev,features --target x86_64-pc-windows-msvc",
         "cargo build --locked --offline --manifest-path experiments/rust-core/Cargo.toml",
