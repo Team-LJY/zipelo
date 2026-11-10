@@ -64,6 +64,21 @@ else
         {
             var lines = File.ReadAllLines(diagnostic);
             observation.WorkerStarted = lines.Any(line => line.Split('\t').ElementAtOrDefault(3) == "process.started");
+            if (plan.Case.Operation == "peer")
+            {
+                var peerPid = Path.Combine(root, "peer.pid");
+                var observedPids = lines.Select(line => line.Split('\t'))
+                    .Where(parts => parts.Length >= 5 && parts[3] == "process.started")
+                    .Select(parts => parts[4]).ToArray();
+                var reached = File.Exists(peerPid) &&
+                    observedPids.Contains(File.ReadAllText(peerPid).Trim(), StringComparer.Ordinal);
+                observation.InjectionConfirmed &= reached;
+                if (!reached || observation.WorkerExitCode == 71)
+                {
+                    observation.Verdict = "blocked";
+                    observation.Detail = "peer_injection_unconfirmed";
+                }
+            }
             observation.CoverageLayer = plan.Case.Operation == "peer" ? "host_fault_peer" :
                 observation.WorkerStarted == true ? "host_and_worker" : "host_preflight";
         }
