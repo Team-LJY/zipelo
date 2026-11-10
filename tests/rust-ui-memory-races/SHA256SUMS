@@ -1,0 +1,9 @@
+806b4331e719fbc1d2f1622e48dda5f4ed089d716ee443996c1f2d803d1959ac  tests/rust-ui-memory-races/Cargo.lock
+36066585aaa69fd78ea2f930ae6978f1b972026f76ab5f8dc3236836dd4ea1bc  tests/rust-ui-memory-races/Cargo.toml
+0714945e52a4d5b560c02c9a18478519f8c4e2572cbf87bd6d52adcfb2b63c62  tests/rust-ui-memory-races/LICENSE
+06ba42b8264d2d5dcf082c2bbeab4b0d6dcb2f23bed7fb28912bfd0e1e15d42b  tests/rust-ui-memory-races/assembly.rs
+8a5f25a3a2b1b83b7f2a116b759663fb199efb8d61f7585bfc72f3681a4d3e33  tests/rust-ui-memory-races/contract.json
+6a26ef0e9f7b69a7478c63f66935f1d2e4afbc2ada83b8280e31a6a38b9ba0e4  tests/rust-ui-memory-races/races.rs
+69999e8609610a89bc6155296c047adaef3126e4d46e4fa0f4bf528b85045195  tests/rust-ui-memory-races/run_reviewed.py
+3dd6d78cabce0bccac4dd7ea208f2557d4af06ddbf67b934568491194e8640c3  tests/rust-ui-memory-races/sources.json
+0e6607a244479eca2377899ded52d1324547fa81b244dc01388a8c13f564176b  tests/rust-ui-memory-races/static_check.py

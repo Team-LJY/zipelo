@@ -1,0 +1,16 @@
+[package]
+name = "zipelo-memory-gzip-regressions"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+publish = false
+autotests = false
+
+[dependencies]
+zipelo-memory-gzip-reader = { path = "../../experiments/rust-memory-gzip-reader" }
+
+[[test]]
+name = "memory_gzip_reader"
+path = "main.rs"
+
+[workspace]

@@ -1,0 +1,37 @@
+{
+    "phase": "미실행 계획임. 검토 후 별도 실행 배정 필요",
+    "preflight": [
+        "원격 고정 head/tree 및 sources 101개와 후보 manifest/local hash 재확인",
+        "기존 도구/cache만 사용하고 현재 cohort flock 안에서 fresh status/read와 build/log 기록",
+        "build 실패 시 중단하고 source/기대값 수정이나 반복 없음"
+    ],
+    "screen": [
+        "각 시나리오는 독립 xvfb-run -a -s \"-screen 0 1280x1024x24 -nolisten tcp\" 자식으로 실행",
+        "자식 환경에서 WAYLAND_DISPLAY/WAYLAND_SOCKET 제거, ZIPELO_XVFB_HARNESS=1만 설정. 기존 DISPLAY :0과 사용자 환경은 변경하지 않음",
+        "xvfb-run의 임시 xauth를 사용하며 인증값을 출력/보고/영구 문서에 저장하지 않음",
+        "supervisor가 자식 Xvfb display/PID/시작 tick과 앱 PID/시작 tick 및 _NET_WM_PID를 연결하고 작업 창만 식별함"
+    ],
+    "future_launch_template": "xvfb-run -a -s \"-screen 0 1280x1024x24 -nolisten tcp\" env -u WAYLAND_DISPLAY -u WAYLAND_SOCKET ZIPELO_XVFB_HARNESS=1 <reviewed-harness-binary> --opt-in-xvfb --scenario <cancel|retract|close>",
+    "first_capture": [
+        "xwd -silent -id <own-window>로 창만 캡처하고 기존 magick으로 PNG 변환",
+        "초기 한글/시험 banner/Checkpoint와 정상 크기 screenshot을 확인하기 전 기능 클릭 금지",
+        "첫 렌더링/캡처 실패는 해당 단계에서 중단함. 원인/앱 상태/미실행 항목을 기록하며 설치나 새 환경으로 우회하지 않음"
+    ],
+    "observations": [
+        "시나리오별 원본 버튼과 harness gate 버튼만 조작함. 좌표는 최초 실제 캡처에서 확인하고 추측하지 않음",
+        "contract.scenarios의 각 상태에서 screenshot/sha256와 action/frame 로그를 매칭함",
+        "60초 gate 안에 관측을 완료하지 못하면 실패/미관측으로 남기며 timeout을 늘리거나 자동 release로 성공시키지 않음",
+        "창 관리자 없음, titlebar/실제 resize/IME/접근성 미검증을 구분함"
+    ],
+    "cleanup": [
+        "정상 cancel/retract는 join 확인 후 원본 idle 닫기 버튼으로 종료함. close는 Waiting에서 join 해제 후 원본 Allowed 닫기를 관측함",
+        "실패 시 가능하면 checkpoint/join release와 원본 취소/닫기로 소유 thread의 정상 join을 유도하되 실행 결과는 실패로 유지함",
+        "supervisor 외부 전체 한도 210초와 정리 15초를 둠. 불응 시 이번 supervisor가 직접 소유한 앱/서버 자식만 종료하고 forced cleanup/미확인 종료를 정상 통과로 기록하지 않음",
+        "xvfb-run 종료 후 소유 앱/Xvfb PID와 시작 tick 부재 및 wrapper exit를 확인함. 다른 세션/VM/프로세스를 조작하지 않음"
+    ],
+    "records": [
+        "모든 결과는 이 tests 경로 아래 새 validation-<reviewed-head>/<scenario>에 저장하며 기존 증거를 덮어쓰지 않음",
+        "각 command/exit/raw stdout/stderr hash, binary hash, 입력 전후와 screenshot hash를 기록함",
+        "시나리오별 screenshot/trace/exit 0/정상 cleanup이 모두 확인될 때만 통과임. 실패/미관측은 별도 유지하고 첫 실패 후 다음 시나리오는 실행하지 않음"
+    ]
+}

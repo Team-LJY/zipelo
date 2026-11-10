@@ -1,0 +1,95 @@
+{
+    "base_head": "cd0a9070332947db043dca65f3d698be354ead0b",
+    "base_tree": "2142dcc29bfaa65eae0f3a750375c27c8110cb91",
+    "branch": "fix/rust-ui-memory-gui-races",
+    "files": [
+        "Cargo.toml",
+        "Cargo.lock",
+        "LICENSE",
+        "main.rs",
+        "gates.rs",
+        "sources.json",
+        "contract.json",
+        "run-plan.json",
+        "static_check.py",
+        "SHA256SUMS"
+    ],
+    "scope": "Xvfb opt-in 시험 화면의 source-only 후보임. 새 Rust test 선언은 0개이며 기존 31/14개 통과와 합산하지 않음. 현재 build/GUI 실행 없음",
+    "rendering": {
+        "app": "원본 app.rs 전체를 original_app 모듈에 include!하고 원본 App::ui를 직접 위임 호출함. 원본 메서드를 복제/변경하지 않음. 원본 main은 호출하지 않음",
+        "assembly": "PR45 assembly.rs를 include!하여 실제 thread/channel/JoinHandle/Receiver를 조립함. extern crate self 별칭으로 원본 App이 시험 crate의 동일 Controller를 사용함",
+        "startup": "원본 한글 font와 type/palette/spacing을 시험 bootstrap에서 설정함. 별도 상단 banner에 시험용/배포 바이너리 검증 아님과 시나리오/장벽을 표시함. 실제 product binary와 다른 실행 파일임",
+        "inputs": "고정 GZip 합성 bytes만 사용함. 원본 화면의 다른 시작 버튼은 busy 동안 원래 로직으로 차단되며 종료 후 다른 작업을 시작하면 harness의 operation guard가 시험 실패로 기록함"
+    },
+    "gates": {
+        "checkpoint": "실제 첫 GZip checkpoint Event를 원본 Transport로 전달한 후 observer 안에서 기다림. GUI의 원본 취소 클릭이 요청한 실제 Cancellation을 observer 반환 뒤 코어가 관측함",
+        "join": "실제 Terminal을 원본 deliver_completion으로 전송한 뒤 thread 반환 전 기다림. 원본 App/Controller가 terminal 수신과 join을 분리하여 표시하는 상태를 관측함",
+        "frame": "GUI는 reached.try_iter와 release.try_send만 사용하며 장벽 recv를 하지 않음. 지속 repaint와 상태변경 로그/frame 번호가 관측 보조임. headless handshake 회귀와 구분함",
+        "timeout_seconds": 60,
+        "overall_ui_deadline_seconds": 180,
+        "timeout": "장벽 timeout/채널 소멸은 fault flag와 실제 panic으로 실패함. 원본 Panicked 처리를 거치되 harness exit 1로 남김. 정상 완료로 바꾸지 않음"
+    },
+    "scenarios": {
+        "cancel": [
+            "Checkpoint에서 취소 요청을 클릭하고 CancelRequested 화면/로그를 기록함",
+            "checkpoint 해제 후 TerminalDelivered에서 terminal=true, joined=false와 원본 취소 대기 상태를 기록함",
+            "join 해제 후 Cancelled/종료 확인을 기록하고 원본 닫기 버튼으로 idle 종료함"
+        ],
+        "retract": [
+            "Checkpoint에서 원본 닫기를 눌러 Confirming 화면과 cancel=false를 기록함",
+            "계속 열기로 철회 후 Open/cancel=false를 기록함",
+            "checkpoint 해제 후 TerminalDelivered/terminal=true/joined=false를 기록함",
+            "join 해제 후 Completed와 payload 행/선택 preview를 기록하고 idle 닫기로 종료함"
+        ],
+        "close": [
+            "Checkpoint에서 원본 닫기와 취소 후 닫기를 눌러 Waiting/cancel=true 화면을 기록함",
+            "checkpoint 해제 후 TerminalDelivered에서도 Waiting/terminal=true/joined=false이며 프로세스가 유지됨을 기록함",
+            "join 해제 후 원본 poll이 Allowed로 전이하고 창/프로세스가 정상 종료함을 확인함"
+        ]
+    },
+    "pass_evidence": "harness exit 0은 joined와 최종 expected status만 검사함. 각 UI 전이 통과는 별도 스크린샷과 동일 operation의 frame 로그/조작 기록이 모두 있어야 함. 마지막 도달/반환 로그만으로 screenshot이나 중간 frame 반환을 합성하지 않음",
+    "dependencies": {
+        "direct": [
+            "core_memory 기존 path",
+            "eframe =0.37.0 기존 동일 features, opt-in optional"
+        ],
+        "default_features": [],
+        "lock": "PR44 GUI Cargo.lock에서 local root package 이름 한 곳만 바꿈. 나머지 모든 registry/의존성 레코드는 원형 보존함",
+        "new_external_packages": 0,
+        "licenses": [
+            "LICENSE",
+            "experiments/rust-ui-memory-app/THIRD-PARTY-NOTICES.txt",
+            "experiments/rust-app-core-memory/THIRD-PARTY-NOTICES.txt",
+            "tests/rust-ui-memory-app/dependencies.json"
+        ]
+    },
+    "limits": [
+        "실제 사용자 display/물리 GPU/IME/전체 접근성/Windows/다른 Ubuntu 검증이 아님",
+        "공개 배포 crate object가 아닌 include 원본의 시험 crate 재컴파일임",
+        "OS 격리 worker/파일 입력/게시/cleanup 증거가 아님",
+        "비정상 owner Drop은 원본 동기 join이므로 blocking할 수 있음. 유한 gate는 시험 입력의 종료 경로이며 production 비선점 작업의 유한 종료를 보장하지 않음",
+        "Xvfb/앱 build와 실행은 고정 source 검토 후 별도 배정임"
+    ],
+    "commands": {
+        "static": "python3 tests/rust-ui-memory-gui-races/static_check.py",
+        "rustfmt": "rustfmt +1.99.1 --edition 2024 --check tests/rust-ui-memory-gui-races/main.rs tests/rust-ui-memory-gui-races/gates.rs",
+        "metadata": "cargo +1.99.1 metadata --locked --offline --manifest-path tests/rust-ui-memory-gui-races/Cargo.toml --features gui-race-harness --filter-platform x86_64-unknown-linux-gnu --format-version 1",
+        "future_build": "cargo +1.99.1 build --locked --offline --manifest-path tests/rust-ui-memory-gui-races/Cargo.toml --features gui-race-harness --bin zipelo-ui-memory-gui-races --target-dir tests/rust-ui-memory-gui-races/validation-<head>/target"
+    },
+    "validation_state": {
+        "built": false,
+        "gui_executed": false,
+        "new_rust_tests": 0
+    },
+    "design": {
+        "palette": {
+            "paper": "#FFFFFF",
+            "ink": "#182739",
+            "selection": "#D3E6F6",
+            "focus_reference": "#174C7C"
+        },
+        "type": "원본 Noto CJK index 1, body/button 18px와 heading 26px 유지함",
+        "layout": "왼쪽 정렬 시험 strip을 원본 상단 앞에 추가함. 원본 동작/결과/상태 영역을 그대로 위임함",
+        "review": "원본 화면을 재사용하는 시험이므로 시각 재설계/아이콘/외부 에셋 없이 시험 경계만 표시함"
+    }
+}
