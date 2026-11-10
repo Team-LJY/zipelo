@@ -1,0 +1,92 @@
+--- a/library/vendor/Zip/Compression/InflaterDynHeader.cs
++++ b/library/vendor/Zip/Compression/InflaterDynHeader.cs
+@@ -57,7 +57,9 @@
+ 				while (!input.TryGetBits(3, ref codeLengths, MetaCodeLengthIndex[i])) yield return false;
+ 			}
+ 
+-			var metaCodeTree = new InflaterHuffmanTree(codeLengths);
++			var metaLengths = new ArraySegment<byte>(codeLengths, 0, META_MAX);
++			ValidateTree(metaLengths, TreePurpose.Codes);
++			var metaCodeTree = new InflaterHuffmanTree(metaLengths);
+ 
+ 			// Decompress the meta tree symbols into the data table code lengths
+ 			int index = 0;
+@@ -113,8 +115,12 @@
+ 			if (codeLengths[256] == 0)
+ 				throw new StreamDecodingException("Inflater dynamic header end-of-block code missing");
+ 
+-			litLenTree = new InflaterHuffmanTree(new ArraySegment<byte>(codeLengths, 0, litLenCodeCount));
+-			distTree = new InflaterHuffmanTree(new ArraySegment<byte>(codeLengths, litLenCodeCount, distanceCodeCount));
++			var literalLengths = new ArraySegment<byte>(codeLengths, 0, litLenCodeCount);
++			var distanceLengths = new ArraySegment<byte>(codeLengths, litLenCodeCount, distanceCodeCount);
++			ValidateTree(literalLengths, TreePurpose.Lens);
++			ValidateTree(distanceLengths, TreePurpose.Dists);
++			litLenTree = new InflaterHuffmanTree(literalLengths);
++			distTree = new InflaterHuffmanTree(distanceLengths);
+ 
+ 			yield return true;
+ 		}
+@@ -133,6 +139,63 @@
+ 		public InflaterHuffmanTree DistanceTree
+ 			=> distTree ?? throw new StreamDecodingException("Header properties were accessed before header had been successfully read");
+ 
++		private enum TreePurpose
++		{
++			Codes,
++			Lens,
++			Dists
++		}
++
++		private static void ValidateTree(IList<byte> lengths, TreePurpose purpose)
++		{
++			int maxBits = purpose == TreePurpose.Codes ? 7 : 15;
++			int[] counts = new int[maxBits + 1];
++			int active = 0;
++
++			for (int i = 0; i < lengths.Count; i++)
++			{
++				int bits = lengths[i];
++				if (bits > maxBits)
++				{
++					throw new StreamDecodingException("Invalid " + purpose + " Huffman code length");
++				}
++				if (bits != 0)
++				{
++					counts[bits]++;
++					active++;
++				}
++			}
++
++			int left = 1;
++			for (int bits = 1; bits <= maxBits; bits++)
++			{
++				left = (left << 1) - counts[bits];
++				if (left < 0)
++				{
++					throw new StreamDecodingException("Oversubscribed " + purpose + " Huffman tree");
++				}
++			}
++
++			if (purpose == TreePurpose.Lens && (lengths.Count <= 256 || lengths[256] == 0))
++			{
++				throw new StreamDecodingException("Inflater dynamic header end-of-block code missing");
++			}
++			if (left == 0)
++			{
++				return;
++			}
++			if (purpose == TreePurpose.Lens && active == 1 && lengths[256] == 1)
++			{
++				return;
++			}
++			if (purpose == TreePurpose.Dists && (active == 0 || (active == 1 && counts[1] == 1)))
++			{
++				return;
++			}
++
++			throw new StreamDecodingException("Incomplete " + purpose + " Huffman tree");
++		}
++
+ 		#region Instance Fields
+ 
+ 		private readonly StreamManipulator input;

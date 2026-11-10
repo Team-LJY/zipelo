@@ -1,0 +1,141 @@
+{
+    "schemaVersion": 1,
+    "status": "Source-only. No restore, build, execution or raw emission performed. Central validation pending; production adoption blocked.",
+    "candidate": {
+        "branch": "features/deflate-dynamic-tree-policy-probe",
+        "parentCommit": "2b0ed428804f0d52ed3bfe998f06e13751da0de8",
+        "assemblyName": "Zipelo.Experimental.SharpZipLibDynamicTreePolicyCandidate",
+        "project": "tests/deflate-dynamic-tree-policy-probe/library/Zipelo.DynamicTreePolicyCandidate.csproj",
+        "dll": "tests/deflate-dynamic-tree-policy-probe/library/bin/Release/net10.0/Zipelo.Experimental.SharpZipLibDynamicTreePolicyCandidate.dll",
+        "binaryHash": "Measure centrally after successful build. No source hash is a DLL hash."
+    },
+    "scope": {
+        "newFilesRoot": "tests/deflate-dynamic-tree-policy-probe/",
+        "decoderChanges": [
+            "Validate first 19 metadata lengths after reading the permuted metadata, before meta tree construction.",
+            "After reading all LL/D lengths and the original missing-EOB check, validate the exact LL and D segments before constructing either tree.",
+            "Private purpose enum and helper: range checked before count indexing, zero lengths excluded, signed Kraft remainder, oversubscription rejected."
+        ],
+        "policy": {
+            "Codes": "Lengths 0..7; complete only, including rejection of empty alphabet.",
+            "Lens": "Lengths 0..15; EOB present; complete or exactly EOB with length 1.",
+            "Dists": "Lengths 0..15; complete, single length 1, or empty. A declared LL match symbol does not reject empty distance. Actual empty-distance lookup retains PR24 rejection."
+        },
+        "preserved": [
+            "Public tree constructor, BuildTree and GetSymbol",
+            "Metadata/repeat parser and insufficient-input yielding",
+            "PR22 HDIST31/32 and reserved symbol use checks",
+            "PR24 zero-slot guards and History OutputWindow correction",
+            "All 65 parent experiment files, every src file, product references, existing fixture and oracle"
+        ],
+        "limitations": [
+            "Dynamic-header construction boundary only; arbitrary arrays passed directly to public tree constructor remain outside this correction.",
+            "No claim of actual subtree zero-slot raw reachability.",
+            "Finite regression coverage is not proof of complete security.",
+            "No production integration, main merge or release."
+        ]
+    },
+    "directProbe": {
+        "project": "tests/deflate-dynamic-tree-policy-probe/Zipelo.DynamicTreePolicyProbe.csproj",
+        "assembly": "Zipelo.Experimental.DeflateDynamicTreePolicyValidation",
+        "fixtures": 17,
+        "trials": 34,
+        "matrix": {
+            "inputChunks": [
+                "1 byte",
+                "whole input"
+            ],
+            "outputCount": 1
+        },
+        "normalFixtures": 6,
+        "invalidFixtures": 11,
+        "recipe": "Independent synthetic raw streams, not PR26 fixture copies. BFINAL=1, BTYPE=2, HCLEN=15 (all 19 positions), 74-bit metadata header. Default metadata has symbols 0..15 at length 4 and 16..18 at 0; LL/D lengths emitted directly as 4-bit canonical symbols. Successful body is only canonical EOB; padding is zero. Invalid declarations have no body. Codes-invalid cases stop at the 74-bit metadata declaration.",
+        "expected": "Every valid fixture produces zero bytes and reaches IsFinished with TotalIn=raw length and RemainingInput=0; repeated completion call returns zero. Invalid fixtures throw exact StreamDecodingException/message after consuming at least ceil(declarationBits/8), before completion; no output. EOF, false completion, wrong error, budget or timeout are failures.",
+        "cases": [
+            "valid-eob-empty-distance",
+            "valid-single-distance",
+            "valid-hdist31",
+            "valid-hdist32",
+            "valid-complete-length15",
+            "valid-unused-length-empty-distance",
+            "invalid-eob-length2",
+            "invalid-eob-length10",
+            "invalid-unused-single-distance2",
+            "invalid-unused-distance22",
+            "invalid-empty-codes",
+            "invalid-single-codes",
+            "invalid-incomplete-codes",
+            "invalid-oversubscribed-codes",
+            "invalid-missing-eob",
+            "invalid-oversubscribed-lens",
+            "invalid-oversubscribed-distance"
+        ],
+        "bounds": {
+            "rawBits": 2048,
+            "maxInflateCalls": 4096,
+            "cooperativeSeconds": 5,
+            "externalProcessSeconds": 60,
+            "outputExpected": 0,
+            "checks": "Drain before feeding; input immutability, all three output bytes and cumulative counters checked in finally. Time checked before/after calls, after typed throws and completion stability. External deadline handles nonreturning calls."
+        },
+        "exitCodes": {
+            "0": "34 passed",
+            "1": "Any failure or identity mismatch",
+            "2": "Any CLI argument"
+        },
+        "coverageLimits": [
+            "Out-of-range byte lengths are not representable by this raw grammar; range checks receive static inspection, not a false raw coverage claim.",
+            "Repeat codes are unchanged and covered by external prior regressions, not this direct recipe.",
+            "No raw artifact, log or binary is written by the direct probe."
+        ]
+    },
+    "compatibilityProbe": {
+        "project": "tests/deflate-dynamic-tree-policy-probe/compatibility/Zipelo.ZeroSlotCompatibilityProbe.csproj",
+        "assembly": "Zipelo.Experimental.DeflateDynamicTreePolicyZeroSlotCompatibility",
+        "cases": 19,
+        "source": "PR24 Program.cs copy with only the candidate identity literal changed; original tests and oracle preserved.",
+        "scope": "Public constructor/GetSymbol tests separate from 34 public Inflate trials and PR26 226 trials. Short-root wait exercises positive leaf with insufficient length; negative pointer wait has unchanged-code evidence, not direct execution coverage."
+    },
+    "centralValidation": {
+        "pr26": {
+            "commit": "3f02c489860c20c5332d16a56cfede22091da3fc",
+            "manifestSha256": "a1842f1dc9c3848d3a1f29191377382418cab0078d7a7f43db0a638f5a15e910",
+            "fixtures": 14,
+            "trials": 226,
+            "plannedCheckpoints": 88,
+            "driverRegressionCases": 50,
+            "delayedEmptyCodesObservations": 6,
+            "command": "dotnet <fixed-PR26-Zipelo.IncompleteProbe.dll> --assembly <absolute-candidate.dll> --sha256 <measured-DLL-SHA256> --corpus <fixed-PR26-14-row-corpus.jsonl>",
+            "target": "226/226 acceptance trials including normal HDIST31/32, complete long tree, unused empty distance and declaration rejection gates; target only, not observed.",
+            "historicalPr24": "Coordinator reported 130 passed / 96 failed per OS in PR26, six new incomplete-tree types wrongly accepted. This is not a candidate result.",
+            "boundaries": "PR26 Wait41 defers policy validation until all LL/D lengths are read. Byte supply checkpoints do not certify exact bit-by-bit API error timing."
+        },
+        "priorRegression": [
+            "PR23 a1e939cab850d7f8fca03bb90a3e10471618b5b9: 114 trials, 40 planned checkpoints",
+            "PR22: 352",
+            "PR18: 184 + 162",
+            "PR19: 220",
+            "PR17: 78",
+            "PR16: 330",
+            "PR20: 150 normal + 120 malformed"
+        ],
+        "comparisonCopies": "If historical harnesses require original aliases or assembly identities, central comparison copies must replace only appropriate vendor files with candidate equivalents, preserve original fixtures and oracle, record exact diffs and each binary hash. They are distinct binaries from standalone candidate.",
+        "limits": "Do not combine overlapping trials as independent security coverage. All runs require owned process cleanup and external 60-second limits; timeout or residual process is failure."
+    },
+    "commands": {
+        "restore": "dotnet restore tests/deflate-dynamic-tree-policy-probe/Zipelo.DynamicTreePolicyProbe.csproj --configfile tests/deflate-dynamic-tree-policy-probe/NuGet.Config",
+        "build": "dotnet build tests/deflate-dynamic-tree-policy-probe/Zipelo.DynamicTreePolicyProbe.csproj -c Release --no-restore",
+        "run": "dotnet tests/deflate-dynamic-tree-policy-probe/bin/Release/net10.0/Zipelo.Experimental.DeflateDynamicTreePolicyValidation.dll",
+        "compatibilityRestore": "dotnet restore tests/deflate-dynamic-tree-policy-probe/compatibility/Zipelo.ZeroSlotCompatibilityProbe.csproj --configfile tests/deflate-dynamic-tree-policy-probe/NuGet.Config",
+        "compatibilityBuild": "dotnet build tests/deflate-dynamic-tree-policy-probe/compatibility/Zipelo.ZeroSlotCompatibilityProbe.csproj -c Release --no-restore",
+        "compatibilityRun": "dotnet tests/deflate-dynamic-tree-policy-probe/compatibility/bin/Release/net10.0/Zipelo.Experimental.DeflateDynamicTreePolicyZeroSlotCompatibility.dll",
+        "invalidCli": "Append --invalid to each executable; expect exit 2.",
+        "environment": "Central only, existing offline SDK10.0.403/runtime10.0.14, Windows26300/Ubuntu26.04.1; no package installation. Build warnings must be recorded, not suppressed or called zero without measurement."
+    },
+    "references": {
+        "rfc": "https://www.rfc-editor.org/rfc/rfc1951.html",
+        "zlib": "https://github.com/madler/zlib/blob/v1.3.1/inftrees.c",
+        "puff": "https://github.com/madler/zlib/blob/v1.3.1/contrib/puff/puff.c",
+        "interpretation": "Completeness is interpreted from the full binary tree definition. Distance single-bit/unused-empty exceptions are explicit in RFC1951 section3.2.7; EOB-only exception is clearer in puff/reference checks. Empty CODES preconstruction rejection is this policy contract, distinct from reference delayed invalid-sentinel behavior. Default zlib HDIST>30 rejection is not used as the normative oracle."
+    }
+}

@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <AssemblyName>Zipelo.Experimental.SharpZipLibDynamicTreePolicyCandidate</AssemblyName>
+        <IsPackable>false</IsPackable>
+        <Nullable>disable</Nullable>
+        <ImplicitUsings>disable</ImplicitUsings>
+        <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+        <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+        <Deterministic>true</Deterministic>
+    </PropertyGroup>
+    <ItemGroup>
+        <Compile Include="../../deflate-tree-validation-probe/library/vendor/Zip/Compression/Inflater.cs" />
+        <Compile Include="vendor/Zip/Compression/InflaterDynHeader.cs" />
+        <Compile Include="../../deflate-zero-slot-probe/library/vendor/Zip/Compression/InflaterHuffmanTree.cs" />
+        <Compile Include="../../deflate-history-validation-probe/vendor/Zip/Compression/DeflaterConstants.cs" />
+        <Compile Include="../../deflate-history-validation-probe/vendor/Zip/Compression/DeflaterHuffman.cs" />
+        <Compile Include="../../deflate-history-validation-probe/vendor/Zip/Compression/DeflaterPending.cs" />
+        <Compile Include="../../deflate-history-validation-probe/vendor/Zip/Compression/PendingBuffer.cs" />
+        <Compile Include="../../deflate-history-validation-probe/vendor/Zip/Compression/Streams/OutputWindow.cs" />
+        <Compile Include="../../deflate-history-validation-probe/vendor/Zip/Compression/Streams/StreamManipulator.cs" />
+        <Compile Include="../../deflate-history-validation-probe/vendor/Checksum/Adler32.cs" />
+        <Compile Include="../../deflate-history-validation-probe/vendor/Checksum/IChecksum.cs" />
+        <Compile Include="../../deflate-history-validation-probe/vendor/Core/Exceptions/SharpZipBaseException.cs" />
+        <Compile Include="../../deflate-history-validation-probe/vendor/Core/Exceptions/StreamDecodingException.cs" />
+        <Compile Include="../../deflate-history-validation-probe/vendor/Core/Exceptions/ValueOutOfRangeException.cs" />
+        <Compile Include="../../deflate-history-validation-probe/vendor/Zip/Compression/Deflater.cs" />
+        <Compile Include="../../deflate-history-validation-probe/vendor/Zip/Compression/DeflaterEngine.cs" />
+    </ItemGroup>
+</Project>

@@ -1,0 +1,678 @@
+{
+    "schemaVersion": 1,
+    "status": "Source authored and statically inspected only. Compilation/execution pending central validation.",
+    "upstream": {
+        "commit": "33f64eb0f28cdd2b084cb822fcc224c7c5aba553",
+        "version": "SharpZipLib 1.4.2",
+        "fullOriginalPath": "tests/deflate-history-validation-probe/vendor/Zip/Compression/InflaterDynHeader.cs",
+        "sha256": "6c0e651185f27f4e92d02fa74df2fd4c2fd4b7edcb49781089f9a11c7f808eb2",
+        "license": "tests/deflate-history-validation-probe/vendor/LICENSE.txt"
+    },
+    "parent": {
+        "pr": 24,
+        "commit": "2b0ed428804f0d52ed3bfe998f06e13751da0de8",
+        "tree": "a4a802f4c3c0276ba94696c9ecb9c8efd904aa07",
+        "fullSourcePath": "tests/deflate-tree-validation-probe/library/vendor/Zip/Compression/InflaterDynHeader.cs",
+        "sha256": "24b9ed8694ff0702a3af7cd07cf77f73300acd616911b91ae1bb7a9f4cf4841a"
+    },
+    "candidate": {
+        "fullSourcePath": "tests/deflate-dynamic-tree-policy-probe/library/vendor/Zip/Compression/InflaterDynHeader.cs",
+        "sha256": "06aa667edafb520d24b791274763ca182ffaf26487d155c813f910264823c836",
+        "patch": "tests/deflate-dynamic-tree-policy-probe/dynamic-tree-policy.patch",
+        "patchSha256": "cb4ed6e7dd1b4d199c21b196a16c3749edef360f7d6cb5b4db341a0d52bb7ad6",
+        "patchBase": "PR24 full DynHeader source inherited from PR22; not pristine upstream."
+    },
+    "changes": [
+        {
+            "area": "DynHeader metadata",
+            "before": "Construct tree from shared 318-byte buffer",
+            "after": "Validate first 19 metadata slots as CODES, then construct from that exact slice"
+        },
+        {
+            "area": "DynHeader LL/D",
+            "before": "EOB check then tree constructors",
+            "after": "Original EOB check, validate LL and D segments, then both constructors"
+        },
+        {
+            "area": "DynHeader helper",
+            "before": "No purpose-specific completeness check",
+            "after": "Private enum/helper, range first, signed Kraft remainder, narrow role exceptions"
+        },
+        {
+            "area": "Public tree constructor and lookup",
+            "before": "PR24 implementation",
+            "after": "Byte-identical source referenced"
+        },
+        {
+            "area": "Compatibility probe",
+            "before": "PR24 19-case Program.cs",
+            "after": "Only target candidate identity string replaced in a new copy"
+        }
+    ],
+    "compiledSources": [
+        {
+            "path": "tests/deflate-tree-validation-probe/library/vendor/Zip/Compression/Inflater.cs",
+            "sha256": "efd1434aa5f921e023d0f67a58f825131b319aea620512cea5ec1299e4f9d5fb"
+        },
+        {
+            "path": "tests/deflate-dynamic-tree-policy-probe/library/vendor/Zip/Compression/InflaterDynHeader.cs",
+            "sha256": "06aa667edafb520d24b791274763ca182ffaf26487d155c813f910264823c836"
+        },
+        {
+            "path": "tests/deflate-zero-slot-probe/library/vendor/Zip/Compression/InflaterHuffmanTree.cs",
+            "sha256": "4d798c3aef68ac50288eb9b8c111dac9b9b3ab738cdd59b305cdf4f52438fdea"
+        },
+        {
+            "path": "tests/deflate-history-validation-probe/vendor/Zip/Compression/DeflaterConstants.cs",
+            "sha256": "99386bd2339eb6a45c9c11f1096a038d71f5fd403d8806f7d028711f5d78d983"
+        },
+        {
+            "path": "tests/deflate-history-validation-probe/vendor/Zip/Compression/DeflaterHuffman.cs",
+            "sha256": "318219fbb9b6dd56b6443024b88c04fa1ed69eb9c952d2a69118559998f45d12"
+        },
+        {
+            "path": "tests/deflate-history-validation-probe/vendor/Zip/Compression/DeflaterPending.cs",
+            "sha256": "a8815ccc4e203b32bf7a2785b6b1b6d204b4e0621ebfb5f8e3cb7d9f29c8e10a"
+        },
+        {
+            "path": "tests/deflate-history-validation-probe/vendor/Zip/Compression/PendingBuffer.cs",
+            "sha256": "1e3a8d5d1b81ddf24fe05a51644213b259c1dd9d0473f90804ae71fd28f7f5a1"
+        },
+        {
+            "path": "tests/deflate-history-validation-probe/vendor/Zip/Compression/Streams/OutputWindow.cs",
+            "sha256": "2e16f3b7f0fbb0ee7ec187a62a3d9a479b2ce732612ecf8ce30bb1a072314895"
+        },
+        {
+            "path": "tests/deflate-history-validation-probe/vendor/Zip/Compression/Streams/StreamManipulator.cs",
+            "sha256": "5d6dbd9dee806e34a853ab8c6f68d6a1a2cb33148f28c1ad23857f960bd47e94"
+        },
+        {
+            "path": "tests/deflate-history-validation-probe/vendor/Checksum/Adler32.cs",
+            "sha256": "659c93673e5d13e1f17db211b5dad1b953f16b3c4552df465ad2e7b290bf4ccc"
+        },
+        {
+            "path": "tests/deflate-history-validation-probe/vendor/Checksum/IChecksum.cs",
+            "sha256": "32b3d05de60dcf3764142885206200b258be847ca4fd488e32e6dfe068d9270b"
+        },
+        {
+            "path": "tests/deflate-history-validation-probe/vendor/Core/Exceptions/SharpZipBaseException.cs",
+            "sha256": "1824f4fb34890a1cb4a8c292f78a910cf8199ab6aa3bdf850aed9292a119a38e"
+        },
+        {
+            "path": "tests/deflate-history-validation-probe/vendor/Core/Exceptions/StreamDecodingException.cs",
+            "sha256": "8f62c5cfd77d9ed6295f362ad950f71b94d501285fd83fa5b3a581d1403f6f46"
+        },
+        {
+            "path": "tests/deflate-history-validation-probe/vendor/Core/Exceptions/ValueOutOfRangeException.cs",
+            "sha256": "ba3938db192c344ca9a383969ee856de254306c195fbd46ec4a2526b01964384"
+        },
+        {
+            "path": "tests/deflate-history-validation-probe/vendor/Zip/Compression/Deflater.cs",
+            "sha256": "35f7e8dfc6534951279a18ffbe6f08bd60960ebb69414654de57fc306c6338c4"
+        },
+        {
+            "path": "tests/deflate-history-validation-probe/vendor/Zip/Compression/DeflaterEngine.cs",
+            "sha256": "5fbff1bbb0668c50cc9cf78a6757e071eb2b932d395beb0538fad78f786a9e0b"
+        }
+    ],
+    "preservedParentExperiments": [
+        {
+            "path": "tests/deflate-history-validation-probe/NuGet.Config",
+            "gitBlob": "22dfa4f9498cfbf80e70ac0bbcd66ec6c3ec2fbb",
+            "sha256": "fafadef85f8fbc5e04d0edc0474dee3f993ef63d76694294ddb0eb656b8f64e1"
+        },
+        {
+            "path": "tests/deflate-history-validation-probe/Program.cs",
+            "gitBlob": "0cb355b6d725205823eb343c44b48b93c58caf05",
+            "sha256": "193e680c0e91b04bda8fe268ea1a4882ceab12e19042eac4fa86f0f8a7e2302d"
+        },
+        {
+            "path": "tests/deflate-history-validation-probe/RawProbe.cs",
+            "gitBlob": "af385bab00a30c174a7bf839987fde6eb41d016b",
+            "sha256": "3a0868addef3f297ddaf271d83afce055e73489246f3f3c599c1797f92dfeabe"
+        },
+        {
+            "path": "tests/deflate-history-validation-probe/SHA256SUMS",
+            "gitBlob": "003512241b2f5d19b6bde7bdbc90e947f97d00c6",
+            "sha256": "a34d0599e1acf77b7a51a8fa032ea08d50f700f13ac44fb9dee60c800c5627ce"
+        },
+        {
+            "path": "tests/deflate-history-validation-probe/Zipelo.HistoryProbe.csproj",
+            "gitBlob": "8f0f7a802be268e8185c9558cb74a40946989b09",
+            "sha256": "8f6e311c4239b19b3c61e54d10a1c740b392a0fb2a07a4fc7fb3ff56e6289fdf"
+        },
+        {
+            "path": "tests/deflate-history-validation-probe/contract.json",
+            "gitBlob": "3a2f9b644ae30d1bc379ee23d77a30dcddeddda1",
+            "sha256": "38d5b261ce5bef81004dc3391d6230f489a26f4046e2e40db45cf6161f82d645"
+        },
+        {
+            "path": "tests/deflate-history-validation-probe/history-validation.patch",
+            "gitBlob": "58ea87fbf73c2e550cb24ff2936d68c7113688e3",
+            "sha256": "a4fdd90b93da48da7a1724f116b19d250c68b00f2891dd0d07bcd72b493408b7"
+        },
+        {
+            "path": "tests/deflate-history-validation-probe/provenance.json",
+            "gitBlob": "142dc3e72fa877f2e27e8082402118c7fe4b277f",
+            "sha256": "c4d550ed8c83eedbe0b4a1ca55f9f62bac77a5278996cbda9c776d4abb3d8b84"
+        },
+        {
+            "path": "tests/deflate-history-validation-probe/vendor/Checksum/Adler32.cs",
+            "gitBlob": "b2a0f151a12c26dc90fea101087ab5325f4dc1fc",
+            "sha256": "659c93673e5d13e1f17db211b5dad1b953f16b3c4552df465ad2e7b290bf4ccc"
+        },
+        {
+            "path": "tests/deflate-history-validation-probe/vendor/Checksum/IChecksum.cs",
+            "gitBlob": "db74a5a5d20a76b8340efabad88f4df0e53c48be",
+            "sha256": "32b3d05de60dcf3764142885206200b258be847ca4fd488e32e6dfe068d9270b"
+        },
+        {
+            "path": "tests/deflate-history-validation-probe/vendor/Core/Exceptions/SharpZipBaseException.cs",
+            "gitBlob": "eb14e2d49f9aef92e483e4a6180656423762080b",
+            "sha256": "1824f4fb34890a1cb4a8c292f78a910cf8199ab6aa3bdf850aed9292a119a38e"
+        },
+        {
+            "path": "tests/deflate-history-validation-probe/vendor/Core/Exceptions/StreamDecodingException.cs",
+            "gitBlob": "e22b11b0d164da18564233ca9cfa8b76d079bbc0",
+            "sha256": "8f62c5cfd77d9ed6295f362ad950f71b94d501285fd83fa5b3a581d1403f6f46"
+        },
+        {
+            "path": "tests/deflate-history-validation-probe/vendor/Core/Exceptions/ValueOutOfRangeException.cs",
+            "gitBlob": "d41cf988275043a10d7f605b8bb83d3bdef2b5ca",
+            "sha256": "ba3938db192c344ca9a383969ee856de254306c195fbd46ec4a2526b01964384"
+        },
+        {
+            "path": "tests/deflate-history-validation-probe/vendor/LICENSE.txt",
+            "gitBlob": "f4597ac929a3206971bb0f8549cf937916082266",
+            "sha256": "d7fbbc16f871bf24fa5624c7eaf945054b778985f32676dcacba41fddca61133"
+        },
+        {
+            "path": "tests/deflate-history-validation-probe/vendor/Zip/Compression/Deflater.cs",
+            "gitBlob": "3dbe98c8d9bdc00fb73d90a75241545ed859ed79",
+            "sha256": "35f7e8dfc6534951279a18ffbe6f08bd60960ebb69414654de57fc306c6338c4"
+        },
+        {
+            "path": "tests/deflate-history-validation-probe/vendor/Zip/Compression/DeflaterConstants.cs",
+            "gitBlob": "b7c7d2a6994bd421d2b9d24d09e5b4a93b401a7c",
+            "sha256": "99386bd2339eb6a45c9c11f1096a038d71f5fd403d8806f7d028711f5d78d983"
+        },
+        {
+            "path": "tests/deflate-history-validation-probe/vendor/Zip/Compression/DeflaterEngine.cs",
+            "gitBlob": "556911c4033cae8cc26fc758131b39d4bc403722",
+            "sha256": "5fbff1bbb0668c50cc9cf78a6757e071eb2b932d395beb0538fad78f786a9e0b"
+        },
+        {
+            "path": "tests/deflate-history-validation-probe/vendor/Zip/Compression/DeflaterHuffman.cs",
+            "gitBlob": "2f71366fca724a2b1f3f69b7dd942d306d733b82",
+            "sha256": "318219fbb9b6dd56b6443024b88c04fa1ed69eb9c952d2a69118559998f45d12"
+        },
+        {
+            "path": "tests/deflate-history-validation-probe/vendor/Zip/Compression/DeflaterPending.cs",
+            "gitBlob": "80d3e2142e34300d07d54ab82579a5c7c21ac62a",
+            "sha256": "a8815ccc4e203b32bf7a2785b6b1b6d204b4e0621ebfb5f8e3cb7d9f29c8e10a"
+        },
+        {
+            "path": "tests/deflate-history-validation-probe/vendor/Zip/Compression/Inflater.cs",
+            "gitBlob": "439b4c6010eb548ad995fbd00327ad962de1f87a",
+            "sha256": "03d71ba116df441a962ae11473af40725a0273f6bbec9e14073e84f88f517e44"
+        },
+        {
+            "path": "tests/deflate-history-validation-probe/vendor/Zip/Compression/InflaterDynHeader.cs",
+            "gitBlob": "8e0196b11f71a9bb0e8141f6c08f24e28978fc01",
+            "sha256": "6c0e651185f27f4e92d02fa74df2fd4c2fd4b7edcb49781089f9a11c7f808eb2"
+        },
+        {
+            "path": "tests/deflate-history-validation-probe/vendor/Zip/Compression/InflaterHuffmanTree.cs",
+            "gitBlob": "ed318824ffe33ee67a18b942b8cf24e55045881b",
+            "sha256": "3529df0ca4eff9a43017e08d89f8295ce052d77086a9f29618e35da88dd522d7"
+        },
+        {
+            "path": "tests/deflate-history-validation-probe/vendor/Zip/Compression/PendingBuffer.cs",
+            "gitBlob": "6ed7e4ab8a72c2a2e9f264792620a42d03dcc307",
+            "sha256": "1e3a8d5d1b81ddf24fe05a51644213b259c1dd9d0473f90804ae71fd28f7f5a1"
+        },
+        {
+            "path": "tests/deflate-history-validation-probe/vendor/Zip/Compression/Streams/OutputWindow.cs",
+            "gitBlob": "9f234731d9c7cf3fb434800647199b1a2562acaa",
+            "sha256": "2e16f3b7f0fbb0ee7ec187a62a3d9a479b2ce732612ecf8ce30bb1a072314895"
+        },
+        {
+            "path": "tests/deflate-history-validation-probe/vendor/Zip/Compression/Streams/StreamManipulator.cs",
+            "gitBlob": "aff6a9c6c52529dd7c152acdb5623161c50eb618",
+            "sha256": "5d6dbd9dee806e34a853ab8c6f68d6a1a2cb33148f28c1ad23857f960bd47e94"
+        },
+        {
+            "path": "tests/deflate-stateful-validation/Fixtures.cs",
+            "gitBlob": "659931d31897c372b42fe45cbc0ef9a5f776d7f2",
+            "sha256": "fe6d762dcdfdacaeaeed08dd738458e43cba3b33cf16be3daa88c9161c8673b4"
+        },
+        {
+            "path": "tests/deflate-stateful-validation/HistoryAliases.cs",
+            "gitBlob": "46c36775ebcdacb4d9a57d5e9f02b92743e26b38",
+            "sha256": "c4bb5f61d825961a2b83bc10de734b5977addbf41d1ea2361fc8bd5430943212"
+        },
+        {
+            "path": "tests/deflate-stateful-validation/NuGet.Config",
+            "gitBlob": "62c277ee7d1fd444263b8828d76daad637791d7c",
+            "sha256": "bcc893bead312e9bf4d7e24ce2f4b7bb1940d6ac41ce4936649457c64bb6ff28"
+        },
+        {
+            "path": "tests/deflate-stateful-validation/Program.cs",
+            "gitBlob": "fda9e56734c46f8f803f45f385013176c42a8992",
+            "sha256": "0acb8fae973e86d71b46af6d5a3c3f15e288ae87040a2812c4bef9eca8f416b1"
+        },
+        {
+            "path": "tests/deflate-stateful-validation/SHA256SUMS",
+            "gitBlob": "22b6912e04099a7b08e8da5b50db699afc9f19b1",
+            "sha256": "7a24bc7825822535330c31bbd0626a92a1d58b16800ec3c8f51a6cb3f2375733"
+        },
+        {
+            "path": "tests/deflate-stateful-validation/StateDriver.cs",
+            "gitBlob": "52185263f374264e98594bbb44d4f23421da2eb7",
+            "sha256": "83bc92e2f669e7dd9fa8c0405a50721e0013cb6d4ac3a1f0a244655648f59ba9"
+        },
+        {
+            "path": "tests/deflate-stateful-validation/Zipelo.StatefulProbe.csproj",
+            "gitBlob": "c2d70c8a4315dbb904cb020339c93cfdfe425ee4",
+            "sha256": "cef821ca2f07ca488aa87eef2ad22fc5bb0dd62ee9956e86e7f6db80a527716d"
+        },
+        {
+            "path": "tests/deflate-stateful-validation/contract.json",
+            "gitBlob": "9f1d11811ffd2e0af9d954b8aa88451923f7b3a6",
+            "sha256": "031ec020c7a8754e04f66055d82361989c5467b739ea820ea5f5b0334883034c"
+        },
+        {
+            "path": "tests/deflate-stateful-validation/provenance.json",
+            "gitBlob": "c61501f9ac176f89ab464bab44b895f6ddd64ce2",
+            "sha256": "90b1cd4db0f1d3ac371ae7ca479d8b75d4c9ab1a4f97853cd44c31db5bf95fe1"
+        },
+        {
+            "path": "tests/deflate-stateful-validation/stateful.patch",
+            "gitBlob": "ba9c9b25e07b7e4b832a0b83658bb37a951aa14d",
+            "sha256": "04aad2ceea52bc55803113607d10e53009935dfd3ba1d150652a5f49ce4bfe09"
+        },
+        {
+            "path": "tests/deflate-tree-validation-probe/ExtraFixtures.cs",
+            "gitBlob": "36798ae53d3365d8b34e208e54a9fe1aade55f4a",
+            "sha256": "6dace3c549d2c7b13bd82776d55706566b86735dc29e887a23f8a6d691a99e0c"
+        },
+        {
+            "path": "tests/deflate-tree-validation-probe/NuGet.Config",
+            "gitBlob": "22dfa4f9498cfbf80e70ac0bbcd66ec6c3ec2fbb",
+            "sha256": "fafadef85f8fbc5e04d0edc0474dee3f993ef63d76694294ddb0eb656b8f64e1"
+        },
+        {
+            "path": "tests/deflate-tree-validation-probe/Program.cs",
+            "gitBlob": "5e535fbad74afe90a8db528b605f52ead57caebc",
+            "sha256": "062346dc115297674a4f7681a98a6fc45477fec282e3fe9d7e7e44ae3453894e"
+        },
+        {
+            "path": "tests/deflate-tree-validation-probe/SHA256SUMS",
+            "gitBlob": "400a27a5c91e4825774ab1290d6f48feea075bd6",
+            "sha256": "7551fdf2b4fc8c8d214f38a58e12d720725a3ab879599cfc4a90e4ebb78e2752"
+        },
+        {
+            "path": "tests/deflate-tree-validation-probe/Zipelo.TreeProbe.csproj",
+            "gitBlob": "716786056af89d07717525c0d69faa5b14e4e068",
+            "sha256": "e700de5f59531b7bbae2e97a2b41b80d6e30d3ebaff55582b948b0f19debee79"
+        },
+        {
+            "path": "tests/deflate-tree-validation-probe/contract.json",
+            "gitBlob": "741c82848d41769018f76a531311fd7af2109a77",
+            "sha256": "14772a140e695ce15cda6018c7d90749be7a7b13ed657e2625939377aa393d75"
+        },
+        {
+            "path": "tests/deflate-tree-validation-probe/library/Zipelo.TreeCandidate.csproj",
+            "gitBlob": "d0b9a41a572f3796cb8b2d547513dc10958c72d9",
+            "sha256": "359c108519130b09ebe038208b912997620e2e4b0b32310964697dcd4fe87378"
+        },
+        {
+            "path": "tests/deflate-tree-validation-probe/library/vendor/Zip/Compression/Inflater.cs",
+            "gitBlob": "f5725eb423c4f66fafc099b0ee0f7aa93052f7ac",
+            "sha256": "efd1434aa5f921e023d0f67a58f825131b319aea620512cea5ec1299e4f9d5fb"
+        },
+        {
+            "path": "tests/deflate-tree-validation-probe/library/vendor/Zip/Compression/InflaterDynHeader.cs",
+            "gitBlob": "1d917491a155a8f8366dd41c58e5f578025766d6",
+            "sha256": "24b9ed8694ff0702a3af7cd07cf77f73300acd616911b91ae1bb7a9f4cf4841a"
+        },
+        {
+            "path": "tests/deflate-tree-validation-probe/library/vendor/Zip/Compression/InflaterHuffmanTree.cs",
+            "gitBlob": "30e3837b08baa95f3c61a0f101dabb557e5237f6",
+            "sha256": "f08d017f6608c5c4f6d2a95e90bb3e749a258f1b32e86f4548edd33128194a6d"
+        },
+        {
+            "path": "tests/deflate-tree-validation-probe/provenance.json",
+            "gitBlob": "1670e0cc15cf163d67403a8e791bbf8217ceeb85",
+            "sha256": "4b335e833d1911ba7b57b6fc61676dca2e579e4e77a9d39777abc5e766fa188f"
+        },
+        {
+            "path": "tests/deflate-tree-validation-probe/tree-validation.patch",
+            "gitBlob": "6e189c2023c5ad61b674c14bdb16b781ae9b7963",
+            "sha256": "4c5b336d9e7478464c40481e80eb3db861ae7369ec5e9042ae9dae7f90e47ef6"
+        },
+        {
+            "path": "tests/deflate-zero-slot-probe/NuGet.Config",
+            "gitBlob": "22dfa4f9498cfbf80e70ac0bbcd66ec6c3ec2fbb",
+            "sha256": "fafadef85f8fbc5e04d0edc0474dee3f993ef63d76694294ddb0eb656b8f64e1"
+        },
+        {
+            "path": "tests/deflate-zero-slot-probe/Program.cs",
+            "gitBlob": "b3c9c408dfa02f69256a2cf06acf7cae2e31535e",
+            "sha256": "d26340a00979b1b57b9623a332d7057d504f8fa96ed74c89942632c3a168a041"
+        },
+        {
+            "path": "tests/deflate-zero-slot-probe/SHA256SUMS",
+            "gitBlob": "abfa3786768a328a6b02d734f29447006c06c005",
+            "sha256": "07eea3f132dc21eb7a1e5ca80f4251066e04d0d8f122c15e1abc1b450b56f69a"
+        },
+        {
+            "path": "tests/deflate-zero-slot-probe/Zipelo.ZeroSlotProbe.csproj",
+            "gitBlob": "8a0687c20345245b7e14675584863b732e1f73a0",
+            "sha256": "929f08b31c417d2346c769325fa3e5eb0587d0daf15578bcc713374afa5d3872"
+        },
+        {
+            "path": "tests/deflate-zero-slot-probe/contract.json",
+            "gitBlob": "dde0d04bec077c778c74946d3f358877edde74b0",
+            "sha256": "ae913ee4e304a256d027387471ba9411dba367d12c43862ea0d07e9a16463767"
+        },
+        {
+            "path": "tests/deflate-zero-slot-probe/library/Zipelo.ZeroSlotCandidate.csproj",
+            "gitBlob": "487444e4e33abef0aaaefa17f6da637e4f4b1db0",
+            "sha256": "248c962a24f4684920d29659f6c613fe219236f34130fefb1abec4a1c89da1a0"
+        },
+        {
+            "path": "tests/deflate-zero-slot-probe/library/vendor/Zip/Compression/InflaterHuffmanTree.cs",
+            "gitBlob": "1c9570faf49f4a1db5f94212be8822de614a5984",
+            "sha256": "4d798c3aef68ac50288eb9b8c111dac9b9b3ab738cdd59b305cdf4f52438fdea"
+        },
+        {
+            "path": "tests/deflate-zero-slot-probe/provenance.json",
+            "gitBlob": "f51dc97c2e2337814df1cff39da34821e444fd8c",
+            "sha256": "1e86e65ceeeaf17fba1219e0ee770b5fc044049b00fd66b85f6316b0a01b88a5"
+        },
+        {
+            "path": "tests/deflate-zero-slot-probe/zero-slot.patch",
+            "gitBlob": "45f5be2bea455620b32544e349a398cb218c0139",
+            "sha256": "14c3c44cadf2a5d6c04e45496fa771d1b955be5b6e4abb44c30386bf6dab421d"
+        },
+        {
+            "path": "tests/dynamic-deflate-corpus/Corpus.cs",
+            "gitBlob": "96454344f363d93e3adca8b73e00eeb20fb200e6",
+            "sha256": "d1d040628908b6d76b6ec38cd3df6eedd10103d31704601f045f98da3f7b3919"
+        },
+        {
+            "path": "tests/dynamic-deflate-corpus/FixtureWriter.cs",
+            "gitBlob": "e292bf266f479a66c413ca17604f695f6ca9b644",
+            "sha256": "07cd36575b8480352bd34b5d8850adf7ba88a2e0207a896a2a9cb980a880cb9b"
+        },
+        {
+            "path": "tests/dynamic-deflate-corpus/NuGet.Config",
+            "gitBlob": "0cae4ce3cbf85f863565d13a5d9a6b74935d7254",
+            "sha256": "026d16a16d2935475ad6b679752acd549757d489cdca32c1a919acccbbc35920"
+        },
+        {
+            "path": "tests/dynamic-deflate-corpus/Program.cs",
+            "gitBlob": "73c4c5945961e8ddc308d95d0e406e4ceca2051c",
+            "sha256": "87a46b9f2a5bbb268813f041f0379ed2adfcdc02264c7e8fb1855f7020c8452b"
+        },
+        {
+            "path": "tests/dynamic-deflate-corpus/SHA256SUMS",
+            "gitBlob": "c10047ddd8b54ae99fa0793892418dac26c36681",
+            "sha256": "10bd658de2a8fcadf9a62be1698442bace70d29342cac23b5e2a9289658775fd"
+        },
+        {
+            "path": "tests/dynamic-deflate-corpus/Zipelo.DynamicDeflateCorpus.csproj",
+            "gitBlob": "e0a97f8e9469316adc2b0c3e225c76531d15e853",
+            "sha256": "bb5ecffd721459fa1c5f4a243216401562f391851375ea94c2df7cbfe2c0238f"
+        },
+        {
+            "path": "tests/dynamic-deflate-corpus/contract.json",
+            "gitBlob": "527fa8c408a57ff44ae3e9a264da3da52d1a25ed",
+            "sha256": "7fde00c4b4b86c66f88e4dfc5b96d5a39543853ab280469db4de51692aac57d7"
+        },
+        {
+            "path": "tests/dynamic-deflate-corpus/expectations.json",
+            "gitBlob": "b129a24cf2abaf24e1eae47aea55429830f6b20f",
+            "sha256": "da76ba2d1e2fcceb967f6cc0195502986995947a9974034a79bac62439eaa174"
+        },
+        {
+            "path": "tests/dynamic-deflate-corpus/provenance.json",
+            "gitBlob": "4ae6efab38ff6451d22c269b5ffd5c6072cbaf1a",
+            "sha256": "10f8a5f5f6435871a2b62f407559602bbcc5ed9b77e4c8a8d072a2c19becba1a"
+        }
+    ],
+    "preservedProductBlobs": [
+        {
+            "path": "src/Zipelo.Core/ArchiveContracts.cs",
+            "gitBlob": "824df6a63f24abf3abfa1517534978e78d20df87"
+        },
+        {
+            "path": "src/Zipelo.Core/ArchiveJob.cs",
+            "gitBlob": "9da5ac64166f554d3b5bec1a0883a4c7519a1505"
+        },
+        {
+            "path": "src/Zipelo.Core/EngineContext.cs",
+            "gitBlob": "2be57080632563c998857f37ebcb2c677aa14506"
+        },
+        {
+            "path": "src/Zipelo.Core/JobBudget.cs",
+            "gitBlob": "339bd7d050d5328f0288922543691ca65eaf7f68"
+        },
+        {
+            "path": "src/Zipelo.Core/OutputPathPolicy.cs",
+            "gitBlob": "2137722b9d8313116fb1ad1423a9a9cc1495f9e5"
+        },
+        {
+            "path": "src/Zipelo.Core/Zipelo.Core.csproj",
+            "gitBlob": "4ac43012b1e508a0a2abb29f5ba548073e41bb19"
+        },
+        {
+            "path": "src/Zipelo.Desktop/App.xaml",
+            "gitBlob": "4901ecbf8c4f7f03a38148f1ec2b83600ed33761"
+        },
+        {
+            "path": "src/Zipelo.Desktop/App.xaml.cs",
+            "gitBlob": "d182390d7e5c0478bc0a3c2031c98eafc37e853c"
+        },
+        {
+            "path": "src/Zipelo.Desktop/ArchiveOpenArguments.cs",
+            "gitBlob": "79f01b4f5650728b80e91893b927fcd3d4ab87e4"
+        },
+        {
+            "path": "src/Zipelo.Desktop/CoreWorkspace.cs",
+            "gitBlob": "617877d985a72bfd9c77eb6833de6c689a0db94e"
+        },
+        {
+            "path": "src/Zipelo.Desktop/CreationWorkspace.cs",
+            "gitBlob": "d0ecf699a948c1dcbc7f6bc4a0ff32c3acecb5b7"
+        },
+        {
+            "path": "src/Zipelo.Desktop/MainWindow.xaml",
+            "gitBlob": "16a91b9d66f44d1e7e198d6558e7a0800e213552"
+        },
+        {
+            "path": "src/Zipelo.Desktop/MainWindow.xaml.cs",
+            "gitBlob": "0f899bd886fd7db275d95fb27958a287720dfad9"
+        },
+        {
+            "path": "src/Zipelo.Desktop/PasswordWindow.xaml",
+            "gitBlob": "2e06cf63a06ae684c3590194480ed5fa3a308333"
+        },
+        {
+            "path": "src/Zipelo.Desktop/PasswordWindow.xaml.cs",
+            "gitBlob": "42a019f151fc1dcba0233ec755c706a388b01951"
+        },
+        {
+            "path": "src/Zipelo.Desktop/Properties/PublishProfiles/WindowsX64.pubxml",
+            "gitBlob": "f6e99599fe4a0bd319170697f1735f601eaf9990"
+        },
+        {
+            "path": "src/Zipelo.Desktop/WorkerDeployment.targets",
+            "gitBlob": "d3b168d3491bfb1c80313eb64f4460706de8245b"
+        },
+        {
+            "path": "src/Zipelo.Desktop/WorkspaceMessages.cs",
+            "gitBlob": "6f595d683d8d83618ef809fb4cb10908d93a1dbf"
+        },
+        {
+            "path": "src/Zipelo.Desktop/WorkspacePort.cs",
+            "gitBlob": "a158dd0288319fc21168db264f800a92a7007856"
+        },
+        {
+            "path": "src/Zipelo.Desktop/ZipCreationWorkflow.cs",
+            "gitBlob": "3efe8549b4fc6d7c27f84b3bcc29f4ab11f291ae"
+        },
+        {
+            "path": "src/Zipelo.Desktop/ZipExtractionWorkflow.cs",
+            "gitBlob": "edf9b9895e4d8e36d87f7422dfd9ea6cd6a99ebb"
+        },
+        {
+            "path": "src/Zipelo.Desktop/ZipWorkerWorkspace.cs",
+            "gitBlob": "6311538270ee67c967b982214c20c3d37c585a0f"
+        },
+        {
+            "path": "src/Zipelo.Desktop/Zipelo.Desktop.csproj",
+            "gitBlob": "fe674648255ed26485a08d6e02001a89846a0c0b"
+        },
+        {
+            "path": "src/Zipelo.Desktop/app.manifest",
+            "gitBlob": "95aee939fe74536af487ce632db4421a739acecb"
+        },
+        {
+            "path": "src/Zipelo.Runtime/LinuxFolderPublication.cs",
+            "gitBlob": "8e8ad800cda65e51644c5982c7aa34bca27a3483"
+        },
+        {
+            "path": "src/Zipelo.Runtime/LinuxPublication.cs",
+            "gitBlob": "52b43495becdf7f30280d579bca0c79ca143cb80"
+        },
+        {
+            "path": "src/Zipelo.Runtime/NewFolderPublisher.cs",
+            "gitBlob": "3caa30eca46918f77a1ac29c03f12993e60b05d1"
+        },
+        {
+            "path": "src/Zipelo.Runtime/NewZipPublisher.cs",
+            "gitBlob": "4c6e34f289700f40f342f1bc3fde351de3c234a2"
+        },
+        {
+            "path": "src/Zipelo.Runtime/PendingFolderPublication.cs",
+            "gitBlob": "fb4f2b498740032a84a5aef57ca5007ff714b0ce"
+        },
+        {
+            "path": "src/Zipelo.Runtime/Streaming/WorkerStreamChannel.cs",
+            "gitBlob": "7c2053a1f8d00f49f0365eecc4729c4df0e94d0c"
+        },
+        {
+            "path": "src/Zipelo.Runtime/Streaming/WorkerStreamContract.cs",
+            "gitBlob": "5b15d7dc3feb7be303473f088f8d1d0604d665a3"
+        },
+        {
+            "path": "src/Zipelo.Runtime/Streaming/WorkerStreamValidator.cs",
+            "gitBlob": "9543c4d0ed5ac32355f0e8e33544ae5711c83534"
+        },
+        {
+            "path": "src/Zipelo.Runtime/WindowsFolderGuard.cs",
+            "gitBlob": "41bbac6e6a530ddd29b61cb3f03aa2c08f4590f2"
+        },
+        {
+            "path": "src/Zipelo.Runtime/WindowsFolderPublication.cs",
+            "gitBlob": "03c97d5bfcf06d1471d4553b726a27924d6631ab"
+        },
+        {
+            "path": "src/Zipelo.Runtime/WindowsPublication.cs",
+            "gitBlob": "8d996d9e6c07f615ba7d1487281e862ecd8a3def"
+        },
+        {
+            "path": "src/Zipelo.Runtime/WorkerPlatform.cs",
+            "gitBlob": "f4c7f85691a65c57dda910a4f42889e3a9feb60c"
+        },
+        {
+            "path": "src/Zipelo.Runtime/WorkerProtocol.cs",
+            "gitBlob": "3d6bd65c01002cef64b9be8ee7c13b5004dd0c96"
+        },
+        {
+            "path": "src/Zipelo.Runtime/ZipExtraction.cs",
+            "gitBlob": "15d157ffba9ec2bc6d68ce546dad4d967264959f"
+        },
+        {
+            "path": "src/Zipelo.Runtime/ZipWorkerClient.cs",
+            "gitBlob": "bfaaa54f7c97ec0f5cf8b41d377c513ac61c425c"
+        },
+        {
+            "path": "src/Zipelo.Runtime/Zipelo.Runtime.csproj",
+            "gitBlob": "67416c08e263ad27c9bb5a4c29f39683f7061263"
+        },
+        {
+            "path": "src/Zipelo.Ubuntu/App.axaml",
+            "gitBlob": "eb4990471aeaf2f95933b20a0faa64ad3373e61c"
+        },
+        {
+            "path": "src/Zipelo.Ubuntu/App.axaml.cs",
+            "gitBlob": "1eaa7618b98a0e5bed96f38f416d3a263cd85f70"
+        },
+        {
+            "path": "src/Zipelo.Ubuntu/MainWindow.axaml",
+            "gitBlob": "9adadffffec51b327c87ba0696366d80eae82e42"
+        },
+        {
+            "path": "src/Zipelo.Ubuntu/MainWindow.axaml.cs",
+            "gitBlob": "9e58b2430d8a3ee074b25dc94fa6f0a2d89f9c84"
+        },
+        {
+            "path": "src/Zipelo.Ubuntu/Program.cs",
+            "gitBlob": "01bccf005744b0f3febd7aab17fc943dc1cb54c6"
+        },
+        {
+            "path": "src/Zipelo.Ubuntu/Properties/PublishProfiles/LinuxX64.pubxml",
+            "gitBlob": "05b76dd94a6e59eb44bc53dd5bc2acbb24ee999f"
+        },
+        {
+            "path": "src/Zipelo.Ubuntu/UbuntuWorkspace.cs",
+            "gitBlob": "84595ac4c56725fa2b6bdd3dc589af058e0f708d"
+        },
+        {
+            "path": "src/Zipelo.Ubuntu/WorkerDeployment.targets",
+            "gitBlob": "f1553b4683b23949c9cb713ae658a30642878b87"
+        },
+        {
+            "path": "src/Zipelo.Ubuntu/Zipelo.Ubuntu.csproj",
+            "gitBlob": "719281e021e50b9fb9b0f411fc17518ab0e6c5b5"
+        },
+        {
+            "path": "src/Zipelo.Worker/BoundedMemoryOutput.cs",
+            "gitBlob": "694a953eb2d5e8e36c389336058e0314c46fe929"
+        },
+        {
+            "path": "src/Zipelo.Worker/BuiltInZipEngine.cs",
+            "gitBlob": "5374834e8f219a8618153a829fd30d9f57df217a"
+        },
+        {
+            "path": "src/Zipelo.Worker/Program.cs",
+            "gitBlob": "d9bc6d42aaf7eb1d18e42b9c45dec6616f04de34"
+        },
+        {
+            "path": "src/Zipelo.Worker/Tar/UstarReader.cs",
+            "gitBlob": "029564826ec038fe66b5007006e663fe6df6a17e"
+        },
+        {
+            "path": "src/Zipelo.Worker/ZipExtractor.cs",
+            "gitBlob": "2a4df0c40f5c35a101d95cf00e236700f2963e2e"
+        },
+        {
+            "path": "src/Zipelo.Worker/Zipelo.Worker.csproj",
+            "gitBlob": "8d3550174cc99560a59acc6f69c6f621d6b9cf8d"
+        }
+    ],
+    "compatibilitySource": {
+        "parent": "tests/deflate-zero-slot-probe/Program.cs",
+        "parentSha256": "d26340a00979b1b57b9623a332d7057d504f8fa96ed74c89942632c3a168a041",
+        "candidate": "tests/deflate-dynamic-tree-policy-probe/compatibility/Program.cs",
+        "candidateSha256": "bc6f40523a50cfce542420a5bd4257ef1e29afb6e8b2a0d543c9c467eb0332a9",
+        "onlyReplacement": [
+            "Zipelo.Experimental.SharpZipLibZeroSlotCandidate",
+            "Zipelo.Experimental.SharpZipLibDynamicTreePolicyCandidate"
+        ]
+    },
+    "integrity": "SHA256SUMS uses repository-root relative paths, covers 65 inherited experiment files plus every new source/config/provenance/patch except itself. Its own SHA256 is reported in PR. Remote parent tree retention preserves all other blobs, including src."
+}
