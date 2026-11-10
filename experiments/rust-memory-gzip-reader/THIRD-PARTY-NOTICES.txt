@@ -1,0 +1,27 @@
+zlib-rs 0.6.8
+License: Zlib
+Source: https://crates.io/crates/zlib-rs/0.6.8
+Repository: https://github.com/trifectatechfoundation/zlib-rs
+Archive SHA256: b268e58e7c693d7c271f93ffc4ba3b380412554231c85bf61ca7af91042a4112
+LICENSE SHA256: e72111c52b7d96ebe25348dee19f0744f444d3c95ae6b1ecb6ccaecc5bce05ba
+The LICENSE bytes below are preserved verbatim.
+
+(C) 2024 Trifecta Tech Foundation 
+
+This software is provided 'as-is', without any express or implied
+warranty. In no event will the authors be held liable for any damages
+arising from the use of this software.
+
+Permission is granted to anyone to use this software for any purpose,
+including commercial applications, and to alter it and redistribute it
+freely, subject to the following restrictions:
+
+1. The origin of this software must not be misrepresented; you must not
+   claim that you wrote the original software. If you use this software
+   in a product, an acknowledgment in the product documentation would be
+   appreciated but is not required.
+
+2. Altered source versions must be plainly marked as such, and must not be
+   misrepresented as being the original software.
+
+3. This notice may not be removed or altered from any source distribution.
