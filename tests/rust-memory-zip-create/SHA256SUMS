@@ -1,8 +1,8 @@
 69239e5ef0c9d78fa5db14ef45cfcc49b8be79ffd68402d98d61173282377ad5  tests/rust-memory-zip-create/api.rs
-c908241145befc510772339ef19a574181c97f5c03e7143841232a17b47dc19f  tests/rust-memory-zip-create/contract.json
+68ad1c93c78a73bcbecfc5413cdfcabbd70142daf5bc0ac33640e0975b4bfd21  tests/rust-memory-zip-create/contract.json
 ddb80e1ad74197fe5fd57356a1ff918ee60eeea442eb1997a585d1f9afb9bbc0  tests/rust-memory-zip-create/lifecycle.rs
 2abd7c04fb7e1b614179d38f9f865e655c8468df3002069c8058f3e84bb1b4e5  tests/rust-memory-zip-create/limits.rs
 dcd350774e6c597401f70de3bbf32be7f37187ecc6adf3260698346226ee1f11  tests/rust-memory-zip-create/names.rs
-70b026b8fbed3bb577204242d8817cf86f593143de481ec18c91eeb0d2d8ce08  tests/rust-memory-zip-create/roundtrip.rs
+6e9688326e9e31bb8cdedc013bd03d1d656ac3067e341f69d62ba5abed21c21a  tests/rust-memory-zip-create/roundtrip.rs
 76a63e576d5db521d3b2af179a1251681ddbac5a2f7a62b3015eb75adcda0ee2  tests/rust-memory-zip-create/storage.rs
-d6f3338ba9ecb5d5ea29b07193c0cc820f879803424233a7561f4690a0410c28  tests/rust-memory-zip-create/support.rs
+971bdf33eb3e7d5ea64293fd70063e166019a47a229f3900fdcd416af8cdccb5  tests/rust-memory-zip-create/support.rs

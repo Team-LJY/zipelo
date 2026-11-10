@@ -56,7 +56,8 @@ pub fn assert_files(bytes: &[u8], method: Method, expected: &[(&str, &[u8], u32)
     assert_eq!(archive.len(), expected.len());
     for (index, (name, content, crc)) in expected.iter().enumerate() {
         let mut file = archive.by_index(index).unwrap();
-        assert_eq!(file.name(), *name);
+        let decoded_name = file.name().expect("정상 생성 이름 디코딩에 성공해야 함");
+        assert_eq!(decoded_name.as_ref(), *name);
         assert!(!file.is_dir());
         assert!(!file.encrypted());
         assert_eq!(file.size(), content.len() as u64);

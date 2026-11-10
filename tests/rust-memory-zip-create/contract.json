@@ -150,5 +150,57 @@
         "cargo +1.99.1 test --locked --offline --manifest-path experiments/rust-memory-zip-create/Cargo.toml --test memory_zip_create --target-dir tests/rust-memory-zip-create/target -- --test-threads=1"
     ],
     "centralRules": "Verify exact integrated head and all files first. Require discovery of 42 public and 11 private tests; zero tests is not a pass. Report each run and fixed head separately. Stop on mismatched source or unexpected targets.",
-    "preserved": "No existing source, fixture, expectation, lock, PR28-34 head, security reproduction or execveat action changed. No download/install/build/test execution/VM/user archive/merge/C# deletion."
+    "preserved": "No existing source, fixture, expectation, lock, PR28-34 head, security reproduction or execveat action changed. No download/install/build/test execution/VM/user archive/merge/C# deletion.",
+    "revisionHistory": [
+        {
+            "baseTestHead": "287d4dfe288247b37c6a26f82003f8f26e4a90cc",
+            "change": "Two test call sites now require ZipFile::name() decoding success with expect(), then compare the decoded name with the original string expectation. No fallback, default, test rename, count change or production edit.",
+            "files": [
+                "roundtrip.rs",
+                "support.rs",
+                "contract.json",
+                "SHA256SUMS"
+            ],
+            "apiEvidence": "zip 9.5.0 src/read/zipfile.rs:97: pub fn name(&self) -> ZipResult<Cow<'_, str>>",
+            "preservedHistoricalExecution": {
+                "integrationHead": "91ffbd43241f669b9a7af3a51876bb86fb690685",
+                "productionHead": "4989f14a026399ba0f09107097cc217d82d01510",
+                "testHead": "287d4dfe288247b37c6a26f82003f8f26e4a90cc",
+                "kind": "Author-side integration execution, not independent verification",
+                "toolchain": "Rust/Cargo 1.99.1, locked/offline",
+                "buildLib": {
+                    "exitCode": 0
+                },
+                "testLib": {
+                    "exitCode": 0,
+                    "discovered": 11,
+                    "passed": 11,
+                    "failed": 0,
+                    "ignored": 0,
+                    "measured": 0,
+                    "filteredOut": 0
+                },
+                "collector": "Initial combined-stream matcher failed because two newline-free Drop stderr diagnostics interrupted one passing result line. Raw log retained. One separate-stream lib repeat confirmed the same 11 passing names and two Cancelled Drop stderr diagnostics; collector negative/positive checks 14 passed.",
+                "testPublicApi": {
+                    "exitCode": 101,
+                    "discovered": 0,
+                    "executed": 0,
+                    "compileErrors": 2,
+                    "error": "E0369",
+                    "locations": [
+                        "roundtrip.rs:67",
+                        "support.rs:59"
+                    ],
+                    "cause": "Compared Result<Cow<str>, ZipError> directly with &str."
+                }
+            },
+            "currentRevisionValidation": {
+                "staticChecks": "rustfmt --check, exact two-call-site diff, unchanged 42 public and 11 private function names and expectations, SHA256 manifest and remote blobs",
+                "build": false,
+                "typeCheck": false,
+                "testExecution": false,
+                "pending": "Manager must create a new integrated head before execution. Do not combine prior production/lib results with this revised test head."
+            }
+        }
+    ]
 }

@@ -64,7 +64,8 @@ fn csharp_ascii_hello_fixture_roundtrip() {
     let mut archive = zip::ZipArchive::new(Cursor::new(bytes)).unwrap();
     assert_eq!(archive.len(), 1);
     let mut file = archive.by_index(0).unwrap();
-    assert_eq!(file.name(), "hello.txt");
+    let decoded_name = file.name().expect("정상 생성 이름 디코딩에 성공해야 함");
+    assert_eq!(decoded_name.as_ref(), "hello.txt");
     let mut content = Vec::new();
     file.read_to_end(&mut content).unwrap();
     assert_eq!(content, [7, 8, 9]);
