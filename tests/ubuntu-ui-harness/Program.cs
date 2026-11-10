@@ -17,16 +17,28 @@ internal static class Program
     [STAThread]
     public static int Main(string[] args)
     {
+        var direct = args.Length == 1 && args[0] == "--direct";
         var probe = args.Length == 2 && args[0] == "--probe" && args[1] is "before-show" or "after-show"
             ? args[1] : null;
-        if (probe is null && (args.Length != 2 || args[0] != "--case" || !Cases.Contains(args[1]))) { return 2; }
+        if (!direct && probe is null && (args.Length != 2 || args[0] != "--case" || !Cases.Contains(args[1]))) { return 2; }
         if (!OperatingSystem.IsLinux()) { return 2; }
-        var selected = args[1];
+        var selected = direct ? "direct" : args[1];
         var exit = 124;
         try
         {
             var project = Fixture.FindProject();
             var guard = new SourceGuard(project);
+            if (direct)
+            {
+                try { DirectChecks.RunAsync().GetAwaiter().GetResult(); return 0; }
+                catch (Exception error)
+                {
+                    Console.WriteLine(JsonSerializer.Serialize(new { kind = "direct-failure",
+                        diagnostic = FailureDiagnostic.Capture(error) }));
+                    return 1;
+                }
+                finally { guard.Verify(); }
+            }
             AppBuilder.Configure<Zipelo.Ubuntu.App>().UsePlatformDetect().SetupWithoutStarting();
             UiSession.Check(Application.Current is Zipelo.Ubuntu.App && Application.Current.ApplicationLifetime is null,
                 "original App must have no desktop auto-start lifetime");
@@ -60,34 +72,40 @@ internal static class Program
                             (probe == "before-show" ? "before Show" : "after Show");
                     exit = 1;
                     Console.WriteLine(JsonSerializer.Serialize(new { kind = "failure", @case = selected,
-                        type = error.GetType().Name, injectedFailure }));
+                        type = error.GetType().Name, diagnostic = FailureDiagnostic.Capture(error), injectedFailure }));
                 }
                 finally
                 {
                     var cleanupConfirmed = !windowCreationStarted || ownedWindow is not null;
-                    async Task Confirm(Func<Task> cleanup)
+                    async Task Confirm(string phase, Func<Task> cleanup)
                     {
                         try { await cleanup(); }
-                        catch { cleanupConfirmed = false; }
+                        catch (Exception error)
+                        {
+                            cleanupConfirmed = false;
+                            Console.WriteLine(JsonSerializer.Serialize(new { kind = "cleanup-failure", @case = selected,
+                                phase, diagnostic = FailureDiagnostic.Capture(error) }));
+                        }
                     }
-                    await Confirm(async () =>
+                    await Confirm("workspace", async () =>
                     {
                         await workspace.DrainAsync();
                         if (ui is not null) { await ui.IdleAsync(); }
                     });
-                    await Confirm(async () =>
+                    await Confirm("window", async () =>
                     {
                         if (ownedWindow is null) { return; }
                         ownedWindow.Close();
                         await UiSession.WaitAsync(() => closed && !ownedWindow.IsVisible, "owned window closed");
                     });
-                    await Confirm(() => { fixture?.Dispose(); return Task.CompletedTask; });
-                    await Confirm(() => { guard.Verify(); return Task.CompletedTask; });
+                    await Confirm("fixture", () => { fixture?.Dispose(); return Task.CompletedTask; });
+                    await Confirm("integrity", () => { guard.Verify(); return Task.CompletedTask; });
                     if (!cleanupConfirmed) { exit = 125; }
                     else if (probe is not null) { exit = injectedFailure && ownedWindow is not null && closed ? 0 : 1; }
                     Console.WriteLine(JsonSerializer.Serialize(new { kind = "result", @case = selected, exit,
                         scope = "controlled-startup-ui-only", cleanupConfirmed, windowClosed = closed,
                         stopFollowingCases = exit is 124 or 125,
+                        workspaceInvocations = workspace.Invocations,
                         workspaceTasksReturned = workspace.Calls.All(call => call.Returned.Task.IsCompleted),
                         cancellationCounts = workspace.Calls.Select(call => call.CancelCount).ToArray() }));
                     loop.Cancel();
@@ -100,7 +118,7 @@ internal static class Program
         {
             exit = 125;
             Console.WriteLine(JsonSerializer.Serialize(new { kind = "setup-failure", type = error.GetType().Name,
-                stopFollowingCases = true }));
+                diagnostic = FailureDiagnostic.Capture(error), stopFollowingCases = true }));
         }
         return exit;
     }

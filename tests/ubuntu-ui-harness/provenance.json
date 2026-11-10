@@ -1,7 +1,7 @@
 {
-    "schema": 2,
+    "schema": 3,
     "baseHead": "678456dfb3d66e67168d43a1fd331f66cd5e37fc",
-    "previousHead": "9444a38efcd873677d8f953a0ef6bd094310f490",
+    "previousHead": "728b3f87f5180cc1a87e61f1132e37eba8fe5085",
     "apiVersion": "Avalonia11.3.9",
     "sourceScope": "tests/ubuntu-ui-harness/ only",
     "productionChanges": false,
@@ -9,7 +9,9 @@
     "apiNotes": [
         "공개 MainWindow(workspace)/OpenStartupAsync/컨트롤 속성/ClickEvent/Close만 사용함. 제품 API 추가/private 반사 없음.",
         "이전 직접 storage 인터페이스 구현은 CS0535로 실패했음. 현재 구현과 factory 등록 및 storage 접근을 제거함.",
-        "Linux supervisor는 표준 ctypes의 libc prctl subreaper 및 Python pidfd API를 사용함. OS picker와 관계없음."
+        "Linux supervisor는 표준 ctypes의 libc prctl subreaper 및 Python pidfd API를 사용함. OS picker와 관계없음.",
+        "geometry JSON은 원시 Rect/Size가 아니라 유한4필드 DTO만 사용함. 실제 ArgumentException의 throw 지점은 아직 미확정임.",
+        "ListAsync guard 전 invocation 계수와 성공 snapshot 재호출 oracle을 추가함. 제품 guard 제거 실행 없이 직접 회귀로 계수 허점을 검사함."
     ],
     "implementationStatus": "source_authored_static_review_only",
     "executed": false

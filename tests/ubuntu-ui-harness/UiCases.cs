@@ -39,8 +39,11 @@ internal static class UiCases
             await UiSession.AwaitAsync(task);
             await ui.IdleAsync();
             ui.Success();
-            await ui.Window.OpenStartupAsync([ui.Fixture.InputPath]);
-            UiSession.Check(ui.Workspace.Calls.Count == 1, "startup must be one-shot");
+            var before = StartupObservation.Capture(ui);
+            await UiSession.AwaitAsync(ui.Window.OpenStartupAsync([ui.Fixture.InputPath]));
+            await UiSession.PumpAsync();
+            StartupObservation.AssertReplay(before, StartupObservation.Capture(ui));
+            ui.Success();
             return;
         }
         if (name == "complete-then-stop")

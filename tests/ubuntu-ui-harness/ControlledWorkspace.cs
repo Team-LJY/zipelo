@@ -42,8 +42,10 @@ internal sealed class ControlledWorkspace : IUbuntuArchiveWorkspace
     public bool CanExtractZip => false;
     public string AvailabilityMessage => "테스트 전용 제어된 목록 Task입니다. 실제 Worker를 실행하지 않습니다.";
     public List<ListCall> Calls { get; } = [];
+    public int Invocations { get; private set; }
     public async Task<JobResult> ListAsync(Guid jobId, Stream input, CancellationToken cancellationToken)
     {
+        Invocations++;
         UiSession.Check(Calls.Count < 1, "workspace call bound exceeded");
         var bytes = new byte[Fixture.Bytes.Length];
         await input.ReadExactlyAsync(bytes, cancellationToken);

@@ -1,5 +1,5 @@
 {
-    "schema": 2,
+    "schema": 3,
     "status": "source_authored_not_built_not_run",
     "basePr": 21,
     "baseHead": "678456dfb3d66e67168d43a1fd331f66cd5e37fc",
@@ -27,7 +27,7 @@
         "기존 압축파일 목록/선택 보존"
     ],
     "oracles": {
-        "startup-success": "같은 JobId Completed/None으로 2항목/성공 상태/빈 안내문 숨김. startup 재호출은 호출 수 1 유지.",
+        "startup-success": "같은 JobId Completed/None으로 2항목/성공 상태/빈 안내문 숨김. 두 번째 OpenStartupAsync 완료 후 workspace의 guard 이전 Invocations=1/등록 Calls=1, 이전 ItemsSource/SelectedItem 동일성 및 제목/성공 상태/항목수/빈 안내문/버튼/progress 상태 불변. 성공 상태를 재확인함.",
         "cancel-throws": "활성 progress/open 잠금/Stop 활성 -> Stop -> token=true/callback1/Stop 비활성/progress 유지 -> gate OCE -> 기존 제품 취소 상태/0항목/idle.",
         "cancel-result": "같은 대기 단계 뒤 Cancelled/Cancelled 결과 -> 기존 제품 중지 상태/0항목/idle. 문구를 제품과 다르게 만들지 않음.",
         "close-waits": "공개 Close 요청과 재요청은 작업 중 창을 유지하고 token callback1. gate OCE 뒤 idle. 정리에서 Close/Closed 관찰.",
@@ -43,7 +43,8 @@
         "maximumJobs": 1,
         "maximumSyntheticEntries": 2,
         "cancellation": "token은 gate를 완료시키지 않음. Task 반환과 UI idle을 따로 관찰함. 실제 Worker를 실행하지 않음.",
-        "duplicateStop": "disabled Stop에 이벤트를 강제로 전달하지 않음. 중복 Close가 callback을 늘리지 않아야 함."
+        "duplicateStop": "disabled Stop에 이벤트를 강제로 전달하지 않음. 중복 Close가 callback을 늘리지 않아야 함.",
+        "invocationCounter": "ListAsync 시작에서 재진입 guard/입력 읽기/Calls.Add 전에 Invocations를 기록함. 등록 Task 수와 실제 진입 수를 구별함."
     },
     "fixture": {
         "hex": "504b0506000000000000000000000000000000000000",
@@ -84,7 +85,23 @@
         "guiProbeExpected": "--probe는11제품 UI 사례와 별도. 주입한 초기화 예외를 관찰하고 소유 창 Closed/비가시성/fixture/해시 정리까지 확인한 경우만0, 정리 미확인125. 다른 예외를 성공으로 위장하지 않음.",
         "runnerChecks": 4,
         "runnerCommand": "python3 -m unittest discover -s tests/ubuntu-ui-harness -p runner_checks.py",
-        "runnerExpected": "timeout leader 종료 뒤 후손 미정리125, 정리된timeout124, 정상 반환 뒤 후손잔류125, PID재사용은 신호 미전달. Mock 시험이며 실제 OS 후손 정리 증거가 아님."
+        "runnerExpected": "timeout leader 종료 뒤 후손 미정리125, 정리된timeout124, 정상 반환 뒤 후손잔류125, PID재사용은 신호 미전달. Mock 시험이며 실제 OS 후손 정리 증거가 아님.",
+        "recordAndOracleChecks": 10,
+        "recordAndOracleNames": [
+            "geometry-empty",
+            "geometry-zero-width",
+            "geometry-zero-height",
+            "geometry-finite",
+            "geometry-nan-rejected",
+            "geometry-infinity-rejected",
+            "diagnostic-bounds",
+            "replay-preserved",
+            "replay-entry-before-guard",
+            "replay-state-change"
+        ],
+        "recordAndOracleCommand": "같은 run_case.py의 --case 대신 --direct. AppBuilder/Window/fixture 파일 생성 없이 같은 assembly의 레코드 및 oracle 직접 회귀10개 수행.",
+        "mutationContract": "제품은 수정하지 않음. 고정 OpenStartupAsync에서 startupHandled guard를 제거하면 유효 파일로 OpenArchiveCoreAsync가 재진입하여 ListAsync의 Invocations가 guard 전에2가 됨. Calls는1이어도 강화 oracle이 실패함. 직접 회귀는 실제 controlled workspace의 재진입 거부/Invocations2/Calls1과 이전 성공 snapshot을 조합해 가장 은폐된 재진입도 거부함. 제품 guard를 실제 제거해 실행했다는 주장이 아님.",
+        "scope": "새 직접10개, 초기화 probe2개, 기존 runner mock4개와 UI11개를 서로 합산하지 않음. 작성자 실행 없음."
     },
     "execution": {
         "oneCasePerProcess": true,
@@ -103,7 +120,8 @@
         "stop": "124/125 또는 정리 미확인 뒤 후속 실행 금지. 강제 정리를 제품 취소 성공으로 계산하지 않음. 그룹/후손이 없는 정상 종료만 앱 결과를 전달함.",
         "display": "중앙이 소유한 별도 Xvfb DISPLAY 사용/정리. runner는 Xvfb를 생성하지 않으며 Xvfb PID/socket 잔류0은 중앙 별도 확인.",
         "build": "중앙만 기존 SDK10.0.403/offline feed로 restore 및 build --no-restore 수행. 기존 Avalonia11.3.9/의존성 보존. author는 정적 검토만 수행.",
-        "sourceIntegrity": "source-inputs.json 제품8파일/SHA256SUMS 전체 harness/manifest/로드 DLL6개 시작과 종료 대조. 중앙은 fresh build 전체 입력과 DLL해시 별도 고정."
+        "sourceIntegrity": "source-inputs.json 제품8파일/SHA256SUMS 전체 harness/manifest/로드 DLL6개 시작과 종료 대조. 중앙은 fresh build 전체 입력과 DLL해시 별도 고정.",
+        "direct": "같은 supervisor에서 --case 대신 --direct. 같은 외부60초/정리125 계약 유지. 직접10개 전부 성공0, assertion1, source 정리 미확인125."
     },
     "history": {
         "head": "9444a38efcd873677d8f953a0ef6bd094310f490",
@@ -114,5 +132,39 @@
         "PR21/PR9 제품source와 의존성 불변",
         "원문 화면/log/binary/생성fixture 업로드 없음",
         "installer/packaging/라이선스/main병합 gate 유지"
+    ],
+    "diagnostics": {
+        "messageUtf16Limit": 512,
+        "stackTraceUtf16Limit": 2048,
+        "typeUtf16Limit": 128,
+        "innerDepth": 2,
+        "notes": "실패/정리 실패/setup 실패/direct 실패에 문자열과 bounded inner DTO만 기록함. 잘린 필드/inner 표식을 포함함. 원문 로그는 중앙 로컬 전용이며 업로드하지 않음."
+    },
+    "geometryRecording": {
+        "dto": [
+            "X",
+            "Y",
+            "Width",
+            "Height"
+        ],
+        "finiteRequired": true,
+        "notes": "원시 Avalonia Rect/Size를 JSON에 넣지 않음. 유한 x/y/width/height만 복사하며 0크기도 유효함. NaN/Infinity 허용 옵션과 배치 assertion 완화 없음. screen 좌표는 정수 X/Y 필드로 분리함."
+    },
+    "centralHistory": [
+        {
+            "head": "728b3f87f5180cc1a87e61f1132e37eba8fe5085",
+            "build": "기존 SDK10.0.403 offline build 경고0/오류0",
+            "integrity": "입력72개/출력40개 실행 전후 해시 동일",
+            "startupUi": "Ubuntu26.04.1 실제 격리 화면 startup9/9 통과. 단, 당시 재호출 oracle은 Calls.Count만 보므로 중복 진입 차단의 충분한 증거가 아님.",
+            "initializationProbes": "2/2 통과",
+            "runnerMocks": "별도4/4 통과",
+            "fontCases": "font24/font32 초기 Bounds 기록 중 ArgumentException 실패. 적용 전 중단. 정확한 throw 위치 미확정. Rect 파생 Size.AspectRatio NaN 직렬화 가능성은 가설이며 제품 배치 결함으로 단정하지 않음.",
+            "notVerified": [
+                "실제24/32DIP배치",
+                "최소창640x500",
+                "글리프 검사"
+            ],
+            "cleanup": "모든 실행 cleanupConfirmed/windowClosed/workspaceTasksReturned=true. timeout/정리미확인/잔류0"
+        }
     ]
 }

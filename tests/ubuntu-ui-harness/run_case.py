@@ -123,6 +123,7 @@ def main():
     choice = parser.add_mutually_exclusive_group(required=True)
     choice.add_argument("--case", choices=contract["cases"])
     choice.add_argument("--probe", choices=["before-show", "after-show"])
+    choice.add_argument("--direct", action="store_true")
     options = parser.parse_args()
     if sys.platform != "linux" or not options.dotnet.is_absolute() or not options.assembly.is_absolute():
         return 2
@@ -130,9 +131,9 @@ def main():
         return 2
     try:
         enable_subreaper()
-        process = subprocess.Popen([str(options.dotnet), str(options.assembly),
-                                    "--case" if options.case else "--probe", options.case or options.probe],
-                                   start_new_session=True)
+        arguments = ["--direct"] if options.direct else [
+            "--case" if options.case else "--probe", options.case or options.probe]
+        process = subprocess.Popen([str(options.dotnet), str(options.assembly), *arguments], start_new_session=True)
     except Exception:
         print("STOP: 소유 세션 생성 실패. 후속 실행 금지")
         return 125

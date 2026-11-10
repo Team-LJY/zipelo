@@ -127,8 +127,9 @@ internal static class LayoutCases
         {
             var font = control is TextBlock block ? block.FontSize : ((TemplatedControl)control).FontSize;
             Console.WriteLine(JsonSerializer.Serialize(new { kind = "font", phase, type = control.GetType().Name,
-                name = control.Name ?? "unnamed", fontDip = font, bounds = InWindow(control, ui.Window),
-                screenOrigin = control.PointToScreen(new Point(0, 0)), renderScaling = ui.Window.RenderScaling }));
+                name = control.Name ?? "unnamed", fontDip = font, bounds = GeometryRecord.Capture(InWindow(control, ui.Window)),
+                screenX = control.PointToScreen(new Point(0, 0)).X,
+                screenY = control.PointToScreen(new Point(0, 0)).Y, renderScaling = ui.Window.RenderScaling }));
         }
     }
 }
