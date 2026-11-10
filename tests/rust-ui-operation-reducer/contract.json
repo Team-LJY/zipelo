@@ -22,8 +22,8 @@
         "sequence": "현재 중복/역전/누락은 Sequence 연결 오류임. 재정렬 buffer나 자동 복구 없음. 최초 link fault 뒤 모든 current 이벤트 수용을 막고 cleanup 확인을 새로 만들지 않음",
         "terminal": "Terminal::Completed(CompletionKind::MemoryValidated|ProtocolObserved|Published), MockCancelled, Failed를 한 번만 수용함. 완료 종류는 입력 그대로 보존하고 자동 승격하지 않음. Published도 MockEvent 안의 모의 단계일 뿐 실제 receipt/파일 게시 증거가 아님. 중복/상충 terminal과 취소 뒤 모든 Completed는 기존 연결 오류로 거부함",
         "progress": "표시만 갱신하며 완료를 만들지 않음. cancel 요청/terminal 뒤의 올바른 순번 progress는 버리고 순번만 소비함. 잘못된 순번은 여전히 연결 오류임",
-        "cancel_race": "취소 요청은 terminal/cleanup을 만들지 않음. 취소 요청 뒤 MockSuccess는 SuccessAfterCancel로 차단하고 성공을 채택하지 않음. MockCancelled 또는 원래 오류 terminal과 cleanup을 별도로 받아야 함",
-        "cleanup": "OperationKind::Memory는 명시적 CleanupNotApplicable, Process는 CleanupConfirmed를 요구함. 반대 종류는 CleanupKindMismatch로 차단함. cleanup은 terminal 전에 받을 수 있으나 terminal까지 기다림. CleanupFailed는 별도 sticky veto이며 나중 확인으로 지우지 않음",
+        "cancel_race": "취소 요청은 terminal/cleanup을 만들지 않음. 취소 요청 뒤 Completed(_)는 SuccessAfterCancel로 차단하고 성공을 채택하지 않음. MockCancelled 또는 원래 오류 terminal과 cleanup을 별도로 받아야 함",
+        "cleanup": "OperationKind::Memory는 명시적 CleanupNotApplicable, Process는 CleanupConfirmed를 요구함. 반대 종류는 CleanupKindMismatch로 차단함. cleanup은 terminal 전에 받을 수 있으나 terminal까지 기다림. CleanupFailed는 별도 sticky veto이며 나중 확인으로 지우지 않음 동일 operation이 유지되는 동안에만 늦은 실패를 관찰할 수 있음. caller가 이미 소비한 PermitClose는 회수하거나 실제 창을 다시 열 수 없음. 새 StartMock 뒤 과거 cleanup 실패는 stale로 제외되며 새 시작 효과를 되돌리지 못함. 최종 cleanup 판단과 효과 실행/소비의 안전 조건은 caller 책임임",
         "error": "Failure의 origin/policy/classification/code와 최초 FirstError를 보존하며 추가 cleanup 실패는 별도임. origin/policy는 각각 1~128 UTF-8 bytes, classification은 1~256 bytes. 빈 값/초과는 자르거나 실제 profile로 대체하지 않고 InvalidEvidence로 차단함",
         "evidence": "모든 Envelope에는 필수 EvidenceKind::Model 또는 CallerAttested가 있음. 수용한 terminal/cleanup/최초 cleanup 실패의 근거를 각각 보존함. OsObserved 타입/OS 관찰/Published receipt 발급 구현은 없음. cleanup NotApplicable은 OS 확인이나 panic/OOM 전체 회수가 아님"
     },
@@ -107,16 +107,16 @@
     "validation": {
         "kind": "작성자 측 Linux 순수 모델 직접 시험",
         "toolchain": "Rust/Cargo 1.99.1",
-        "discovered": 58,
-        "executed": 58,
-        "passed": 58,
+        "discovered": 67,
+        "executed": 67,
+        "passed": 67,
         "failed": 0,
         "ignored": 0,
         "filtered": 0,
-        "split": "private overflow 6개 + 공개 API 52개. 기존 49개 시험 이름/행동 기대를 유지하고 성공 fixture를 명시적 MemoryValidated+Model로 표현함. 의미 경계 회귀 9개 추가. PR34 14개는 변경/재실행/합산하지 않음",
-        "checks": "rustfmt --check, Python AST/JSON, root-only lock, PR34 고정 10파일 전후 hash 일치",
-        "historical": "이전 head bb5a659d의 작성자 측 49개 통과를 별도 이력으로 보존함. 현재 58개에 합산하지 않음. 완료/근거/cleanup 종류와 policy 필드를 추가한 후 기존 49개, 추가 후 최종 58개를 실행함",
-        "command": "python3 tests/rust-ui-operation-reducer/validate.py",
+        "split": "기존 58개 + 새 Rust 회귀 9개 = private 7개 및 API 60개. 별도 Python helper 시험 15개는 합산하지 않음",
+        "checks": "실행 전 두 manifest와 기대 file digest 대조, 실행 후 재검증/불변 비교, 실제 이름과 수 확인. 해당 고정 head 실행 결과는 PR과 로컬 report로 확인함",
+        "historical": "이전 head bb5a659d의 작성자 측 49개 통과를 별도 이력으로 보존함. 현재 58개에 합산하지 않음. 완료/근거/cleanup 종류와 policy 필드를 추가한 후 기존 49개, 추가 후 최종 58개를 실행함 65b2c0a0의 58개 결과는 별도 이력이며 새 head 통과 수에 합산하지 않음",
+        "command": "python3 tests/rust-ui-operation-reducer/validate.py --source-head <고정 commit> --reducer-manifest-sha256 <별도 신뢰 경로로 확인한 digest>",
         "artifacts": "tests/rust-ui-operation-reducer/artifacts/ 아래 분리 stdout/stderr/target/report만 생성함. 해당 생성물은 PR에 올리지 않음",
         "limits": "독립 검증, 실제 GUI/IME/Orca/NVDA/DPI/Windows/GL 성공, 실제 작업 중단이나 cleanup 증거가 아님"
     },
@@ -125,5 +125,13 @@
         "실제 backend/PR30 공통 계약은 별도 합의 전 수정하지 않음",
         "설치/네트워크 복원/GUI/VM/보류된 동작/게시/main 병합/C# 삭제 없음"
     ],
-    "profile_boundary": "실제 PR30/PR33 또는 코어 의존성/exit parser를 추가하지 않음. PR30은 PR28 고정 identity와 exit 10~18을 대상으로 함. PR33 exit 19~23의 실제 해석은 범위 밖이며 새 회귀의 code 19는 mock-profile-only 원문 보존 시험임"
+    "profile_boundary": "실제 PR30/PR33 또는 코어 의존성/exit parser를 추가하지 않음. PR30은 PR28 고정 identity와 exit 10~18을 대상으로 함. PR33 exit 19~23의 실제 해석은 범위 밖이며 새 회귀의 code 19는 mock-profile-only 원문 보존 시험임",
+    "manifest_trust": {
+        "baseline_head": "63b80e3158c08b71ec70666a2a39216cd36752b1",
+        "baseline_expected_sha256": "7316761d72c18e3dc6f89135ca15272f44aa814e493b2083bc278081dd5006f8",
+        "reducer": "고정 source commit에서 별도 확인한 manifest digest를 필수 CLI로 전달함. 현재 manifest hash를 helper 안에 기록하지 않아 자기 hash 순환이 없음",
+        "paths": "허용 경로 집합 고정. 경로/중복/누락/추가/잘못된 hash/누락 파일/symlink를 거부함",
+        "helper": "helper 자체도 manifest에서 검증함. report의 helper_sha256과 caller supplied source head를 구분하며 commit provenance를 독립 입증하지 않음",
+        "pre_cargo": "전체 preflight 전 Cargo와 검증 산출물 생성을 시작하지 않음. 변조 복사본에서 Cargo run 호출 0회를 시험함"
+    }
 }

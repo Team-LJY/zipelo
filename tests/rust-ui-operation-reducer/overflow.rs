@@ -109,3 +109,36 @@ fn last_generation_can_be_installed_without_wrapping() {
     assert_eq!(result.disposition, Disposition::Applied);
     assert_eq!(result.state.generation(), u64::MAX);
 }
+
+#[test]
+fn generation_overflow_keeps_nonempty_rows_and_selected_key() {
+    let mut model = start();
+    let ui = model.operation().unwrap().mapping.ui;
+    model = model
+        .reduce(Input::Command(Command::ReplaceMockList {
+            operation: ui,
+            rows: vec![Row {
+                id: RowId(7),
+                name: "한글/한".into(),
+            }],
+        }))
+        .state;
+    model.generation = u64::MAX;
+    let key = model.row_key(RowId(7)).unwrap();
+    model = model.reduce(Input::Command(Command::Select(key))).state;
+    assert_eq!(model.selected(), Some(key));
+    let result = model.reduce(Input::Command(Command::ReplaceMockList {
+        operation: ui,
+        rows: vec![Row {
+            id: RowId(9),
+            name: "교체".into(),
+        }],
+    }));
+    assert_eq!(
+        result.disposition,
+        Disposition::Ignored(Rejection::GenerationOverflow)
+    );
+    assert_eq!(result.state, model);
+    assert_eq!(result.state.selected(), Some(key));
+    assert_eq!(result.state.rows()[0].name, "한글/한");
+}

@@ -876,3 +876,134 @@ fn cancellation_blocks_all_mock_completion_kinds() {
         assert!(result.state.operation().unwrap().terminal.is_none());
     }
 }
+
+#[test]
+fn consumed_permit_close_cannot_be_retracted_by_late_cleanup_failure() {
+    let ready = settle(
+        &started(),
+        Terminal::Completed(CompletionKind::MemoryValidated),
+    );
+    let permitted = command(&ready, Command::RequestClose);
+    let caller_consumed = permitted.effect;
+    assert_eq!(caller_consumed, Some(MockEffect::PermitClose));
+    let late = event(
+        &permitted.state,
+        MockEvent::CleanupFailed(failure("caller", "LateCleanup", 5)),
+    );
+    assert_eq!(late.effect, None);
+    assert_eq!(late.state.close(), CloseState::MockClosed);
+    assert!(!late.state.operation().unwrap().settled());
+    assert_eq!(caller_consumed, Some(MockEffect::PermitClose));
+}
+
+#[test]
+fn new_start_effect_is_not_undone_by_old_cleanup_failure() {
+    let ready = settle(
+        &started(),
+        Terminal::Completed(CompletionKind::MemoryValidated),
+    );
+    let old_mapping = mapping(&ready);
+    let next = command(&ready, Command::StartMock);
+    let caller_consumed = next.effect;
+    let late = next.state.reduce(Input::Event(Envelope {
+        mapping: old_mapping,
+        sequence: 2,
+        evidence: EvidenceKind::CallerAttested,
+        event: MockEvent::CleanupFailed(failure("old", "LateCleanup", 5)),
+    }));
+    assert_eq!(
+        late.disposition,
+        Disposition::Ignored(Rejection::StaleOperation)
+    );
+    assert_eq!(late.state, next.state);
+    assert_eq!(late.effect, None);
+    assert_eq!(
+        caller_consumed,
+        Some(MockEffect::Start(mapping(&next.state)))
+    );
+}
+
+#[test]
+fn decreasing_progress_latches_connection_fault_without_overwriting_progress() {
+    let model = event(&started(), MockEvent::Progress { done: 5, total: 10 }).state;
+    let result = event(&model, MockEvent::Progress { done: 4, total: 10 });
+    assert_eq!(
+        result.disposition,
+        Disposition::ConnectionFault(LinkFault::InvalidProgress)
+    );
+    assert_eq!(result.state.operation().unwrap().progress, Some((5, 10)));
+}
+
+#[test]
+fn changed_progress_total_latches_connection_fault() {
+    let model = event(&started(), MockEvent::Progress { done: 5, total: 10 }).state;
+    let result = event(&model, MockEvent::Progress { done: 6, total: 11 });
+    assert_eq!(
+        result.disposition,
+        Disposition::ConnectionFault(LinkFault::InvalidProgress)
+    );
+    assert_eq!(result.state.operation().unwrap().progress, Some((5, 10)));
+}
+
+#[test]
+fn progress_above_total_is_not_accepted() {
+    let result = event(
+        &started(),
+        MockEvent::Progress {
+            done: 11,
+            total: 10,
+        },
+    );
+    assert_eq!(
+        result.disposition,
+        Disposition::ConnectionFault(LinkFault::InvalidProgress)
+    );
+    assert_eq!(result.state.operation().unwrap().progress, None);
+}
+
+#[test]
+fn duplicate_cleanup_confirmation_blocks_retry() {
+    let model = settle(
+        &started(),
+        Terminal::Completed(CompletionKind::MemoryValidated),
+    );
+    let result = event(&model, MockEvent::CleanupConfirmed);
+    assert_eq!(
+        result.disposition,
+        Disposition::ConnectionFault(LinkFault::ConflictingCleanup)
+    );
+    assert!(!result.state.operation().unwrap().settled());
+    assert_eq!(command(&result.state, Command::StartMock).effect, None);
+}
+
+#[test]
+fn settled_while_confirming_close_permits_close_without_cancel_effect() {
+    let model = command(&started(), Command::RequestClose).state;
+    let model = settle(&model, Terminal::Completed(CompletionKind::MemoryValidated));
+    assert_eq!(model.close(), CloseState::Confirming);
+    let result = command(&model, Command::ConfirmCloseCancel);
+    assert_eq!(result.effect, Some(MockEffect::PermitClose));
+    assert_eq!(result.state.close(), CloseState::MockClosed);
+    assert!(!result.state.operation().unwrap().cancel_requested);
+}
+
+#[test]
+fn old_event_does_not_advance_nonzero_new_operation_sequence() {
+    let old = settle(
+        &started(),
+        Terminal::Completed(CompletionKind::MemoryValidated),
+    );
+    let next = command(&old, Command::StartMock).state;
+    let next = event(&next, MockEvent::Progress { done: 1, total: 10 }).state;
+    let late = next.reduce(Input::Event(Envelope {
+        mapping: mapping(&old),
+        sequence: 3,
+        evidence: EvidenceKind::Model,
+        event: MockEvent::CleanupConfirmed,
+    }));
+    assert_eq!(late.state, next);
+    assert_eq!(late.state.operation().unwrap().next_sequence, 1);
+    let valid = event(&late.state, MockEvent::Progress { done: 2, total: 10 });
+    assert_eq!(valid.disposition, Disposition::Applied);
+    assert_eq!(valid.state.operation().unwrap().next_sequence, 2);
+}
