@@ -1,0 +1,37 @@
+{
+    "provenance": "Python 표준 gzip/zlib와 tarfile USTAR_FORMAT으로 만든 합성 bytes임",
+    "gzip": {
+        "mtime": 0,
+        "level": 6,
+        "crc32": 3421780262
+    },
+    "ustar": {
+        "trimmed_length": 2048,
+        "terminator_blocks": 2,
+        "mtime": 0,
+        "mode": "0644"
+    },
+    "files": {
+        "digits": {
+            "bytes": 9,
+            "sha256": "15e2b0d3c33891ebb0f1ef609ec419420c20e320ce94c65fbc8c3312448eb225"
+        },
+        "gzip_digits": {
+            "bytes": 29,
+            "sha256": "d64e159cec6070c5cc22ddcd33573fec1069cd355c3f8ad3e5f9abeee1996acf"
+        },
+        "gzip_empty": {
+            "bytes": 20,
+            "sha256": "ac73670af3abed54ac6fb4695131f4099be9fbe39d6076c5d0264a6bbdae9d83"
+        },
+        "ustar_one": {
+            "bytes": 2048,
+            "sha256": "a5177b66def6e719f42e4fa16f99378f3050b957fb757676ab69df8bd1669c35"
+        },
+        "ustar_sha256": {
+            "bytes": 32,
+            "sha256": "1baddf35c9eb6b1164954d59306ecb380c3b850f90bede0f634f867da8f1ca17"
+        }
+    },
+    "limitations": "ZIP 결과는 native 호출과 비교함. 독립 ZIP parser나 codec 검증이 아님"
+}
