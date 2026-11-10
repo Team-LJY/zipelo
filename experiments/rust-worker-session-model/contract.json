@@ -1,0 +1,145 @@
+{
+    "schema": "zipelo.rust-worker-session-model.v1",
+    "base_head": "f7fc8cbece281e2f9a6374b4640ca4dd9d321fbc",
+    "base_tree": "ab5574289f537a4028a3abf092e4634cb9b89282",
+    "branch": "features/rust-worker-session-model",
+    "status": "source and static preparation only; no Rust compilation, discovery, or execution",
+    "scope": {
+        "kind": "GZip single-member bytes protocol and pure synthetic supervisor model",
+        "external_dependencies": 0,
+        "unsafe_code": false,
+        "host_ownership": "Host owns input acquisition/snapshot and destination. SessionModel borrows an immutable bounded input slice; no path, file handle, destination, publication object, process handle, PID, executable digest, or credential enters this API. Output payload slices are inspected and discarded, never returned as verified content.",
+        "request_id": "Nonzero opaque 16-byte correlation ID supplied by host. Equality binds frames only to this model instance. Uniqueness, OperationId mapping, peer authentication, launch identity and replay isolation across processes are NOT established.",
+        "authority": "ModelReport.live_verified() and publication_allowed() are constant false. SettledModel and ProtocolCompletionObserved are only consistency results over caller-supplied observations, never permission or a receipt. No conversion to MemoryValidated, FileSnapshot, FileJob, commit gate or product Published exists."
+    },
+    "compatibility": [
+        {
+            "existing": "C# ZIP2 streaming v2",
+            "comparison": "Retains identity, exact sequence, data/frame/wire caps, terminal then EOF concepts. New ZWM1 magic and version/profile are intentionally separate: not wire-compatible, no auto-negotiation or C# integration. Only one bytes request and one output stream, no item IDs, names or archive metadata."
+        },
+        {
+            "existing": "C# WorkerProtocol v1",
+            "comparison": "Does not deserialize JSON or carry paths/names/passwords. No modification of existing v1 caps or callers."
+        },
+        {
+            "existing": "Rust app-core-memory",
+            "comparison": "OperationId(u64), MemoryValidated and ProcessCleanup::NotApplicable remain unchanged. RequestId is not that OperationId or process identity. WorkerStatus is untrusted peer reporting, never translated into a native decoder error or successful memory result."
+        },
+        {
+            "existing": "Rust FileSnapshot",
+            "comparison": "Future host may lend FileSnapshot.bytes(); this API accepts ordinary synthetic bytes and cannot claim they came from FileSnapshot. Snapshot policy, identity and owned destination publication stay outside."
+        },
+        {
+            "existing": "Earlier rust-live-supervisor / rust-host-errors candidates outside fixed main",
+            "comparison": "Read for pitfalls in arbitrary Binding fields, first cause, closed-vs-EOF, kill-vs-reap and observation cap cleanup. Not copied, imported or declared validated. Existing held execveat probe and its failures remain untouched."
+        }
+    ],
+    "wire": {
+        "profile": "gzip-single-member-session-model-v1",
+        "header_bytes": 64,
+        "magic": "ZWM1",
+        "version": 1,
+        "integer_order": "unsigned little-endian",
+        "layout": {
+            "0..4": "magic",
+            "4..6": "u16 version",
+            "6..8": "u16 kind",
+            "8..12": "u32 payload length",
+            "12..16": "reserved zero",
+            "16..32": "opaque request ID bytes, no Guid endian conversion",
+            "32..40": "u64 sequence",
+            "40..64": "reserved zero"
+        },
+        "frames": {
+            "1 RequestBegin": "16 bytes: u64 exact input length, u64 maximum output bytes",
+            "2 RequestData": "1..65536 bytes, immutable host input chunks",
+            "3 RequestEnd": "zero bytes",
+            "16 ResultBegin": "8 bytes: u64 declared output length",
+            "17 ResultData": "1..65536 bytes, counted and discarded",
+            "18 ResultEnd": "1 byte: 1 Completed, 2 Failed, 3 Cancelled, unknown rejected"
+        },
+        "sequence": "Each direction starts at zero and advances exactly once per complete frame, including begin/end. Directions have independent counters. ResultBegin allowed only after request end acknowledgement. No resynchronization/retry or partial-frame acceptance. Duplicate begin, wrong direction, mismatched ID/sequence, terminal repetition and trailing frames fail.",
+        "completion": "Completed requires actual result bytes equal the declaration, valid terminal, EOF on both result and diagnostic channels, compatible exit, matching reap, all channel closure observations and resource release. Failed/Cancelled may end a partial declared output and must have nonzero normal exit for a coherent untrusted report. Signal exits contradict protocol completion. Diagnostics are raw untrusted bytes, never result/control instructions."
+    },
+    "limits": {
+        "input_bytes_max": 16777216,
+        "output_bytes_max": 16777216,
+        "chunk_bytes_max": 65536,
+        "wire_bytes_per_direction_max": 22020096,
+        "frames_per_direction_max": 65536,
+        "observations_max": 131072,
+        "diagnostic_bytes_max": 4096,
+        "operation_duration_seconds_max": 300,
+        "cleanup_duration_seconds_max": 30,
+        "configuration": "Caps can only shrink. Zero input/output caps permit empty bytes. Duration must be nonzero; frames >=2; requested input wire overhead and frame count must fit at construction. Request cost is predetermined for the canonical 64KiB chunking.",
+        "accounting": "Request counters account only acknowledged model frames, not actual writes. Result wire includes submitted complete frame header/body cost before header/body semantics; frames charge after header ID/sequence/cap checks; data charges accepted bytes only. Malformed attempts retain prior cumulative cost and first fault. Rejected oversized slices are not consumed or retained. No reset. This does not measure physical I/O, decoder processed bytes, compression ratio or OS resource use."
+    },
+    "api": {
+        "wire": [
+            "RequestId::new/bytes",
+            "Header::inspect/kind/id/sequence/payload_length",
+            "encode_header"
+        ],
+        "session": [
+            "SessionModel::new",
+            "outbound",
+            "request_frame_sent",
+            "observe",
+            "report"
+        ],
+        "observation_kinds": [
+            "ResultFrame",
+            "DiagnosticBytes",
+            "ResultEof",
+            "DiagnosticEof",
+            "Exit",
+            "Reaped",
+            "Closed",
+            "ResourcesReleased",
+            "StopAttempted",
+            "TruncatedFrame",
+            "IoFailure",
+            "Cancel",
+            "Tick"
+        ],
+        "report": [
+            "request",
+            "phase",
+            "outcome",
+            "first_fault",
+            "worker_report",
+            "observed_exit",
+            "missing",
+            "usage",
+            "observations_unreliable",
+            "stop_needed_in_model",
+            "live_verified=false",
+            "publication_allowed=false"
+        ],
+        "call_result": "Ok means an observation was consumed, not job success. Some consumed EOF/Cancel/Tick/closure observations latch a fault while returning Ok; callers must inspect report. Err may describe current rejected action while report.first_fault retains the earlier cause. After SettledModel every observation including late cancel is AlreadySettled and leaves the report unchanged."
+    },
+    "supervision": {
+        "phases": [
+            "SendingRequest",
+            "ReceivingResult",
+            "Draining",
+            "Stopping",
+            "SettledModel",
+            "Blocked"
+        ],
+        "elapsed": "Caller-supplied monotonically increasing modeled Duration since construction, not Instant/real time proof. Every mutating observation and frame acknowledgement checks clock and observation cap. Exact operation deadline is checked before same-call cancellation; earlier first cause wins. Cleanup starts on first fault or exit, cannot be extended by later events.",
+        "order": "Exit and reap are independent; reap must follow observed exit and match its exact status. Stop acceptance never implies exit/reap. Closing readers without earlier EOF, duplicate lifecycle observations, early resource release, failed stop, backward time, cleanup timeout or observation exhaustion mark the trace unreliable and block settlement permanently. Missing confirmations stay visible in Missing; no permissive default. Observed exit with unfinished request latches RequestIncomplete and disables outbound frames. No stop attempt is accepted/recommended after observed exit or reap.",
+        "first_cause": "Cancel, I/O, wire/budget and contradiction errors latch first_fault once. Later failures do not rewrite it; unreliability is tracked separately so an earlier cancel cannot conceal failed cleanup. Coherent cleanup after failure may reach SettledModel with a Failed outcome. Cleanup observation cap exhaustion cannot manufacture settlement.",
+        "memory": "No heap allocation or payload copies in production module; one borrowed host input and fixed 16-byte begin payload. Result frame body is caller-owned and not retained. A future transport adapter must inspect 64-byte Header before body allocation, cap body at64KiB, handle fragmented reads/writes, and report truncation. The model does not implement partial transport or prove external allocation bounds."
+    },
+    "unverified": [
+        "Rust type checking, compilation, exact discovery and all synthetic cases",
+        "Any actual decoder worker, decode/CRC/content verification or provenance of input/output",
+        "OS launch identity, executable sealing/hash, actual permission/fd restrictions or containment",
+        "Spawn, execveat, held probes, child lifecycle syscalls, true EOF/exit/reap, cleanup, real deadlines and cancellation latency",
+        "Physical pipe fragmentation/backpressure/fairness/short reads/short writes/EINTR/EAGAIN/SIGPIPE",
+        "Windows and Linux OS adapters",
+        "FileJob/publication integration, user files, GUI and product Published"
+    ],
+    "validation_plan": "../../tests/rust-worker-session-model/run-plan.json"
+}

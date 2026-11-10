@@ -1,0 +1,43 @@
+{
+    "head": "f7fc8cbece281e2f9a6374b4640ca4dd9d321fbc",
+    "tree": "ab5574289f537a4028a3abf092e4634cb9b89282",
+    "reference_files": [
+        {
+            "path": "docs/WORKER_STREAM_PROTOCOL.md",
+            "blob": "2b5ccce575d7fe48affcaf1a11740992c50867a3",
+            "sha256": "7082d3c265a7dcb6356bb949c86123d19bbf26ce33cac1f2868702bd6abab312"
+        },
+        {
+            "path": "src/Zipelo.Core/ArchiveContracts.cs",
+            "blob": "824df6a63f24abf3abfa1517534978e78d20df87",
+            "sha256": "8dcfa7ac7287b326abf2b755352fbc4e2f494326a6557688a87a6dc6874987a5"
+        },
+        {
+            "path": "src/Zipelo.Core/JobBudget.cs",
+            "blob": "339bd7d050d5328f0288922543691ca65eaf7f68",
+            "sha256": "878caa4469642b2e03f375872ce29eadea3d6fa0d4b6f34b6bf5e0fb8dfa008f"
+        },
+        {
+            "path": "src/Zipelo.Runtime/WorkerProtocol.cs",
+            "blob": "3d6bd65c01002cef64b9be8ee7c13b5004dd0c96",
+            "sha256": "582232bdddad14388858eb669fbcd6c4948f2c514273997bdab7af7b0f696a2f"
+        },
+        {
+            "path": "src/Zipelo.Runtime/Streaming/WorkerStreamContract.cs",
+            "blob": "5b15d7dc3feb7be303473f088f8d1d0604d665a3",
+            "sha256": "0e8e8c21478224d6ed861e50a5ec310dce8b6af522ce3d66e4f899a926cf7a94"
+        },
+        {
+            "path": "experiments/rust-app-core-memory/src/lib.rs",
+            "blob": "3bea6de7efe5657614a4747f2b071abe35de21d9",
+            "sha256": "2540ab5f801d78f27e4d2a0a751f15378863ba5b14a4d564b3be4dc996cb7571"
+        },
+        {
+            "path": "experiments/rust-file-snapshot/src/lib.rs",
+            "blob": "b119facbf8cef61cb1877b7cef9f921f4d63d311",
+            "sha256": "e087714fc3e30b8efdd1cf16e1d8944ebc3518c757b8917d6e32d3b3dc3936c9"
+        }
+    ],
+    "reference_only": true,
+    "existing_files_modified": false
+}

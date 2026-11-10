@@ -1,0 +1,53 @@
+{
+    "schema": "zipelo.worker-session-model.run-plan.v1",
+    "status": "pending fixed head review; no Rust build/run yet",
+    "target": "worker_session_model",
+    "manifest": "experiments/rust-worker-session-model/Cargo.toml",
+    "target_dir": "tests/rust-worker-session-model/validation-HEAD/target",
+    "counts": {
+        "expected": 30,
+        "must_discover": 30,
+        "run_each_exactly_once": 30,
+        "passed_per_case": 1,
+        "filtered_per_case": 29,
+        "ignored_allowed": 0
+    },
+    "compile": [
+        "cargo",
+        "+1.99.1",
+        "test",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "experiments/rust-worker-session-model/Cargo.toml",
+        "--test",
+        "worker_session_model",
+        "--no-run",
+        "--message-format=json",
+        "--target-dir",
+        "tests/rust-worker-session-model/validation-HEAD/target"
+    ],
+    "compile_timeout_seconds": 120,
+    "discovery": [
+        "BINARY",
+        "--list",
+        "--format",
+        "terse"
+    ],
+    "case": [
+        "BINARY",
+        "NAME",
+        "--exact",
+        "--test-threads=1",
+        "--nocapture"
+    ],
+    "case_timeout_seconds": 30,
+    "log_limit_bytes_per_command": 8388608,
+    "jobs": 1,
+    "serial": true,
+    "first_failure_stop": true,
+    "inputs": "Pin every candidate remote blob/mode and SHA256SUMS; preserve base305 unchanged; inspect metadata to confirm no dependencies/build scripts; new target only",
+    "preflight": "rustfmt --check; Python static checker; locked/offline metadata; exact declared name set; synthetic only; no target before build",
+    "validation": "Capture raw compile/discovery/case stdout/stderr/exit, EOF and process-group cleanup; compare before/after input and binary hashes; reject missing/duplicate/ignored names and unexpected summary. Do not call any OS adapter, worker, held probe or user-file path. Verify empty owned run directories and no remaining owned processes.",
+    "success_scope": "Synthetic consistency only. Even 30 passing cases never prove live_verified or publication_allowed; both remain false. No prior model or archive tests counted."
+}

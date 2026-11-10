@@ -1,0 +1,5 @@
+029b2f86e3542be093e5234f1cd7c1eb68663aac6fc703f31918b0d266bb8e48  tests/rust-worker-session-model/main.rs
+eae4f21bd32698fa17775f8a636e01871b0da10bfb5a815f93972c6ac8f94483  tests/rust-worker-session-model/contract.json
+7d1989a1c0922c9ed593326056bc7a4fa190a408f688d4d87a06510d89aecc97  tests/rust-worker-session-model/run-plan.json
+878921ef4ce278c7a2477f49a2bffb56771e9ea36cc309da0ebdfa6f088688e3  tests/rust-worker-session-model/static_check.py
+d82fafcb162ecec04f05a1b8c6727f7daa6229fe9c5a62444db381321a1d8c20  experiments/rust-worker-session-model/SHA256SUMS

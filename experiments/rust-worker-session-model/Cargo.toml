@@ -1,0 +1,16 @@
+[package]
+name = "zipelo-rust-worker-session-model"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+license = "MIT"
+publish = false
+autotests = false
+autobenches = false
+autoexamples = false
+
+[workspace]
+
+[[test]]
+name = "worker_session_model"
+path = "../../tests/rust-worker-session-model/main.rs"
