@@ -1,0 +1,25 @@
+{
+    "direct": [
+        {
+            "name": "libc",
+            "version": "0.2.191",
+            "license": "MIT OR Apache-2.0",
+            "target": "cfg(target_os = linux)",
+            "features": [
+                "std"
+            ],
+            "default_features": false,
+            "checksum": "65cd87c9a6d60536580b316ad985726104730a5151c99845f2490428ef91240a",
+            "cached_regular_files_verified": 452,
+            "license_files": [
+                "LICENSE-APACHE",
+                "LICENSE-MIT"
+            ]
+        }
+    ],
+    "transitive": [],
+    "new_external_crate_versions": false,
+    "reuse": "Existing rust-file-snapshot and rust-live-supervisor libc version; no snapshot dependency",
+    "network_restore": false,
+    "advisory_audit": "not performed; no vulnerability-free claim"
+}
