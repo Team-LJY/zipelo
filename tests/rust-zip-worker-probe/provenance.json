@@ -428,6 +428,44 @@
                 "unverified": 8
             },
             "appliesToNewHead": false
+        },
+        "corpusBoundaryFix": {
+            "parentHead": "22e8f98a3bc3c2d986e1513ca750587f59999012",
+            "selectionLogicUnchanged": true,
+            "hostDependencyRemovedFromShared": true,
+            "projectInputsUnchanged": true,
+            "addedRegressions": 0,
+            "built": false,
+            "executed": false
+        },
+        "parentCentralCorpusBoundaryValidation": {
+            "head": "22e8f98a3bc3c2d986e1513ca750587f59999012",
+            "source": "central report",
+            "worker": {
+                "warnings": 0,
+                "errors": 0
+            },
+            "host": {
+                "warnings": 0,
+                "errors": 0
+            },
+            "corpus": {
+                "built": false,
+                "error": "shared/Evidence.cs(47,24): CS0103 NativeExitPeer definition missing"
+            },
+            "nativeHelper": {
+                "compiler": "existing cc 15.2",
+                "flags": [
+                    "-std=c11",
+                    "-O2",
+                    "-Wall",
+                    "-Wextra",
+                    "-Werror"
+                ],
+                "built": true,
+                "eofLivenessExecuted": false
+            },
+            "appliesToNewHead": false
         }
     },
     "limits": [

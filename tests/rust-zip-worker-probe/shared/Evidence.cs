@@ -33,6 +33,13 @@ internal static class Evidence
         left.ExecutableSha256 == right.ExecutableSha256 && left.Worker == right.Worker &&
         left.WorkerSha256 == right.WorkerSha256 && left.Arguments.SequenceEqual(right.Arguments);
 
+    internal static bool NativeExitCase(CasePlan plan) => plan.Case.Id == "peer.deadline-no-exit" &&
+        plan.Case.Operation == "peer" && plan.Case.Mode == "deadline-no-exit" &&
+        plan.Case.Fixture == "stored-chunk";
+
+    internal static bool NativeExitSelected(CasePlan plan) => OperatingSystem.IsLinux() &&
+        NativeExitCase(plan) && plan.Implementation == "host-peer-native" && plan.Invocation.Kind == "native";
+
     internal static void Validate(CasePlan plan)
     {
         Check.That(Same(Planned(plan), plan.Invocation), "실행 계획과 호출 방식 불일치");
@@ -44,7 +51,7 @@ internal static class Evidence
         }
         else if (plan.Implementation == "host-peer-native")
         {
-            Check.That(NativeExitPeer.Selected(plan), "Linux no-exit native 호출만 허용함");
+            Check.That(NativeExitSelected(plan), "Linux no-exit native 호출만 허용함");
         }
         else { Check.That(plan.Implementation == "rust" && plan.Invocation.Kind == "native", "후보 호출 방식 오류"); }
         VerifyFiles(plan.Invocation);

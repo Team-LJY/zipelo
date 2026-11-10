@@ -10,12 +10,9 @@ internal static class NativeExitPeer
     internal static readonly JobLimits Limits = new(1024, 128L * 1024 * 1024,
         16L * 1024 * 1024, TimeSpan.FromSeconds(2), 1);
 
-    internal static bool Case(CasePlan plan) => plan.Case.Id == "peer.deadline-no-exit" &&
-        plan.Case.Operation == "peer" && plan.Case.Mode == "deadline-no-exit" &&
-        plan.Case.Fixture == "stored-chunk";
+    internal static bool Case(CasePlan plan) => Evidence.NativeExitCase(plan);
 
-    internal static bool Selected(CasePlan plan) => OperatingSystem.IsLinux() &&
-        Case(plan) && plan.Implementation == "host-peer-native" && plan.Invocation.Kind == "native";
+    internal static bool Selected(CasePlan plan) => Evidence.NativeExitSelected(plan);
 
     // 기존 합성 payload의 여섯 프레임만 작성함.
     internal static byte[] Wire(Guid job, long inputLength)

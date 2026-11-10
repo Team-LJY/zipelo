@@ -117,7 +117,10 @@
         "lifetimeFixParent": "6647e447efd9b27a90a85d6bef0d6feaaafd4da9",
         "centralLifetimeFailure": "중앙 보고: 6647e447 Windows offline 빌드 경고 0/오류 0. Linux 직접 회귀는 cleanup.source-io에서 수명 scope 누락 InvalidOperationException으로 중단됨. bounded 재현 exit -6 및 소유 프로세스 종료 확인. 등록 55개를 통과로 집계하지 않으며 전체 비교 미시작임.",
         "nativeNoExitParent": "d78574da8cdb5b764ee1395995e4b877097d0070",
-        "centralNativeParentEvidence": "중앙 보고: d78574da 직접 회귀 55/55 통과. Rust cb05c264와 ext4 비교 137관측은 112 통과/17 실패/8 미검증이며 보존/정리/프로세스 종료 확인. 기존 한계 7개 외 no-exit는 stdout 쓰기 참조 잔류로 EOF/exit 대기에 도달하지 못함. 새 head 검증 결과로 이전하지 않음."
+        "centralNativeParentEvidence": "중앙 보고: d78574da 직접 회귀 55/55 통과. Rust cb05c264와 ext4 비교 137관측은 112 통과/17 실패/8 미검증이며 보존/정리/프로세스 종료 확인. 기존 한계 7개 외 no-exit는 stdout 쓰기 참조 잔류로 EOF/exit 대기에 도달하지 못함. 새 head 검증 결과로 이전하지 않음.",
+        "corpusBoundaryFixParent": "22e8f98a3bc3c2d986e1513ca750587f59999012",
+        "corpusBoundaryFix": "Pure CasePlan/OS/invocation selection predicates now live in shared Evidence. Host NativeExitPeer delegates to these same predicates; shared code no longer references the host-only type. Corpus Compile/ProjectReference inputs, wire/proof/deadline behavior and all 68 regression expectations remain unchanged.",
+        "centralCorpusBoundaryEvidence": "중앙 보고: 22e8f98a worker와 host 빌드 경고 0/오류 0, corpus는 shared/Evidence.cs(47,24) CS0103 NativeExitPeer 정의 없음으로 실패함. Linux native helper는 기존 cc 15.2의 -std=c11 -O2 -Wall -Wextra -Werror 빌드 통과. 실제 EOF/생존 실행 전이며 새 head 결과가 아님."
     },
     "peerEvidence": {
         "planJson": "PascalCase Job/Mode; shared camelCase result writer unchanged; actual frozen reader used by regression",
