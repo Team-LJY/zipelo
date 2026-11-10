@@ -10,7 +10,7 @@ fn alter(
     stage: Stage,
     offset: u64,
     action: impl FnOnce(&std::path::Path),
-) -> snapshot::Failure<()> {
+) -> (Sandbox, snapshot::Failure<()>) {
     let sandbox = Sandbox::new();
     let path = sandbox.file("input", &pattern(32));
     let mut action = Some(action);
@@ -30,8 +30,7 @@ fn alter(
     )
     .unwrap_err();
     assert!(action.is_none());
-    sandbox.finish();
-    result
+    (sandbox, result)
 }
 
 fn append(path: &std::path::Path) {
@@ -54,30 +53,38 @@ fn truncate(path: &std::path::Path) {
 
 #[test]
 fn append_after_pinning_detected_before_data_read() {
-    let usage = changed(alter(Stage::Pinned, 0, append), Changed::Length);
+    let (sandbox, failure) = alter(Stage::Pinned, 0, append);
+    let usage = changed(failure, Changed::Length);
     assert_eq!(usage.read_calls, 0);
+    sandbox.finish();
 }
 
 #[test]
 fn truncate_after_pinning_detected_before_data_read() {
-    let usage = changed(alter(Stage::Pinned, 0, truncate), Changed::Length);
+    let (sandbox, failure) = alter(Stage::Pinned, 0, truncate);
+    let usage = changed(failure, Changed::Length);
     assert_eq!(usage.read_calls, 0);
+    sandbox.finish();
 }
 
 #[test]
 fn append_after_copy_detected_by_first_eof_probe() {
-    let usage = changed(alter(Stage::Copying, 32, append), Changed::Length);
+    let (sandbox, failure) = alter(Stage::Copying, 32, append);
+    let usage = changed(failure, Changed::Length);
     assert_eq!(usage.read_calls, 2);
     assert_eq!(usage.actual_read_bytes, 33);
     assert_eq!(usage.compared_bytes, 0);
+    sandbox.finish();
 }
 
 #[test]
 fn truncate_before_copy_returns_early_eof() {
-    let usage = changed(alter(Stage::Copying, 0, truncate), Changed::Length);
+    let (sandbox, failure) = alter(Stage::Copying, 0, truncate);
+    let usage = changed(failure, Changed::Length);
     assert_eq!(usage.read_calls, 1);
     assert_eq!(usage.actual_read_bytes, 0);
     assert_eq!(usage.reserved_read_bytes, 32);
+    sandbox.finish();
 }
 
 #[test]
@@ -119,37 +126,42 @@ fn positive_short_read_is_accumulated_before_later_eof() {
 
 #[test]
 fn same_size_overwrite_before_comparison_returns_content_change() {
-    let usage = changed(
-        alter(Stage::Comparing, 0, |path| {
-            fs::write(path, vec![99; 32]).unwrap()
-        }),
-        Changed::Contents,
-    );
+    let (sandbox, failure) = alter(Stage::Comparing, 0, |path| {
+        fs::write(path, vec![99; 32]).unwrap()
+    });
+    let usage = changed(failure, Changed::Contents);
     assert_eq!(usage.actual_read_bytes, 64);
     assert_eq!(usage.compared_bytes, 32);
+    sandbox.finish();
 }
 
 #[test]
 fn truncate_before_comparison_returns_early_eof() {
-    let usage = changed(alter(Stage::Comparing, 0, truncate), Changed::Length);
+    let (sandbox, failure) = alter(Stage::Comparing, 0, truncate);
+    let usage = changed(failure, Changed::Length);
     assert_eq!(usage.actual_read_bytes, 32);
     assert_eq!(usage.compared_bytes, 0);
     assert_eq!(usage.read_calls, 3);
+    sandbox.finish();
 }
 
 #[test]
 fn append_after_comparison_detected_by_second_eof_probe() {
-    let usage = changed(alter(Stage::Comparing, 32, append), Changed::Length);
+    let (sandbox, failure) = alter(Stage::Comparing, 32, append);
+    let usage = changed(failure, Changed::Length);
     assert_eq!(usage.actual_read_bytes, 65);
     assert_eq!(usage.compared_bytes, 32);
     assert_eq!(usage.read_calls, 4);
+    sandbox.finish();
 }
 
 #[test]
 fn finalizing_append_detected_by_final_metadata() {
-    let usage = changed(alter(Stage::Finalizing, 32, append), Changed::Length);
+    let (sandbox, failure) = alter(Stage::Finalizing, 32, append);
+    let usage = changed(failure, Changed::Length);
     assert_eq!(usage.actual_read_bytes, 64);
     assert_eq!(usage.metadata_calls, 5);
+    sandbox.finish();
 }
 
 #[test]
