@@ -130,6 +130,16 @@ def config(path):
     for item in Path(csharp["path"]).parent.iterdir():
         if item.is_file() and (item.suffix in (".dll", ".so", ".dylib", ".exe", ".json") or item.suffix == ""):
             require(str(no_links(item)) in by_path, "C# 산출물 명세 누락: " + item.name)
+    helper = value.get("nativeNoExit")
+    if helper is not None:
+        require(sys.platform == "linux" and helper["invocationKind"] == "native" and
+                Path(helper["path"]).suffix.lower() != ".dll", "Linux native no-exit helper만 허용함")
+        checked_file(helper)
+        require(helper["sourceCommit"] == value["host"]["sourceCommit"], "helper와 host source commit 불일치")
+        require(by_path.get(str(no_links(helper["path"]))) == helper["sha256"], "helper 산출물 해시 누락")
+        for other in [value["dotnet"], value["host"], value["corpus"], *value["implementations"]]:
+            require(not os.path.samefile(helper["path"], other["path"]) and
+                    helper["sha256"] != other["sha256"], "별도 no-exit helper 실행파일 필요")
     build = value["rustBuild"]
     require(build["toolchain"] and build["target"] and isinstance(build["features"], list), "Rust 구성 필요")
     for key in ("manifestSha256", "lockSha256"):
@@ -305,6 +315,8 @@ def run(args, settings):
             if case["operation"] == "peer":
                 item = {**item, "name": "host-peer", "path": settings["host"]["path"],
                         "sha256": settings["host"]["sha256"], "sourceCommit": settings["host"]["sourceCommit"]}
+                if case["id"] == "peer.deadline-no-exit" and sys.platform == "linux" and settings.get("nativeNoExit"):
+                    item = {**settings["nativeNoExit"], "name": "host-peer-native"}
             if case["operation"] == "blocked":
                 item["name"] = "contract"
             jobs.append((case, item))

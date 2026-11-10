@@ -30,7 +30,8 @@ internal static class Cases
         var mode = plan.Case.Mode;
         var special = new List<(string Path, string Hash)>();
         var allowed = new HashSet<string>(StringComparer.Ordinal) { "keep.txt" };
-        var injected = plan.Case.Injection != "unavailable";
+        var injected = plan.Case.Injection != "unavailable" &&
+            (!NativeExitPeer.Case(plan) || NativeExitPeer.Selected(plan));
         using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(CaseLifetime.Token);
         Stream source = mode == "snapshot-cancel"
             ? new CancelReadStream(bytes, cancellation)
@@ -42,7 +43,9 @@ internal static class Cases
                 if (!injected)
                 {
                     report.Verdict = "blocked";
-                    report.Detail = mode;
+                    report.Detail = NativeExitPeer.Case(plan)
+                        ? OperatingSystem.IsWindows() ? "native_no_exit_windows_unverified" : "native_no_exit_not_configured"
+                        : mode;
                     return;
                 }
                 if (mode is "destination-file" or "destination-directory")
@@ -136,7 +139,7 @@ internal static class Cases
                 var worker = plan.Worker;
                 var workerHost = plan.Dotnet;
                 var peer = plan.Case.Operation == "peer";
-                if (peer)
+                if (peer && !NativeExitPeer.Selected(plan))
                 {
                     worker = typeof(Cases).Assembly.Location;
                     var peerMode = mode.StartsWith("cancel-", StringComparison.Ordinal) ? mode[7..] :
@@ -147,6 +150,10 @@ internal static class Cases
                 if (mode.StartsWith("deadline-", StringComparison.Ordinal))
                 {
                     limits = limits with { MaxDuration = TimeSpan.FromSeconds(2) };
+                }
+                if (NativeExitPeer.Selected(plan))
+                {
+                    NativeExitPeer.Prepare(plan, Guid.Parse(report.JobId), bytes.LongLength, limits);
                 }
                 var client = new ObservedWorkerClient(new StreamingZipWorkerClient(worker, workerHost));
                 var pending = client.ExtractToNewFolderAsync(Guid.Parse(report.JobId), source, destination, limits,

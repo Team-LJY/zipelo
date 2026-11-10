@@ -11,6 +11,7 @@
         <ProjectReference Include="../frozen/src/Zipelo.Runtime/Zipelo.Runtime.csproj" />
         <Compile Include="Program.cs" />
         <Compile Include="Cases.cs" />
+        <Compile Include="NativeExitPeer.cs" />
         <Compile Include="ListRelay.cs" />
         <Compile Include="Regression.cs" />
         <Compile Include="../shared/Evidence.cs" />

@@ -42,6 +42,10 @@ internal static class Evidence
                 Path.GetFileNameWithoutExtension(plan.Dotnet).Equals("dotnet", StringComparison.OrdinalIgnoreCase),
                 "C#은 고정 dotnet과 managed DLL로 실행해야 함");
         }
+        else if (plan.Implementation == "host-peer-native")
+        {
+            Check.That(NativeExitPeer.Selected(plan), "Linux no-exit native 호출만 허용함");
+        }
         else { Check.That(plan.Implementation == "rust" && plan.Invocation.Kind == "native", "후보 호출 방식 오류"); }
         VerifyFiles(plan.Invocation);
     }

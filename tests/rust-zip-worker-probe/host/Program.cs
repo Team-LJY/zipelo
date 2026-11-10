@@ -84,6 +84,7 @@ else
                 int? peerPid = File.Exists(peerPath) && new FileInfo(peerPath).Length <= 16 &&
                     int.TryParse(File.ReadAllText(peerPath), out var parsedPid) ? parsedPid : null;
                 Evidence.ConfirmPeer(observation, plan.Case.Mode, rows, pid, peerPid, Evidence.Ready(root));
+                NativeExitPeer.Confirm(plan, observation, pid);
             }
             observation.CoverageLayer = plan.Case.Operation == "peer" ? "host_fault_peer" :
                 observation.WorkerStarted == true ? "host_and_worker" : "host_preflight";

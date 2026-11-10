@@ -376,7 +376,7 @@
             "fullComparisonExecuted": false,
             "appliesToNewHead": false
         },
-        "directRegressionsWritten": 55,
+        "directRegressionsWritten": 68,
         "diagnosticStartFix": {
             "parentHead": "b995ef1373fb4171767464a8bfbb91427b55a65b",
             "addedRegressions": 17,
@@ -405,6 +405,28 @@
                 "allPassed": false
             },
             "fullComparisonExecuted": false,
+            "appliesToNewHead": false
+        },
+        "nativeNoExit": {
+            "parentHead": "d78574da8cdb5b764ee1395995e4b877097d0070",
+            "addedRegressions": 13,
+            "linuxOnly": true,
+            "compiled": false,
+            "executed": false,
+            "windows": "unverified"
+        },
+        "parentCentralNoExitValidation": {
+            "head": "d78574da8cdb5b764ee1395995e4b877097d0070",
+            "rustHead": "cb05c26486e31346d5534bfe7248d85951caea66",
+            "source": "central report",
+            "directPassed": 55,
+            "directRegistered": 55,
+            "functional": {
+                "observed": 137,
+                "passed": 112,
+                "failed": 17,
+                "unverified": 8
+            },
             "appliesToNewHead": false
         }
     },
@@ -469,9 +491,11 @@
         "frozen/tests/extraction/fixtures.json",
         "host/Cases.cs",
         "host/ListRelay.cs",
+        "host/NativeExitPeer.cs",
         "host/Program.cs",
         "host/Regression.cs",
         "host/Zipelo.RustComparison.csproj",
+        "native/no_exit.c",
         "process_scope.py",
         "provenance.json",
         "regression_runner.py",

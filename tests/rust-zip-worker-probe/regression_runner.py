@@ -24,7 +24,7 @@ def run_child(args):
     require(observed["exitCode"] == 0 and not observed["forcedTermination"] and
             observed["ownedProcessesExited"], "직접 회귀 또는 종료 확인 실패")
     result = read_json(area / "regression.json")
-    require(len(result["cases"]) == 46 and len(set(result["cases"])) == 46, "C# 직접 회귀 수 불일치")
+    require(len(result["cases"]) == 59 and len(set(result["cases"])) == 59, "C# 직접 회귀 수 불일치")
     passed = list(result["cases"])
 
     def record(name, operation):
@@ -82,7 +82,7 @@ def run_child(args):
         lambda candidate: candidate["implementations"][0].update(invocationKind="native")))
     record("candidate.rust-kind-rejected", lambda: changed(
         lambda candidate: candidate["implementations"][1].update(invocationKind="dotnet-managed")))
-    require(len(passed) == 55 and len(set(passed)) == 55, "전체 직접 회귀 수 불일치")
+    require(len(passed) == 68 and len(set(passed)) == 68, "전체 직접 회귀 수 불일치")
     write_json(area / "direct-summary.json", {"cases": passed, "count": len(passed), "hostSupervisor": observed})
 
 
@@ -109,7 +109,7 @@ def main():
     checked_file({"path": args.dotnet, "sha256": args.dotnet_sha256})
     checked_file({"path": args.host, "sha256": args.host_sha256})
     check_sources()
-    print(json.dumps({"directCases": 55, "result": str(area / "direct-summary.json")}))
+    print(json.dumps({"directCases": 68, "result": str(area / "direct-summary.json")}))
     return 0
 
 

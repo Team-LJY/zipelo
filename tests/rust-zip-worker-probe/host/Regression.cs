@@ -258,6 +258,76 @@ internal static class Regression
             Evidence.Parse([Line(diagnosticStart), Line(eof[0] with { HostPid = 102 })], job, 101)));
         Record("diagnostic.work-before-start", Rejects(() =>
             Evidence.Parse([Line(diagnosticStart with { Ticks = 10 }), Line(eof[0])], job, 101)));
+        async Task<bool> NativeWire()
+        {
+            var wireJob = Guid.NewGuid();
+            var bytes = NativeExitPeer.Wire(wireJob, 70000);
+            Check.That(bytes.Length == 66002 && bytes.AsSpan(0, 4).SequenceEqual("ZXE2"u8) &&
+                BinaryPrimitives.ReadInt32LittleEndian(bytes.AsSpan(4)) == 2 &&
+                new Guid(bytes.AsSpan(8, 16)) == wireJob &&
+                BinaryPrimitives.ReadInt64LittleEndian(bytes.AsSpan(24)) == 70000 &&
+                BinaryPrimitives.ReadInt64LittleEndian(bytes.AsSpan(32)) == 128L * 1024 * 1024 &&
+                BinaryPrimitives.ReadInt64LittleEndian(bytes.AsSpan(40)) == 16L * 1024 * 1024 &&
+                BinaryPrimitives.ReadInt64LittleEndian(bytes.AsSpan(48)) == 1024 &&
+                BinaryPrimitives.ReadInt64LittleEndian(bytes.AsSpan(56)) == TimeSpan.FromSeconds(2).Ticks,
+                "native config 계약 불일치");
+            using var stream = new MemoryStream(bytes, false);
+            stream.Position = 64;
+            using var channel = new WorkerStreamChannel(stream, WorkerStreamDirection.Read, wireJob);
+            var frames = new List<WorkerStreamFrame>();
+            while (await channel.ReadAsync() is { } frame) { frames.Add(frame); }
+            ushort[] kinds = [1, 2, 3, 3, 4, 5];
+            int[] lengths = [0, 8, 65536, 1, 8, 1];
+            var item = new Guid("00000001-0000-0000-0000-000000000000");
+            return frames.Count == 6 && frames.Select((frame, index) =>
+                (ushort)frame.Header.Kind == kinds[index] && frame.Header.Sequence == (ulong)index &&
+                frame.Header.JobId == wireJob && frame.Header.ItemId == (index is 0 or 5 ? Guid.Empty : item) &&
+                frame.Header.PayloadLength == lengths[index]).All(value => value) &&
+                BinaryPrimitives.ReadInt64LittleEndian(frames[1].Payload.Span) == 65537 &&
+                BinaryPrimitives.ReadInt64LittleEndian(frames[4].Payload.Span) == 65537 &&
+                frames[2].Payload.ToArray().Concat(frames[3].Payload.ToArray()).SequenceEqual(ZipFixture.Payload()) &&
+                frames[5].Payload.Span.SequenceEqual(new byte[] { 1 }) &&
+                channel.Phase == WorkerStreamPhase.InputCompleted &&
+                channel.TerminalStatus == WorkerStreamTerminalStatus.Completed &&
+                channel.FramesAccepted == 6 && channel.TotalDataBytes == 65537 &&
+                channel.TotalWireBytes == NativeExitPeer.WireBytes;
+        }
+        Record("native.wire-frozen-reader", await NativeWire());
+        var nativeProof = new byte[NativeExitPeer.ProofBytes];
+        "NXP1"u8.CopyTo(nativeProof);
+        BinaryPrimitives.WriteUInt32LittleEndian(nativeProof.AsSpan(4), 1);
+        job.TryWriteBytes(nativeProof.AsSpan(8, 16));
+        BinaryPrimitives.WriteUInt32LittleEndian(nativeProof.AsSpan(24), 202);
+        BinaryPrimitives.WriteUInt32LittleEndian(nativeProof.AsSpan(28), 101);
+        BinaryPrimitives.WriteUInt64LittleEndian(nativeProof.AsSpan(32), 8);
+        BinaryPrimitives.WriteUInt64LittleEndian(nativeProof.AsSpan(40), 1234);
+        BinaryPrimitives.WriteUInt32LittleEndian(nativeProof.AsSpan(48), 1);
+        BinaryPrimitives.WriteUInt32LittleEndian(nativeProof.AsSpan(56), NativeExitPeer.WireBytes);
+        BinaryPrimitives.WriteUInt32LittleEndian(nativeProof.AsSpan(60), 1);
+        BinaryPrimitives.WriteUInt64LittleEndian(nativeProof.AsSpan(64), 100_000_000);
+        BinaryPrimitives.WriteUInt64LittleEndian(nativeProof.AsSpan(72), 150_000_000);
+        bool NativeProof(byte[] bytes) => NativeExitPeer.ProofMatches(bytes, job, 202, 101);
+        bool RejectProof(int offset, byte value)
+        {
+            var changed = nativeProof.ToArray();
+            changed[offset] = value;
+            return !NativeProof(changed);
+        }
+        Record("native.proof-valid", NativeProof(nativeProof));
+        Record("native.proof-length", !NativeProof(nativeProof[..95]));
+        Record("native.proof-job", !NativeExitPeer.ProofMatches(nativeProof, Guid.NewGuid(), 202, 101));
+        Record("native.proof-pid", !NativeExitPeer.ProofMatches(nativeProof, job, 203, 101));
+        Record("native.proof-parent", !NativeExitPeer.ProofMatches(nativeProof, job, 202, 102));
+        Record("native.proof-extra-writer", RejectProof(48, 2));
+        Record("native.proof-writer-remains", RejectProof(52, 1));
+        Record("native.proof-short-wire", RejectProof(56, 0));
+        var noLiveness = nativeProof.ToArray();
+        BinaryPrimitives.WriteUInt64LittleEndian(noLiveness.AsSpan(72), 100_000_000);
+        Record("native.proof-no-liveness", !NativeProof(noLiveness));
+        Record("native.proof-version", RejectProof(4, 2));
+        Record("native.proof-phase", RejectProof(60, 0));
+        Record("native.proof-reserved", RejectProof(95, 1));
+
         Data.WriteNew(Path.Combine(root, "regression.json"), new { cases = results, cleanup });
         return 0;
     }

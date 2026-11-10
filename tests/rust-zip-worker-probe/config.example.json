@@ -44,5 +44,6 @@
         ],
         "manifestSha256": "REPLACE",
         "lockSha256": "REPLACE"
-    }
+    },
+    "nativeNoExit": null
 }

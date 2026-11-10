@@ -66,6 +66,8 @@
         "dotnet build tests/rust-zip-worker-probe/frozen/src/Zipelo.Worker/Zipelo.Worker.csproj --configfile tests/rust-zip-worker-probe/NuGet.Config",
         "dotnet build tests/rust-zip-worker-probe/host/Zipelo.RustComparison.csproj --configfile tests/rust-zip-worker-probe/NuGet.Config",
         "dotnet build tests/rust-zip-worker-probe/corpus/Zipelo.ComparisonCorpus.csproj --configfile tests/rust-zip-worker-probe/NuGet.Config",
+        "Linux 중앙에서 기존 cc만 사용함: cc -std=c11 -O2 -Wall -Wextra -Werror -pedantic tests/rust-zip-worker-probe/native/no_exit.c -o <existing-owned-tests-build-directory>/zipelo-no-exit",
+        "중앙 native build 뒤 compiler 경로/버전/옵션과 source 및 binary SHA256을 기록하고 nativeNoExit와 artifacts에 실제 경로/해시/sourceCommit을 넣음. Windows nativeNoExit는 null임. author는 compiler나 helper를 실행하지 않음.",
         "python3 -B tests/rust-zip-worker-probe/regression_runner.py --dotnet <absolute-dotnet> --dotnet-sha256 <hash> --host <absolute-Zipelo.RustComparison.dll> --host-sha256 <hash> --work-parent <absolute-tests/rust-zip-worker-probe>",
         "중앙에서 config.example.json을 시험 소유 경로에 복사하고 실제 절대경로/바이너리/전체 산출물 해시 및 Rust lock 정보를 채움.",
         "python3 -B tests/rust-zip-worker-probe/runner.py prepare --config <actual-config> --work-parent <absolute-tests/rust-zip-worker-probe>",
@@ -113,7 +115,9 @@
         "diagnosticStartFixParent": "b995ef1373fb4171767464a8bfbb91427b55a65b",
         "diagnosticStartFix": "known first diagnostic.start is validated separately; frozen producer lifecycle and synthetic negative regression sources added; execution remains central-only",
         "lifetimeFixParent": "6647e447efd9b27a90a85d6bef0d6feaaafd4da9",
-        "centralLifetimeFailure": "중앙 보고: 6647e447 Windows offline 빌드 경고 0/오류 0. Linux 직접 회귀는 cleanup.source-io에서 수명 scope 누락 InvalidOperationException으로 중단됨. bounded 재현 exit -6 및 소유 프로세스 종료 확인. 등록 55개를 통과로 집계하지 않으며 전체 비교 미시작임."
+        "centralLifetimeFailure": "중앙 보고: 6647e447 Windows offline 빌드 경고 0/오류 0. Linux 직접 회귀는 cleanup.source-io에서 수명 scope 누락 InvalidOperationException으로 중단됨. bounded 재현 exit -6 및 소유 프로세스 종료 확인. 등록 55개를 통과로 집계하지 않으며 전체 비교 미시작임.",
+        "nativeNoExitParent": "d78574da8cdb5b764ee1395995e4b877097d0070",
+        "centralNativeParentEvidence": "중앙 보고: d78574da 직접 회귀 55/55 통과. Rust cb05c264와 ext4 비교 137관측은 112 통과/17 실패/8 미검증이며 보존/정리/프로세스 종료 확인. 기존 한계 7개 외 no-exit는 stdout 쓰기 참조 잔류로 EOF/exit 대기에 도달하지 못함. 새 head 검증 결과로 이전하지 않음."
     },
     "peerEvidence": {
         "planJson": "PascalCase Job/Mode; shared camelCase result writer unchanged; actual frozen reader used by regression",
@@ -150,8 +154,8 @@
         "preflight": "no process.started remains host_preflight with identityConfirmed=false; not worker execution evidence"
     },
     "directRegressions": {
-        "total": 55,
-        "csharp": 46,
+        "total": 68,
+        "csharp": 59,
         "python": 9,
         "registeredSeparately": true,
         "executed": false,
@@ -210,7 +214,20 @@
             "candidate.same-bytes-rejected",
             "candidate.native-dll-rejected",
             "candidate.managed-kind-rejected",
-            "candidate.rust-kind-rejected"
+            "candidate.rust-kind-rejected",
+            "native.wire-frozen-reader",
+            "native.proof-valid",
+            "native.proof-length",
+            "native.proof-job",
+            "native.proof-pid",
+            "native.proof-parent",
+            "native.proof-extra-writer",
+            "native.proof-writer-remains",
+            "native.proof-short-wire",
+            "native.proof-no-liveness",
+            "native.proof-version",
+            "native.proof-phase",
+            "native.proof-reserved"
         ],
         "actualFrozenReader": "two bounded child processes invoke unchanged FakeWorker.Run; Pascal Job/Mode produces unsupported exit 2 plus matching PID, camelCase produces 71 before PID",
         "cleanup": "Each of the four Cases.Run preservation probes creates a fresh frozen CaseLifetime before Task.Run, verifies an uncancelled token, waits at most 45 seconds, and always drains the same body with StopAsync (25-second bound). Unconfirmed drain aborts the regression suite. Only the exact injected IOException is expected; completed body and preservation/cleanup/stop observations remain separately required. The real stop observations feed the unchanged runner.run_schedule checks; the late-exception regression also remains.",
@@ -230,6 +247,37 @@
             "externalSupervisionUnchanged": true,
             "workerLimit": "These blocked preservation probes do not launch a worker; lifetime draining is not worker execution evidence.",
             "executedByAuthor": false
+        },
+        "nativeNoExit": {
+            "added": 13,
+            "actualFrozenFrameReader": 1,
+            "syntheticProofChecks": 12,
+            "executedByAuthor": false,
+            "scope": "Fixed wire is consumed by unchanged WorkerStreamChannel in memory. Proof rejection tests do not execute native code or prove OS pipe behavior; central functional case required."
         }
+    },
+    "nativeNoExit": {
+        "scope": "Linux only, peer.deadline-no-exit only; host fault injection, not decoder evidence. Windows explicitly unverified.",
+        "source": "native/no_exit.c",
+        "dependencies": "Existing C compiler and libc only; no new package, codec or JSON parser.",
+        "configuration": {
+            "key": "nativeNoExit",
+            "absent": "blocked, never fallback to frozen no-exit",
+            "windows": "must be null; no-exit remains blocked",
+            "linuxExample": {
+                "path": "ABSOLUTE_OWNED_TEST_BUILD_DIRECTORY/zipelo-no-exit",
+                "sha256": "ACTUAL_BINARY_SHA256",
+                "sourceCommit": "SAME_FIXED_HEAD_AS_HOST",
+                "invocationKind": "native"
+            },
+            "artifacts": "helper path/hash also required in artifacts; distinct from dotnet, host, corpus and both worker candidates"
+        },
+        "invocation": "Frozen host directly starts pinned native path with exactly --extract-stream-v2. Existing JobId/host PID/worker PID/peer.pid/identity trace and binary hashes before/after remain required.",
+        "wire": "native-wire.bin is exactly 66002 bytes: expected 64-byte frozen configuration followed by six fixed frames (65938 bytes). Existing ZipFixture.Payload supplies 65537 bytes for stored-chunk payload.bin; sample expectations unchanged. Helper compares all 64 stdin config bytes before copying exact bounded wire and requires file EOF. Host rechecks exact wire afterwards.",
+        "ownership": "Single native process, no fork/child/dup. Own stdout must be write-only FIFO. Read-only /proc/self/fd audit (at most 4096 entries) checks dev/inode with exactly one writer at STDOUT_FILENO before closing and zero after closing. Unknown refs/audit failure exit 71, never closed or accepted. Only own opened sidecar/directory descriptors and STDOUT_FILENO are closed. stdin/stderr stay open.",
+        "proof": "96-byte NXP1 v1 little-endian native-proof.bin: JobId[8:24], PID@24, parent PID@28, pipe dev@32/inode@40, writers-before=1@48/after=0@52, wireBytes=65938@56, phase=1@60, CLOCK_MONOTONIC close/alive ns@64/72, reserved zero[80:96]. Alive is at least 50ms after close; stdout EBADF verified. ready=1 is written only after proof. Helper then pauses until host termination or its independent 12-second alarm.",
+        "acceptance": "Proof plus same PID/JobId, ordered terminal/EOF/exit-wait trace, no process.exit.end, BudgetExceeded, nonzero non-71 confirmed worker exit, unchanged identity/preservation/cleanup/supervisor gates. Missing, invalid or unexpected evidence is not pass. Full trace remains mandatory; ready/PID/self-report alone are insufficient.",
+        "retained": "native-wire.bin, native-proof.bin and native-evidence.json remain only in owned central run directory; no generated data included in source PR.",
+        "limitations": "Self-observation of a pinned trusted helper plus actual host EOF is not OS loader attestation. Helper has no duplicate/inherited writer creation path, but inaccessible procfs or unexpected refs block. Managed extra-fd owners remain unknown. Native compile/runtime and Linux pipe/deadline behavior require central validation; Windows remains separately unverified. Shared malformed error classification and all seven unavailable gates remain."
     }
 }
