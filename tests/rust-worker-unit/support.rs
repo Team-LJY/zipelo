@@ -136,7 +136,16 @@ pub fn io_failure<T>(result: io::Result<T>) -> Failure {
     }
 }
 
-pub fn frame_records(bytes: &[u8]) -> Vec<(u16, Vec<u8>)> {
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FrameRecord {
+    pub kind: u16,
+    pub item_id: [u8; 16],
+    pub payload_length: usize,
+    pub item_length: Option<u64>,
+    pub payload: Vec<u8>,
+}
+
+pub fn frame_records(bytes: &[u8]) -> Vec<FrameRecord> {
     let mut at = 0;
     let mut result = Vec::new();
     while at < bytes.len() {
@@ -153,13 +162,102 @@ pub fn frame_records(bytes: &[u8]) -> Vec<(u16, Vec<u8>)> {
         );
         let size = u32::from_le_bytes(h[8..12].try_into().unwrap()) as usize;
         assert!(size <= 65_536 && size <= bytes.len() - at - 64);
-        result.push((
-            u16::from_le_bytes(h[6..8].try_into().unwrap()),
-            bytes[at + 64..at + 64 + size].to_vec(),
-        ));
+        let kind = u16::from_le_bytes(h[6..8].try_into().unwrap());
+        let payload = bytes[at + 64..at + 64 + size].to_vec();
+        let item_length = if matches!(kind, 2 | 4) {
+            assert_eq!(size, 8);
+            Some(u64::from_le_bytes(payload[..].try_into().unwrap()))
+        } else {
+            None
+        };
+        result.push(FrameRecord {
+            kind,
+            item_id: h[32..48].try_into().unwrap(),
+            payload_length: size,
+            item_length,
+            payload,
+        });
         at += 64 + size;
     }
     result
+}
+
+pub fn frame_shapes(records: &[FrameRecord]) -> Vec<(u16, Vec<u8>)> {
+    records
+        .iter()
+        .map(|r| (r.kind, r.payload.clone()))
+        .collect()
+}
+
+// 항목별 ID와 길이 및 순서를 고정 계약으로 대조함.
+pub fn validate_success(
+    records: &[FrameRecord],
+    expected: &[&[u8]],
+) -> std::result::Result<(), &'static str> {
+    if records.iter().any(|r| r.payload_length != r.payload.len()) {
+        return Err("payload length");
+    }
+    let mut records = records.iter();
+    let begin = records.next().ok_or("missing BeginJob")?;
+    if begin.kind != 1
+        || begin.item_id != [0; 16]
+        || !begin.payload.is_empty()
+        || begin.item_length.is_some()
+    {
+        return Err("BeginJob");
+    }
+    for (index, bytes) in expected.iter().enumerate() {
+        let mut id = [0; 16];
+        id[..4].copy_from_slice(&((index + 1) as u32).to_le_bytes());
+        let begin = records.next().ok_or("missing BeginItem")?;
+        if begin.kind != 2
+            || begin.item_id != id
+            || begin.item_length != Some(bytes.len() as u64)
+            || begin.payload != (bytes.len() as u64).to_le_bytes()
+        {
+            return Err("BeginItem");
+        }
+        let mut actual = 0;
+        loop {
+            let record = records.next().ok_or("missing EndItem")?;
+            if record.item_id != id {
+                return Err("item ownership");
+            }
+            match record.kind {
+                3 => {
+                    if record.payload.is_empty()
+                        || record.payload.len() > 65_536
+                        || record.item_length.is_some()
+                        || record.payload.len() > bytes.len() - actual
+                        || record.payload != bytes[actual..actual + record.payload.len()]
+                    {
+                        return Err("Data");
+                    }
+                    actual += record.payload.len();
+                }
+                4 => {
+                    if actual != bytes.len()
+                        || record.item_length != Some(actual as u64)
+                        || record.payload != (actual as u64).to_le_bytes()
+                    {
+                        return Err("EndItem");
+                    }
+                    break;
+                }
+                _ => return Err("item order"),
+            }
+        }
+    }
+    let end = records.next().ok_or("missing EndJob")?;
+    if end.kind != 5
+        || end.item_id != [0; 16]
+        || end.payload != [1]
+        || end.item_length.is_some()
+        || records.next().is_some()
+    {
+        return Err("EndJob");
+    }
+    Ok(())
 }
 
 #[derive(Clone)]

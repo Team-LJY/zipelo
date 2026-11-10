@@ -237,7 +237,7 @@ fn frames_normal_sequence_ids_and_terminal() {
     frames.complete().unwrap();
     let before = capture.0.borrow().clone();
     assert_eq!(
-        frame_records(&before),
+        frame_shapes(&frame_records(&before)),
         vec![
             (1, vec![]),
             (2, 2u64.to_le_bytes().to_vec()),
@@ -304,7 +304,7 @@ fn frames_exact_chunk_and_zero_size_item() {
     assert_eq!(
         frame_records(&capture.0.borrow())
             .iter()
-            .map(|x| x.0)
+            .map(|x| x.kind)
             .collect::<Vec<_>>(),
         [1, 2, 3, 4, 2, 4, 5]
     );

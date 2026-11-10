@@ -145,7 +145,8 @@ fn source_actual_eof_is_truncated_not_format_error() {
 #[test]
 fn source_metadata_limit_rejects_before_next_read() {
     let (inner, calls) = Observed::new(vec![0; MAX_METADATA as usize + 1]);
-    let mut source = Source::new(inner, MAX_METADATA + 1, budget()).unwrap();
+    let shared = budget();
+    let mut source = Source::new(inner, MAX_METADATA + 1, shared.clone()).unwrap();
     let mut chunk = [0; CHUNK];
     for _ in 0..32 {
         source.read_exact(&mut chunk).unwrap();
@@ -153,8 +154,10 @@ fn source_metadata_limit_rejects_before_next_read() {
     assert_eq!(calls.borrow().len(), 32);
     assert_eq!(io_failure(source.read(&mut [0; 1])), Failure::Budget);
     assert_eq!(calls.borrow().len(), 32);
+    assert_eq!(shared.check(), Err(Failure::Budget));
     source.metadata_switch().set(false);
     assert_eq!(io_failure(source.read(&mut [0; 1])), Failure::Budget);
+    assert_eq!(shared.check(), Err(Failure::Budget));
     assert_eq!(calls.borrow().len(), 32);
 }
 
@@ -283,7 +286,7 @@ fn source_metadata_rejection_latches_shared_budget_before_smaller_retry() {
     assert_eq!(calls.borrow().len(), 32);
     assert_eq!(frames.complete(), Err(Failure::Budget));
     drop(frames);
-    assert_eq!(frame_records(&output), vec![(1, vec![])]);
+    assert_eq!(frame_shapes(&frame_records(&output)), vec![(1, vec![])]);
 
     let (other, other_calls) = Observed::new(vec![0; 22]);
     let mut other = Source::new(other, 22, shared).unwrap();

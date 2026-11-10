@@ -1,9 +1,9 @@
 {
     "schemaVersion": 1,
-    "baselineCommit": "3f7eefa0c45511d8c4250cc591558cacc0672bb5",
+    "baselineCommit": "a53f60b46afcb1146eebd41f001db52586a5405d",
     "target": "worker_unit",
-    "namedTests": 76,
-    "assertionTests": 75,
+    "namedTests": 79,
+    "assertionTests": 78,
     "policyObservations": 1,
     "execution": "not built or executed; central validation required",
     "moduleLinking": "main.rs #[path] imports the five existing worker modules from experiments/rust-core/src; no implementation copy and reviewed production fixes including metadata failure latching. The main process entry point is excluded.",
@@ -140,7 +140,8 @@
                 "zip_eocd_and_central_boundaries_rejected",
                 "zip_multidisk_zip64_encryption_and_method_are_unsupported",
                 "zip_count_cap_is_checked_before_central_records",
-                "zip_declared_output_cap_and_stored_size_mismatch"
+                "zip_declared_output_cap_and_stored_size_mismatch",
+                "zip_matching_headers_with_overlapping_packed_ranges_rejected"
             ]
         },
         {
@@ -159,7 +160,9 @@
                 "zip_deflate_malformed_payload_never_completes",
                 "zip_deflate_packed_tail_has_explicit_observation",
                 "unix_special_empty_slash_entries_cannot_become_directories",
-                "unix_allowed_types_preserve_regular_and_directory_extraction"
+                "unix_allowed_types_preserve_regular_and_directory_extraction",
+                "zip_success_preserves_empty_items_between_payloads",
+                "success_oracle_rejects_item_omission_ownership_length_and_order"
             ]
         }
     ],
@@ -619,6 +622,24 @@
             "file": "bounds.rs",
             "group": "budget-source",
             "kind": "assertion"
+        },
+        {
+            "name": "zip_matching_headers_with_overlapping_packed_ranges_rejected",
+            "file": "archive.rs",
+            "group": "zip-structure",
+            "kind": "assertion"
+        },
+        {
+            "name": "zip_success_preserves_empty_items_between_payloads",
+            "file": "archive.rs",
+            "group": "zip-completion",
+            "kind": "assertion"
+        },
+        {
+            "name": "success_oracle_rejects_item_omission_ownership_length_and_order",
+            "file": "archive.rs",
+            "group": "zip-completion",
+            "kind": "assertion"
         }
     ],
     "provenance": {
@@ -629,8 +650,8 @@
         "dependencies": "Only existing crate dependencies, no added dev-dependencies"
     },
     "limits": [
-        "76 named Rust test functions; two new metadata regressions and one existing metadata expectation strengthened to require sticky failure. Other 73 functions preserved. Loop rows are subcases.",
-        "75 assertion tests and one policy observation. Deflate packed-tail acceptance/rejection is printed with --nocapture and is not evidence of C# policy compatibility.",
+        "79 named Rust test functions: three new oracle/overlap cases, stronger per-item success and single-item CRC/malformed failure assertions. Loop mutations remain subcases.",
+        "78 assertion tests and one policy observation. Deflate packed-tail acceptance/rejection is printed with --nocapture and is not evidence of C# policy compatibility.",
         "Reviewed production fixes include Unix type precedence, bounded duration parsing, borrowed nested-error classification and metadata failure latching. Execution remains pending.",
         "Allocator activity is not instrumented. Oversized JSON/Source/range requests are checked by no-body-read/no-request observations plus static preallocation review.",
         "21 MiB wire cap is unreachable through the public Frames API under current stricter caps: <=16 MiB data + <=65536*64 header bytes + <=1024*16 item metadata bytes +1 completion byte <21 MiB. No claimed direct branch hit.",
@@ -645,7 +666,7 @@
         "timeout --signal=TERM --kill-after=5s 60s cargo test --locked --offline --manifest-path experiments/rust-core/Cargo.toml --test worker_unit -- --test-threads=1 --nocapture"
     ],
     "centralPrerequisites": [
-        "Use centrally resolved actual Cargo.lock with matching dependency manifest; no handmade lock.",
+        "Use included centrally generated Cargo.lock, SHA256 92f7b05d7da086b4b8c6b596755ba6233129e5bac8b060b9c6b3aa63fe17fecf; validate this new head with --locked --offline.",
         "Record new source head, lock hash, toolchain, target, command exit and external process cleanup.",
         "Old c9a2747d build results do not validate this test head. Stop on timeout and confirm owned process cleanup."
     ],
@@ -654,9 +675,7 @@
         "duration": "8..16 byte guard precedes iterator parsing; exactly three colon-separated components, no temporary Vec. Long-input tests allocate their own input; parser allocation claim is static, not allocator instrumentation.",
         "nestedErrors": "Owned and borrowed io/ZipError conversions share classification; observed UnexpectedEof, embedded Failure and declared decompressed-size limit retain identity; messages never infer EOF/budget.",
         "dependencyReachability": "Regression errors are constructed directly. Actual dependency reachability has not been executed.",
-        "separatePendingAssignments": [
-            "Central Cargo.lock import is separate queued work; no lock is fabricated here."
-        ],
+        "separatePendingAssignments": [],
         "oldBuild": "Coordinator reports c9a2747d Rust/Cargo 1.99.1 locked offline compile exit 0, no warnings/errors, after normal registry approval; not validation of 9b7891c3 or this correction head."
     },
     "metadataAccounting": {
@@ -674,5 +693,15 @@
         "allocationAndIo": "Observed reader call counts establish no new read after rejection; not allocator instrumentation.",
         "completed": false,
         "execution": "not executed"
+    },
+    "oracleCorrections": {
+        "scope": "Only test code, test contract and integrated hashes changed; production Rust, Cargo.toml, real Cargo.lock and frozen C# source/fixtures preserved.",
+        "metadata": "Existing post-limit failure oracle now also checks shared Budget before and after disabling metadata. Previously added normal pre-failure mode-switch case retained.",
+        "records": "FrameRecord preserves ItemId, payload length, decoded BeginItem/EndItem u64 length and payload; existing sequence, JobId, reserved and frame-size checks retained.",
+        "success": "Validate every expected item in order: BeginItem, owned Data with exact bytes and total length, EndItem. Require zero-ID BeginJob and Completed EndJob, no missing empty items or trailing records.",
+        "failure": "Single-item payload CRC, header CRC and malformed Deflate failures require neither EndItem nor EndJob. Partial Data remains possible and is not publication.",
+        "overlap": "New distinct first/second names keep local and central version/flags/method/CRC/packed/size/name fields consistent. First Stored packed range extends through second local header and payload, ends exactly at central start; rejects Integrity. Original name-mismatch case retained separately.",
+        "oracleSelfChecks": "Ten mutations cover omitted empty item, wrong Data/BeginItem owner, declared/actual lengths, order, content, payload length, missing terminal and extra trailing terminal.",
+        "execution": "Static source and formatting checks only. No branch instrumentation, build, test execution or frozen-host comparison performed. One policy observation remains non-normative."
     }
 }

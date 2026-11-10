@@ -13,7 +13,7 @@ fn unix_special_empty_slash_entries_cannot_become_directories() {
         assert_eq!(list(input.clone()).unwrap()[0]["Entry"]["Kind"], 4);
         let (result, output) = extract(input, limits());
         assert_eq!(result, Err(Failure::UnsupportedEntry));
-        assert_eq!(frame_records(&output), vec![(1, vec![])]);
+        assert_eq!(frame_shapes(&frame_records(&output)), vec![(1, vec![])]);
     }
 }
 
@@ -26,7 +26,7 @@ fn unix_allowed_types_preserve_regular_and_directory_extraction() {
         assert_eq!(list(input.clone()).unwrap()[0]["Entry"]["Kind"], kind);
         let (result, output) = extract(input, limits());
         assert_eq!(result, Ok(()));
-        assert_eq!(frame_records(&output).last(), Some(&(5, vec![1])));
+        assert_eq!(validate_success(&frame_records(&output), &[&[]]), Ok(()));
     }
 }
 
