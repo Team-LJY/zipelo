@@ -152,13 +152,19 @@ def main():
         cwd=ROOT, check=False,
     )
     if checks.returncode != 0:
-        return checks.returncode
-    results = execute_phases(ROOT, phases)
+        results = [{
+            "phase": "self-check",
+            "manifest": "tests/ci",
+            "status": "failed",
+            "exit_code": checks.returncode,
+        }]
+    else:
+        results = execute_phases(ROOT, phases)
     report = {
         "head": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
         "platform": sys.platform,
         "windows_cross_target": WINDOWS_TARGET if "cross-build" in phases else None,
-        "windows_runtime_tested": sys.platform == "win32" and "test" in phases,
+        "windows_runtime_tested": checks.returncode == 0 and sys.platform == "win32" and "test" in phases,
         "results": results,
     }
     (ROOT / f"tests/ci/{args.phase}-results.json").write_text(
@@ -180,7 +186,7 @@ def main():
     if summary:
         with open(summary, "a", encoding="utf-8") as output:
             output.write("\n" + "\n\n".join(lines) + "\n")
-    return int(any(result["status"] == "failed" for result in results))
+    return checks.returncode or int(any(result["status"] == "failed" for result in results))
 
 
 if __name__ == "__main__":

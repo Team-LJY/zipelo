@@ -1,4 +1,8 @@
+from contextlib import redirect_stdout
+from io import StringIO
+import json
 from pathlib import Path
+import tempfile
 import subprocess
 import unittest
 from unittest.mock import patch
@@ -75,6 +79,46 @@ class RunnerTests(unittest.TestCase):
             results = run_rust.execute_phases(Path("/repo"), ["build", "cross-build"])
         self.assertEqual([row["status"] for row in results], ["passed", "failed"])
         self.assertEqual(results[1]["reason"], "missing linker")
+
+    def test_self_check_failure_replaces_previous_success_report(self):
+        for phase, platform in (("local", "linux"), ("test", "win32")):
+            with self.subTest(phase=phase), tempfile.TemporaryDirectory(
+                dir=run_rust.ROOT / "tests/ci"
+            ) as directory:
+                root = Path(directory)
+                (root / "tests/ci").mkdir(parents=True)
+                report_path = root / f"tests/ci/{phase}-results.json"
+                with (
+                    patch.object(run_rust, "ROOT", root),
+                    patch.object(run_rust.sys, "argv", ["run_rust.py", phase]),
+                    patch.object(run_rust.sys, "platform", platform),
+                    patch.dict(run_rust.os.environ, {"GITHUB_STEP_SUMMARY": ""}),
+                    patch.object(run_rust.subprocess, "run", side_effect=[
+                        subprocess.CompletedProcess([], 0),
+                        subprocess.CompletedProcess([], 7),
+                    ]),
+                    patch.object(run_rust.subprocess, "check_output", side_effect=[
+                        "successful-head\n", "failed-head\n",
+                    ]),
+                    patch.object(run_rust, "execute_phases", return_value=[
+                        {"phase": "test", "manifest": "sample", "status": "passed"},
+                    ]) as execute,
+                    redirect_stdout(StringIO()),
+                ):
+                    self.assertEqual(run_rust.main(), 0)
+                    successful = json.loads(report_path.read_text(encoding="utf-8"))
+                    self.assertEqual(successful["results"][0]["status"], "passed")
+                    self.assertEqual(run_rust.main(), 7)
+                    failed = json.loads(report_path.read_text(encoding="utf-8"))
+                self.assertEqual(failed["head"], "failed-head")
+                self.assertEqual(failed["results"], [{
+                    "phase": "self-check",
+                    "manifest": "tests/ci",
+                    "status": "failed",
+                    "exit_code": 7,
+                }])
+                self.assertFalse(failed["windows_runtime_tested"])
+                execute.assert_called_once()
 
     def test_cargo_contract(self):
         args = run_rust.command(Path("tests/example/Cargo.toml"), "test")
