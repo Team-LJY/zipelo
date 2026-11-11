@@ -37,19 +37,20 @@
 - 통신 형식은 backend와 frontend 담당이 합의한 계약을 따른다. 작업 ID, 취소 후 종료 확인, 부분 출력 보고를 포함한다.
 - 작업자가 나오기 전의 화면은 가짜 작업자로 개발한다.
 
-## 4. 담당과 브랜치
+## 4. 담당과 진행 상태
 
-- backend: features/rust-archive-worker. ZIP, TAR, GZ, TAR.GZ 작업자, 이후 7z.
-- frontend: features/rust-app-ui. 화면과 작업자 연결, 이후 설치 파일.
-- bugfix: features/ci-rust-build(Windows/Ubuntu CI), 이후 작업자 리뷰와 악성 압축파일 회귀 시험(폴더 밖 경로, 압축 폭탄, 틀린 암호).
-- planning: docs/v0.1-scope. README와 이 문서.
+- backend: features/rust-archive-worker. ZIP, TAR, GZ, TAR.GZ 작업자(PR63, 리뷰 중). 이후 7z와 암호.
+- frontend: features/rust-app-ui. 가짜 작업자로 만든 화면(PR62, 리뷰 중). 이후 실제 작업자 연결. features/windows-installer에서 설치 파일 작업 시작 단계.
+- bugfix: 로컬 빌드와 시험 실행기(PR61, 병합 완료). 악성 압축파일 표본(PR64, 리뷰 중)과 작업자 PR 리뷰.
+- planning: docs/*. README와 이 문서.
+- 빌드와 시험은 로컬에서 `python3 tests/ci/run_rust.py local`로 돌리고 결과를 PR 본문에 적는다. GitHub Actions는 수동 실행 Windows 확인용만 쓴다.
 
 ## 5. 완료 기준
 
 - 새 PC에서 설치 파일을 더블클릭해 설치하고 기본 앱 단계까지 진행된다.
 - zip, 7z, tar.gz를 더블클릭해 열고 풀 수 있다.
 - 암호 ZIP을 만들고 풀 수 있다.
-- Windows와 Ubuntu에서 tests/ 시험이 CI로 통과한다.
+- Linux 시험과 Windows 교차 빌드가 로컬 실행기로 통과한다. Windows 실제 실행은 출시 전에 수동으로 확인한다.
 - 폴더 밖 경로, 압축 폭탄, 틀린 암호 회귀 시험이 통과한다.
 - 지원하지 않는 형식을 지원한다고 안내하지 않는다. 실제 검증 전에는 지원 완료로 표시하지 않는다.
 
