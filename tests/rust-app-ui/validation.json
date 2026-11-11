@@ -1,0 +1,59 @@
+{
+    "command": "python3 tests/ci/run_rust.py local",
+    "platform": "linux-desktop-2",
+    "base_remote_main": "486fe9ae64a73f999cc5122c2eb9bbeb62fb2fb3",
+    "local_baseline_head": "6ea0b8b3b7444c35bb0845b58bf5638ac58f5e58",
+    "source_state": "Run on edited working tree over local baseline whose tree equals remote main; file hashes below identify tested source, not a claim that local baseline head contains changes.",
+    "linux_build_crates": 17,
+    "linux_test_targets": 17,
+    "rust_tests_passed": 823,
+    "new_archive_ui_tests_passed": 16,
+    "windows_cross_build_crates": 17,
+    "windows_runtime_tested": false,
+    "native_visual_check": "Owned Xvfb screen displayed Korean synthetic file list; initial capture missed Xvfb because inherited Wayland selected host backend; corrected capture removes Wayland only in owned process environment. Not complete native interaction coverage.",
+    "prior_failures": "Retained locally: first build drop API/legacy harness references; second and third egui renderer harness texture/first-frame setup; final runner passed.",
+    "limitations": [
+        "Fake transport projects agreed revision2 semantics; no binary codec, actual worker process, filesystem extraction or encryption in this frontend PR.",
+        "Default executable explicitly reports unavailable worker. ui-fixture feature AND --ui-fixture flag select test-only fake; UI labels it.",
+        "Entry listing is metadata, not integrity proof. Partial publication/durability/cleanup remain separate.",
+        "UTF-8 text fields for manual paths; native CLI/drop archive paths stay PathBuf. ZIP multi-source manual entry is UTF-8 only."
+    ],
+    "tested_files": [
+        {
+            "path": "experiments/rust-ui-memory-app/Cargo.toml",
+            "sha256": "1b161c74260b64de926b37528d61fd73de4074d250f711d8458ed770c0af69d8"
+        },
+        {
+            "path": "experiments/rust-ui-memory-app/src/lib.rs",
+            "sha256": "335104e14b4fd69fd20e29941a1cc40c7c123bd7b853c09206c39d10b55fda2c"
+        },
+        {
+            "path": "experiments/rust-ui-memory-app/src/desktop.rs",
+            "sha256": "5d0e14f72cdebc6fe02952539db55c682cb5978fd883e072bd08d461807c8106"
+        },
+        {
+            "path": "experiments/rust-ui-memory-app/src/archive_ui.rs",
+            "sha256": "19b1c36a4cc34139d1e854d249bfecf6da90891d91617f3565e21b88b4f1d2a1"
+        },
+        {
+            "path": "experiments/rust-ui-memory-app/src/archive_screen.rs",
+            "sha256": "63362b49b5cd51ecaf9c50f10a8f45e60192e6a55cc45eacd81ad04915335de7"
+        },
+        {
+            "path": "tests/rust-app-ui/regressions.rs",
+            "sha256": "f9f8d0179ee0a3218d6d8168b1ad07c4b4ec3ca42923d8a434bd2e6bcdf8ff46"
+        },
+        {
+            "path": "tests/rust-app-ui/fake.rs",
+            "sha256": "be59b676d71786915f6bf399009233ba052ddfea3139bff39ec5965f38ce9a89"
+        },
+        {
+            "path": "tests/rust-app-ui/native_smoke.py",
+            "sha256": "303cff6a9452b43db62af21ad906aef49279f7bf23136e2166793d4118d951dc"
+        },
+        {
+            "path": "tests/rust-app-ui/README.md",
+            "sha256": "bc78864dbbe50e99f3fbfa2ace1479fe1988b313884fe064f05114a8f73a2009"
+        }
+    ]
+}

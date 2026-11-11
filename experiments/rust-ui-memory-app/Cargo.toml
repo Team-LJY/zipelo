@@ -15,6 +15,7 @@ doctest = false
 [features]
 default = []
 ui = ["dep:eframe"]
+ui-fixture = ["ui"]
 
 [dependencies]
 core_memory = { package = "zipelo-app-core-memory", path = "../rust-app-core-memory" }
@@ -22,9 +23,13 @@ eframe = { version = "=0.37.0", optional = true, default-features = false, featu
 
 [[bin]]
 name = "zipelo-ui-memory-app"
-path = "src/app.rs"
+path = "src/desktop.rs"
 required-features = ["ui"]
 
 [[test]]
 name = "ui_memory"
 path = "../../tests/rust-ui-memory-app/regressions.rs"
+
+[[test]]
+name = "archive_ui"
+path = "../../tests/rust-app-ui/regressions.rs"
