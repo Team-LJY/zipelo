@@ -143,19 +143,21 @@
         "regression": "Preserve existing format bytes and round-trip SevenZip in ListEnd/ListId."
     },
     "streaming_limits": {
-        "agreement": "Frontend/backend revision 2 agreement on 2026-11-11; field order, tags and frame encoding unchanged.",
+        "agreement": "Revision 2 fields, tags and frame encoding unchanged. Ratio-rejection removal and disk-space advisory checks are proposed under manager decision d6bc0d37-89d1-4cd2-a00b-883b5eb23ec0; frontend confirmation pending.",
         "default_input_bytes": 18446744073709551615,
         "default_output_bytes": 17179869184,
         "default_entries": 10000,
         "lower_limits": "Callers can lower the input, output and entry quotas. input=u64::MAX means no input-size quota; resource and duration checks still apply.",
-        "zip_ratio": "For each ZIP entry, declared output and actual decoded bytes are bounded by 1000 times compressed payload bytes, excluding ZipCrypto/AES framing. Zero packed bytes permit only zero output. ZIP metadata is checked before allocation/decode; size and CRC/HMAC must also match.",
-        "gzip_ratio": "For each complete GZip member, verified decoded bytes are at most 1000 times actual consumed member bytes, including its header/trailer. Concatenating a low-ratio member cannot dilute an excessive member. Aggregate decoded bytes, including TAR headers/padding, cannot exceed output quota. During decoding the complete source length is an additional conservative ratio ceiling.",
+        "zip_ratio": "No compression-ratio rejection. Validate declared and actual output sizes, stream end, CRC and HMAC; sum of declared output sizes must fit output quota before decoding.",
+        "gzip_ratio": "No compression-ratio rejection, including concatenated members. Aggregate decoded bytes, including TAR headers/padding, cannot exceed output quota.",
         "tar_ratio": "Plain TAR copies declared nonoverlapping ranges within the captured input. The sum of file sizes cannot exceed output quota.",
-        "arithmetic": "Checked u64 offsets/totals; ratio comparison uses u128(output) <= u128(input) * 1000 without u64 multiplication overflow.",
+        "arithmetic": "Checked u64 offsets and totals; free-space block-to-byte conversion uses u128 to avoid multiplication overflow.",
         "memory_target": "ZIP/TAR/GZ/TAR.GZ List/Extract: worker process peak RSS <=64 MiB in Linux regression with independently generated 1 GiB payloads. This is a measured target, not an OS-enforced RSS cap. Metadata budget remains 8 MiB.",
         "staging": "64 KiB buffers; immutable input capture and verified decoded content use private temporary files that are removed on last-handle close. No decoded content is published until the entire catalog and integrity checks succeed. Temporary disk usage can include the archive plus expanded content plus current destination temporary file; disk exhaustion fails with Io and closes/removes unpublished data.",
         "legacy": "7z and ZIP creation retain separate 64 MiB input /128 MiB output caps until their streaming implementation. The slice-based archive parser also retains these legacy memory bounds.",
-        "parent_lifetime": "Capture native parent before reading Start. At decode/read/write/password checkpoints, fail Io if parent is gone; close anonymous staging and remove current unpublished destination temp. stdin EOF alone remains valid for one-shot requests. Already published entries and directories are reported and retained. A blocked OS file operation cannot be forcibly interrupted by this cooperative guard."
+        "parent_lifetime": "Capture native parent before reading Start. At decode/read/write/password checkpoints, fail Io if parent is gone; close anonymous staging and remove current unpublished destination temp. stdin EOF alone remains valid for one-shot requests. Already published entries and directories are reported and retained. A blocked OS file operation cannot be forcibly interrupted by this cooperative guard.",
+        "disk_space": "Advisory free-space checks use opened Linux x86_64 filesystem handles (fstatvfs) or the Windows handle-derived directory (GetDiskFreeSpaceExW). Before ZIP/7z decoding and before publication, group remaining staging and selected output logical bytes by volume. For GZip with unknown expanded size, check staging space before each decoded chunk, then preflight selected output. Input capture also checks its snapshot space. Query failure or insufficient space returns existing Io tag 8. Checks do not reserve space or account for every metadata/block-allocation overhead; later ENOSPC still closes staging and removes current unpublished output.",
+        "remaining_risk": "High compression ratios within 16 GiB may expand fully onto disk. Resource duration, cooperative cancellation and measured memory target remain. Free-space checks can race with other disk users; already published outputs are retained on failure."
     },
     "validation": "Implementation results belong in the PR verification record. No OS sandbox or native Windows execution claim."
 }

@@ -17,7 +17,6 @@ GIB = 1024 ** 3
 CHUNK = 64 * 1024
 INPUT_LIMIT = 2 ** 64 - 1
 OUTPUT_LIMIT = 16 * GIB
-RATIO_LIMIT = 1000
 NAME = "payload.bin"
 
 
@@ -99,8 +98,6 @@ def violations(artifact, limits):
         failed.append("input")
     if artifact["decoded_bytes"] > limits["output"]:
         failed.append("output")
-    if artifact["decoded_bytes"] > artifact["ratio_input_bytes"] * RATIO_LIMIT:
-        failed.append("ratio")
     return failed
 
 
@@ -165,12 +162,12 @@ def build(directory, large=False):
             ("above", CHUNK - 1, ["output"]),
         ])
     for suffix, delta in (("below", -1), ("equal", 0), ("above", 1)):
-        add("ratio-" + suffix + ".gz", 2_000_000 + delta, True, "ratio-boundary", [
-            ("default", OUTPUT_LIMIT, ["ratio"] if delta > 0 else []),
+        add("ratio-" + suffix + ".gz", 2_000_000 + delta, True, "former-ratio-boundary", [
+            ("default", OUTPUT_LIMIT, []),
         ], packed_size=2000)
     for extension in ("zip", "tar.gz"):
-        add("ratio-only." + extension, 16 * 1024 ** 2, True, "ratio-limit", [
-            ("default", OUTPUT_LIMIT, ["ratio"]),
+        add("ratio-only." + extension, 16 * 1024 ** 2, True, "high-ratio-success", [
+            ("default", OUTPUT_LIMIT, []),
         ])
     if large:
         for extension in ("zip", "tar.gz"):
@@ -181,7 +178,7 @@ def build(directory, large=False):
             ("default", OUTPUT_LIMIT, ["output"]),
         ], level=1)
     manifest = {
-        "policy": {"revision": 2, "input": INPUT_LIMIT, "output": OUTPUT_LIMIT, "ratio": RATIO_LIMIT},
+        "policy": {"revision": 2, "input": INPUT_LIMIT, "output": OUTPUT_LIMIT, "ratio": None},
         "large": large,
         "worker_execution_verified": False,
         "generator_chunk_bytes": CHUNK,

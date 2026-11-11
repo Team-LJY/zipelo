@@ -13,9 +13,11 @@
 
 ## 스트리밍과 자원 정리
 
-기존 revision 2의 필드와 tag를 유지하고 입력/출력 기본 한도를 변경하는 안에 frontend/backend가 공동 합의했습니다. 앱이 공유하는 Limits::default()도 같은 값을 사용합니다. 세부 계약은 contract.json의 streaming_limits에 있습니다.
+기존 revision 2의 필드와 tag 및 공동 합의한 입력/출력 기본 한도를 유지합니다. 앱이 공유하는 Limits::default()도 같은 값을 사용합니다. 압축비 거부 제거와 여유 공간 검사의 frontend 확인은 PR에서 별도로 받습니다. 세부 계약은 contract.json의 streaming_limits에 있습니다.
 
-- ZIP은 각 항목의 압축 payload 바이트에서 암호 framing을 뺀 값을 분모로 1000:1을 적용합니다. 선언 크기를 먼저 검사하고 실제 해제 크기, CRC와 AES 인증을 다시 확인합니다. GZ는 연결된 각 멤버의 실제 소비 바이트(헤더와 trailer 포함)와 해제 바이트로 비율을 검사하므로 뒤에 붙인 멤버가 앞의 폭탄 비율을 희석하지 않습니다. 연결 멤버 전체 해제량도 총량 한도에 포함하며 TAR.GZ의 헤더와 padding도 계산합니다. u64 누계/offset은 checked 연산, 비율 비교는 u128을 사용합니다.
+- 압축비는 거부 조건으로 사용하지 않습니다. ZIP 선언 크기와 실제 해제 크기, CRC와 AES 인증을 검사하며, GZ 연결 멤버의 전체 해제량도 16 GiB 총량 한도에 포함합니다. TAR.GZ의 헤더와 padding도 계산합니다. u64 누계와 offset은 checked 연산을 사용합니다.
+- 입력 캡처 전에 임시 저장소 여유 공간을 확인합니다. ZIP/7z 해제 전에는 전체 임시 해제량과 선택한 출력량을 볼륨별로 합산해 검사하고, 게시 전에도 출력 공간을 재검사합니다. 미리 해제 크기를 알 수 없는 GZ/TAR.GZ는 각 해제 청크를 쓰기 전에 임시 저장소 공간을 확인합니다. Linux 64비트는 열린 핸들의 [fstatvfs](https://man7.org/linux/man-pages/man3/fstatvfs.3.html), Windows는 핸들에서 얻은 디렉터리의 [GetDiskFreeSpaceExW](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-getdiskfreespaceexw)를 사용합니다. 조회 실패와 부족은 기존 Io로 반환합니다.
+- 공간 검사는 논리적 파일 크기에 따른 사전 확인이며 예약이나 모든 메타데이터/할당 단위 비용의 보장이 아닙니다. 다른 작업과 경쟁해 나중에 ENOSPC가 발생하면 기존 부분 출력 정리 정책을 적용합니다. 16 GiB 안에서는 압축비가 매우 큰 파일도 디스크에 풀릴 수 있습니다. 이 정책의 frontend 계약 확인은 PR에서 별도로 받습니다.
 - 입력과 검증된 해제 내용은 임시 파일에 저장합니다. Linux는 [O_TMPFILE](https://man7.org/linux/man-pages/man2/open.2.html), 이를 지원하지 않는 Linux 파일시스템에서는 0600 난수 파일을 배타적으로 만든 즉시 unlink하고 링크 수 0을 확인합니다. Windows는 배타적 [DELETE_ON_CLOSE 파일](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-createfilew)을 사용합니다. 마지막 핸들이 닫히면 제거되며 임시 파일명에 아카이브 내부 이름을 사용하지 않습니다. 디스크에는 입력 사본, 해제 내용과 현재 출력 임시 파일이 동시에 필요할 수 있습니다. 임시 폴더가 tmpfs이면 해당 파일 내용은 프로세스 RSS 외의 시스템 메모리를 사용합니다.
 - 64 MiB는 ZIP/TAR/GZ/TAR.GZ 해제 작업자 프로세스의 피크 RSS 시험 목표입니다. OS 메모리 강제 격리나 모든 아카이브의 보장을 뜻하지 않습니다. 7z와 생성은 이 RSS 목표에 포함하지 않습니다. 입력 크기와 무관한 메타데이터 예산은 유지합니다.
 - Linux는 시작 시 부모 PID를 캡처하고 [getppid](https://man7.org/linux/man-pages/man2/getpid.2.html) 변경을 확인합니다. Windows는 부모 프로세스 핸들과 생성 시간을 확인한 뒤 [WaitForSingleObject](https://learn.microsoft.com/en-us/windows/win32/api/synchapi/nf-synchapi-waitforsingleobject)로 생존을 검사합니다. 부모가 사라지면 checkpoint에서 Io로 중단하고 임시 출력을 정리합니다. 이미 게시한 파일/디렉터리는 유지하며 OS의 블로킹 I/O 강제 중단을 보장하지 않습니다. 기존 단발 요청을 위해 stdin EOF만으로 취소하지 않습니다.

@@ -13,15 +13,6 @@ use zlib_rs::{Inflate, InflateFlush, Status, crc32::crc32};
 
 type Result<T> = std::result::Result<T, ErrorCode>;
 const CHUNK: usize = 65536;
-pub(crate) const RATIO: u64 = 1000;
-
-pub(crate) fn ratio(output: u64, input: u64) -> Result<()> {
-    if output as u128 > input as u128 * RATIO as u128 {
-        Err(ErrorCode::Limit)
-    } else {
-        Ok(())
-    }
-}
 fn at(file: &mut File, offset: u64, bytes: &mut [u8]) -> Result<()> {
     file.seek(SeekFrom::Start(offset))
         .map_err(|_| ErrorCode::Io)?;
@@ -98,16 +89,7 @@ impl Catalog {
         if magic.starts_with(&[31, 139]) {
             let mut data = spool::temporary()?;
             io(source.rewind())?;
-            let expanded = inflate(
-                source,
-                len,
-                true,
-                limits.output,
-                Some(len),
-                &mut data,
-                check,
-            )?
-            .0;
+            let expanded = inflate(source, len, true, limits.output, &mut data, check)?.0;
             let mut header = [0; 512];
             if expanded >= 512 {
                 at(&mut data, 0, &mut header)?;
@@ -248,13 +230,12 @@ fn tar(
     })
 }
 
-// 각 ZIP 항목과 각 GZip 멤버의 실제 해제량에 압축비와 누적 총량을 적용함.
+// ZIP 항목과 연결 GZip 스트림의 해제 총량을 제한함.
 fn inflate(
     input: &mut impl Read,
     length: u64,
     gzip: bool,
     limit: u64,
-    ratio_base: Option<u64>,
     output: &mut File,
     check: &mut impl FnMut() -> Result<()>,
 ) -> Result<(u64, u32)> {
@@ -290,15 +271,10 @@ fn inflate(
                 .checked_add(n as u64)
                 .filter(|n| *n <= limit)
                 .ok_or(ErrorCode::Limit)?;
-            if let Some(base) = ratio_base {
-                ratio(total, base)?;
-            }
             crc = crc32(crc, &plain[..n]);
+            crate::space::ensure(output, n as u64)?;
             io(output.write_all(&plain[..n]))?;
             if status == Status::StreamEnd {
-                if gzip {
-                    ratio(stream.total_out(), stream.total_in())?;
-                }
                 break;
             }
             if a == stream.total_in() && b == stream.total_out() {
@@ -501,10 +477,9 @@ fn zip(
         } else {
             12
         };
-        let payload = compressed
+        compressed
             .checked_sub(overhead)
             .ok_or(ErrorCode::Integrity)?;
-        ratio(size, payload)?;
         total = total
             .checked_add(size)
             .filter(|n| *n <= limits.output)
@@ -636,6 +611,9 @@ fn zip(
     }
     archive::validate_members(&members)?;
     let mut data = spool::temporary()?;
+    if decode {
+        crate::space::ensure(&data, total)?;
+    }
     let mut offsets = Vec::new();
     for (member, packed) in members.iter().zip(packed) {
         check()?;
@@ -667,7 +645,6 @@ fn zip(
                 length,
                 false,
                 member.entry.size,
-                Some(length),
                 &mut data,
                 check,
             )?

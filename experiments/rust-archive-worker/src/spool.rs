@@ -107,6 +107,7 @@ impl Snapshot {
         source.rewind().map_err(|_| ErrorCode::Io)?;
         let object = filesystem::object(&source)?;
         let mut file = temporary()?;
+        crate::space::ensure(&file, before.len())?;
         let mut buffer = [0; 65536];
         let mut hash = Sha256::new();
         let mut len = 0u64;

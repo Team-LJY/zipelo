@@ -51,7 +51,7 @@ class LargeArchiveFixtureTests(unittest.TestCase):
                 self.assertEqual(case["expected"]["error"], "Limit" if failed else "None")
                 self.assertEqual(case["expected"]["created_count"], 0 if failed else 1)
 
-    def test_ratio_boundary_is_exact_and_below_output_limit(self):
+    def test_former_ratio_samples_all_expect_success(self):
         with tempfile.TemporaryDirectory(dir=ROOT / "tests/ci") as scratch:
             manifest = GENERATOR.build(Path(scratch) / "corpus")
             for suffix, delta in (("below", -1), ("equal", 0), ("above", 1)):
@@ -59,6 +59,9 @@ class LargeArchiveFixtureTests(unittest.TestCase):
                 artifact = manifest["artifacts"][name]
                 self.assertEqual(artifact["decoded_bytes"] - 1000 * artifact["ratio_input_bytes"], delta)
                 self.assertLess(artifact["decoded_bytes"], GENERATOR.OUTPUT_LIMIT)
+                case = next(c for c in manifest["cases"] if c["file"] == name)
+                self.assertEqual(case["expected"]["outcome"], "Completed")
+                self.assertIsNone(manifest["policy"]["ratio"])
                 payload = gzip.decompress((Path(scratch) / "corpus" / name).read_bytes())
                 self.assertEqual(payload, bytes(artifact["payload_bytes"]))
 

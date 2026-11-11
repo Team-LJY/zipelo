@@ -247,6 +247,9 @@ mod platform {
                 Err(_) => Err(ErrorCode::UnsafePath),
             }
         }
+        pub(crate) fn handle(&self) -> &File {
+            &self.file
+        }
         pub fn duplicate(&self) -> Result<Self> {
             Ok(Self {
                 file: self.file.try_clone().map_err(|_| ErrorCode::Io)?,
@@ -337,6 +340,9 @@ mod platform {
             }
             Ok(Self { path: p, locks })
         }
+        pub(crate) fn handle(&self) -> &File {
+            self.locks.last().unwrap()
+        }
         pub fn duplicate(&self) -> Result<Self> {
             Ok(Self {
                 path: self.path.clone(),
@@ -417,6 +423,46 @@ pub fn preflight(root: &Dir, names: &[(String, EntryKind)]) -> Result<()> {
     }
     Ok(())
 }
+pub(crate) fn preflight_space(
+    root: &Dir,
+    files: &[(String, u64)],
+    staging: Option<(&File, u64)>,
+) -> Result<()> {
+    let mut volumes = std::collections::BTreeMap::<u64, (File, u64)>::new();
+    let mut charge = |file: &File, bytes: u64| -> Result<()> {
+        crate::space::ensure(file, bytes)?;
+        let volume = crate::space::volume(file)?;
+        if let Some((_, total)) = volumes.get_mut(&volume) {
+            *total = total.checked_add(bytes).ok_or(ErrorCode::Limit)?;
+        } else {
+            volumes.insert(
+                volume,
+                (file.try_clone().map_err(|_| ErrorCode::Io)?, bytes),
+            );
+        }
+        Ok(())
+    };
+    if let Some((file, bytes)) = staging {
+        charge(file, bytes)?;
+    }
+    for (name, size) in files {
+        valid_name(name, false)?;
+        let mut parent = root.duplicate()?;
+        let mut parts = name.split('/').collect::<Vec<_>>();
+        parts.pop();
+        for part in parts {
+            match parent.child(part, false)? {
+                Some(child) => parent = child,
+                None => break,
+            }
+        }
+        charge(parent.handle(), *size)?;
+    }
+    for (file, bytes) in volumes.values() {
+        crate::space::ensure(file, *bytes)?;
+    }
+    Ok(())
+}
 pub fn directory(root: &Dir, name: &str) -> Result<(bool, Durability)> {
     let (d, leaf) = parent(root, name, false)?.ok_or(ErrorCode::Io)?;
     if d.child(&leaf, false)?.is_some() {
@@ -481,6 +527,7 @@ pub fn publish_reader(
             }
         })?;
         let written = (|| {
+            crate::space::ensure(&file, length)?;
             let mut buffer = zeroize::Zeroizing::new([0; 65536]);
             let mut remaining = length;
             while remaining != 0 {

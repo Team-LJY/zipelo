@@ -291,6 +291,40 @@ impl<W: Write> Job<W> {
                     {
                         return Err(ErrorCode::UnsafePath);
                     }
+                    if catalog.format == Format::Gzip {
+                        let name = gzip_output_name.ok_or(ErrorCode::InvalidRequest)?;
+                        let checked = archive::valid_name(&name, false)
+                            .map_err(|_| ErrorCode::InvalidRequest)?;
+                        if checked.contains('/') {
+                            return Err(ErrorCode::InvalidRequest);
+                        }
+                        catalog.members[0].entry.name = checked;
+                    } else if gzip_output_name.is_some() {
+                        return Err(ErrorCode::InvalidRequest);
+                    }
+                    let root = Dir::root(&destination.to_path()?)?;
+                    let output_sizes = catalog
+                        .members
+                        .iter()
+                        .filter(|m| {
+                            m.entry.kind == EntryKind::File
+                                && selected
+                                    .as_ref()
+                                    .is_none_or(|s| s.contains(&m.entry.entry_id))
+                        })
+                        .map(|m| (m.entry.name.clone(), m.entry.size))
+                        .collect::<Vec<_>>();
+                    let staged = if matches!(catalog.format, Format::Zip | Format::SevenZip) {
+                        Some((
+                            &catalog.data,
+                            catalog.members.iter().try_fold(0u64, |sum, m| {
+                                sum.checked_add(m.entry.size).ok_or(ErrorCode::Limit)
+                            })?,
+                        ))
+                    } else {
+                        None
+                    };
+                    filesystem::preflight_space(&root, &output_sizes, staged)?;
                     let encrypted = catalog.members.iter().any(|m| m.entry.encrypted);
                     if matches!(catalog.format, Format::Zip | Format::SevenZip) {
                         for attempt in 1..=3 {
@@ -316,18 +350,6 @@ impl<W: Write> Job<W> {
                             }
                         }
                     }
-                    if catalog.format == Format::Gzip {
-                        let name = gzip_output_name.ok_or(ErrorCode::InvalidRequest)?;
-                        let checked = archive::valid_name(&name, false)
-                            .map_err(|_| ErrorCode::InvalidRequest)?;
-                        if checked.contains('/') {
-                            return Err(ErrorCode::InvalidRequest);
-                        }
-                        catalog.members[0].entry.name = checked;
-                    } else if gzip_output_name.is_some() {
-                        return Err(ErrorCode::InvalidRequest);
-                    }
-                    let root = Dir::root(&destination.to_path()?)?;
                     let offsets = catalog.offsets;
                     let mut data = catalog.data;
                     let members = catalog
@@ -354,6 +376,7 @@ impl<W: Write> Job<W> {
                             .map(|m| (m.entry.name.clone(), EntryKind::File)),
                     );
                     filesystem::preflight(&root, &names)?;
+                    filesystem::preflight_space(&root, &output_sizes, None)?;
                     for name in dirs {
                         self.check()?;
                         let (created, durability) = filesystem::directory(&root, &name)?;
@@ -589,6 +612,9 @@ pub fn serve<R: Read + Send + 'static, W: Write + Send + 'static>(
             ErrorCode::None => "취소됨",
             ErrorCode::UnsupportedFeature => "암호 또는 해당 기능 미지원",
             ErrorCode::SourceChanged => "파일이 변경됨. 다시 열어 목록을 확인해야 함",
+            ErrorCode::Io => {
+                "파일을 읽거나 쓰지 못했습니다. 디스크 여유 공간과 접근 권한을 확인하세요"
+            }
             _ => "작업 실패. 오류 코드와 게시 상태를 확인해야 함",
         }
         .to_owned();

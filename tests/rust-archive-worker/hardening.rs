@@ -80,13 +80,53 @@ fn streaming_zip64_local_headers_and_chunk_boundaries() {
     assert_zero_file(&s.0.join("output/payload.bin"), 9 * 1024 * 1024 + 13);
 }
 #[test]
-fn streaming_ratio_rejects_bomb_without_publication() {
+fn generated_zero_deflate_zip_round_trips_through_list_and_extract() {
+    let s = Scratch::new();
+    fs::write(s.0.join("source"), vec![0; 2 * 1024 * 1024]).unwrap();
+    let events = execute(Start {
+        action: Action::CreateZip {
+            sources: vec![Source {
+                path: s.path("source"),
+                archive_name: "payload.bin".into(),
+            }],
+            output_file: s.path("input"),
+            method: Method::Deflate,
+            encryption: Encryption::None,
+        },
+        limits: Limits::default(),
+    });
+    assert_eq!(terminal(&events).outcome, Outcome::Completed, "{events:?}");
+    let events = execute(Start {
+        action: Action::List {
+            archive: s.path("input"),
+        },
+        limits: Limits::default(),
+    });
+    assert_eq!(terminal(&events).outcome, Outcome::Completed, "{events:?}");
+    let list_id = events
+        .iter()
+        .find_map(|e| match e {
+            Message::ListEnd { list_id, .. } => Some(list_id.clone()),
+            _ => None,
+        })
+        .unwrap();
+    assert!(events.iter().any(|e| matches!(e, Message::Entry(entry)
+        if entry.size == 2 * 1024 * 1024 && entry.size > entry.compressed_size * 1000)));
+    let mut request = start(&s, false, Limits::default().output);
+    if let Action::Extract { list_id: id, .. } = &mut request.action {
+        *id = Some(list_id);
+    }
+    let events = execute(request);
+    assert_eq!(terminal(&events).outcome, Outcome::Completed, "{events:?}");
+    assert_zero_file(&s.0.join("output/payload.bin"), 2 * 1024 * 1024);
+}
+#[test]
+fn streaming_high_ratio_zip_extracts_below_total_limit() {
     let s = Scratch::new();
     generate(&s, "bomb", 16 * 1024 * 1024);
     let events = execute(start(&s, false, Limits::default().output));
-    assert_eq!(terminal(&events).error, ErrorCode::Limit, "{events:?}");
-    assert_eq!(terminal(&events).publication, Publication::None);
-    assert_eq!(fs::read_dir(s.0.join("output")).unwrap().count(), 0);
+    assert_eq!(terminal(&events).outcome, Outcome::Completed, "{events:?}");
+    assert_zero_file(&s.0.join("output/payload.bin"), 16 * 1024 * 1024);
 }
 #[test]
 fn streaming_tar_and_gzip_truncation_never_publish() {
@@ -204,13 +244,12 @@ fn untrusted_zip64_u64_sizes_and_offsets_never_allocate_or_publish() {
     }
 }
 #[test]
-fn gzip_ratio_is_per_member_even_with_low_ratio_suffix() {
+fn gzip_high_ratio_members_extract_below_total_limit() {
     let s = Scratch::new();
     generate(&s, "gzip-bomb-joined", 16 * 1024 * 1024);
     let events = execute(start(&s, true, Limits::default().output));
-    assert_eq!(terminal(&events).error, ErrorCode::Limit, "{events:?}");
-    assert_eq!(terminal(&events).created_count, 0);
-    assert_eq!(fs::read_dir(s.0.join("output")).unwrap().count(), 0);
+    assert_eq!(terminal(&events).outcome, Outcome::Completed, "{events:?}");
+    assert_zero_file(&s.0.join("output/payload.bin"), 32 * 1024 * 1024);
 }
 #[test]
 fn streamed_aes_counter_survives_many_read_chunks() {
@@ -409,6 +448,31 @@ mod linux {
             assert_eq!(t.cleanup, Cleanup::Complete);
             assert_eq!(fs::read_dir(s.0.join("output")).unwrap().count(), 0);
             assert_eq!(fs::read(s.0.join("preserve")).unwrap(), b"original");
+        }
+    }
+    #[test]
+    fn disk_space_preflight_rejects_without_outputs_and_closes_staging() {
+        for mode in [
+            "space-stage",
+            "space-destination",
+            "space-combined",
+            "space-error",
+        ] {
+            let s = Scratch::new();
+            generate(&s, "store", 1024 * 1024);
+            let request = start(&s, false, Limits::default().output);
+            let child = spawn(&s, request, Some(mode));
+            assert_eq!(wait(child.id()).0, 0);
+            let events = events(&s);
+            let t = terminal(&events);
+            assert_eq!(t.error, ErrorCode::Io, "{mode}: {events:?}");
+            assert_eq!(t.publication, Publication::None);
+            assert_eq!(t.cleanup, Cleanup::Complete);
+            assert_eq!(t.created_count, 0);
+            assert!(t.detail.contains("디스크 여유 공간"));
+            assert!(s.0.join("paused").exists());
+            assert_eq!(fs::read_dir(s.0.join("output")).unwrap().count(), 0);
+            assert_eq!(fs::read_dir(s.0.join("staging")).unwrap().count(), 0);
         }
     }
     #[test]

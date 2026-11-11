@@ -6,6 +6,7 @@ mod parent;
 pub mod protocol;
 pub mod runtime;
 mod seven_zip;
+mod space;
 mod spool;
 mod streaming;
 pub mod wire;
