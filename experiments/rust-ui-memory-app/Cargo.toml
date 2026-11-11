@@ -14,7 +14,7 @@ doctest = false
 
 [features]
 default = []
-ui = ["dep:eframe"]
+ui = ["dep:eframe", "dep:wgpu"]
 ui-fixture = ["ui"]
 
 [dependencies]
@@ -42,3 +42,12 @@ path = "../../tests/rust-app-real-worker/flows.rs"
 [[test]]
 name = "format_contract"
 path = "../../tests/rust-app-real-worker/formats.rs"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+wgpu = { version = "=30.0.1", optional = true, default-features = false, features = ["std", "dx12"] }
+eframe = { version = "=0.37.0", optional = true, default-features = false, features = ["wgpu_no_default_features"] }
+
+[[test]]
+name = "renderer_fallback"
+path = "../../tests/rust-app-ui/renderer_fallback.rs"
+required-features = ["ui"]

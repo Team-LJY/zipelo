@@ -17,3 +17,14 @@ cargo +1.99.1 run --locked --manifest-path experiments/rust-ui-memory-app/Cargo.
 디자인은 흰 바탕 #FFFFFF, 글자 #182739, 선택 #D3E6F6, 강조 #174C7C를 사용함. 기존 한글 시스템 폰트와 본문/버튼 18px, 제목 26px를 유지함. 상단 작업 버튼, 가운데 파일 목록, 하단 진행/결과의 왼쪽 정렬 구조이며 작은 부가 설명, 장식 카드와 새 아이콘을 추가하지 않음.
 
 풀기 버튼은 raw GZ에만 출력명을 보내며 ZIP/TAR/TAR.GZ에는 None을 보냄. 모델과 가짜 작업자도 이 계약을 검증함. Start 전송 실패 시에는 연결을 보존하고 추가 요청을 막으며, 양쪽 EOF와 child wait가 모두 올 때까지 교체와 닫기를 허용하지 않음. 이때 Terminal이 없어도 종료 후 오류 확인 화면으로 이동하며 성공으로 표시하지 않음.
+
+
+## Windows 렌더러 시작 검증
+
+Windows는 DirectX 12 하드웨어 장치, 소프트웨어 장치(WARP), Glow 순서로 초기화를 시도합니다. 앱 생성 전에만 다음 렌더러를 시도하며 앱 생성 뒤 오류에는 작업을 중복 실행하지 않습니다. 모두 실패하면 한국어 안내 창을 표시합니다. Linux는 기존 Glow 경로를 유지합니다.
+
+```sh
+cargo +1.99.1 test --locked --manifest-path experiments/rust-ui-memory-app/Cargo.toml --features ui --test renderer_fallback
+```
+
+이 시험은 선택 순서와 재시도 중단 조건을 검증합니다. Windows WARP와 안내 창의 실제 실행은 Windows 실기로 별도 확인해야 합니다. 파일 크기와 전체 로컬 검증 결과는 validation.json의 renderer_fallback에 기록합니다.

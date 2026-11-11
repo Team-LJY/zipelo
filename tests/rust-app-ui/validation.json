@@ -133,5 +133,61 @@
     "merge_heads": {
         "password_pr72": "ff86e6ddb7100781c4d3dc0dd388d10e86d2025c",
         "main": "e497fac4309018a2824b2f296a366a648f4429bf"
+    },
+    "renderer_fallback": {
+        "base_remote_main": "26bb9574dfab498b33825b1157678b146822055b",
+        "tested_source_local_commit": "84ca4cc3b0fa457e45c101a4ba5b3720fb80cdd0",
+        "tested_code_tree": "fec757180d04d57808fa424c7014a76816b8af86",
+        "command": "python3 tests/ci/run_rust.py local",
+        "exit_code": 0,
+        "rust_tests_passed": 953,
+        "runner_checks_passed": 34,
+        "linux_build_targets_passed": 21,
+        "linux_test_targets_passed": 21,
+        "windows_cross_targets_passed": 21,
+        "renderer_order_tests_passed": 6,
+        "windows_order": [
+            "DX12 hardware",
+            "DX12 software/WARP",
+            "Glow"
+        ],
+        "linux_order": [
+            "Glow"
+        ],
+        "retry_boundary": "앱 생성 전에만 재시도하며 앱 생성 뒤 오류나 정상 종료에는 다시 시작하지 않음",
+        "startup_failure_ui": "Windows MessageBoxW 한국어 안내와 GUI subsystem",
+        "baseline_package_commit": "9159859b761135a6957a3c527b4aa31cae1802b3",
+        "baseline_note": "9159859와 기준 main 사이 experiments/ 및 packaging/ 변경 없음. 사용자가 시험한 설치 파일과 앱 해시 일치.",
+        "artifacts": {
+            "app": {
+                "before_bytes": 20856408,
+                "before_sha256": "64486c3bbf3edde5041957755a21c738baddf3c5a920aaa1f09b143e9f2a05df",
+                "after_bytes": 29586667,
+                "after_sha256": "a6aabbc0d0411b34fe381e4b73fa737be5b163f6ffdcd562b571ffd5e9d99271",
+                "increase_bytes": 8730259,
+                "local_path": "tests/release-packages/runs/windows-renderer-final/payload/Zipelo.exe"
+            },
+            "installer": {
+                "before_bytes": 5609149,
+                "before_sha256": "fa9ba9f33897bf4794ff02a2e6151e22bce01b48a8a31eaeb8a0dfb370000ae4",
+                "after_bytes": 7473098,
+                "after_sha256": "e0023e413f09294bf9b123805a5f1f3feabf150f0c25d79952e3cb58a62b6a3f",
+                "increase_bytes": 1863949,
+                "local_path": "tests/release-packages/runs/windows-renderer-final/Zipelo-0.1.0-dev-windows-x64-setup.exe"
+            }
+        },
+        "windows_runtime_tested": false,
+        "warp_and_message_box_runtime_tested": false,
+        "native_linux_window_rerun": false,
+        "local_logs": [
+            "tests/renderer-local.log",
+            "tests/renderer-windows.log",
+            "tests/renderer-release.log"
+        ],
+        "initial_build_failures": [
+            "수동 교차 빌드에서 MinGW 기본 이름을 찾지 못해 기존 gcc-posix 경로를 지정함",
+            "설치 빌드의 생성 캐시가 Git 변경으로 잡혀 개인 저장소 제외 목록에 캐시 경로를 추가하고 같은 소스로 재실행함"
+        ],
+        "evidence_note": "검증과 패키지 생성 후 README와 이 검증 JSON만 갱신함"
     }
 }
