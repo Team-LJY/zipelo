@@ -3,7 +3,7 @@ set -eu
 if command -v update-desktop-database >/dev/null 2>&1; then
     update-desktop-database /usr/share/applications
 fi
-if [ "$1" = configure ] && [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != root ]; then
+if [ "$1" = configure ] && [ -z "${2:-}" ] && [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != root ]; then
     account=$(getent passwd "$SUDO_USER")
     uid=$(printf '%s' "$account" | cut -d: -f3)
     home_dir=$(printf '%s' "$account" | cut -d: -f6)

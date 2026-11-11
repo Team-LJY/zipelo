@@ -68,5 +68,36 @@
         "tests/release-packages/runs/local-fixed.log",
         "tests/release-packages/runs/smoke/installed-window.png"
     ],
-    "evidence_note": "Validation JSON added after tests; the tested code tree matches the remote code tree."
+    "evidence_note": "Validation JSON added after tests; the tested code tree matches the remote code tree.",
+    "lifecycle_fix": {
+        "tested_source_local_commit": "64278d557270ceead65729a2a7484c90806cce97",
+        "changes": [
+            "최초 configure에서만 기본 앱 적용, 업그레이드 및 재설정은 기존 선택 보존",
+            "설치 시도 실패에도 purge 실행, purge 실패와 별개로 MIME 복원",
+            "외부 MIME 변경은 보존하며 다른 파일 복원 지속, 원래 실패와 정리 실패 모두 보고"
+        ],
+        "regression_command": "python3 -m unittest discover -s tests/release-packages -p \"test_*.py\" -v",
+        "regression_tests_passed": 7,
+        "local": {
+            "exit_code": 0,
+            "rust_tests_passed": 937,
+            "runner_checks_passed": 34,
+            "linux_build_targets_passed": 21,
+            "linux_test_targets_passed": 21,
+            "windows_cross_targets_passed": 21
+        },
+        "ubuntu_repackaged": {
+            "path": "tests/release-packages/runs/ubuntu-lifecycle/zipelo_0.1.0~dev1_amd64.deb",
+            "bytes": 4966540,
+            "sha256": "bbab8fcd97b004c6bbb62a3a3f76d519dc517d35f72b617f01f37f18e46ec97a",
+            "payload_reused_from": "10aad21",
+            "postinst_updated": true
+        },
+        "actual_installation_rerun": false,
+        "windows_runtime_tested": false,
+        "logs": [
+            "tests/release-packages/runs/lifecycle-regression.log",
+            "tests/release-packages/runs/local-lifecycle.log"
+        ]
+    }
 }
