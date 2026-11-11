@@ -1,0 +1,268 @@
+const FIXTURE_PASSWORD: &str = "fixture-password";
+fn encrypted_fixture(scratch: &Scratch, name: &str) -> PathBuf {
+    let archive = scratch.path(name);
+    fs::copy(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../tests/rust-archive-worker/fixtures")
+            .join(name),
+        &archive,
+    )
+    .unwrap();
+    archive
+}
+impl Screen {
+    fn password_request(&mut self, expected_attempt: u32, encrypt: bool) -> u64 {
+        let deadline = Instant::now() + Duration::from_secs(10);
+        loop {
+            self.render(vec![]);
+            assert!(self.app.model.busy(), "{}", self.app.model.status());
+            if let Some((id, attempt, purpose)) = self.app.model.challenge {
+                assert_eq!(attempt, expected_attempt);
+                assert_eq!(purpose, encrypt);
+                self.render(vec![]);
+                return id;
+            }
+            assert!(Instant::now() < deadline);
+            std::thread::sleep(Duration::from_millis(2));
+        }
+    }
+    fn password_answer(&mut self, text: &str) {
+        self.render(vec![]);
+        let input = self
+            .context
+            .read_response(egui::Id::new("archive-password-input"))
+            .expect("암호 입력란이 없음")
+            .rect
+            .center();
+        self.click_at(input);
+        let rendered = self.render(vec![
+            egui::Event::Key {
+                key: egui::Key::A,
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers: egui::Modifiers::COMMAND,
+            },
+            egui::Event::Text(text.into()),
+        ]);
+        assert!(!rendered.iter().any(|(value, _)| value.contains(text)));
+        self.click("암호 전달");
+    }
+    fn start_password_extract(&mut self, output: &Path) {
+        self.fill("출력 폴더", egui::vec2(100.0, 0.0), output);
+        self.click("풀기");
+        assert!(self.app.model.busy());
+    }
+    fn finish_password_job(&mut self, expected: Outcome) {
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while self.app.model.busy() {
+            self.render(vec![]);
+            assert!(Instant::now() < deadline);
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        assert!(self.app.model.confirmed, "{}", self.app.model.status());
+        assert_eq!(self.app.model.terminal.as_ref().unwrap().outcome, expected);
+        assert!(self.app.model.challenge.is_none());
+    }
+    fn start_encrypted_zip(&mut self, source: &Path, archive: &Path) {
+        self.click("ZIP 만들기");
+        self.fill(
+            "원본 파일 절대 경로 / 한 줄에 하나",
+            egui::vec2(0.0, 25.0),
+            source,
+        );
+        self.fill("저장할 ZIP 절대 경로", egui::vec2(0.0, 22.0), archive);
+        self.click("암호로 보호");
+        self.click("ZIP 만들기");
+        assert!(self.app.model.busy(), "{}", self.app.model.status());
+    }
+}
+#[test]
+fn encrypted_zip_list_and_extract_with_actual_password_dialog() {
+    for name in [
+        "zipcrypto-store.zip",
+        "zipcrypto-deflate.zip",
+        "aes1-store.zip",
+        "aes1-deflate.zip",
+        "aes2-store.zip",
+        "aes2-deflate.zip",
+    ] {
+        let scratch = Scratch::new();
+        let archive = encrypted_fixture(&scratch, name);
+        let original = fs::read(&archive).unwrap();
+        let output = make_directory(&scratch.path("output"));
+        let (factory, observed) = observed_factory();
+        let mut screen = Screen::new(factory);
+        screen.open(&archive);
+        assert!(screen.app.model.entries.iter().all(|entry| entry.encrypted));
+        assert!(screen.app.model.challenge.is_none());
+        screen.start_password_extract(&output);
+        screen.password_request(1, false);
+        assert_eq!(fs::read_dir(&output).unwrap().count(), 0);
+        screen.password_answer(FIXTURE_PASSWORD);
+        screen.finish_password_job(Outcome::Completed);
+        assert_eq!(
+            fs::read(output.join("payload.bin")).unwrap(),
+            b"Zipelo encrypted interoperability\n".repeat(8)
+        );
+        assert_eq!(fs::read(archive).unwrap(), original);
+        assert_reaped(&observed);
+    }
+}
+#[test]
+fn wrong_password_retry_clears_input_and_succeeds_without_partial_output() {
+    let scratch = Scratch::new();
+    let archive = encrypted_fixture(&scratch, "aes2-deflate.zip");
+    let output = make_directory(&scratch.path("output"));
+    let (factory, observed) = observed_factory();
+    let mut screen = Screen::new(factory);
+    screen.open(&archive);
+    screen.start_password_extract(&output);
+    let first = screen.password_request(1, false);
+    screen.password_answer("wrong-password");
+    let second = screen.password_request(2, false);
+    assert_ne!(first, second);
+    assert_eq!(fs::read_dir(&output).unwrap().count(), 0);
+    let labels = screen.render(vec![]);
+    assert!(
+        labels
+            .iter()
+            .any(|(value, _)| value == "암호가 맞지 않습니다. 다시 입력하세요")
+    );
+    screen.click("암호 전달");
+    assert_eq!(screen.app.model.challenge, Some((second, 2, false)));
+    assert!(
+        screen
+            .app
+            .model
+            .error
+            .as_ref()
+            .unwrap()
+            .contains("1~1024바이트")
+    );
+    screen.render(vec![]);
+    screen.password_answer(FIXTURE_PASSWORD);
+    screen.finish_password_job(Outcome::Completed);
+    assert_reaped(&observed);
+}
+#[test]
+fn three_wrong_passwords_fail_without_writes_and_can_start_a_new_job() {
+    let scratch = Scratch::new();
+    let archive = encrypted_fixture(&scratch, "zipcrypto-deflate.zip");
+    let output = make_directory(&scratch.path("output"));
+    let (factory, observed) = observed_factory();
+    let mut screen = Screen::new(factory);
+    screen.open(&archive);
+    screen.start_password_extract(&output);
+    for attempt in 1..=3 {
+        screen.password_request(attempt, false);
+        assert_eq!(fs::read_dir(&output).unwrap().count(), 0);
+        screen.password_answer("wrong-password");
+    }
+    screen.finish_password_job(Outcome::Failed);
+    assert_eq!(
+        screen.app.model.terminal.as_ref().unwrap().error,
+        Some(ErrorCode::WrongPassword)
+    );
+    assert_eq!(fs::read_dir(&output).unwrap().count(), 0);
+    screen.open(&archive);
+    assert_reaped(&observed);
+}
+#[test]
+fn cancel_password_extraction_waits_for_cleanup_without_writes() {
+    let scratch = Scratch::new();
+    let archive = encrypted_fixture(&scratch, "aes1-store.zip");
+    let output = make_directory(&scratch.path("output"));
+    fs::write(output.join("existing.txt"), b"preserve").unwrap();
+    let (factory, observed) = observed_factory();
+    let mut screen = Screen::new(factory);
+    screen.open(&archive);
+    screen.start_password_extract(&output);
+    screen.password_request(1, false);
+    screen.click("작업 취소");
+    screen.app.model.request_close();
+    screen.app.model.confirm_close();
+    assert!(matches!(
+        screen.app.model.close,
+        Close::Waiting | Close::Review
+    ));
+    screen.finish_password_job(Outcome::Cancelled);
+    assert_eq!(screen.app.model.close, Close::Review);
+    assert_eq!(fs::read(output.join("existing.txt")).unwrap(), b"preserve");
+    assert_eq!(fs::read_dir(output).unwrap().count(), 1);
+    assert_reaped(&observed);
+}
+#[test]
+fn cold_start_creates_aes_zip_then_reopens_and_extracts_with_password() {
+    let scratch = Scratch::new();
+    let source = scratch.path("private.txt");
+    let payload = b"Public synthetic password flow payload\n";
+    fs::write(&source, payload).unwrap();
+    let archive = scratch.path("encrypted.zip");
+    let output = make_directory(&scratch.path("output"));
+    let (factory, observed) = observed_factory();
+    let mut screen = Screen::new(factory);
+    assert!(!screen.app.model.encryption);
+    screen.start_encrypted_zip(&source, &archive);
+    screen.password_request(1, true);
+    assert!(!archive.exists());
+    screen.password_answer(FIXTURE_PASSWORD);
+    screen.finish_password_job(Outcome::Completed);
+    let bytes = fs::read(&archive).unwrap();
+    assert_eq!(&bytes[..4], b"PK\x03\x04");
+    assert_eq!(u16::from_le_bytes(bytes[6..8].try_into().unwrap()) & 1, 1);
+    assert_eq!(u16::from_le_bytes(bytes[8..10].try_into().unwrap()), 99);
+    screen.open(&archive);
+    assert!(screen.app.model.entries.iter().all(|entry| entry.encrypted));
+    screen.start_password_extract(&output);
+    screen.password_request(1, false);
+    screen.password_answer(FIXTURE_PASSWORD);
+    screen.finish_password_job(Outcome::Completed);
+    assert_eq!(fs::read(output.join("private.txt")).unwrap(), payload);
+    assert_eq!(fs::read(source).unwrap(), payload);
+    assert_reaped(&observed);
+}
+#[test]
+fn cancel_password_creation_does_not_create_an_archive() {
+    let scratch = Scratch::new();
+    let source = scratch.path("private.txt");
+    fs::write(&source, b"preserve").unwrap();
+    let archive = scratch.path("cancelled.zip");
+    let (factory, observed) = observed_factory();
+    let mut screen = Screen::new(factory);
+    screen.start_encrypted_zip(&source, &archive);
+    screen.password_request(1, true);
+    screen.click("작업 취소");
+    screen.finish_password_job(Outcome::Cancelled);
+    assert!(!archive.exists());
+    assert_eq!(fs::read(source).unwrap(), b"preserve");
+    assert_eq!(fs::read_dir(&scratch.0).unwrap().count(), 1);
+    assert_reaped(&observed);
+}
+
+#[test]
+fn oversized_utf8_password_stays_in_dialog_then_accepts_valid_input() {
+    let scratch = Scratch::new();
+    let archive = encrypted_fixture(&scratch, "aes2-store.zip");
+    let output = make_directory(&scratch.path("output"));
+    let (factory, observed) = observed_factory();
+    let mut screen = Screen::new(factory);
+    screen.open(&archive);
+    screen.start_password_extract(&output);
+    let id = screen.password_request(1, false);
+    screen.password_answer(&"가".repeat(342));
+    assert_eq!(screen.app.model.challenge, Some((id, 1, false)));
+    assert!(
+        screen
+            .app
+            .model
+            .error
+            .as_ref()
+            .unwrap()
+            .contains("1~1024바이트")
+    );
+    assert_eq!(fs::read_dir(&output).unwrap().count(), 0);
+    screen.password_answer(FIXTURE_PASSWORD);
+    screen.finish_password_job(Outcome::Completed);
+    assert_reaped(&observed);
+}

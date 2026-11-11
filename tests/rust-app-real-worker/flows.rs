@@ -266,6 +266,8 @@ mod screen {
             );
         }
     }
+    include!("password_flows.rs");
+
     fn archive_flow(name: &str, format: Format) {
         let scratch = Scratch::new();
         let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))

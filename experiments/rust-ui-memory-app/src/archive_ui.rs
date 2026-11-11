@@ -53,10 +53,12 @@ pub enum Start {
 pub struct Secret(Vec<u8>);
 impl Secret {
     pub fn new(text: String) -> Result<Self, &'static str> {
-        if text.is_empty() || text.len() > 1024 {
+        let mut bytes = text.into_bytes();
+        if bytes.is_empty() || bytes.len() > 1024 {
+            bytes.fill(0);
             return Err("암호는 UTF-8 1~1024바이트로 입력하세요");
         }
-        Ok(Self(text.into_bytes()))
+        Ok(Self(bytes))
     }
     pub fn as_bytes(&self) -> &[u8] {
         &self.0
@@ -322,12 +324,10 @@ impl Model {
             Start::CreateZip {
                 sources,
                 output_file,
-                aes256,
                 ..
             } => {
                 !sources.is_empty()
                     && output_file.is_absolute()
-                    && (!aes256 || self.encryption)
                     && sources
                         .iter()
                         .all(|(p, n)| p.is_absolute() && valid_relative(n))

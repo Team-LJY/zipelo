@@ -50,3 +50,14 @@ fixtures/는 generate.py의 Python 표준 라이브러리로 생성한 작은 �
 암호 ZIP, 대용량 성능, OS sandbox, 악성 파일 전체 검증과 Windows 실기는 이 시험의 범위 밖임.
 
 취소와 종료 경합 회귀 시험은 실제 작업자에 List를 보낸 뒤 화면 poll 전에 취소하는 흐름을 100회 확인함. 취소 파이프 쓰기가 실패해도 검증된 Terminal과 성공 종료가 있으면 원래 결과를 보존하며, Terminal이 없는 조기 종료는 계속 실패로 처리함. 취소 쓰기 오류 판단을 미루어도 EOF와 child wait 전에는 닫기나 작업 교체를 허용하지 않음.
+
+암호 화면 흐름
+
+password_flows.rs는 공개 시험 암호 fixture-password를 사용하는 기존 합성 ZIP 6개로
+ZipCrypto와 AES의 Store/Deflate 목록 및 해제를 실제 화면 위젯과 작업자로 확인함.
+목록은 암호 없이 표시하며 해제 시 작업자의 challenge_id와 attempt로 암호를 요청함.
+틀린 암호 뒤 재입력, 3회 실패, 빈 입력과 UTF-8 바이트 한도 초과, 대기 중 취소,
+첫 실행의 AES ZIP 생성 및 재열기/해제를 검증함. 실패와 취소 중 출력이 없고 기존 파일과
+원본이 보존되며 Terminal, 양쪽 EOF 및 child wait 후 연결이 정리되는지 확인함.
+암호 표시를 가리고 재요청, 취소 및 창 해제 때 앱이 소유한 입력 버퍼를 지움.
+Windows 실행이나 네이티브 OS 창 입력 자동화 검증은 포함하지 않음.
