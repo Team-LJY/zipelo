@@ -6,6 +6,7 @@ pub enum Format {
     Tar,
     Gzip,
     TarGzip,
+    SevenZip,
 }
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum SourceObject {
@@ -200,6 +201,8 @@ pub enum Event {
     Terminal(Terminal),
 }
 pub enum HostEvent {
+    Fault(String),
+    CleanupComplete,
     Frame {
         job_id: u64,
         sequence: u64,
@@ -237,6 +240,7 @@ struct Running {
     entries: Vec<Entry>,
     list_end: Option<(u32, ListId)>,
     stdout_eof: bool,
+    transport_closed: bool,
     stderr_eof: bool,
     exit: Option<bool>,
     cancel_sequence: Option<u64>,
@@ -380,6 +384,7 @@ impl Model {
             entries: Vec::new(),
             list_end: None,
             stdout_eof: false,
+            transport_closed: false,
             stderr_eof: false,
             exit: None,
             cancel_sequence: None,
@@ -509,10 +514,10 @@ impl Model {
             };
             self.receive(event);
         }
-        let complete = self
-            .running
-            .as_ref()
-            .is_some_and(|r| r.stdout_eof && r.stderr_eof && r.exit.is_some());
+        let complete = self.running.as_ref().is_some_and(|r| {
+            r.exit.is_some()
+                && ((r.stdout_eof && r.stderr_eof) || (r.transport_closed && self.error.is_some()))
+        });
         if complete {
             let run = self.running.take().unwrap();
             self.confirmed =
@@ -559,6 +564,8 @@ impl Model {
     fn receive(&mut self, host: HostEvent) {
         let run = self.running.as_mut().unwrap();
         match host {
+            HostEvent::Fault(message) => self.error = Some(message),
+            HostEvent::CleanupComplete => run.transport_closed = true,
             HostEvent::StdoutEof => run.stdout_eof = true,
             HostEvent::StderrEof => run.stderr_eof = true,
             HostEvent::Exited { success } => run.exit = Some(success),

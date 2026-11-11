@@ -10,7 +10,7 @@
 cargo +1.99.1 run --locked --manifest-path experiments/rust-ui-memory-app/Cargo.toml --features ui-fixture -- --ui-fixture /absolute/example.zip
 ```
 
-`locked.zip` 이름은 가짜 암호 요청을 만듦. 아무 비어 있지 않은 합성 암호를 받으며 암호를 기록하거나 저장하지 않음. 실제 암호나 사용자 자료를 입력할 필요가 없음. 시험 모드는 화면에 명시되고 실제 파일을 만들지 않음. `ui-fixture` 없이 실행하면 작업자 미연결 오류를 표시하며 가짜 성공으로 대체하지 않음.
+`locked.zip` 이름은 가짜 암호 요청을 만듦. 아무 비어 있지 않은 합성 암호를 받으며 암호를 기록하거나 저장하지 않음. 실제 암호나 사용자 자료를 입력할 필요가 없음. 시험 모드는 화면에 명시되고 실제 파일을 만들지 않음. `ui-fixture` 없이 실행하면 앱과 같은 폴더의 실제 zipelo-archive-worker를 실행함. Windows에서는 .exe 확장자를 사용함. 작업자가 누락되면 오류를 표시하며 가짜 성공으로 대체하지 않음. 실제 작업자 연결 시험은 ../rust-app-real-worker/README.md를 참고할 것.
 
 범위는 목록 확인, 선택 해제, GZ 출력명, ZIP 생성, 암호 요청, 진행률, 취소와 닫기 철회, Terminal/EOF/child wait 분리, 오래된 ID/sequence 거부, SourceChanged 재열람, 부분 출력과 불확실 게시 보존임. 구성한 이벤트 시험은 실제 OS 종료나 파일 보안 검증의 증거가 아님.
 
