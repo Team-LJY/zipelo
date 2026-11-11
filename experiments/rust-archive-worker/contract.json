@@ -73,7 +73,6 @@
         "CRC/size/stream-end validation precedes committed output events; preserve commit/durability/cleanup distinctions."
     ],
     "pending": [
-        "7z streaming and ZIP creation streaming remain deferred with separate legacy quotas.",
         "Windows native runtime, forced interruption of blocked OS I/O and a current full dependency advisory audit are not verified."
     ],
     "crypto": {
@@ -144,7 +143,7 @@
         "regression": "Preserve existing format bytes and round-trip SevenZip in ListEnd/ListId."
     },
     "streaming_limits": {
-        "agreement": "Revision 2 fields and frame encoding unchanged. Ratio-rejection removal and advisory disk-space checks follow manager decision d6bc0d37-89d1-4cd2-a00b-883b5eb23ec0. DiskFull tag 13 and preserving Io tag 8 for query/access failures were agreed with frontend in message 3b01f4c4-c9b4-4c72-a9a0-b3df39979ea1. The 7z/CreateZip streaming extension follows manager task c4acbf18-0845-49a2-ae10-a92e7934042d; this extension is proposed for joint frontend review before merge. Existing numeric quotas, frame fields and error tags remain unchanged.",
+        "agreement": "Revision 2 fields and frame encoding unchanged. Ratio-rejection removal and advisory disk-space checks follow manager decision d6bc0d37-89d1-4cd2-a00b-883b5eb23ec0. DiskFull tag 13 and preserving Io tag 8 for query/access failures were agreed with frontend in message 3b01f4c4-c9b4-4c72-a9a0-b3df39979ea1. The 7z/CreateZip streaming extension follows manager task c4acbf18-0845-49a2-ae10-a92e7934042d; this extension was agreed with frontend in message 81b585cb-84be-494d-a953-1c8220300176 (PR 78 review 5864130366). Existing numeric quotas, frame fields and error tags remain unchanged.",
         "default_input_bytes": 18446744073709551615,
         "default_output_bytes": 17179869184,
         "default_entries": 10000,
