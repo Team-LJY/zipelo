@@ -2,6 +2,7 @@
 
 import argparse
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -11,6 +12,9 @@ import subprocess
 
 ROOT = Path(__file__).resolve().parents[3]
 TARGET = "x86_64-pc-windows-gnu"
+SPEC = importlib.util.spec_from_file_location("licenses", ROOT / "packaging/licenses.py")
+LICENSES = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(LICENSES)
 
 
 def pe_machine(path):
@@ -72,6 +76,7 @@ def build(args):
     records = {}
     payload = output / "payload"
     payload.mkdir()
+    LICENSES.generate([args.app_manifest, args.worker_manifest], payload / "THIRD-PARTY-LICENSES.txt")
     for name, manifest, binary, features in (
         ("Zipelo.exe", args.app_manifest, "zipelo-ui-memory-app", ("ui",)),
         ("zipelo-archive-worker.exe", args.worker_manifest, "zipelo-archive-worker", ()),

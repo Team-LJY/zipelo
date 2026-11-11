@@ -1,11 +1,6 @@
-Zipelo 합성 메모리 UI 후보
-자체 코드: MIT. LICENSE에 원문을 포함함.
-직접 의존성: 고정 PR42의 zipelo-app-core-memory와 선택적 eframe 0.37.0임.
-eframe feature: accesskit, clipboard, glow, system_fonts, wayland, x11임.
-기존 PR34 및 PR42 lock에 있는 package/version/checksum만 사용함.
-플랫폼별 선택 feature, SPDX license, 캐시 archive checksum, 라이선스 파일의 상대 경로와 SHA256은 tests/rust-ui-memory-app/dependencies.json에 기록함.
-원문 출처는 해당 checksum의 crates.io crate archive와 그 archive에서 풀린 registry source임.
-Linux headless/GUI 빌드만 수행함. Windows GNU/MSVC는 선택 그래프 분석이며 빌드/실행을 뜻하지 않음.
-설치된 Noto CJK 폰트는 런타임 경로에서 읽으며 이 후보에 재배포하지 않음.
-이 기록은 최종 설치기/배포용 전체 고지를 완료했다는 뜻이 아님.
-crate에 원문이 없는 GUI package의 고정 upstream 보충 원문은 기존 PR34에서 보존한 tests/rust-ui-memory-app/license-supplement.json을 사용함. 원래 URL과 원문을 그대로 보존하며 새로운 네트워크 조회를 하지 않음.
+Zipelo 의존성 고지 생성 안내
+
+최종 배포 고지는 packaging/licenses.py가 빌드할 때 생성하는 THIRD-PARTY-LICENSES.txt임.
+앱과 작업자의 Cargo.lock 전체 항목을 오프라인 cargo metadata와 대조함.
+로컬 registry의 원문과 잠금 체크섬을 확인하며 누락 시 패키지 생성을 중단함.
+이 안내 파일과 과거 시험용 보충 원문은 최종 배포 고지를 대신하지 않음.

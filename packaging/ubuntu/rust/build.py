@@ -22,6 +22,12 @@ def build(args):
     lib = stage / "usr/lib/zipelo"
     lib.mkdir(parents=True)
     records = {}
+    docs = stage / "usr/share/doc/zipelo"
+    docs.mkdir(parents=True)
+    WINDOWS.LICENSES.generate(
+        [ROOT / "experiments/rust-ui-memory-app/Cargo.toml", ROOT / "experiments/rust-archive-worker/Cargo.toml"],
+        docs / "THIRD-PARTY-LICENSES.txt",
+    )
     for name, manifest, binary, features in (
         ("Zipelo", ROOT / "experiments/rust-ui-memory-app/Cargo.toml", "zipelo-ui-memory-app", ("ui",)),
         ("zipelo-archive-worker", ROOT / "experiments/rust-archive-worker/Cargo.toml", "zipelo-archive-worker", ()),
@@ -38,8 +44,6 @@ def build(args):
     desktop.mkdir(parents=True)
     shutil.copyfile(Path(__file__).with_name("zipelo.desktop"), desktop / "zipelo.desktop")
     subprocess.run(["desktop-file-validate", str(desktop / "zipelo.desktop")], check=True)
-    docs = stage / "usr/share/doc/zipelo"
-    docs.mkdir(parents=True)
     shutil.copyfile(ROOT / "LICENSE", docs / "copyright")
     control = stage / "DEBIAN"
     control.mkdir()

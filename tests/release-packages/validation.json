@@ -99,5 +99,71 @@
             "tests/release-packages/runs/lifecycle-regression.log",
             "tests/release-packages/runs/local-lifecycle.log"
         ]
+    },
+    "third_party_licenses": {
+        "status": "passed",
+        "base_remote_main": "8bfa25456b936346b4f1808233afb4551e769718",
+        "tested_source_local_commit": "6e0cfdb2ce00acc0b703c29a078234066493ed91",
+        "tested_code_tree": "f29a148a8b6ef035f90140d143fa0e4f80b5eea5",
+        "metadata_locked_crates": 403,
+        "metadata_lock_mismatches": 0,
+        "missing_originals": [],
+        "source_counts": {
+            "upstream_supplement": 46,
+            "registry": 339,
+            "standard_supplement": 12,
+            "workspace": 6
+        },
+        "notice_source_files": 745,
+        "supplement_catalog_sha256": "519f306f6d7affe127b762d82df99ca025ffcbb5a5db628884112e4b88c73084",
+        "source_policy": "로컬 registry와 잠금 .crate를 대조함. 누락 46개는 해당 버전 공식 upstream 원문을 사용함. upstream에도 원문이 없는 승인된 12개는 SPDX MIT 표준 원문과 버전별 Cargo.toml 저자 고지를 출처 및 해시와 함께 표시함. 생성 단계는 오프라인임.",
+        "unit_command": "python3 -m unittest discover -s tests/release-packages -p \"test_*.py\" -v",
+        "package_unit_tests_passed": 25,
+        "license_tests_passed": 18,
+        "local_command": "python3 tests/ci/run_rust.py local",
+        "local_exit_code": 0,
+        "rust_tests_passed": 953,
+        "runner_tests_passed": 34,
+        "local_phase_counts": {
+            "build": 21,
+            "test": 21,
+            "cross-build": 21
+        },
+        "windows_builder_exit_code": 0,
+        "ubuntu_builder_exit_code": 0,
+        "package_profile": "release",
+        "final_packages_created": true,
+        "package_contents_verified": true,
+        "verification": "NSIS 설치 EXE와 .deb 내부에서 고지를 읽어 생성 원문과 바이트 단위로 대조함. metadata/잠금 목록과 고지 항목 누락 0개 및 중복 없음.",
+        "package_contents": {
+            "crates": 403,
+            "missing": 0,
+            "notice_sha256": "69c07f1cf2943b28931834c7a97fd201b6fbfd56bc623b22c78d7880b0e0f096",
+            "notice_bytes": 3847431,
+            "standard_supplements": 12,
+            "packages": {
+                "windows": {
+                    "path": "tests/release-packages/runs/licenses/windows-final/Zipelo-0.1.0-dev-windows-x64-setup.exe",
+                    "sha256": "e3fc9a259c13aadcc399263bb844a989b4d493456505590109dc2a4c12678e9e",
+                    "bytes": 7523507
+                },
+                "ubuntu": {
+                    "path": "tests/release-packages/runs/licenses/ubuntu-final/zipelo_0.1.0~dev1_amd64.deb",
+                    "sha256": "19014ebafac2e9d4dbf5ec6cc9f54c21f82484d1dfdb7c182c5923b512829be2",
+                    "bytes": 5015432
+                }
+            }
+        },
+        "windows_runtime_tested": false,
+        "ubuntu_installation_tested": false,
+        "release_published": false,
+        "local_logs": [
+            "tests/release-packages/runs/licenses/final-unit.log",
+            "tests/release-packages/runs/licenses/final-local.log",
+            "tests/release-packages/runs/licenses/windows-final.log",
+            "tests/release-packages/runs/licenses/ubuntu-final.log",
+            "tests/release-packages/runs/licenses/package-contents.json"
+        ],
+        "evidence_note": "코드와 패키지 검증을 완료한 뒤 이 검증 JSON만 갱신함. 실제 설치와 별도 법적 준수 심사는 이번 범위가 아님."
     }
 }
