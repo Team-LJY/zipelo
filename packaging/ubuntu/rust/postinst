@@ -1,0 +1,15 @@
+#!/bin/sh
+set -eu
+if command -v update-desktop-database >/dev/null 2>&1; then
+    update-desktop-database /usr/share/applications
+fi
+if [ "$1" = configure ] && [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != root ]; then
+    account=$(getent passwd "$SUDO_USER")
+    uid=$(printf '%s' "$account" | cut -d: -f3)
+    home_dir=$(printf '%s' "$account" | cut -d: -f6)
+    if [ -n "$uid" ] && [ "$uid" -ge 1000 ] && [ -d "$home_dir" ]; then
+        for mime in application/zip application/x-7z-compressed application/x-compressed-tar application/gzip application/x-tar; do
+            runuser -u "$SUDO_USER" -- env HOME="$home_dir" xdg-mime default zipelo.desktop "$mime"
+        done
+    fi
+fi
