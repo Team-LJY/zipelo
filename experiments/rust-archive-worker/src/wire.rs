@@ -495,7 +495,7 @@ impl<R: Read> Reader<R> {
         }
         self.job = Some(job);
         self.sequence += 1;
-        let mut b = vec![0; len];
+        let mut b = zeroize::Zeroizing::new(vec![0; len]);
         self.input.read_exact(&mut b)?;
         let message = Message::decode(u16::from_le_bytes(h[6..8].try_into().unwrap()), &b)?;
         self.terminal = matches!(message, Message::Terminal(_));
@@ -522,6 +522,7 @@ impl<W: Write> Writer<W> {
             return Err(invalid());
         }
         let (kind, b) = m.encode()?;
+        let b = zeroize::Zeroizing::new(b);
         let mut h = Vec::with_capacity(32);
         h.extend(b"ZAW1");
         h.extend(1u16.to_le_bytes());

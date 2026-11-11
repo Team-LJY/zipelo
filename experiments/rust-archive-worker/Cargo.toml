@@ -7,6 +7,12 @@ publish = false
 autotests = false
 
 [dependencies]
+aes = { version = "=0.8.4", features = ["zeroize"] }
+hmac = "=0.12.1"
+pbkdf2 = { version = "=0.12.2", default-features = false, features = ["hmac"] }
+sha1 = "=0.10.7"
+subtle = "=2.6.1"
+zeroize = "=1.9.1"
 sha2 = "=0.10.9"
 zlib-rs = { version = "=0.6.8", default-features = false, features = ["rust-allocator"] }
 

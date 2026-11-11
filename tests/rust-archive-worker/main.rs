@@ -413,7 +413,7 @@ fn create_store_and_deflate_zip() {
     }
 }
 #[test]
-fn encrypted_creation_is_explicitly_unsupported() {
+fn encryption_password_eof_is_protocol_failure() {
     let s = Scratch::new();
     let e = execute(Start {
         action: Action::CreateZip {
@@ -424,7 +424,7 @@ fn encrypted_creation_is_explicitly_unsupported() {
         },
         limits: Limits::default(),
     });
-    assert_eq!(terminal(&e).error, ErrorCode::UnsupportedFeature);
+    assert_eq!(terminal(&e).error, ErrorCode::Protocol);
     assert!(!s.0.join("result.zip").exists());
 }
 #[test]
@@ -598,14 +598,14 @@ fn cancel_ack_and_terminal_are_distinct() {
 }
 
 #[test]
-fn encrypted_zip_rejects_without_outputs() {
+fn encrypted_zip_password_eof_preserves_outputs() {
     let mut bytes = include_bytes!("fixtures/store.zip").to_vec();
     bytes[6] |= 1;
     let central = bytes.windows(4).position(|b| b == b"PK\x01\x02").unwrap();
     bytes[central + 8] |= 1;
     let s = Scratch::new();
     let e = extract(&s, &bytes, None, Selection::All, None, Limits::default());
-    assert_eq!(terminal(&e).error, ErrorCode::UnsupportedFeature);
+    assert_eq!(terminal(&e).error, ErrorCode::Protocol);
     assert_eq!(terminal(&e).publication, Publication::None);
     assert_eq!(fs::read_dir(s.0.join("output")).unwrap().count(), 0);
 }
@@ -800,4 +800,401 @@ fn zero_payload_gzip_is_not_tar() {
         let list_id = listing(&scratch);
         assert_eq!(list_id.format, Format::Gzip);
     }
+}
+
+const ENCRYPTED_PAYLOAD: &[u8] = b"Zipelo encrypted interoperability\nZipelo encrypted interoperability\nZipelo encrypted interoperability\nZipelo encrypted interoperability\nZipelo encrypted interoperability\nZipelo encrypted interoperability\nZipelo encrypted interoperability\nZipelo encrypted interoperability\n";
+const TEST_PASSWORD: &[u8] = b"fixture-password";
+const AES_ZIP: &[u8] = include_bytes!("fixtures/aes2-deflate.zip");
+fn interactive(
+    start: Start,
+    mut respond: impl FnMut(u64, u32, PasswordPurpose) -> Vec<Message>,
+) -> Vec<Message> {
+    use std::{io::Read, sync::mpsc, time::Duration};
+    let mut child = Command::new(env!("CARGO_BIN_EXE_zipelo-archive-worker"))
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut writer = Some(Writer::new(child.stdin.take().unwrap(), 17));
+    writer
+        .as_mut()
+        .unwrap()
+        .send(&Message::Start(start))
+        .unwrap();
+    let output = child.stdout.take().unwrap();
+    let mut errors = child.stderr.take().unwrap();
+    let error_thread = std::thread::spawn(move || {
+        let mut bytes = Vec::new();
+        errors.read_to_end(&mut bytes).unwrap();
+        bytes
+    });
+    let (sender, receiver) = mpsc::channel();
+    let reader_thread = std::thread::spawn(move || {
+        let mut reader = Reader::new(output);
+        loop {
+            let event = reader.read().map(|v| {
+                v.map(|(job, _, message)| {
+                    assert_eq!(job, 17);
+                    message
+                })
+            });
+            let done = !matches!(event, Ok(Some(_)));
+            if sender.send(event).is_err() || done {
+                break;
+            }
+        }
+    });
+    let mut events = Vec::new();
+    loop {
+        let event = match receiver.recv_timeout(Duration::from_secs(10)) {
+            Ok(event) => event.unwrap(),
+            Err(error) => {
+                child.kill().unwrap();
+                child.wait().unwrap();
+                panic!("worker timeout: {error}");
+            }
+        };
+        let Some(event) = event else {
+            break;
+        };
+        if let Message::PasswordRequired {
+            challenge_id,
+            attempt,
+            purpose,
+        } = &event
+        {
+            let commands = respond(*challenge_id, *attempt, *purpose);
+            if commands.is_empty() {
+                writer = None;
+            } else {
+                for command in commands {
+                    writer.as_mut().unwrap().send(&command).unwrap();
+                }
+            }
+        }
+        if matches!(event, Message::Terminal(_)) {
+            writer = None;
+        }
+        events.push(event);
+    }
+    assert!(child.wait().unwrap().success());
+    reader_thread.join().unwrap();
+    assert!(error_thread.join().unwrap().is_empty());
+    assert!(matches!(events.last(), Some(Message::Terminal(_))));
+    events
+}
+fn password_reply(id: u64, password: &[u8]) -> Vec<Message> {
+    vec![Message::Password {
+        challenge_id: id,
+        secret: Secret(password.to_vec()),
+    }]
+}
+fn encrypted_start(s: &Scratch, bytes: &[u8]) -> Start {
+    fs::write(s.0.join("input"), bytes).unwrap();
+    fs::create_dir(s.0.join("output")).unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(s.0.join("output"), fs::Permissions::from_mode(0o700)).unwrap();
+    }
+    Start {
+        action: Action::Extract {
+            archive: s.path("input"),
+            destination: s.path("output"),
+            selection: Selection::All,
+            list_id: None,
+            gzip_output_name: None,
+        },
+        limits: Limits::default(),
+    }
+}
+fn no_encrypted_output(s: &Scratch, events: &[Message], error: ErrorCode) {
+    assert_eq!(terminal(events).error, error, "{events:?}");
+    assert_eq!(terminal(events).publication, Publication::None);
+    assert_eq!(terminal(events).created_count, 0);
+    assert!(!events.iter().any(|e| matches!(e, Message::Output { .. })));
+    assert_eq!(fs::read_dir(s.0.join("output")).unwrap().count(), 0);
+}
+#[test]
+fn independent_encrypted_fixtures_list_and_extract() {
+    for bytes in [
+        include_bytes!("fixtures/aes1-store.zip").as_slice(),
+        include_bytes!("fixtures/aes1-deflate.zip").as_slice(),
+        include_bytes!("fixtures/aes2-store.zip").as_slice(),
+        AES_ZIP,
+        include_bytes!("fixtures/zipcrypto-store.zip").as_slice(),
+        include_bytes!("fixtures/zipcrypto-deflate.zip").as_slice(),
+    ] {
+        let s = Scratch::new();
+        let start = encrypted_start(&s, bytes);
+        let listing = execute(Start {
+            action: Action::List {
+                archive: s.path("input"),
+            },
+            limits: Limits::default(),
+        });
+        assert_eq!(
+            terminal(&listing).outcome,
+            Outcome::Completed,
+            "{listing:?}"
+        );
+        assert!(listing.iter().any(|e| matches!(
+            e,
+            Message::Entry(Entry {
+                encrypted: true,
+                ..
+            })
+        )));
+        assert!(
+            !listing
+                .iter()
+                .any(|e| matches!(e, Message::PasswordRequired { .. }))
+        );
+        let events = interactive(start, |id, attempt, purpose| {
+            assert_eq!(purpose, PasswordPurpose::Decrypt);
+            assert_eq!(attempt, 1);
+            password_reply(id, TEST_PASSWORD)
+        });
+        assert_eq!(terminal(&events).outcome, Outcome::Completed, "{events:?}");
+        assert_eq!(
+            fs::read(s.0.join("output/payload.bin")).unwrap(),
+            ENCRYPTED_PAYLOAD
+        );
+    }
+}
+#[test]
+fn aes_creation_uses_password_flow_and_independent_verification() {
+    for method in [Method::Store, Method::Deflate] {
+        let s = Scratch::new();
+        fs::write(s.0.join("source"), ENCRYPTED_PAYLOAD).unwrap();
+        let events = interactive(
+            Start {
+                action: Action::CreateZip {
+                    sources: vec![Source {
+                        path: s.path("source"),
+                        archive_name: "payload.bin".into(),
+                    }],
+                    output_file: s.path("encrypted.zip"),
+                    method,
+                    encryption: Encryption::Aes256,
+                },
+                limits: Limits::default(),
+            },
+            |id, attempt, purpose| {
+                assert_eq!(purpose, PasswordPurpose::Encrypt);
+                assert_eq!(attempt, 1);
+                password_reply(id, TEST_PASSWORD)
+            },
+        );
+        assert_eq!(terminal(&events).outcome, Outcome::Completed, "{events:?}");
+        assert!(events.iter().any(|e| matches!(
+            e,
+            Message::Accepted {
+                encryption: true,
+                ..
+            }
+        )));
+        #[cfg(target_os = "linux")]
+        {
+            let helper = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("../../tests/rust-archive-worker/encryption_fixtures.py");
+            assert!(
+                Command::new("python3")
+                    .arg(helper)
+                    .arg("--verify")
+                    .arg(s.0.join("encrypted.zip"))
+                    .status()
+                    .unwrap()
+                    .success()
+            );
+        }
+        let bytes = fs::read(s.0.join("encrypted.zip")).unwrap();
+        let start = encrypted_start(&s, &bytes);
+        let events = interactive(start, |id, _, _| password_reply(id, TEST_PASSWORD));
+        assert_eq!(terminal(&events).outcome, Outcome::Completed, "{events:?}");
+        assert_eq!(
+            fs::read(s.0.join("output/payload.bin")).unwrap(),
+            ENCRYPTED_PAYLOAD
+        );
+    }
+}
+#[test]
+fn wrong_password_retries_with_new_challenge_then_succeeds() {
+    let s = Scratch::new();
+    let start = encrypted_start(&s, AES_ZIP);
+    let mut previous = 0;
+    let events = interactive(start, |id, attempt, _| {
+        assert!(id > previous);
+        previous = id;
+        password_reply(
+            id,
+            if attempt == 1 {
+                b"wrong"
+            } else {
+                TEST_PASSWORD
+            },
+        )
+    });
+    assert_eq!(terminal(&events).outcome, Outcome::Completed);
+    assert_eq!(previous, 2);
+}
+#[test]
+fn wrong_password_attempts_are_bounded_without_writes() {
+    let s = Scratch::new();
+    let start = encrypted_start(&s, AES_ZIP);
+    let mut attempts = 0;
+    let events = interactive(start, |id, attempt, _| {
+        attempts = attempt;
+        password_reply(id, b"wrong")
+    });
+    assert_eq!(attempts, 3);
+    no_encrypted_output(&s, &events, ErrorCode::WrongPassword);
+}
+#[test]
+fn cancellation_while_waiting_for_password_is_acknowledged() {
+    let s = Scratch::new();
+    let start = encrypted_start(&s, AES_ZIP);
+    let events = interactive(start, |_, _, _| vec![Message::Cancel]);
+    assert_eq!(terminal(&events).outcome, Outcome::Cancelled);
+    assert!(events.iter().any(|e| matches!(
+        e,
+        Message::CancelAck {
+            status: CancelStatus::Requested,
+            ..
+        }
+    )));
+    no_encrypted_output(&s, &events, ErrorCode::None);
+}
+#[test]
+fn stale_and_mismatched_password_challenges_fail_without_writes() {
+    for stale in [false, true] {
+        let s = Scratch::new();
+        let start = encrypted_start(&s, AES_ZIP);
+        let events = interactive(start, |id, attempt, _| {
+            if stale && attempt == 1 {
+                password_reply(id, b"wrong")
+            } else {
+                password_reply(if stale { id - 1 } else { id + 1 }, TEST_PASSWORD)
+            }
+        });
+        no_encrypted_output(&s, &events, ErrorCode::Protocol);
+    }
+}
+#[test]
+fn password_input_eof_fails_without_writes() {
+    let s = Scratch::new();
+    let start = encrypted_start(&s, AES_ZIP);
+    let events = interactive(start, |_, _, _| vec![]);
+    no_encrypted_output(&s, &events, ErrorCode::Protocol);
+}
+#[test]
+fn aes_authentication_failure_never_publishes_plaintext() {
+    for tamper_tag in [false, true] {
+        let mut bytes = AES_ZIP.to_vec();
+        let central = bytes.windows(4).position(|b| b == b"PK\x01\x02").unwrap();
+        if tamper_tag {
+            bytes[central - 1] ^= 1;
+        } else {
+            bytes[30 + b"payload.bin".len() + 11 + 18] ^= 1;
+        }
+        let s = Scratch::new();
+        let start = encrypted_start(&s, &bytes);
+        let events = interactive(start, |id, _, _| password_reply(id, TEST_PASSWORD));
+        no_encrypted_output(&s, &events, ErrorCode::Integrity);
+    }
+}
+#[test]
+fn aes1_crc_and_extra_consistency_are_checked() {
+    let original = include_bytes!("fixtures/aes1-store.zip");
+    for corrupt_extra in [false, true] {
+        let mut bytes = original.to_vec();
+        let central = bytes.windows(4).position(|b| b == b"PK\x01\x02").unwrap();
+        if corrupt_extra {
+            bytes[30 + b"payload.bin".len() + 4] = 2;
+        } else {
+            bytes[14] ^= 1;
+            bytes[central + 16] ^= 1;
+        }
+        let s = Scratch::new();
+        let start = encrypted_start(&s, &bytes);
+        let events = interactive(start, |id, _, _| password_reply(id, TEST_PASSWORD));
+        no_encrypted_output(&s, &events, ErrorCode::Integrity);
+    }
+}
+#[test]
+fn empty_aes_members_and_random_salts_round_trip() {
+    let members = vec![archive::Member {
+        entry: Entry {
+            entry_id: 0,
+            name: "empty".into(),
+            kind: EntryKind::File,
+            size: 0,
+            compressed_size: 0,
+            encrypted: false,
+        },
+        data: vec![],
+    }];
+    let a = archive::create_zip_with_password(
+        &members,
+        Method::Store,
+        Limits::default(),
+        Some(TEST_PASSWORD),
+        &mut || Ok(()),
+    )
+    .unwrap();
+    let b = archive::create_zip_with_password(
+        &members,
+        Method::Store,
+        Limits::default(),
+        Some(TEST_PASSWORD),
+        &mut || Ok(()),
+    )
+    .unwrap();
+    assert_ne!(a, b);
+    let decoded = archive::parse_with_password(
+        &a,
+        Limits::default(),
+        true,
+        Some(TEST_PASSWORD),
+        &mut || Ok(()),
+    )
+    .unwrap();
+    assert!(decoded.members[0].data.is_empty());
+}
+
+#[test]
+fn password_racing_after_cancel_does_not_override_cancellation() {
+    let s = Scratch::new();
+    let start = encrypted_start(&s, AES_ZIP);
+    let events = interactive(start, |id, _, _| {
+        vec![
+            Message::Cancel,
+            Message::Password {
+                challenge_id: id,
+                secret: Secret(TEST_PASSWORD.to_vec()),
+            },
+        ]
+    });
+    assert_eq!(terminal(&events).outcome, Outcome::Cancelled);
+    no_encrypted_output(&s, &events, ErrorCode::None);
+}
+#[test]
+fn empty_encryption_password_never_creates_zip() {
+    let s = Scratch::new();
+    let events = interactive(
+        Start {
+            action: Action::CreateZip {
+                sources: vec![],
+                output_file: s.path("empty.zip"),
+                method: Method::Store,
+                encryption: Encryption::Aes256,
+            },
+            limits: Limits::default(),
+        },
+        |id, _, _| password_reply(id, b""),
+    );
+    assert_eq!(terminal(&events).error, ErrorCode::InvalidRequest);
+    assert_eq!(terminal(&events).publication, Publication::None);
+    assert!(!s.0.join("empty.zip").exists());
 }

@@ -264,7 +264,7 @@ impl std::fmt::Debug for Secret {
 }
 impl Drop for Secret {
     fn drop(&mut self) {
-        self.0.fill(0);
+        zeroize::Zeroize::zeroize(&mut self.0);
     }
 }
 #[derive(Debug)]
