@@ -225,3 +225,103 @@ fn invalid_descendant_names_and_case_collisions_fail_before_password() {
         fs::remove_file(s.0.join("tree").join(leaf)).unwrap();
     }
 }
+
+#[cfg(target_os = "linux")]
+fn readable_sources_under_parent(mode: u32) {
+    use std::os::unix::fs::PermissionsExt;
+    struct RestoreParent(PathBuf);
+    impl Drop for RestoreParent {
+        fn drop(&mut self) {
+            fs::set_permissions(&self.0, fs::Permissions::from_mode(0o700)).unwrap();
+        }
+    }
+    let s = Scratch::new();
+    let parent = s.0.join("restricted");
+    fs::create_dir_all(parent.join("tree/empty")).unwrap();
+    fs::write(parent.join("loose"), b"readable file").unwrap();
+    fs::write(parent.join("tree/nested"), b"nested content").unwrap();
+    let _restore = RestoreParent(parent.clone());
+    fs::set_permissions(&parent, fs::Permissions::from_mode(mode)).unwrap();
+    if mode == 0o111 {
+        assert_eq!(
+            fs::read_dir(&parent).unwrap_err().kind(),
+            std::io::ErrorKind::PermissionDenied
+        );
+    } else {
+        assert!(fs::read_dir(&parent).is_ok());
+    }
+    assert_eq!(fs::read(parent.join("loose")).unwrap(), b"readable file");
+    for (name, encryption) in [("plain", Encryption::None), ("aes", Encryption::Aes256)] {
+        let archive_name = format!("{name}.zip");
+        let events = interactive(
+            Start {
+                action: Action::CreateZip {
+                    sources: vec![
+                        Source {
+                            path: NativePath::from_path(&parent.join("loose")),
+                            archive_name: "loose.txt".into(),
+                        },
+                        Source {
+                            path: NativePath::from_path(&parent.join("tree")),
+                            archive_name: "tree".into(),
+                        },
+                    ],
+                    output_file: s.path(&archive_name),
+                    method: Method::Deflate,
+                    encryption,
+                },
+                limits: Limits::default(),
+            },
+            |id, _, _| {
+                vec![Message::Password {
+                    challenge_id: id,
+                    secret: Secret(b"parent-password".to_vec()),
+                }]
+            },
+        );
+        assert_eq!(terminal(&events).outcome, Outcome::Completed, "{events:?}");
+        let output = format!("output-{name}");
+        fs::create_dir(s.0.join(&output)).unwrap();
+        fs::set_permissions(s.0.join(&output), fs::Permissions::from_mode(0o700)).unwrap();
+        let extracted = interactive(
+            Start {
+                action: Action::Extract {
+                    archive: s.path(&archive_name),
+                    destination: s.path(&output),
+                    selection: Selection::All,
+                    list_id: None,
+                    gzip_output_name: None,
+                },
+                limits: Limits::default(),
+            },
+            |id, _, _| {
+                vec![Message::Password {
+                    challenge_id: id,
+                    secret: Secret(b"parent-password".to_vec()),
+                }]
+            },
+        );
+        assert_eq!(
+            terminal(&extracted).outcome,
+            Outcome::Completed,
+            "{extracted:?}"
+        );
+        for (source, destination) in [("loose", "loose.txt"), ("tree/nested", "tree/nested")] {
+            assert_eq!(
+                Sha256::digest(fs::read(parent.join(source)).unwrap()),
+                Sha256::digest(fs::read(s.0.join(&output).join(destination)).unwrap())
+            );
+        }
+        assert!(s.0.join(&output).join("tree/empty").is_dir());
+    }
+}
+#[cfg(target_os = "linux")]
+#[test]
+fn readable_sources_under_search_only_parent_0111() {
+    readable_sources_under_parent(0o111);
+}
+#[cfg(target_os = "linux")]
+#[test]
+fn readable_sources_under_readable_parent_0711() {
+    readable_sources_under_parent(0o711);
+}

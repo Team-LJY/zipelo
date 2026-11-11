@@ -27,7 +27,7 @@ impl Input {
             fn openat(fd: i32, name: *const i8, flags: i32, ...) -> i32;
         }
         let name = std::ffi::CString::new(name.as_bytes()).map_err(|_| ErrorCode::UnsafePath)?;
-        // 객체 종류를 확인한 뒤 고정 핸들로만 읽기 열기를 수행함.
+        // 링크를 따라가지 않는 경로 핸들로 객체 종류를 확인함.
         let fd = unsafe {
             openat(
                 file.as_raw_fd(),
@@ -45,6 +45,12 @@ impl Input {
         }
         let pinned = unsafe { File::from_raw_fd(fd) };
         Self::validate(&pinned)?;
+        Ok(pinned)
+    }
+    #[cfg(target_os = "linux")]
+    fn read(pinned: File) -> Result<File> {
+        use std::os::fd::AsRawFd;
+        // 읽기 권한은 최종 입력에만 요청함.
         File::open(format!("/proc/self/fd/{}", pinned.as_raw_fd())).map_err(crate::space::io_error)
     }
     pub fn open(path: &Path) -> Result<Self> {
@@ -53,7 +59,12 @@ impl Input {
         }
         #[cfg(target_os = "linux")]
         {
-            let mut file = File::open("/").map_err(crate::space::io_error)?;
+            use std::os::unix::fs::OpenOptionsExt;
+            let mut file = fs::OpenOptions::new()
+                .read(true)
+                .custom_flags(0x200000 | 0x20000 | 0x10000 | 0x80000)
+                .open("/")
+                .map_err(crate::space::io_error)?;
             for part in path.components() {
                 match part {
                     Component::RootDir => {}
@@ -61,6 +72,7 @@ impl Input {
                     _ => return Err(ErrorCode::UnsafePath),
                 }
             }
+            let file = Self::read(file)?;
             Self::validate(&file)?;
             Ok(Self { file })
         }
@@ -99,7 +111,7 @@ impl Input {
     fn lock(path: &Path) -> Result<File> {
         use std::os::windows::fs::{MetadataExt, OpenOptionsExt};
         let file = fs::OpenOptions::new()
-            .access_mode(0x80)
+            .access_mode(0)
             .share_mode(3)
             .custom_flags(0x02000000 | 0x00200000)
             .open(path)
@@ -133,7 +145,7 @@ impl Input {
         #[cfg(target_os = "linux")]
         {
             let _ = path;
-            let file = Self::child(&self.file, std::ffi::OsStr::new(name))?;
+            let file = Self::read(Self::child(&self.file, std::ffi::OsStr::new(name))?)?;
             Self::validate(&file)?;
             Ok(Self { file })
         }
