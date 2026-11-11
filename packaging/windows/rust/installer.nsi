@@ -13,6 +13,7 @@ SetOverwrite off
 AllowSkipFiles off
 ShowInstDetails show
 !define MUI_ABORTWARNING
+!define MUI_CUSTOMFUNCTION_ABORT Rollback
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_INSTFILES
 Page custom FinishCreate
@@ -22,6 +23,10 @@ Page custom FinishCreate
 Var Dialog
 Var ApplyButton
 Var Mutex
+Var RootOwned
+Var ShortcutOwned
+Var UninstallOwned
+Var InstallComplete
 !define APPKEY "Software\Zipelo-Dev"
 !define PROGKEY "Software\Classes\ZipeloDev.Archive"
 !define UNKEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\Zipelo-Dev"
@@ -33,6 +38,7 @@ Function .onInit
     ${EndIf}
     SetShellVarContext current
     SetRegView 64
+    System::Call 'kernel32::SetLastError(i 0)'
     System::Call 'kernel32::CreateMutexW(p 0, i 0, w "Local\ZipeloDevSetup") p.r0 ?e'
     Pop $1
     StrCpy $Mutex $0
@@ -67,12 +73,24 @@ Section "Zipelo"
     ${ElseIf} $0 != 2
         Goto failed
     ${EndIf}
+    ; 공유 등록 값이 이미 있으면 형식과 관계없이 보존함.
+    System::Call 'advapi32::RegOpenKeyExW(p 0x80000001, w "Software\RegisteredApplications", i 0, i 0x20119, *p.r1) i.r0'
+    ${If} $0 == 0
+        System::Call 'advapi32::RegQueryValueExW(p r1, w "Zipelo 개발판", p 0, p 0, p 0, p 0) i.r2'
+        System::Call 'advapi32::RegCloseKey(p r1)'
+        ${If} $2 != 2
+            Goto failed
+        ${EndIf}
+    ${ElseIf} $0 != 2
+        Goto failed
+    ${EndIf}
     IfFileExists "$SMPROGRAMS\Zipelo 개발판.lnk" failed
     ClearErrors
     CreateDirectory "$LOCALAPPDATA\Programs"
     IfErrors failed
     System::Call 'kernel32::CreateDirectoryW(w "$INSTDIR", p 0) i.r0'
     IntCmp $0 0 failed
+    StrCpy $RootOwned 1
     SetOutPath "$INSTDIR"
     ClearErrors
     File "payload\Zipelo.exe"
@@ -84,19 +102,53 @@ Section "Zipelo"
     IfErrors failed
     WriteINIStr "$INSTDIR\install.ini" "Zipelo" "Location" "$INSTDIR"
     IfErrors failed
+    StrCpy $ShortcutOwned 1
     CreateShortcut "$SMPROGRAMS\Zipelo 개발판.lnk" "$INSTDIR\Zipelo.exe"
     IfErrors failed
+    StrCpy $UninstallOwned 1
     WriteRegStr HKCU "${UNKEY}" "DisplayName" "Zipelo 개발판"
     WriteRegStr HKCU "${UNKEY}" "DisplayVersion" "0.1.0-dev"
     WriteRegStr HKCU "${UNKEY}" "UninstallString" '$\"$INSTDIR\Uninstall.exe$\"'
     IfErrors failed
+    StrCpy $InstallComplete 1
     Goto done
 failed:
+    Call Rollback
     SetErrorLevel 1
-    MessageBox MB_OK|MB_ICONSTOP "설치를 완료하지 못했습니다. 기존 Zipelo 개발판이 있으면 먼저 제거하고, 여유 공간과 쓰기 권한을 확인하세요. 새로 복사한 파일이 남았다면 해당 폴더의 제거 프로그램을 사용하세요."
+    MessageBox MB_OK|MB_ICONSTOP "설치를 완료하지 못했습니다. 기존 Zipelo 개발판이 있으면 먼저 제거하고, 여유 공간과 쓰기 권한을 확인하세요. 이번 설치 항목을 정리했으며, 사용 중이라 지우지 못한 항목은 상세 보기에서 확인하세요."
     Abort
  done:
 SectionEnd
+
+Function Rollback
+    ${If} $InstallComplete == 1
+    ${OrIf} $RootOwned != 1
+        Return
+    ${EndIf}
+    SetOutPath "$TEMP"
+    ${If} $ShortcutOwned == 1
+        Delete "$SMPROGRAMS\Zipelo 개발판.lnk"
+    ${EndIf}
+    ${If} $UninstallOwned == 1
+        DeleteRegValue HKCU "${UNKEY}" "DisplayName"
+        DeleteRegValue HKCU "${UNKEY}" "DisplayVersion"
+        DeleteRegValue HKCU "${UNKEY}" "UninstallString"
+        DeleteRegKey /ifempty HKCU "${UNKEY}"
+    ${EndIf}
+    Delete "$INSTDIR\Zipelo.exe"
+    Delete "$INSTDIR\zipelo-archive-worker.exe"
+    Delete "$INSTDIR\LICENSE"
+    Delete "$INSTDIR\BUILD-INFO.json"
+    Delete "$INSTDIR\install.ini"
+    Delete "$INSTDIR\Uninstall.exe"
+    RMDir "$INSTDIR"
+    StrCpy $RootOwned 0
+FunctionEnd
+
+Function .onInstFailed
+    Call Rollback
+    SetErrorLevel 1
+FunctionEnd
 
 Function FinishCreate
     GetDlgItem $0 $HWNDPARENT 1
@@ -145,6 +197,7 @@ FunctionEnd
 Function un.onInit
     SetShellVarContext current
     SetRegView 64
+    System::Call 'kernel32::SetLastError(i 0)'
     System::Call 'kernel32::CreateMutexW(p 0, i 0, w "Local\ZipeloDevSetup") p.r0 ?e'
     Pop $1
     StrCpy $Mutex $0
@@ -170,8 +223,12 @@ Section "Uninstall"
     Delete "$INSTDIR\LICENSE"
     Delete "$INSTDIR\BUILD-INFO.json"
     Delete "$SMPROGRAMS\Zipelo 개발판.lnk"
+    IfErrors uninstall_failed
     ; 자신이 등록한 값만 제거하고 다른 파일과 키를 보존함.
-    DeleteRegValue HKCU "Software\RegisteredApplications" "Zipelo 개발판"
+    ReadRegStr $0 HKCU "Software\RegisteredApplications" "Zipelo 개발판"
+    ${If} $0 == "${APPKEY}\Capabilities"
+        DeleteRegValue HKCU "Software\RegisteredApplications" "Zipelo 개발판"
+    ${EndIf}
     DeleteRegValue HKCU "${APPKEY}\Capabilities\FileAssociations" ".zip"
     DeleteRegValue HKCU "${APPKEY}\Capabilities\FileAssociations" ".tar"
     DeleteRegValue HKCU "${APPKEY}\Capabilities\FileAssociations" ".gz"

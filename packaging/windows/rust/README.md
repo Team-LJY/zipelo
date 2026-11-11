@@ -13,7 +13,7 @@ python3 packaging/windows/rust/build.py \
 
 Cargo 1.99.1, Windows GNU Rust target, MinGW-w64와 makensis가 필요합니다.
 도구는 자동 설치하지 않습니다. 기본 profile은 release이고 개발 검증에는 --profile dev를 사용할 수 있습니다.
-출력 폴더는 새 경로여야 하며 기존 파일을 덮어쓰지 않습니다. 입력 저장소는 커밋된 상태여야 합니다.
+출력 폴더는 새 경로여야 하며 기존 파일을 덮어쓰지 않습니다. 입력 저장소는 커밋된 상태여야 합니다. 캐시는 실행 파일과 소스 커밋별로 분리하며 빌드 중 소스 변경을 거부합니다.
 앱과 작업자 PR이 병합되기 전에는 각 PR의 별도 소스 경로를 인자로 지정합니다.
 빌드 정보에는 소스 커밋, 실행 파일 SHA-256, target, profile, 기능 목록을 기록합니다.
 

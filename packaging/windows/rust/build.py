@@ -27,6 +27,16 @@ def pe_machine(path):
 
 def build_binary(manifest, binary, target_dir, profile, features=()):
     manifest = Path(manifest).resolve(strict=True)
+    commit = subprocess.check_output(
+        ["git", "-C", str(manifest.parent), "rev-parse", "HEAD"], text=True
+    ).strip()
+    dirty = subprocess.check_output(
+        ["git", "-C", str(manifest.parent), "status", "--porcelain"], text=True
+    )
+    if dirty.strip():
+        raise ValueError("소스에 커밋하지 않은 변경이 있음")
+    # 작업 복사본 간 mtime 기반 캐시 혼합을 방지함.
+    target_dir = target_dir / binary / commit
     command = ["cargo", "+1.99.1", "build", "--locked", "--manifest-path", str(manifest),
                "--target", TARGET, "--target-dir", str(target_dir), "--profile", profile,
                "--bin", binary]
@@ -42,10 +52,14 @@ def build_binary(manifest, binary, target_dir, profile, features=()):
     output = target_dir / TARGET / ("debug" if profile == "dev" else profile) / (binary + ".exe")
     if pe_machine(output) != 0x8664:
         raise ValueError("x64 Windows 실행 파일이 아님")
-    commit = subprocess.check_output(["git", "-C", str(manifest.parent), "rev-parse", "HEAD"], text=True).strip()
-    dirty = subprocess.check_output(["git", "-C", str(manifest.parent), "status", "--porcelain"], text=True)
-    if dirty.strip():
-        raise ValueError("소스에 커밋하지 않은 변경이 있음")
+    current_commit = subprocess.check_output(
+        ["git", "-C", str(manifest.parent), "rev-parse", "HEAD"], text=True
+    ).strip()
+    dirty = subprocess.check_output(
+        ["git", "-C", str(manifest.parent), "status", "--porcelain"], text=True
+    )
+    if current_commit != commit or dirty.strip():
+        raise ValueError("빌드 중 소스가 바뀜")
     return output, {"commit": commit, "sha256": hashlib.sha256(output.read_bytes()).hexdigest(),
                     "binary": binary, "features": list(features)}
 
