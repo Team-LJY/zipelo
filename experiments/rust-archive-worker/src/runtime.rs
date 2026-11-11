@@ -407,7 +407,7 @@ impl<W: Write> Job<W> {
                 let name = archive::valid_name(leaf, false)?;
                 let root = Dir::root(output.parent().ok_or(ErrorCode::InvalidRequest)?)?;
                 filesystem::preflight(&root, &[(name.clone(), EntryKind::File)])?;
-                let members = crate::create::plan(&sources, start.limits)?;
+                let members = crate::create::plan(&sources, start.limits, &mut || self.check())?;
                 let secret = if encryption == Encryption::Aes256 {
                     let secret = self.password(PasswordPurpose::Encrypt, 1)?;
                     if secret.0.is_empty() {
@@ -418,7 +418,6 @@ impl<W: Write> Job<W> {
                     None
                 };
                 let (mut data, length) = crate::create::zip(
-                    &sources,
                     &members,
                     method,
                     start.limits,
