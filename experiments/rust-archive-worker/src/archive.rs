@@ -8,12 +8,12 @@ pub const MAX_METADATA_BYTES: usize = 8 * 1024 * 1024;
 pub const MAX_OUTPUT_NODES: usize = 32_768;
 
 #[derive(Default)]
-struct MetadataBudget {
+pub(crate) struct MetadataBudget {
     bytes: usize,
     nodes: usize,
 }
 impl MetadataBudget {
-    fn charge(&mut self, name: &str) -> Result<()> {
+    pub(crate) fn charge(&mut self, name: &str) -> Result<()> {
         // 이름 복제와 인덱스 노드 비용을 할당 전에 계산함.
         let cost = name
             .len()
@@ -578,6 +578,12 @@ pub fn parse_with_password(
 ) -> Result<Catalog> {
     if !limits.valid() || input.len() as u64 > limits.input {
         return Err(ErrorCode::Limit);
+    }
+    if input.starts_with(b"7z\xbc\xaf\x27\x1c") {
+        return Ok(Catalog {
+            format: Format::SevenZip,
+            members: crate::seven_zip::parse(input, limits, decode, check)?,
+        });
     }
     if input.starts_with(b"PK\x03\x04") || input.starts_with(b"PK\x05\x06") {
         return Ok(Catalog {

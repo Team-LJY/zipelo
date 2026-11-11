@@ -50,3 +50,9 @@ fixtures/는 generate.py의 Python 표준 라이브러리로 생성한 작은 �
 암호 ZIP, 대용량 성능, OS sandbox, 악성 파일 전체 검증과 Windows 실기는 이 시험의 범위 밖임.
 
 취소와 종료 경합 회귀 시험은 실제 작업자에 List를 보낸 뒤 화면 poll 전에 취소하는 흐름을 100회 확인함. 취소 파이프 쓰기가 실패해도 검증된 Terminal과 성공 종료가 있으면 원래 결과를 보존하며, Terminal이 없는 조기 종료는 계속 실패로 처리함. 취소 쓰기 오류 판단을 미루어도 EOF와 child wait 전에는 닫기나 작업 교체를 허용하지 않음.
+
+7z 앱 연동은 revision 2의 기존 Format 값 0~3을 유지하고 SevenZip 값 4를 추가함.
+formats.rs는 전체 ListEnd 프레임을 고정 바이트와 비교하고 Unix/Windows 식별자가
+목록 응답과 해제 요청 사이에서 보존되는지 확인함. 화면 흐름 시험은 PR69의 LZMA와
+LZMA2 표본을 실제 작업자로 열고, 받은 ListId로 풀어 원본 바이트를 확인함.
+구버전 앱은 새 형식 값을 해석할 수 없으므로 앱과 작업자를 함께 갱신해야 함.

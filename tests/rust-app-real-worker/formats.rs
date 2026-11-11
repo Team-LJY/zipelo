@@ -1,0 +1,130 @@
+#![allow(dead_code)]
+#[path = "../../experiments/rust-ui-memory-app/src/archive_ui.rs"]
+mod archive_ui;
+mod adapter {
+    include!("../../experiments/rust-ui-memory-app/src/archive_process.rs");
+
+    fn token(format: ui::Format, source_object: ui::SourceObject) -> ui::ListId {
+        ui::ListId {
+            catalog_version: 1,
+            format,
+            source_object,
+            archive_bytes: 33,
+            archive_sha256: [44; 32],
+        }
+    }
+    fn formats() -> [ui::Format; 5] {
+        [
+            ui::Format::Zip,
+            ui::Format::Tar,
+            ui::Format::Gzip,
+            ui::Format::TarGzip,
+            ui::Format::SevenZip,
+        ]
+    }
+    #[test]
+    fn list_end_preserves_existing_tags_and_assigns_four_to_seven_zip() {
+        for (tag, format) in formats().into_iter().enumerate() {
+            let id = token(
+                format,
+                ui::SourceObject::Unix {
+                    device: 11,
+                    inode: 22,
+                },
+            );
+            let mut actual = Vec::new();
+            codec::Writer::new(&mut actual, 99)
+                .send(&wire::Message::ListEnd {
+                    entry_count: 7,
+                    list_id: list_to_wire(id.clone()),
+                })
+                .unwrap();
+            let mut body = Vec::new();
+            body.extend(7u32.to_le_bytes());
+            body.extend(1u16.to_le_bytes());
+            body.push(tag as u8);
+            body.push(1);
+            body.extend(11u64.to_le_bytes());
+            body.extend(22u64.to_le_bytes());
+            body.extend(33u64.to_le_bytes());
+            body.extend([44; 32]);
+            let mut expected = Vec::from(*b"ZAW1");
+            expected.extend(1u16.to_le_bytes());
+            expected.extend(102u16.to_le_bytes());
+            expected.extend((body.len() as u32).to_le_bytes());
+            expected.extend([0; 4]);
+            expected.extend(99u64.to_le_bytes());
+            expected.extend(0u64.to_le_bytes());
+            expected.extend(body);
+            assert_eq!(actual, expected);
+            let (_, _, message) = codec::Reader::new(actual.as_slice())
+                .read()
+                .unwrap()
+                .unwrap();
+            match event_to_ui(message, None).unwrap() {
+                ui::Event::ListEnd {
+                    entry_count,
+                    list_id,
+                } => {
+                    assert_eq!(entry_count, 7);
+                    assert_eq!(list_id, id);
+                }
+                _ => panic!("목록 완료 응답이 아님"),
+            }
+        }
+    }
+    #[test]
+    fn extraction_roundtrip_preserves_both_platform_identities_and_all_formats() {
+        for source in [
+            ui::SourceObject::Unix {
+                device: 11,
+                inode: 22,
+            },
+            ui::SourceObject::Windows {
+                volume: 55,
+                file_id: [66; 16],
+            },
+        ] {
+            for format in formats() {
+                let id = token(format, source.clone());
+                assert_eq!(list_to_ui(list_to_wire(id.clone())), id);
+                let start = start_to_wire(ui::Start::Extract {
+                    archive: PathBuf::from("input.7z"),
+                    destination: PathBuf::from("output"),
+                    selection: ui::Selection::EntryIds(vec![7]),
+                    list_id: id.clone(),
+                    gzip_output_name: if format == ui::Format::Gzip {
+                        Some("content".into())
+                    } else {
+                        None
+                    },
+                });
+                let mut bytes = Vec::new();
+                codec::Writer::new(&mut bytes, 99)
+                    .send(&wire::Message::Start(start))
+                    .unwrap();
+                assert_eq!(&bytes[6..8], &1u16.to_le_bytes());
+                match codec::Reader::new(bytes.as_slice())
+                    .read()
+                    .unwrap()
+                    .unwrap()
+                    .2
+                {
+                    wire::Message::Start(wire::Start {
+                        action:
+                            wire::Action::Extract {
+                                list_id: Some(decoded),
+                                selection,
+                                ..
+                            },
+                        ..
+                    }) => {
+                        assert_eq!(list_to_ui(decoded), id);
+                        assert_eq!(selection, wire::Selection::EntryIds(vec![7]));
+                    }
+                    _ => panic!("압축 해제 요청이 아님"),
+                }
+            }
+        }
+    }
+}

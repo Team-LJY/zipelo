@@ -29,7 +29,8 @@ convert_enum!(
     Zip,
     Tar,
     Gzip,
-    TarGzip
+    TarGzip,
+    SevenZip
 );
 convert_enum!(
     format_to_ui,
@@ -38,7 +39,8 @@ convert_enum!(
     Zip,
     Tar,
     Gzip,
-    TarGzip
+    TarGzip,
+    SevenZip
 );
 convert_enum!(
     kind_to_ui,

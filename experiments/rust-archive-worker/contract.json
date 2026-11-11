@@ -136,5 +136,17 @@
             "url": "https://man7.org/linux/man-pages/man2/stat.2.html",
             "purpose": "Source metadata from the open file descriptor rather than a later path reopen."
         }
-    ]
+    ],
+    "format_tags": {
+        "Zip": 0,
+        "Tar": 1,
+        "Gzip": 2,
+        "TarGzip": 3,
+        "SevenZip": 4
+    },
+    "seven_zip_extension": {
+        "agreement_message_id": "5a36fd89-af36-42be-9f79-bca39415e84d",
+        "compatibility": "Existing format values 0 through 3, fields, message tags and frame version stay unchanged. Older clients reject format 4. App Format and bidirectional conversion require an update.",
+        "regression": "Preserve existing format bytes and round-trip SevenZip in ListEnd/ListId."
+    }
 }
