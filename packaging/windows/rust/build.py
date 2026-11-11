@@ -25,7 +25,7 @@ def pe_machine(path):
     return struct.unpack_from("<H", signature, 4)[0]
 
 
-def build_binary(manifest, binary, target_dir, profile, features=()):
+def build_binary(manifest, binary, target_dir, profile, features=(), target=TARGET):
     manifest = Path(manifest).resolve(strict=True)
     commit = subprocess.check_output(
         ["git", "-C", str(manifest.parent), "rev-parse", "HEAD"], text=True
@@ -38,19 +38,20 @@ def build_binary(manifest, binary, target_dir, profile, features=()):
     # 작업 복사본 간 mtime 기반 캐시 혼합을 방지함.
     target_dir = target_dir / binary / commit
     command = ["cargo", "+1.99.1", "build", "--locked", "--manifest-path", str(manifest),
-               "--target", TARGET, "--target-dir", str(target_dir), "--profile", profile,
+               "--target", target, "--target-dir", str(target_dir), "--profile", profile,
                "--bin", binary]
     if features:
         command += ["--features", ",".join(features)]
     environment = dict(os.environ)
     linker = environment.get("CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER")
     linker = linker or shutil.which("x86_64-w64-mingw32-gcc") or shutil.which("x86_64-w64-mingw32-gcc-posix")
-    if not linker or not shutil.which(linker):
+    if target == TARGET and (not linker or not shutil.which(linker)):
         raise ValueError("MinGW-w64 교차 링커를 찾지 못함")
-    environment["CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER"] = linker
+    if target == TARGET:
+        environment["CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER"] = linker
     subprocess.run(command, env=environment, check=True)
-    output = target_dir / TARGET / ("debug" if profile == "dev" else profile) / (binary + ".exe")
-    if pe_machine(output) != 0x8664:
+    output = target_dir / target / ("debug" if profile == "dev" else profile) / (binary + (".exe" if target == TARGET else ""))
+    if target == TARGET and pe_machine(output) != 0x8664:
         raise ValueError("x64 Windows 실행 파일이 아님")
     current_commit = subprocess.check_output(
         ["git", "-C", str(manifest.parent), "rev-parse", "HEAD"], text=True
