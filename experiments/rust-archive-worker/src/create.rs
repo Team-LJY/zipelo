@@ -1,8 +1,4 @@
-use crate::{
-    archive::{self, Member, MetadataBudget},
-    protocol::*,
-    spool,
-};
+use crate::{protocol::*, spool};
 use std::{
     fs::File,
     io::{Read, Seek, Write},
@@ -110,34 +106,16 @@ fn pack(
         }
     }
 }
-pub(crate) fn plan(sources: &[Source], limits: Limits) -> Result<Vec<Member>> {
-    if sources.len() > limits.entries as usize {
-        return Err(ErrorCode::Limit);
-    }
-    let mut metadata = MetadataBudget::default();
-    let mut members = Vec::new();
-    for source in sources {
-        source.path.to_path()?;
-        let name = archive::valid_name(&source.archive_name, false)?;
-        metadata.charge(&name)?;
-        members.push(Member {
-            entry: Entry {
-                entry_id: members.len() as u32,
-                name,
-                kind: EntryKind::File,
-                size: 0,
-                compressed_size: 0,
-                encrypted: false,
-            },
-            data: Vec::new(),
-        });
-    }
-    archive::validate_members(&members)?;
-    Ok(members)
+pub(crate) use crate::create_sources::Plan;
+pub(crate) fn plan(
+    sources: &[Source],
+    limits: Limits,
+    check: &mut impl FnMut() -> Result<()>,
+) -> Result<Plan> {
+    Plan::new(sources, limits, check)
 }
 pub(crate) fn zip(
-    sources: &[Source],
-    members: &[Member],
+    plan: &Plan,
     method: Method,
     limits: Limits,
     password: Option<&[u8]>,
@@ -147,36 +125,53 @@ pub(crate) fn zip(
     let mut central = Vec::new();
     let mut total = 0u64;
     let mut have_zip64 = false;
-    for (source, member) in sources.iter().zip(members) {
+    for source in &plan.items {
+        let member = &source.member;
+        let directory = member.entry.kind == EntryKind::Directory;
+        let method = if directory { Method::Store } else { method };
+        let password = if directory { None } else { password };
         check()?;
         let remaining = limits
             .input
             .min(limits.output)
             .checked_sub(total)
             .ok_or(ErrorCode::Limit)?;
-        let mut snapshot = spool::Snapshot::open(&source.path.to_path()?, remaining, check)?;
+        let mut input = source.open()?;
+        let mut snapshot = if directory {
+            None
+        } else {
+            Some(spool::Snapshot::capture(&mut input.file, remaining, check)?)
+        };
+        let length = snapshot.as_ref().map_or(0, |s| s.len);
         total = total
-            .checked_add(snapshot.len)
+            .checked_add(length)
             .filter(|n| *n <= limits.output)
             .ok_or(ErrorCode::Limit)?;
         // 압축 결과의 보수적 상한과 ZIP에 복사할 공간을 함께 확인함.
-        let bound = snapshot
-            .len
-            .checked_add(snapshot.len / 16383 * 5)
+        let bound = length
+            .checked_add(length / 16383 * 5)
             .and_then(|n| n.checked_add(131072))
             .ok_or(ErrorCode::Limit)?;
         crate::space::ensure(&output, bound.checked_mul(2).ok_or(ErrorCode::Limit)?)?;
         let mut packed = spool::temporary()?;
-        let (packed_size, crc) =
-            pack(&mut snapshot.file, snapshot.len, method, &mut packed, check)?;
+        let (packed_size, crc) = if let Some(snapshot) = snapshot.as_mut() {
+            pack(&mut snapshot.file, length, method, &mut packed, check)?
+        } else {
+            (0, 0)
+        };
         let packed_size = packed_size
             .checked_add(if password.is_some() { 28 } else { 0 })
             .ok_or(ErrorCode::Limit)?;
         let offset = io(output.stream_position())?;
-        let name = member.entry.name.as_bytes();
+        let zip_name = if directory {
+            format!("{}/", member.entry.name)
+        } else {
+            member.entry.name.clone()
+        };
+        let name = zip_name.as_bytes();
         let real_method = if method == Method::Store { 0 } else { 8 };
         let flags = if password.is_some() { 0x0801 } else { 0x0800 };
-        let wide_sizes = snapshot.len >= u32::MAX as u64 || packed_size >= u32::MAX as u64;
+        let wide_sizes = length >= u32::MAX as u64 || packed_size >= u32::MAX as u64;
         let wide_offset = offset >= u32::MAX as u64;
         have_zip64 |= wide_sizes || wide_offset;
         let version = if password.is_some() {
@@ -197,7 +192,7 @@ pub(crate) fn zip(
             aes.push(3);
             put16(&mut aes, real_method);
         }
-        let mut extra = zip64_extra(snapshot.len, packed_size, None);
+        let mut extra = zip64_extra(length, packed_size, None);
         extra.extend(&aes);
         let mut header = Vec::new();
         header.extend(b"PK\x03\x04");
@@ -215,11 +210,7 @@ pub(crate) fn zip(
         );
         put32(
             &mut header,
-            if wide_sizes {
-                u32::MAX
-            } else {
-                snapshot.len as u32
-            },
+            if wide_sizes { u32::MAX } else { length as u32 },
         );
         put16(&mut header, name.len() as u16);
         put16(&mut header, extra.len() as u16);
@@ -246,7 +237,7 @@ pub(crate) fn zip(
                 io(output.write_all(&buffer[..n]))?;
             }
         }
-        let mut extra = zip64_extra(snapshot.len, packed_size, Some(offset));
+        let mut extra = zip64_extra(length, packed_size, Some(offset));
         extra.extend(&aes);
         central.extend(b"PK\x01\x02");
         put16(&mut central, 0x032d);
@@ -264,18 +255,21 @@ pub(crate) fn zip(
         );
         put32(
             &mut central,
-            if wide_sizes {
-                u32::MAX
-            } else {
-                snapshot.len as u32
-            },
+            if wide_sizes { u32::MAX } else { length as u32 },
         );
         put16(&mut central, name.len() as u16);
         put16(&mut central, extra.len() as u16);
         for _ in 0..3 {
             put16(&mut central, 0);
         }
-        put32(&mut central, 0o100600 << 16);
+        put32(
+            &mut central,
+            if directory {
+                (0o40700 << 16) | 0x10
+            } else {
+                0o100600 << 16
+            },
+        );
         put32(
             &mut central,
             if wide_offset { u32::MAX } else { offset as u32 },
@@ -296,8 +290,8 @@ pub(crate) fn zip(
         put16(&mut end, 45);
         put32(&mut end, 0);
         put32(&mut end, 0);
-        put64(&mut end, sources.len() as u64);
-        put64(&mut end, sources.len() as u64);
+        put64(&mut end, plan.items.len() as u64);
+        put64(&mut end, plan.items.len() as u64);
         put64(&mut end, central.len() as u64);
         put64(&mut end, at);
         end.extend(b"PK\x06\x07");
@@ -316,13 +310,14 @@ pub(crate) fn zip(
         end.extend(b"PK\x05\x06");
         put16(&mut end, 0);
         put16(&mut end, 0);
-        put16(&mut end, sources.len() as u16);
-        put16(&mut end, sources.len() as u16);
+        put16(&mut end, plan.items.len() as u16);
+        put16(&mut end, plan.items.len() as u16);
         put32(&mut end, central.len() as u32);
         put32(&mut end, at as u32);
         put16(&mut end, 0);
     }
     io(output.write_all(&end))?;
+    plan.verify(check)?;
     let size = io(output.stream_position())?;
     io(output.rewind())?;
     Ok((output, size))

@@ -184,5 +184,13 @@
         "mapping": "Insufficient preflight space and StorageFull I/O failures return DiskFull 13. Windows ERROR_HANDLE_DISK_FULL 39 and ERROR_DISK_FULL 112 also map to DiskFull. Query failure, permission errors and other I/O failures return Io 8. No error classification by localized detail text.",
         "detail": "디스크 여유 공간이 부족합니다. 공간을 확보한 뒤 다시 시도하세요",
         "publication": "Keep existing publication, durability and cleanup semantics. DiskFull does not imply rollback or absence of previously published outputs."
+    },
+    "create_zip_sources": {
+        "agreement": "Proposed semantic extension under manager task 82093f56-73b7-4be4-ba6d-2597ffc2c6f7; frontend joint agreement is pending. Revision 2 fields, encoding, numeric quotas and error tags are unchanged.",
+        "roots": "Each source may be a regular file or directory. archive_name names that root inside the ZIP; directory descendants retain relative paths and every directory, including empty directories, gets a trailing-slash ZIP entry.",
+        "links": "Reject the whole job with UnsafePath for symbolic links, Windows reparse points, special files or unsafe/non-UTF-8 descendant names. Do not skip entries or follow external links. Open each path component without following links; enumerate pinned directories.",
+        "limits": "All expanded file and directory entries count toward entries (default 10000). Only file logical bytes count toward min(input,output), default output 16 GiB. Preserve 8 MiB metadata and 64-component name limits. Validate the complete plan and case-insensitive/path-prefix conflicts before requesting a password.",
+        "consistency": "Capture each file from its validated open handle. Compare planned object identity, kind, size and modification time before capture and check planned objects again before publishing the completed ZIP; detected changes fail SourceChanged. This is not an atomic snapshot of an entire directory tree.",
+        "encryption": "AES-256 protects file contents using the existing AE-2 encoding. Directory entries are stored as zero-byte unencrypted directory records; entry names remain visible, as with other ZIP entries."
     }
 }

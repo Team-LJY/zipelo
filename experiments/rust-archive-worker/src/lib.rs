@@ -1,5 +1,6 @@
 pub mod archive;
 mod create;
+mod create_sources;
 mod crypto;
 pub mod filesystem;
 mod lzma;

@@ -91,6 +91,20 @@ impl Snapshot {
             options.share_mode(1);
         }
         let mut source = options.open(path).map_err(|_| ErrorCode::Io)?;
+        let snapshot = Self::capture(&mut source, limit, check)?;
+        let named = options.open(path).map_err(|_| ErrorCode::SourceChanged)?;
+        if filesystem::object(&named)? != snapshot.object
+            || !named.metadata().map_err(|_| ErrorCode::Io)?.is_file()
+        {
+            return Err(ErrorCode::SourceChanged);
+        }
+        Ok(snapshot)
+    }
+    pub(crate) fn capture(
+        source: &mut File,
+        limit: u64,
+        check: &mut impl FnMut() -> Result<()>,
+    ) -> Result<Self> {
         let before = source.metadata().map_err(|_| ErrorCode::Io)?;
         if !before.is_file() {
             return Err(ErrorCode::InvalidRequest);
@@ -120,12 +134,9 @@ impl Snapshot {
             hash.update(&buffer[..n]);
         }
         let after = source.metadata().map_err(|_| ErrorCode::Io)?;
-        let named = options.open(path).map_err(|_| ErrorCode::SourceChanged)?;
-        if filesystem::object(&named)? != object
-            || filesystem::object(&source)? != object
+        if filesystem::object(&source)? != object
             || before.len() != len
             || after.len() != len
-            || !named.metadata().map_err(|_| ErrorCode::Io)?.is_file()
             || before.modified().ok() != after.modified().ok()
         {
             return Err(ErrorCode::SourceChanged);

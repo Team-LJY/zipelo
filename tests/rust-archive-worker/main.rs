@@ -1593,3 +1593,5 @@ fn disk_full_error_tag_preserves_previous_tags_and_rejects_unknown() {
         assert!(Reader::new(bytes.as_slice()).read().is_err());
     }
 }
+
+mod folder_inputs;
