@@ -3949,6 +3949,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "zipelo-archive-worker"
+version = "0.1.0"
+dependencies = [
+ "sha2",
+ "zlib-rs",
+]
+
+[[package]]
 name = "zipelo-memory-gzip-reader"
 version = "0.1.0"
 dependencies = [
@@ -3976,6 +3984,7 @@ version = "0.1.0"
 dependencies = [
  "eframe",
  "zipelo-app-core-memory",
+ "zipelo-archive-worker",
 ]
 
 [[package]]
