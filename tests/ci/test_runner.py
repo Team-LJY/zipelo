@@ -48,6 +48,19 @@ class RunnerTests(unittest.TestCase):
         )
         self.assertEqual(execute.call_count, 1)
 
+    def test_fixture_bytes_match_git_blobs(self):
+        names = subprocess.check_output(
+            ["git", "ls-files", "-z", "tests/**/fixtures/*"], cwd=run_rust.ROOT
+        ).decode("utf-8").split("\0")
+        names = [name for name in names if name]
+        self.assertTrue(names, "검증할 fixture가 없음")
+        for name in names:
+            with self.subTest(path=name):
+                expected = subprocess.check_output(
+                    ["git", "show", f"HEAD:{name}"], cwd=run_rust.ROOT
+                )
+                self.assertEqual((run_rust.ROOT / name).read_bytes(), expected)
+
     def test_cargo_contract(self):
         args = run_rust.command(Path("tests/example/Cargo.toml"), "test")
         self.assertIn("--locked", args)
