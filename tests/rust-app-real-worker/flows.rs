@@ -511,12 +511,50 @@ fn late_cancel_after_child_reap_keeps_the_original_terminal_result() {
 
 #[test]
 fn cancel_racing_child_exit_preserves_completed_result_before_poll() {
+    struct CompletedFactory(ProcessFactory);
+    struct BufferedConnection {
+        inner: Box<dyn Connection>,
+        pending: std::collections::VecDeque<HostEvent>,
+    }
+    impl Factory for CompletedFactory {
+        fn connect(&mut self, job_id: u64) -> Result<Box<dyn Connection>, String> {
+            Ok(Box::new(BufferedConnection {
+                inner: self.0.connect(job_id)?,
+                pending: Default::default(),
+            }))
+        }
+    }
+    impl Connection for BufferedConnection {
+        fn send(&mut self, request: Request) -> Result<(), String> {
+            let starting = matches!(&request.command, Command::Start(_));
+            self.inner.send(request)?;
+            if starting {
+                let deadline = Instant::now() + Duration::from_secs(20);
+                loop {
+                    assert!(Instant::now() < deadline, "작업자 종료 대기 시간 초과");
+                    if let Some(event) = self.inner.poll() {
+                        let exited = matches!(&event, HostEvent::Exited { .. });
+                        self.pending.push_back(event);
+                        if exited {
+                            break;
+                        }
+                    } else {
+                        std::thread::sleep(Duration::from_millis(1));
+                    }
+                }
+            }
+            Ok(())
+        }
+        fn poll(&mut self) -> Option<HostEvent> {
+            self.pending.pop_front().or_else(|| self.inner.poll())
+        }
+    }
     let archive = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/rust-app-real-worker/fixtures/sample.zip")
         .canonicalize()
         .unwrap();
     for iteration in 0..100 {
-        let mut factory = ProcessFactory::new(binary("zipelo-archive-worker"));
+        let mut factory = CompletedFactory(ProcessFactory::new(binary("zipelo-archive-worker")));
         let mut model = Model::default();
         assert!(model.begin(
             Start::List {
@@ -524,7 +562,7 @@ fn cancel_racing_child_exit_preserves_completed_result_before_poll() {
             },
             &mut factory
         ));
-        std::thread::sleep(Duration::from_millis(2));
+        assert!(model.terminal.is_none());
         model.cancel();
         wait(&mut model);
         assert!(model.confirmed, "iteration={iteration}: {:?}", model.error);

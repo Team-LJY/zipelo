@@ -27,12 +27,12 @@ Zipelo.exe, zipelo-archive-worker.exe, MIT LICENSE, BUILD-INFO.json과 제거 �
 마지막 화면의 [적용]을 누르면 HKCU의 ZipeloDev.Archive ProgID와 RegisteredApplications에
 .zip, .tar, .gz, .tgz 연결 후보를 등록하고 ms-settings:defaultapps를 엽니다.
 .tar.gz는 마지막 확장자 .gz로 연결됩니다. 기본 앱은 사용자가 Windows 설정에서 직접 선택합니다.
-JAR, RAR, 7z는 등록하지 않습니다. [마침]만 누르면 연결 후보를 등록하지 않습니다.
+7z도 연결 후보에 포함하며 JAR와 RAR는 등록하지 않습니다. [마침]만 누르면 연결 후보를 등록하지 않습니다.
 관리자 권한, HKLM, UserChoice 변경을 사용하지 않습니다.
 제거 시 알려진 앱 파일과 등록 값만 정리하며 폴더 전체를 재귀 삭제하지 않습니다.
 실행 파일 삭제 실패 시 등록과 제거 프로그램을 보존하여 재시도할 수 있습니다.
 
-현재는 개발 검증용입니다. PR62 화면의 실제 작업자 연결, Windows에서의 설치/제거와 설정 실행,
+현재 main의 실제 작업자 연결 앱을 포함합니다. Windows에서의 설치/제거와 설정 실행,
 지원 형식별 실제 파일 열기, 재설치/권한 실패/잠긴 파일 검증, 포함 의존성의 배포 고지 검토는 남아 있습니다.
 이번 EXE 생성만으로 해당 항목을 인증하거나 출시하지 않습니다.
 Windows 실행 검증 전에는 README 다운로드 버튼이나 release에 배포하지 않습니다.
