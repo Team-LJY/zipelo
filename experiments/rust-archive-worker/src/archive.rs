@@ -314,10 +314,45 @@ fn tar(
     validate_members(&members)?;
     Ok(members)
 }
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct AesExtra {
+    version: u16,
+    method: u16,
+}
+fn aes_extra(extra: &[u8]) -> Result<Option<AesExtra>> {
+    let mut at = 0;
+    let mut found = None;
+    while at < extra.len() {
+        let tag = u16at(extra, at)?;
+        let len = u16at(extra, at + 2)? as usize;
+        let value = part(extra, at + 4, len)?;
+        if tag == 1 {
+            return Err(ErrorCode::UnsupportedFeature);
+        }
+        if tag == 0x9901 {
+            if found.is_some() || len < 7 {
+                return Err(ErrorCode::Integrity);
+            }
+            let version = u16at(value, 0)?;
+            let method = u16at(value, 5)?;
+            if !matches!(version, 1 | 2)
+                || &value[2..4] != b"AE"
+                || value[4] != 3
+                || !matches!(method, 0 | 8)
+            {
+                return Err(ErrorCode::UnsupportedFeature);
+            }
+            found = Some(AesExtra { version, method });
+        }
+        at += 4 + len;
+    }
+    Ok(found)
+}
 fn zip(
     input: &[u8],
     limits: Limits,
     decode: bool,
+    password: Option<&[u8]>,
     check: &mut impl FnMut() -> Result<()>,
 ) -> Result<Vec<Member>> {
     if input.len() < 22 {
@@ -363,7 +398,7 @@ fn zip(
         }
         let flags = u16at(h, 8)?;
         let method = u16at(h, 10)?;
-        if flags & !0x080f != 0 || !matches!(method, 0 | 8) || u16at(h, 34)? != 0 {
+        if flags & !0x080f != 0 || !matches!(method, 0 | 8 | 99) || u16at(h, 34)? != 0 {
             return Err(ErrorCode::UnsupportedFeature);
         }
         let crc = u32at(h, 16)?;
@@ -379,6 +414,14 @@ fn zip(
         let name_len = u16at(h, 28)? as usize;
         let extra_len = u16at(h, 30)? as usize;
         let comment_len = u16at(h, 32)? as usize;
+        let extra = aes_extra(part(input, at + 46 + name_len, extra_len)?)?;
+        let encrypted = flags & 1 != 0;
+        if (method == 99) != extra.is_some() || (method == 99 && !encrypted) {
+            return Err(ErrorCode::Integrity);
+        }
+        if extra.is_some_and(|e| e.version == 2) && crc != 0 {
+            return Err(ErrorCode::Integrity);
+        }
         let raw = part(input, at + 46, name_len)?;
         if flags & 0x0800 == 0 && !raw.is_ascii() {
             return Err(ErrorCode::UnsupportedFeature);
@@ -406,7 +449,10 @@ fn zip(
         }
         let ln = u16at(lh, 26)? as usize;
         let le = u16at(lh, 28)? as usize;
-        if part(input, local + 30, ln)? != raw {
+        if aes_extra(part(input, local + 30 + ln, le)?)? != extra
+            || u16at(lh, 10)? != u16at(h, 12)?
+            || part(input, local + 30, ln)? != raw
+        {
             return Err(ErrorCode::Integrity);
         }
         if flags & 8 == 0
@@ -437,21 +483,43 @@ fn zip(
             return Err(ErrorCode::Integrity);
         }
         spans.push((local, stop));
-        let encrypted = flags & 1 != 0;
-        let data = if decode && !encrypted {
-            let bytes = if method == 0 {
-                if compressed != size {
+        if encrypted && compressed < if extra.is_some() { 28 } else { 12 } {
+            return Err(ErrorCode::Integrity);
+        }
+        let data = if decode {
+            let decrypted;
+            let packed = if encrypted {
+                let password = password.ok_or(ErrorCode::WrongPassword)?;
+                decrypted = if extra.is_some() {
+                    crate::crypto::aes_decrypt(packed, password, check)?
+                } else {
+                    let verifier = if flags & 8 != 0 {
+                        (u16at(h, 12)? >> 8) as u8
+                    } else {
+                        (crc >> 24) as u8
+                    };
+                    crate::crypto::zipcrypto_decrypt(packed, password, verifier, check)?
+                };
+                decrypted.as_slice()
+            } else {
+                packed
+            };
+            let actual_method = extra.map_or(method, |e| e.method);
+            let bytes = if actual_method == 0 {
+                if packed.len() != size {
                     return Err(ErrorCode::Integrity);
                 }
                 packed.to_vec()
             } else {
                 let (out, used) = inflate(packed, false, size as u64, check)?;
-                if used != compressed {
+                if used != packed.len() {
                     return Err(ErrorCode::Integrity);
                 }
                 out
             };
-            if bytes.len() != size || crc32(0, &bytes) != crc {
+            if bytes.len() != size
+                || (extra.is_none_or(|e| e.version == 1) && crc32(0, &bytes) != crc)
+            {
                 return Err(ErrorCode::Integrity);
             }
             bytes
@@ -499,13 +567,22 @@ pub fn parse(
     decode: bool,
     check: &mut impl FnMut() -> Result<()>,
 ) -> Result<Catalog> {
+    parse_with_password(input, limits, decode, None, check)
+}
+pub fn parse_with_password(
+    input: &[u8],
+    limits: Limits,
+    decode: bool,
+    password: Option<&[u8]>,
+    check: &mut impl FnMut() -> Result<()>,
+) -> Result<Catalog> {
     if !limits.valid() || input.len() as u64 > limits.input {
         return Err(ErrorCode::Limit);
     }
     if input.starts_with(b"PK\x03\x04") || input.starts_with(b"PK\x05\x06") {
         return Ok(Catalog {
             format: Format::Zip,
-            members: zip(input, limits, decode, check)?,
+            members: zip(input, limits, decode, password, check)?,
         });
     }
     if input.starts_with(&[31, 139]) {
@@ -576,6 +653,15 @@ pub fn create_zip(
     limits: Limits,
     check: &mut impl FnMut() -> Result<()>,
 ) -> Result<Vec<u8>> {
+    create_zip_with_password(members, method, limits, None, check)
+}
+pub fn create_zip_with_password(
+    members: &[Member],
+    method: Method,
+    limits: Limits,
+    password: Option<&[u8]>,
+    check: &mut impl FnMut() -> Result<()>,
+) -> Result<Vec<u8>> {
     if members.len() > limits.entries as usize || members.len() >= 65535 {
         return Err(ErrorCode::Limit);
     }
@@ -593,7 +679,11 @@ pub fn create_zip(
             return Err(ErrorCode::UnsupportedFeature);
         }
         let name = m.entry.name.as_bytes();
-        let crc = crc32(0, &m.data);
+        let crc = if password.is_some() {
+            0
+        } else {
+            crc32(0, &m.data)
+        };
         let offset = out.len() as u32;
         let packed = match method {
             Method::Store => m.data.clone(),
@@ -603,9 +693,23 @@ pub fn create_zip(
             Method::Store => 0,
             Method::Deflate => 8,
         };
+        let mut extra = Vec::new();
+        let flags = if password.is_some() { 0x0801 } else { 0x0800 };
+        let version = if password.is_some() { 51 } else { 20 };
+        let (method, packed) = if let Some(password) = password {
+            put16(&mut extra, 0x9901);
+            put16(&mut extra, 7);
+            put16(&mut extra, 2);
+            extra.extend(b"AE");
+            extra.push(3);
+            put16(&mut extra, method);
+            (99, crate::crypto::aes_encrypt(&packed, password, check)?)
+        } else {
+            (method, packed)
+        };
         out.extend(b"PK\x03\x04");
-        put16(&mut out, 20);
-        put16(&mut out, 0x0800);
+        put16(&mut out, version);
+        put16(&mut out, flags);
         put16(&mut out, method);
         put16(&mut out, 0);
         put16(&mut out, 33);
@@ -613,13 +717,14 @@ pub fn create_zip(
         put32(&mut out, packed.len() as u32);
         put32(&mut out, m.data.len() as u32);
         put16(&mut out, name.len() as u16);
-        put16(&mut out, 0);
+        put16(&mut out, extra.len() as u16);
         out.extend(name);
+        out.extend(&extra);
         bounded_append(&mut out, &packed, limits.output)?;
         cd.extend(b"PK\x01\x02");
         put16(&mut cd, 0x0314);
-        put16(&mut cd, 20);
-        put16(&mut cd, 0x0800);
+        put16(&mut cd, version);
+        put16(&mut cd, flags);
         put16(&mut cd, method);
         put16(&mut cd, 0);
         put16(&mut cd, 33);
@@ -627,13 +732,14 @@ pub fn create_zip(
         put32(&mut cd, packed.len() as u32);
         put32(&mut cd, m.data.len() as u32);
         put16(&mut cd, name.len() as u16);
-        put16(&mut cd, 0);
+        put16(&mut cd, extra.len() as u16);
         put16(&mut cd, 0);
         put16(&mut cd, 0);
         put16(&mut cd, 0);
         put32(&mut cd, 0o100600 << 16);
         put32(&mut cd, offset);
         cd.extend(name);
+        cd.extend(&extra);
     }
     let offset = out.len();
     bounded_append(&mut out, &cd, limits.output)?;

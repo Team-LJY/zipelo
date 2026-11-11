@@ -7,7 +7,7 @@ use crate::{
 use std::{
     collections::BTreeSet,
     io::{Read, Write},
-    sync::{Arc, Mutex},
+    sync::{Arc, Condvar, Mutex},
     time::{Duration, Instant},
 };
 
@@ -17,13 +17,57 @@ struct State<W> {
     cancelled: bool,
     phase: u8,
     fault: Option<ErrorCode>,
+    challenge: Option<u64>,
+    password: Option<Secret>,
+    input_closed: bool,
 }
 struct Job<W> {
     state: Arc<Mutex<State<W>>>,
+    wake: Arc<Condvar>,
+    next_challenge: u64,
     started: Instant,
     terminal: Terminal,
 }
 impl<W: Write> Job<W> {
+    fn password(&mut self, purpose: PasswordPurpose, attempt: u32) -> Result<Secret> {
+        self.check()?;
+        self.next_challenge = self.next_challenge.checked_add(1).ok_or(ErrorCode::Limit)?;
+        let id = self.next_challenge;
+        let state_ref = Arc::clone(&self.state);
+        let mut state = state_ref.lock().map_err(|_| ErrorCode::Internal)?;
+        state.challenge = Some(id);
+        state
+            .writer
+            .send(&Message::PasswordRequired {
+                challenge_id: id,
+                attempt,
+                purpose,
+            })
+            .map_err(|_| ErrorCode::Io)?;
+        loop {
+            if let Some(error) = state.fault {
+                return Err(error);
+            }
+            if state.cancelled {
+                return Err(ErrorCode::None);
+            }
+            if let Some(secret) = state.password.take() {
+                return Ok(secret);
+            }
+            if state.input_closed {
+                return Err(ErrorCode::Protocol);
+            }
+            if self.started.elapsed() > Duration::from_secs(300) {
+                return Err(ErrorCode::Limit);
+            }
+            state = self
+                .wake
+                .wait_timeout(state, Duration::from_millis(50))
+                .map_err(|_| ErrorCode::Internal)?
+                .0;
+        }
+    }
+
     fn event(&mut self, event: Message) -> Result<()> {
         let mut state = self.state.lock().map_err(|_| ErrorCode::Internal)?;
         state.writer.send(&event).map_err(|_| {
@@ -136,7 +180,7 @@ impl<W: Write> Job<W> {
         }
         self.event(Message::Accepted {
             action: start.action.kind(),
-            encryption: false,
+            encryption: true,
         })?;
         self.check()?;
         match start.action {
@@ -172,7 +216,7 @@ impl<W: Write> Job<W> {
                     0,
                 )?;
                 let mut catalog =
-                    archive::parse(&snapshot.bytes, start.limits, extract, &mut || self.check())?;
+                    archive::parse(&snapshot.bytes, start.limits, false, &mut || self.check())?;
                 let list_id = ListId {
                     catalog_version: 1,
                     format: catalog.format,
@@ -218,15 +262,34 @@ impl<W: Write> Job<W> {
                             Some(set)
                         }
                     };
-                    if catalog.members.iter().any(|m| m.entry.encrypted) {
-                        return Err(ErrorCode::UnsupportedFeature);
-                    }
                     if catalog
                         .members
                         .iter()
                         .any(|m| !matches!(m.entry.kind, EntryKind::File | EntryKind::Directory))
                     {
                         return Err(ErrorCode::UnsafePath);
+                    }
+                    let encrypted = catalog.members.iter().any(|m| m.entry.encrypted);
+                    for attempt in 1..=3 {
+                        let secret = if encrypted {
+                            Some(self.password(PasswordPurpose::Decrypt, attempt)?)
+                        } else {
+                            None
+                        };
+                        match archive::parse_with_password(
+                            &snapshot.bytes,
+                            start.limits,
+                            true,
+                            secret.as_ref().map(|s| s.0.as_slice()),
+                            &mut || self.check(),
+                        ) {
+                            Ok(decoded) => {
+                                catalog = decoded;
+                                break;
+                            }
+                            Err(ErrorCode::WrongPassword) if attempt < 3 => continue,
+                            Err(error) => return Err(error),
+                        }
                     }
                     if catalog.format == Format::Gzip {
                         let name = gzip_output_name.ok_or(ErrorCode::InvalidRequest)?;
@@ -299,9 +362,6 @@ impl<W: Write> Job<W> {
                 method,
                 encryption,
             } => {
-                if encryption != Encryption::None {
-                    return Err(ErrorCode::UnsupportedFeature);
-                }
                 if sources.len() > start.limits.entries as usize {
                     return Err(ErrorCode::Limit);
                 }
@@ -328,8 +388,22 @@ impl<W: Write> Job<W> {
                         data: snapshot.bytes,
                     });
                 }
-                let bytes =
-                    archive::create_zip(&members, method, start.limits, &mut || self.check())?;
+                let secret = if encryption == Encryption::Aes256 {
+                    let secret = self.password(PasswordPurpose::Encrypt, 1)?;
+                    if secret.0.is_empty() {
+                        return Err(ErrorCode::InvalidRequest);
+                    }
+                    Some(secret)
+                } else {
+                    None
+                };
+                let bytes = archive::create_zip_with_password(
+                    &members,
+                    method,
+                    start.limits,
+                    secret.as_ref().map(|s| s.0.as_slice()),
+                    &mut || self.check(),
+                )?;
                 let output = output_file.to_path()?;
                 let leaf = output
                     .file_name()
@@ -365,18 +439,23 @@ pub fn serve<R: Read + Send + 'static, W: Write + Send + 'static>(
         cancelled: false,
         phase: 0,
         fault: None,
+        challenge: None,
+        password: None,
+        input_closed: false,
     }));
+    let wake = Arc::new(Condvar::new());
+    let control_wake = Arc::clone(&wake);
     let control = Arc::clone(&state);
     std::thread::spawn(move || {
         loop {
             let command = reader.read();
             let Ok(Some((_, sequence, message))) = command else {
-                if command.is_err() {
-                    if let Ok(mut state) = control.lock() {
-                        if state.phase < 2 {
-                            state.fault = Some(ErrorCode::Protocol);
-                        }
+                if let Ok(mut state) = control.lock() {
+                    state.input_closed = true;
+                    if command.is_err() && state.phase < 2 {
+                        state.fault = Some(ErrorCode::Protocol);
                     }
+                    control_wake.notify_all();
                 }
                 break;
             };
@@ -387,6 +466,23 @@ pub fn serve<R: Read + Send + 'static, W: Write + Send + 'static>(
                 break;
             }
             match message {
+                Message::Password {
+                    challenge_id,
+                    secret,
+                } => {
+                    if state.phase != 0
+                        || state.challenge != Some(challenge_id)
+                        || state.password.is_some()
+                    {
+                        state.fault = Some(ErrorCode::Protocol);
+                    } else {
+                        state.challenge = None;
+                        if !state.cancelled {
+                            state.password = Some(secret);
+                        }
+                    }
+                    control_wake.notify_all();
+                }
                 Message::Cancel => {
                     let status = match state.phase {
                         2 => CancelStatus::Finished,
@@ -397,6 +493,7 @@ pub fn serve<R: Read + Send + 'static, W: Write + Send + 'static>(
                             CancelStatus::Requested
                         }
                     };
+                    control_wake.notify_all();
                     if state
                         .writer
                         .send(&Message::CancelAck {
@@ -418,6 +515,8 @@ pub fn serve<R: Read + Send + 'static, W: Write + Send + 'static>(
     });
     let mut context = Job {
         state: Arc::clone(&state),
+        wake,
+        next_challenge: 0,
         started: Instant::now(),
         terminal: Terminal {
             outcome: Outcome::Completed,
@@ -443,6 +542,8 @@ pub fn serve<R: Read + Send + 'static, W: Write + Send + 'static>(
         .lock()
         .map_err(|_| std::io::Error::other("worker state poisoned"))?;
     state.phase = 2;
+    state.challenge = None;
+    state.password = None;
     if let Some(error) = state.fault.or(error) {
         context.terminal.error = error;
         context.terminal.outcome = if error == ErrorCode::None {
