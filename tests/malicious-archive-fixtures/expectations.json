@@ -1,0 +1,221 @@
+{
+    "schema_version": 1,
+    "worker_protocol_revision": 2,
+    "worker_execution_verified": false,
+    "request_defaults": {
+        "action": "Extract",
+        "selection": "All",
+        "list_id": null,
+        "gzip_output_name": null,
+        "limits": {
+            "input": 1048576,
+            "output": 131072,
+            "entries": 64
+        }
+    },
+    "expected": {
+        "terminal_count": 1,
+        "outcome": "Failed",
+        "publication": "None",
+        "created_count": 0,
+        "retained_partial_count": 0,
+        "output_event_count": 0,
+        "destination_mutation_count": 0,
+        "outside_mutation_count": 0,
+        "archive_bytes_unchanged": true,
+        "terminal_is_last": true,
+        "stdout_eof": true,
+        "stderr_eof": true,
+        "child_exit_code": 0
+    },
+    "cases": [
+        {
+            "file": "zip-dotdot.zip",
+            "category": "unsafe-path",
+            "format": "ZIP",
+            "bytes": 267,
+            "sha256": "e81bba4caa41bcac3c2439f8c29672001139ec353475802cd758af69409a0073",
+            "error_any_of": [
+                "UnsafePath"
+            ],
+            "hostile_name": "../outside/escape.txt"
+        },
+        {
+            "file": "zip-absolute-posix.zip",
+            "category": "unsafe-path",
+            "format": "ZIP",
+            "bytes": 293,
+            "sha256": "b19d1b2038aecca600e4a0b1a69d1bac1d1a02ea564857fc5ce1f2ca65986cfa",
+            "error_any_of": [
+                "UnsafePath"
+            ],
+            "hostile_name": "/zipelo-fixture-outside/escape.txt"
+        },
+        {
+            "file": "zip-absolute-drive.zip",
+            "category": "unsafe-path",
+            "format": "ZIP",
+            "bytes": 297,
+            "sha256": "7c6515a793f287f10fc028e46c1b6e943cd338e6af312a97e1f4e93bfd23938c",
+            "error_any_of": [
+                "UnsafePath"
+            ],
+            "hostile_name": "C:/zipelo-fixture-outside/escape.txt"
+        },
+        {
+            "file": "zip-backslash-dotdot.zip",
+            "category": "unsafe-path",
+            "format": "ZIP",
+            "bytes": 267,
+            "sha256": "ea3ea2cc890c971da618596f97b2215a07ba9b2870b48a9f5ec14da3238ffb82",
+            "error_any_of": [
+                "UnsafePath"
+            ],
+            "hostile_name": "..\\outside\\escape.txt"
+        },
+        {
+            "file": "tar-dotdot.tar",
+            "category": "unsafe-path",
+            "format": "TAR",
+            "bytes": 10240,
+            "sha256": "fa6c672ff59bf63640775a70df07dd7f2d0078fb31c9f6b749da6721d3083f0b",
+            "error_any_of": [
+                "UnsafePath"
+            ],
+            "hostile_name": "../outside/escape.txt"
+        },
+        {
+            "file": "targz-dotdot.tar.gz",
+            "category": "unsafe-path",
+            "format": "TAR_GZIP",
+            "bytes": 158,
+            "sha256": "49ff351e2c65bcee2debe141255d00937d063d7f1406fc21866aa20aa4449546",
+            "error_any_of": [
+                "UnsafePath"
+            ],
+            "hostile_name": "../outside/escape.txt"
+        },
+        {
+            "file": "tar-absolute-posix.tar",
+            "category": "unsafe-path",
+            "format": "TAR",
+            "bytes": 10240,
+            "sha256": "0fdca381406c03f61045134874aa821451677ebceb45f16bb0892c3813a7b1be",
+            "error_any_of": [
+                "UnsafePath"
+            ],
+            "hostile_name": "/zipelo-fixture-outside/escape.txt"
+        },
+        {
+            "file": "zip-symlink-escape.zip",
+            "category": "symlink-escape",
+            "format": "ZIP",
+            "bytes": 351,
+            "sha256": "ecce7538871a999dec566684b1aa91a49c983110041f64cdf206640955201015",
+            "error_any_of": [
+                "UnsafePath",
+                "Conflict"
+            ],
+            "link_name": "link",
+            "link_target": "../outside"
+        },
+        {
+            "file": "tar-symlink-escape.tar",
+            "category": "symlink-escape",
+            "format": "TAR",
+            "bytes": 10240,
+            "sha256": "a33e70ad9ce988bf30cbf9b8c03d6a617b2d82b3d59f49b02cb9447c39b4ccf9",
+            "error_any_of": [
+                "UnsafePath",
+                "Conflict"
+            ],
+            "link_name": "link",
+            "link_target": "../outside"
+        },
+        {
+            "file": "zip-output-limit.zip",
+            "category": "output-limit",
+            "format": "ZIP",
+            "bytes": 313,
+            "sha256": "6737aeeb32577caece669c8be8b3a1938b78d33a521d8c400bafcca6f5cdb0fb",
+            "error_any_of": [
+                "Limit"
+            ],
+            "expanded_bytes": 65556,
+            "limits": {
+                "input": 1048576,
+                "output": 1024,
+                "entries": 64
+            },
+            "gzip_output_name": null
+        },
+        {
+            "file": "gzip-output-limit.gz",
+            "category": "output-limit",
+            "format": "GZIP",
+            "bytes": 97,
+            "sha256": "4bb05674d4b00f83dc5201f245bcbcad3fafa5119647d8c8df72bad1d5fff291",
+            "error_any_of": [
+                "Limit"
+            ],
+            "expanded_bytes": 65536,
+            "limits": {
+                "input": 1048576,
+                "output": 1024,
+                "entries": 64
+            },
+            "gzip_output_name": "payload.bin"
+        },
+        {
+            "file": "targz-output-limit.tar.gz",
+            "category": "output-limit",
+            "format": "TAR_GZIP",
+            "bytes": 207,
+            "sha256": "2bf979822e2608339b53cfd8dde281a8256a58b853fcddf606d1ce319ea7da84",
+            "error_any_of": [
+                "Limit"
+            ],
+            "expanded_bytes": 71680,
+            "limits": {
+                "input": 1048576,
+                "output": 1024,
+                "entries": 64
+            },
+            "gzip_output_name": null
+        },
+        {
+            "file": "zip-bad-local-header.zip",
+            "category": "damaged-header",
+            "format": "ZIP",
+            "bytes": 245,
+            "sha256": "bdc9ea0ae8aef98d8bcc56a894cf4cdc56baa375339595e54554a5b08c2a8ae6",
+            "error_any_of": [
+                "Integrity"
+            ],
+            "damage": "second local filename length exceeds archive"
+        },
+        {
+            "file": "tar-bad-checksum.tar",
+            "category": "damaged-header",
+            "format": "TAR",
+            "bytes": 10240,
+            "sha256": "deb83a94302ee0660973d66a58e94a30892a057f958dd4e7aaa933d327c21d91",
+            "error_any_of": [
+                "Integrity"
+            ],
+            "damage": "second header name changed without checksum update"
+        },
+        {
+            "file": "gzip-reserved-flags.gz",
+            "category": "damaged-header",
+            "format": "GZIP",
+            "bytes": 27,
+            "sha256": "a320985b7ae3556bef90f28d58cc82483c85cdbdc11f5f012d84e0fac749872c",
+            "error_any_of": [
+                "Integrity"
+            ],
+            "damage": "reserved flag bit 0x20",
+            "gzip_output_name": "payload.bin"
+        }
+    ]
+}

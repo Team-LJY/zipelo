@@ -1,7 +1,7 @@
 {
     "command": "python3 tests/ci/run_rust.py local",
     "platform": "linux-desktop-2",
-    "base_remote_main": "5e8b0ceba8eeef55f6743157186b914c9224dbee",
+    "base_remote_main": "3f51510fcc613c3f72e29c3b421aab178bf94186",
     "local_baseline_head": "3ef6f50",
     "source_state": "Tested committed integration source. Only this evidence JSON was updated after the full runner completed; hashes identify the tested code and fixtures.",
     "linux_build_crates": 19,
@@ -113,7 +113,8 @@
     ],
     "before_review_fix": "Earlier PR62 fixes reproduced 3 failures before repair. Integration tests additionally reproduced normal channel shutdown and late-cancel races before repair. PR68 review race reproduced with the new test before repair; all 100 iterations passed after repair.",
     "approved_ui_head": "423a7c80c9d7182e07d29adee03a97d09a19b11f",
-    "tested_local_head": "32fd1b97ad616c4526deb4d91fed9156be1b026b",
+    "tested_local_head": "b7e558cd8afbb8bb54b55ebd4c463641cc2129e5",
     "real_worker_tests_passed": 10,
-    "runner_tests_passed": 8
+    "runner_tests_passed": 17,
+    "merge_validation": "Approved UI logic unchanged from 2174031; main malicious fixtures integrated and full local runner passed."
 }
