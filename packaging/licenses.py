@@ -71,7 +71,39 @@ def registry_files(package, locked):
     return records
 
 
-def inventory(manifests, project_root=ROOT):
+def supplemental_files(package, supplement_path):
+    data = json.loads(Path(supplement_path).read_text(encoding="utf-8"))
+    candidates = [row for row in data["packages"]
+                  if (row["name"], row["version"]) == (package["name"], package["version"])]
+    if not candidates:
+        return []
+    if len(candidates) != 1:
+        raise ValueError("보충 항목 중복")
+    row = candidates[0]
+    if row["license"] != package["license"]:
+        raise ValueError(f"보충 SPDX 불일치: {package['name']}")
+    root = Path(package["manifest_path"]).parent.resolve()
+    archive = root.parents[2] / "cache" / root.parent.name / (root.name + ".crate")
+    with tarfile.open(archive, "r:gz") as source:
+        vcs = json.load(source.extractfile(root.name + "/.cargo_vcs_info.json"))
+    if vcs["git"]["sha1"] != row["rev"]:
+        raise ValueError(f"보충 버전 커밋 불일치: {package['name']}")
+    records = []
+    for url in row["files"]:
+        file = data["files"][url]
+        parts = url.split("/")
+        if (len(parts) < 7 or parts[:3] != ["https:", "", "raw.githubusercontent.com"]
+                or parts[5] != row["upstream_ref"]
+                or row["upstream_ref"] not in {row["rev"], row["version"]}):
+            raise ValueError(f"보충 출처 고정 오류: {url}")
+        content = file["text"].encode("utf-8")
+        if file["url"] != url or hashlib.sha256(content).hexdigest() != file["sha256"]:
+            raise ValueError(f"보충 원문 해시 불일치: {url}")
+        records.append({"path": url, "sha256": file["sha256"], "text": file["text"]})
+    return records
+
+
+def inventory(manifests, project_root=ROOT, supplement_path=ROOT / "packaging/license-supplements.json"):
     locked = {}
     packages = {}
     for manifest in manifests:
@@ -88,6 +120,8 @@ def inventory(manifests, project_root=ROOT):
             if not package["source"].startswith("registry+"):
                 raise ValueError(f"지원하지 않는 원문 저장소: {key}")
             files = registry_files(package, locked[key])
+            if not files and Path(supplement_path).is_file():
+                files = supplemental_files(package, supplement_path)
         else:
             root = Path(project_root).resolve()
             if package["license"] != "MIT" or not Path(package["manifest_path"]).resolve().is_relative_to(root):
@@ -104,10 +138,10 @@ def render(records):
     missing = [f'{record["name"]}@{record["version"]}' for record in records if not record["files"]]
     if missing:
         raise ValueError(f"라이선스 원문 누락 {len(missing)}개: " + ", ".join(missing))
-    lines = ["Zipelo third-party licenses", "Cargo.lock 전체 의존성의 로컬 원문 고지", ""]
+    lines = ["Zipelo third-party licenses", "Cargo.lock 전체 의존성의 원문 고지 (로컬 registry 및 고정 upstream 보충)", ""]
     for record in records:
         lines.extend(["=" * 72, f'Crate: {record["name"]} {record["version"]}',
-                      f'Source: {record["source"]}', f'License: {record["license"]}', ""])
+                      f'Source: {record["source"]}', f'License: {record["license"]}', f'Version: {record["version"]}', ""])
         for file in record["files"]:
             lines.extend([f'File: {file["path"]}', f'SHA-256: {file["sha256"]}', "", file["text"], ""])
     return "\n".join(lines)
@@ -118,7 +152,7 @@ def generate(manifests, output, audit=None):
     if audit:
         Path(audit).write_text(json.dumps(records, ensure_ascii=False, indent=4) + "\n", encoding="utf-8")
     text = render(records)
-    Path(output).write_text(text, encoding="utf-8")
+    Path(output).write_text(text, encoding="utf-8", newline="")
     return records
 
 

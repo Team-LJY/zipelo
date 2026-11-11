@@ -113,6 +113,63 @@ class LicenseTests(unittest.TestCase):
         self.assertIn("--offline", command)
         self.assertIn("--all-features", command)
 
+    def supplement_fixture(self, license="MIT", revision="a" * 40):
+        self.fixture({".cargo_vcs_info.json": json.dumps({"git": {"sha1": "a" * 40}}).encode()})
+        url = "https://raw.githubusercontent.com/example/sample/" + revision + "/LICENSE"
+        original = "Fixture permission text\\r\\n"
+        data = {"packages": [{"name": "sample", "version": "1.0.0", "license": license,
+                              "rev": revision, "upstream_ref": revision, "files": [url]}],
+                "files": {url: {"url": url, "text": original,
+                                "sha256": hashlib.sha256(original.encode()).hexdigest()}}}
+        path = self.root / "supplements.json"
+        path.write_text(json.dumps(data))
+        return path, data, url
+
+    def test_supplement_preserves_fixed_source_and_original(self):
+        path, data, url = self.supplement_fixture()
+        records = LICENSES.supplemental_files(self.package, path)
+        self.assertEqual(records[0]["path"], url)
+        self.assertEqual(records[0]["text"], data["files"][url]["text"])
+
+    def test_supplement_spdx_must_match_metadata(self):
+        path, _, _ = self.supplement_fixture(license="Apache-2.0")
+        with self.assertRaisesRegex(ValueError, "SPDX 불일치"):
+            LICENSES.supplemental_files(self.package, path)
+
+    def test_supplement_revision_must_match_published_crate(self):
+        path, _, _ = self.supplement_fixture(revision="b" * 40)
+        with self.assertRaisesRegex(ValueError, "커밋 불일치"):
+            LICENSES.supplemental_files(self.package, path)
+
+    def test_supplement_content_hash_is_verified(self):
+        path, data, url = self.supplement_fixture()
+        data["files"][url]["text"] += "changed"
+        path.write_text(json.dumps(data))
+        with self.assertRaisesRegex(ValueError, "해시 불일치"):
+            LICENSES.supplemental_files(self.package, path)
+
+    def test_supplement_requires_fixed_upstream_url(self):
+        path, data, _ = self.supplement_fixture()
+        data["packages"][0]["upstream_ref"] = "main"
+        path.write_text(json.dumps(data))
+        with self.assertRaisesRegex(ValueError, "출처 고정 오류"):
+            LICENSES.supplemental_files(self.package, path)
+
+    def test_real_supplement_spdx_matches_offline_metadata(self):
+        manifests = [ROOT / "experiments" / crate / "Cargo.toml"
+                     for crate in ["rust-ui-memory-app", "rust-archive-worker"]]
+        records = LICENSES.inventory(manifests)
+        declared = {LICENSES.identity(p): p["license"]
+                    for manifest in manifests for p in LICENSES.metadata(manifest)}
+        self.assertEqual({(r["name"], r["version"], r["source"]): r["license"]
+                          for r in records}, declared)
+        supplement = json.loads((ROOT / "packaging/license-supplements.json").read_text())
+        for row in supplement["packages"]:
+            matches = [r for r in records if (r["name"], r["version"]) == (row["name"], row["version"])]
+            self.assertEqual(len(matches), 1)
+            self.assertEqual(matches[0]["license"], row["license"])
+            self.assertTrue(matches[0]["files"])
+
     def test_both_packagers_stop_before_build_on_missing_licenses(self):
         for builder, binaries in [(WINDOWS, WINDOWS), (UBUNTU, UBUNTU.WINDOWS)]:
             with self.subTest(builder=builder.__name__):
