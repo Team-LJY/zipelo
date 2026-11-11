@@ -38,3 +38,7 @@ path = "../../tests/rust-app-ui/regressions.rs"
 [[test]]
 name = "real_worker"
 path = "../../tests/rust-app-real-worker/flows.rs"
+
+[[test]]
+name = "format_contract"
+path = "../../tests/rust-app-real-worker/formats.rs"

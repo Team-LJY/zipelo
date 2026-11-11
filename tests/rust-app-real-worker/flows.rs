@@ -144,7 +144,12 @@ fn wait(model: &mut Model) {
 }
 fn completed(model: &Model) {
     assert!(model.confirmed, "{}", model.status());
-    assert_eq!(model.terminal.as_ref().unwrap().outcome, Outcome::Completed);
+    assert_eq!(
+        model.terminal.as_ref().unwrap().outcome,
+        Outcome::Completed,
+        "terminal: {:?}",
+        model.terminal
+    );
 }
 #[cfg(feature = "ui")]
 mod screen {
@@ -288,6 +293,38 @@ mod screen {
         assert_eq!(fs::read(archive).unwrap(), original);
         assert_eq!(observed.borrow().jobs.len(), 2);
         assert_reaped(&observed);
+    }
+    #[test]
+    fn seven_zip_open_and_extract_via_actual_widgets_and_worker() {
+        for name in ["lzma.7z", "lzma2.7z"] {
+            let scratch = Scratch::new();
+            let archive = scratch.path(name);
+            fs::copy(
+                Path::new(env!("CARGO_MANIFEST_DIR"))
+                    .join("../../tests/rust-archive-worker/fixtures/7z")
+                    .join(name),
+                &archive,
+            )
+            .unwrap();
+            let original = fs::read(&archive).unwrap();
+            let output = make_directory(&scratch.path("output"));
+            let (factory, observed) = observed_factory();
+            let mut screen = Screen::new(factory);
+            screen.open(&archive);
+            assert_eq!(
+                screen.app.model.list_id.as_ref().unwrap().format,
+                Format::SevenZip
+            );
+            assert!(screen.app.model.can_extract());
+            screen.extract(&output);
+            assert_eq!(
+                fs::read(output.join("folder/hello.txt")).unwrap(),
+                b"Zipelo 7z interoperability\n".repeat(100)
+            );
+            assert_eq!(fs::read(archive).unwrap(), original);
+            assert_eq!(observed.borrow().jobs.len(), 2);
+            assert_reaped(&observed);
+        }
     }
     #[test]
     fn zip_open_and_extract_via_actual_widgets_and_worker() {
