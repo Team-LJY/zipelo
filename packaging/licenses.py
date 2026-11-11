@@ -142,35 +142,51 @@ def supplemental_files(package, supplement_path):
     return records
 
 
-def inventory(manifests, project_root=ROOT, supplement_path=ROOT / "packaging/license-supplements.json"):
-    locked = {}
-    packages = {}
+def repository_root(manifest):
+    result = subprocess.run(
+        ["git", "-C", str(manifest.parent), "rev-parse", "--show-toplevel"],
+        check=True, capture_output=True, text=True,
+    )
+    return Path(result.stdout.strip()).resolve(strict=True)
+
+
+def inventory(manifests, project_root=None, supplement_path=ROOT / "packaging/license-supplements.json"):
+    records = {}
     for manifest in manifests:
         manifest = Path(manifest).resolve(strict=True)
         lock = tomllib.loads(manifest.with_name("Cargo.lock").read_text())
-        locked.update({identity(package): package for package in lock["package"]})
-        packages.update({identity(package): package for package in metadata(manifest)})
-    if set(locked) != set(packages):
-        raise ValueError(f"Cargo.lock/metadata 불일치: 누락 {sorted(set(locked) - set(packages))}, "
-                         f"추가 {sorted(set(packages) - set(locked))}")
-    records = []
-    for key, package in sorted(packages.items()):
-        if package.get("source"):
-            if not package["source"].startswith("registry+"):
-                raise ValueError(f"지원하지 않는 원문 저장소: {key}")
-            files = registry_files(package, locked[key])
-            if not files and Path(supplement_path).is_file():
-                files = supplemental_files(package, supplement_path)
-        else:
-            root = Path(project_root).resolve()
-            if package["license"] != "MIT" or not Path(package["manifest_path"]).resolve().is_relative_to(root):
-                raise ValueError(f"프로젝트 라이선스 범위 확인 필요: {key}")
-            content = (root / "LICENSE").read_bytes()
-            files = [{"path": "project/LICENSE", "sha256": hashlib.sha256(content).hexdigest(),
-                      "text": content.decode("utf-8")}]
-        records.append({"name": key[0], "version": key[1], "source": key[2],
-                        "license": package["license"], "files": files})
-    return records
+        locked = {identity(package): package for package in lock["package"]}
+        packages = {identity(package): package for package in metadata(manifest)}
+        if set(locked) != set(packages):
+            raise ValueError(f"Cargo.lock/metadata 불일치: 누락 {sorted(set(locked) - set(packages))}, "
+                             f"추가 {sorted(set(packages) - set(locked))}")
+        root = None
+        for key, package in sorted(packages.items()):
+            if package.get("source"):
+                if not package["source"].startswith("registry+"):
+                    raise ValueError(f"지원하지 않는 원문 저장소: {key}")
+                files = registry_files(package, locked[key])
+                if not files and Path(supplement_path).is_file():
+                    files = supplemental_files(package, supplement_path)
+            else:
+                if root is None:
+                    root = Path(project_root).resolve() if project_root else repository_root(manifest)
+                if (package["license"] != "MIT"
+                        or not Path(package["manifest_path"]).resolve().is_relative_to(root)):
+                    raise ValueError(f"프로젝트 라이선스 범위 확인 필요: {key}")
+                content = (root / "LICENSE").read_bytes()
+                files = [{"path": "project/LICENSE", "sha256": hashlib.sha256(content).hexdigest(),
+                          "text": content.decode("utf-8")}]
+            if key in records:
+                if records[key]["license"] != package["license"]:
+                    raise ValueError(f"입력 저장소 간 SPDX 불일치: {key}")
+                for file in files:
+                    if file not in records[key]["files"]:
+                        records[key]["files"].append(file)
+            else:
+                records[key] = {"name": key[0], "version": key[1], "source": key[2],
+                                "license": package["license"], "files": files}
+    return [records[key] for key in sorted(records)]
 
 
 def render(records):

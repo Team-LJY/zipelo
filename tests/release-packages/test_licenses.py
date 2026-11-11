@@ -88,6 +88,65 @@ class LicenseTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "Cargo.lock/metadata 불일치"):
                 LICENSES.inventory([self.manifest], self.root)
 
+    def checkout_fixture(self, name, license_text):
+        checkout = self.root / name
+        crate = checkout / "experiments" / "shared"
+        crate.mkdir(parents=True)
+        subprocess.run(["git", "init", "-q", str(checkout)], check=True)
+        (checkout / "LICENSE").write_text(license_text)
+        (crate / "Cargo.toml").write_text(
+            '[workspace]\n[package]\nname = "shared"\nversion = "1.0.0"\nlicense = "MIT"\n'
+        )
+        (crate / "src").mkdir()
+        (crate / "src/lib.rs").write_text("")
+        (crate / "Cargo.lock").write_text(
+            'version = 4\n[[package]]\nname = "shared"\nversion = "1.0.0"\n'
+        )
+        return crate / "Cargo.toml"
+
+    def test_separate_checkouts_preserve_each_repository_license(self):
+        app = self.checkout_fixture("app-checkout", "App copyright\n")
+        worker = self.checkout_fixture("worker-checkout", "Worker copyright\n")
+        records = LICENSES.inventory([app, worker])
+        self.assertEqual(len(records), 1)
+        self.assertEqual(
+            {file["text"] for file in records[0]["files"]},
+            {"App copyright\n", "Worker copyright\n"},
+        )
+        args = SimpleNamespace(output=self.root / "windows", target_dir=self.root / "target",
+                               profile="release", app_manifest=app, worker_manifest=worker)
+        with patch.object(WINDOWS, "build_binary", side_effect=RuntimeError("compile reached")) as build:
+            with self.assertRaisesRegex(RuntimeError, "compile reached"):
+                WINDOWS.build(args)
+            self.assertEqual(build.call_args.args[0], app)
+        notice = (args.output / "payload/THIRD-PARTY-LICENSES.txt").read_text()
+        self.assertIn("App copyright", notice)
+        self.assertIn("Worker copyright", notice)
+
+    def test_second_checkout_license_is_validated_before_deduplication(self):
+        app = self.checkout_fixture("app-checkout", "App copyright\n")
+        worker = self.checkout_fixture("worker-checkout", "Worker copyright\n")
+        worker.write_text(worker.read_text().replace('license = "MIT"', 'license = "Apache-2.0"'))
+        with self.assertRaisesRegex(ValueError, "프로젝트 라이선스 범위"):
+            LICENSES.inventory([app, worker])
+
+    def test_external_path_dependency_is_not_covered_by_input_license(self):
+        app = self.checkout_fixture("app-checkout", "App copyright\n")
+        foreign = self.checkout_fixture("foreign-checkout", "Foreign copyright\n")
+        package = LICENSES.metadata(app)[0]
+        package["manifest_path"] = str(foreign)
+        with patch.object(LICENSES, "metadata", return_value=[package]):
+            with self.assertRaisesRegex(ValueError, "프로젝트 라이선스 범위"):
+                LICENSES.inventory([app])
+
+    def test_each_input_lock_is_checked_before_merging(self):
+        app = self.checkout_fixture("app-checkout", "App copyright\n")
+        worker = self.checkout_fixture("worker-checkout", "Worker copyright\n")
+        package = LICENSES.metadata(app)[0]
+        with patch.object(LICENSES, "metadata", side_effect=[[package], []]):
+            with self.assertRaisesRegex(ValueError, "Cargo.lock/metadata 불일치"):
+                LICENSES.inventory([app, worker])
+
     def test_modified_registry_license_is_rejected(self):
         locked = self.fixture({"LICENSE": b"Fixture license"})
         (self.registry / "LICENSE").write_bytes(b"Modified license")

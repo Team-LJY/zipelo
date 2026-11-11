@@ -49,6 +49,8 @@ ms-settings URI를 사용합니다.
 
 앱과 작업자의 Cargo.lock 전체 항목을 cargo metadata --locked --offline --all-features와 대조한 뒤 packaging/licenses.py로 THIRD-PARTY-LICENSES.txt를 생성합니다. 로컬 registry 원문과 캐시 crate의 잠금 체크섬을 확인하며 LICENSE, COPYING, NOTICE 등의 원문을 함께 보존합니다. 원문이 없거나 변조됐거나 metadata 대조에서 누락되면 패키지 생성을 중단합니다.
 
+별도 체크아웃을 입력하면 각 manifest가 속한 Git 저장소의 LICENSE와 로컬 패키지의 MIT 선언 및 경로 범위를 따로 검증합니다. 두 입력의 Cargo.lock과 metadata도 각각 대조한 뒤 고지를 합치며, 같은 이름과 버전의 패키지라도 서로 다른 저작권 고지는 모두 보존합니다.
+
 처음 준비할 때 각 manifest에 cargo +1.99.1 fetch --locked --manifest-path 명령으로 모든 플랫폼의 의존성을 캐시에 받아 두어야 합니다. 고지 생성 중에는 네트워크를 사용하지 않습니다. Windows에는 설치 폴더에, Ubuntu에는 /usr/share/doc/zipelo/THIRD-PARTY-LICENSES.txt에 포함합니다. 파일 동봉 자체가 별도 라이선스 준수 검토를 대신하지는 않습니다.
 
 로컬 crate에 원문이 없으면 packaging/license-supplements.json의 해당 버전 공식 upstream 원문을 사용합니다. 보충 파일에는 고정 출처 URL, crate 버전과 VCS 커밋, Cargo SPDX 식, UTF-8 원문과 SHA-256이 들어 있습니다. 생성기는 SPDX와 게시된 crate 커밋 및 원문 해시를 오프라인으로 검증합니다. 승인된 표준 보충도 없는 항목은 링크 설명만으로 대체하지 않고 계속 빌드를 차단합니다.
