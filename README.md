@@ -11,3 +11,12 @@
 ## 개발 상태
 
 Rust로 개발 중이며 첫 출시판(v0.1) 범위는 [docs/PLANS.md](docs/PLANS.md)를 참고하세요.
+
+## 지원 형식
+
+- ZIP 목록 보기, 해제, 생성
+- 암호 ZIP: ZipCrypto 해제, AES-256 해제와 생성
+- 7z 해제
+- TAR, GZ, TAR.GZ 해제
+
+RAR, 손상 파일 복구, 미리보기는 v0.1에서 지원하지 않습니다. 자세한 내용과 알려진 한계는 [v0.1 릴리스 노트](docs/release-notes-v0.1.md)를 참고하세요.
