@@ -726,3 +726,84 @@ fn fake_worker_rejects_invalid_format_specific_output_names() {
         assert_eq!(factory.state.borrow().starts.len(), previous);
     }
 }
+
+#[test]
+fn cleanup_marker_without_error_does_not_replace_eofs() {
+    let mut factory = FakeFactory::manual();
+    let mut model = Model::default();
+    assert!(model.begin(
+        Start::List {
+            archive: path("sample.zip")
+        },
+        &mut factory
+    ));
+    factory
+        .state
+        .borrow_mut()
+        .queue
+        .push_back(HostEvent::CleanupComplete);
+    factory
+        .state
+        .borrow_mut()
+        .queue
+        .push_back(HostEvent::Exited { success: true });
+    for _ in 0..10 {
+        model.poll();
+    }
+    assert!(model.busy());
+    factory
+        .state
+        .borrow_mut()
+        .queue
+        .push_back(HostEvent::StdoutEof);
+    for _ in 0..10 {
+        model.poll();
+    }
+    assert!(model.busy());
+    factory
+        .state
+        .borrow_mut()
+        .queue
+        .push_back(HostEvent::StderrEof);
+    pump(&mut model);
+    assert!(!model.confirmed);
+}
+
+#[test]
+fn error_cleanup_requires_child_wait_without_fabricating_terminal() {
+    let mut factory = FakeFactory::manual();
+    let mut model = Model::default();
+    assert!(model.begin(
+        Start::List {
+            archive: path("sample.zip")
+        },
+        &mut factory
+    ));
+    factory
+        .state
+        .borrow_mut()
+        .queue
+        .push_back(HostEvent::Fault("pipe error".into()));
+    factory
+        .state
+        .borrow_mut()
+        .queue
+        .push_back(HostEvent::CleanupComplete);
+    model.request_close();
+    model.confirm_close();
+    for _ in 0..10 {
+        model.poll();
+    }
+    assert!(model.busy());
+    assert_eq!(model.close, Close::Waiting);
+    factory
+        .state
+        .borrow_mut()
+        .queue
+        .push_back(HostEvent::Exited { success: false });
+    pump(&mut model);
+    assert!(!model.confirmed);
+    assert!(model.terminal.is_none());
+    assert_eq!(model.error.as_deref(), Some("pipe error"));
+    assert_eq!(model.close, Close::Review);
+}

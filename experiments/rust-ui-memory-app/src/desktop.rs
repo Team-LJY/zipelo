@@ -58,7 +58,10 @@ fn main() -> eframe::Result {
                     )));
                 }
             } else {
-                Box::new(zipelo_ui_memory_app::archive_ui::Unavailable)
+                Box::new(
+                    zipelo_ui_memory_app::archive_process::ProcessFactory::sibling()
+                        .map_err(std::io::Error::other)?,
+                )
             };
             Ok(Box::new(
                 zipelo_ui_memory_app::archive_screen::ArchiveApp::new(factory, startup, fixture),
