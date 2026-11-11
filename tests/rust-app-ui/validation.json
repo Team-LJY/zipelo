@@ -6,7 +6,7 @@
     "source_state": "Tested committed integration source. Only this evidence JSON was updated after the full runner completed; hashes identify the tested code and fixtures.",
     "linux_build_crates": 19,
     "linux_test_targets": 19,
-    "rust_tests_passed": 868,
+    "rust_tests_passed": 870,
     "new_archive_ui_tests_passed": 22,
     "windows_cross_build_crates": 19,
     "windows_runtime_tested": false,
@@ -30,7 +30,7 @@
         },
         {
             "path": "experiments/rust-ui-memory-app/src/archive_process.rs",
-            "sha256": "4a0f066a17f5f02b7c04588a377545853bcad609416c4daf06398d94667a6aa2"
+            "sha256": "52cebb8d1ec237dfbf56d2bb4449d6fce26dc66c594767ac086a9a6577fe2767"
         },
         {
             "path": "experiments/rust-ui-memory-app/src/archive_screen.rs",
@@ -62,7 +62,7 @@
         },
         {
             "path": "tests/rust-app-real-worker/README.md",
-            "sha256": "1f71868f8988f98c84b7bee4b764685a90d997d78e6b913bf749206662317823"
+            "sha256": "7902bca8e72fc9599492bfe022b123a60b1ae6cad6fbbd8094bb3c5512268a98"
         },
         {
             "path": "tests/rust-app-real-worker/fixtures/sample.tar.gz",
@@ -74,7 +74,7 @@
         },
         {
             "path": "tests/rust-app-real-worker/flows.rs",
-            "sha256": "1b38693802cacc8717189662469aaf0effbd13e21c33d69d6dc1e3d5882e9dd4"
+            "sha256": "d2510f60db64cc373a8affd4b7102d16e3733f82e224905e18b7c5633134e8ff"
         },
         {
             "path": "tests/rust-app-real-worker/generate.py",
@@ -108,11 +108,12 @@
         "Start 전송 실패 시 양쪽 EOF/child wait까지 연결 보존과 닫기/교체 차단",
         "오류 후 명시적 정리는 child wait 전에 닫기를 허용하지 않음",
         "정상 정리 신호는 EOF를 대신하지 않음",
-        "정상 종료 뒤 채널 닫힘과 늦은 취소가 최종 결과를 오류로 바꾸지 않음"
+        "정상 종료 뒤 채널 닫힘과 늦은 취소가 최종 결과를 오류로 바꾸지 않음",
+        "child 회수 전 늦은 취소의 실제 작업자 경합 100회와 Terminal 없는 종료의 실패 유지"
     ],
-    "before_review_fix": "Earlier PR62 fixes reproduced 3 failures before repair. Integration tests additionally reproduced normal channel shutdown and late-cancel races before repair.",
+    "before_review_fix": "Earlier PR62 fixes reproduced 3 failures before repair. Integration tests additionally reproduced normal channel shutdown and late-cancel races before repair. PR68 review race reproduced with the new test before repair; all 100 iterations passed after repair.",
     "approved_ui_head": "423a7c80c9d7182e07d29adee03a97d09a19b11f",
-    "tested_local_head": "bc5d01cd282d92c977174c3bbf61072c761f3a34",
-    "real_worker_tests_passed": 8,
+    "tested_local_head": "32fd1b97ad616c4526deb4d91fed9156be1b026b",
+    "real_worker_tests_passed": 10,
     "runner_tests_passed": 8
 }

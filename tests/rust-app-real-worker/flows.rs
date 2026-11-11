@@ -469,3 +469,52 @@ fn late_cancel_after_child_reap_keeps_the_original_terminal_result() {
     }
     assert!(connection.poll().is_none());
 }
+
+#[test]
+fn cancel_racing_child_exit_preserves_completed_result_before_poll() {
+    let archive = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../tests/rust-app-real-worker/fixtures/sample.zip")
+        .canonicalize()
+        .unwrap();
+    for iteration in 0..100 {
+        let mut factory = ProcessFactory::new(binary("zipelo-archive-worker"));
+        let mut model = Model::default();
+        assert!(model.begin(
+            Start::List {
+                archive: archive.clone()
+            },
+            &mut factory
+        ));
+        std::thread::sleep(Duration::from_millis(2));
+        model.cancel();
+        wait(&mut model);
+        assert!(model.confirmed, "iteration={iteration}: {:?}", model.error);
+        assert_eq!(model.terminal.as_ref().unwrap().outcome, Outcome::Completed);
+        assert!(model.error.is_none());
+    }
+}
+
+#[test]
+fn cancel_racing_exit_without_terminal_remains_unconfirmed() {
+    let scratch = Scratch::new();
+    let probe = scratch.path("early-exit");
+    fs::copy(binary("zipelo-real-worker-probe"), &probe).unwrap();
+    let mut factory = ProcessFactory::new(probe);
+    let mut model = Model::default();
+    assert!(model.begin(
+        Start::List {
+            archive: scratch.path("sample.zip")
+        },
+        &mut factory
+    ));
+    std::thread::sleep(Duration::from_millis(2));
+    model.cancel();
+    model.request_close();
+    model.confirm_close();
+    assert_eq!(model.close, Close::Waiting);
+    wait(&mut model);
+    assert!(!model.confirmed);
+    assert!(model.terminal.is_none());
+    assert!(model.error.is_some());
+    assert_eq!(model.close, Close::Review);
+}

@@ -301,7 +301,7 @@ impl Write for FrameBuffer {
         Ok(())
     }
 }
-struct Frame(Vec<u8>);
+struct Frame(Vec<u8>, bool);
 impl Drop for Frame {
     fn drop(&mut self) {
         self.0.fill(0);
@@ -468,7 +468,7 @@ impl ui::Connection for ProcessConnection {
             self.stop.store(true, Ordering::Release);
             return Err("작업자 요청을 직렬화하지 못했습니다".into());
         }
-        let bytes = Frame(std::mem::take(&mut *self.buffer.0.borrow_mut()));
+        let bytes = Frame(std::mem::take(&mut *self.buffer.0.borrow_mut()), is_cancel);
         if self.send.as_ref().unwrap().try_send(bytes).is_err() {
             if is_cancel && self.done.load(Ordering::Acquire) {
                 self.next += 1;
@@ -523,6 +523,9 @@ fn supervise(
     let mut output = child.stdout.take().unwrap();
     let mut errors = child.stderr.take().unwrap();
     let mut threads = Vec::new();
+    let cancel_write_failed = Arc::new(AtomicBool::new(false));
+    let terminal_received = Arc::new(AtomicBool::new(false));
+    let failed_cancel = cancel_write_failed.clone();
     let tx = events.clone();
     let abort = stop.clone();
     let finished = done.clone();
@@ -538,7 +541,12 @@ fn supervise(
                                 .and_then(|_| input.flush())
                                 .is_err()
                             {
-                                fault(&tx, &abort, "작업자 요청 파이프 쓰기에 실패했습니다");
+                                if frame.1 {
+                                    // 취소 쓰기 실패는 응답과 실제 종료 결과를 확인한 뒤 판단함.
+                                    failed_cancel.store(true, Ordering::Release);
+                                } else {
+                                    fault(&tx, &abort, "작업자 요청 파이프 쓰기에 실패했습니다");
+                                }
                                 break;
                             }
                         }
@@ -550,6 +558,7 @@ fn supervise(
     );
     let tx = events.clone();
     let abort = stop.clone();
+    let received_terminal = terminal_received.clone();
     threads.push(
         thread::Builder::new()
             .name("zipelo-worker-output".into())
@@ -565,6 +574,9 @@ fn supervise(
                                 if job != job_id || event.is_err() {
                                     fault(&tx, &abort, "작업자 응답이 요청과 일치하지 않습니다");
                                     break false;
+                                }
+                                if matches!(event, Ok(ui::Event::Terminal(_))) {
+                                    received_terminal.store(true, Ordering::Release);
                                 }
                                 if !notify(
                                     &tx,
@@ -643,6 +655,12 @@ fn supervise(
         if handle.join().is_err() {
             fault(&events, &stop, "작업자 통신 스레드 회수에 실패했습니다");
         }
+    }
+    if cancel_write_failed.load(Ordering::Acquire)
+        && !(terminal_received.load(Ordering::Acquire)
+            && status.as_ref().is_some_and(|status| status.success()))
+    {
+        fault(&events, &stop, "작업자 요청 파이프 쓰기에 실패했습니다");
     }
     if let Some(status) = status {
         // 회수와 모든 파이프 핸들 정리가 끝난 뒤에만 닫기 허용 근거를 전달함.
