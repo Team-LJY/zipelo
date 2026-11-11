@@ -372,6 +372,31 @@ fn local_sizes(size: u32, compressed: u32, extra: Option<&[u8]>) -> Result<(u64,
         Ok((size as u64, compressed as u64))
     }
 }
+fn descriptor_size(
+    bytes: &[u8],
+    crc: u32,
+    compressed: u64,
+    size: u64,
+    wide_required: bool,
+) -> Result<usize> {
+    // 일반 크기 헤더와 64비트 디스크립터를 함께 기록하는 도구도 있음.
+    if bytes.len() >= 20
+        && u32at(bytes, 0) == crc
+        && u64at(bytes, 4) == compressed
+        && u64at(bytes, 12) == size
+    {
+        return Ok(20);
+    }
+    if !wide_required
+        && bytes.len() >= 12
+        && u32at(bytes, 0) == crc
+        && u32at(bytes, 4) as u64 == compressed
+        && u32at(bytes, 8) as u64 == size
+    {
+        return Ok(12);
+    }
+    Err(ErrorCode::Integrity)
+}
 fn zip(
     source: &mut File,
     len: u64,
@@ -579,19 +604,9 @@ fn zip(
             if signature == b"PK\x07\x08" {
                 stop = add(stop, 4)?;
             }
-            if add(stop, descriptor_len)? > central {
-                return Err(ErrorCode::Integrity);
-            }
-            let d = bytes(source, stop, descriptor_len as usize)?;
-            let (pc, ps) = if size_zip64 {
-                (u64at(&d, 4), u64at(&d, 12))
-            } else {
-                (u32at(&d, 4) as u64, u32at(&d, 8) as u64)
-            };
-            if u32at(&d, 0) != crc || pc != compressed || ps != size {
-                return Err(ErrorCode::Integrity);
-            }
-            stop += descriptor_len;
+            let d = bytes(source, stop, (central - stop).min(20) as usize)?;
+            let descriptor_len = descriptor_size(&d, crc, compressed, size, size_zip64)?;
+            stop = add(stop, descriptor_len as u64)?;
         }
         spans.push((local, stop));
         packed.push(Packed {

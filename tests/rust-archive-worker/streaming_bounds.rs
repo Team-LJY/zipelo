@@ -80,3 +80,45 @@ fn local_zip64_always_reads_both_sizes() {
         );
     }
 }
+
+#[test]
+fn descriptor_width_uses_sizes_and_crc() {
+    for (compressed, size) in [(21u64, 21u64), (0, 0)] {
+        let crc = 123u32;
+        let wide = [
+            crc.to_le_bytes().as_slice(),
+            &compressed.to_le_bytes(),
+            &size.to_le_bytes(),
+        ]
+        .concat();
+        let narrow = [
+            crc.to_le_bytes(),
+            (compressed as u32).to_le_bytes(),
+            (size as u32).to_le_bytes(),
+        ]
+        .concat();
+        assert_eq!(descriptor_size(&wide, crc, compressed, size, false), Ok(20));
+        assert_eq!(descriptor_size(&wide, crc, compressed, size, true), Ok(20));
+        assert_eq!(
+            descriptor_size(&narrow, crc, compressed, size, false),
+            Ok(12)
+        );
+        assert_eq!(
+            descriptor_size(&narrow, crc, compressed, size, true),
+            Err(ErrorCode::Integrity)
+        );
+        let followed = [narrow.as_slice(), b"PK\x03\x04\x14\0\0\0"].concat();
+        assert_eq!(
+            descriptor_size(&followed, crc, compressed, size, false),
+            Ok(12)
+        );
+        assert_eq!(
+            descriptor_size(&wide, crc + 1, compressed, size, false),
+            Err(ErrorCode::Integrity)
+        );
+        assert_eq!(
+            descriptor_size(&wide[..11], crc, compressed, size, false),
+            Err(ErrorCode::Integrity)
+        );
+    }
+}
