@@ -801,3 +801,355 @@ fn zero_payload_gzip_is_not_tar() {
         assert_eq!(list_id.format, Format::Gzip);
     }
 }
+
+const SEVEN_PAYLOAD: &[u8] = b"Zipelo 7z interoperability\n";
+fn seven_fixture(name: &str) -> Vec<u8> {
+    fs::read(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../tests/rust-archive-worker/fixtures/7z")
+            .join(name),
+    )
+    .unwrap()
+}
+#[test]
+fn seven_zip_lzma_lzma2_and_copy_interoperate() {
+    for name in [
+        "copy.7z",
+        "lzma.7z",
+        "lzma2.7z",
+        "properties-0.7z",
+        "properties-1.7z",
+        "properties-2.7z",
+        "properties-3.7z",
+        "libarchive-lzma1.7z",
+        "libarchive-lzma2.7z",
+    ] {
+        let bytes = seven_fixture(name);
+        let catalog = archive::parse(&bytes, Limits::default(), true, &mut || Ok(()))
+            .unwrap_or_else(|e| panic!("{name}: {e:?}"));
+        assert_eq!(catalog.format, Format::SevenZip);
+        assert_eq!(catalog.members[0].data, SEVEN_PAYLOAD.repeat(100), "{name}");
+        let s = Scratch::new();
+        let events = extract(&s, &bytes, None, Selection::All, None, Limits::default());
+        assert_eq!(
+            terminal(&events).outcome,
+            Outcome::Completed,
+            "{name}: {events:?}"
+        );
+        assert_eq!(
+            fs::read(s.0.join("output/folder/hello.txt")).unwrap(),
+            SEVEN_PAYLOAD.repeat(100)
+        );
+    }
+}
+#[test]
+fn seven_zip_encoded_header_solid_and_empty_entries() {
+    let s = Scratch::new();
+    let bytes = seven_fixture("encoded-solid.7z");
+    let catalog = archive::parse(&bytes, Limits::default(), false, &mut || Ok(())).unwrap();
+    assert_eq!(catalog.members.len(), 4);
+    let events = extract(&s, &bytes, None, Selection::All, None, Limits::default());
+    assert_eq!(terminal(&events).outcome, Outcome::Completed, "{events:?}");
+    assert_eq!(fs::read(s.0.join("output/folder/empty")).unwrap(), b"");
+    assert_eq!(
+        fs::read(s.0.join("output/folder/hello.txt")).unwrap(),
+        SEVEN_PAYLOAD.repeat(100)
+    );
+    let mut reverse = SEVEN_PAYLOAD.repeat(100);
+    reverse.reverse();
+    assert_eq!(fs::read(s.0.join("output/한글.txt")).unwrap(), reverse);
+}
+#[test]
+fn seven_zip_long_matches_and_lzma2_chunks() {
+    for name in ["long-match.7z", "lzma2-chunks.7z"] {
+        let bytes = seven_fixture(name);
+        let catalog = archive::parse(&bytes, Limits::default(), true, &mut || Ok(()))
+            .unwrap_or_else(|e| panic!("{name}: {e:?}"));
+        if name == "long-match.7z" {
+            assert_eq!(catalog.members[0].data, SEVEN_PAYLOAD.repeat(10000));
+        } else {
+            let expected = (0..100000u64)
+                .map(|i| (((i * 1103515245 + (i >> 2) * 12345) >> ((i % 4) * 8)) & 255) as u8)
+                .collect::<Vec<_>>();
+            assert_eq!(catalog.members[0].data, expected);
+        }
+    }
+}
+#[test]
+fn seven_zip_malicious_inputs_never_write() {
+    for name in [
+        "unsafe-dotdot.7z",
+        "unsafe-absolute.7z",
+        "unsafe-drive.7z",
+        "unsafe-backslash.7z",
+        "unsafe-deep.7z",
+        "symlink.7z",
+        "collision.7z",
+        "bad-payload.7z",
+        "bad-crc.7z",
+        "bad-dictionary.7z",
+    ] {
+        let s = Scratch::new();
+        let bytes = seven_fixture(name);
+        let events = extract(&s, &bytes, None, Selection::All, None, Limits::default());
+        assert_eq!(
+            terminal(&events).outcome,
+            Outcome::Failed,
+            "{name}: {events:?}"
+        );
+        assert_eq!(terminal(&events).publication, Publication::None);
+        assert_eq!(terminal(&events).created_count, 0);
+        assert!(!events.iter().any(|e| matches!(e, Message::Output { .. })));
+        assert_eq!(fs::read_dir(s.0.join("output")).unwrap().count(), 0);
+        assert!(!s.0.join("outside.txt").exists());
+    }
+}
+
+#[test]
+fn seven_zip_format_wire_tag_preserves_existing_encodings() {
+    for (tag, format) in [
+        Format::Zip,
+        Format::Tar,
+        Format::Gzip,
+        Format::TarGzip,
+        Format::SevenZip,
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let token = ListId {
+            catalog_version: 1,
+            format,
+            source_object: SourceObject::Unix {
+                device: 1,
+                inode: 2,
+            },
+            archive_bytes: 3,
+            archive_sha256: [4; 32],
+        };
+        let mut bytes = Vec::new();
+        Writer::new(&mut bytes, 17)
+            .send(&Message::ListEnd {
+                entry_count: 5,
+                list_id: token.clone(),
+            })
+            .unwrap();
+        assert_eq!(bytes[38], tag as u8);
+        match Reader::new(bytes.as_slice()).read().unwrap().unwrap().2 {
+            Message::ListEnd {
+                entry_count,
+                list_id,
+            } => {
+                assert_eq!(entry_count, 5);
+                assert_eq!(list_id, token);
+            }
+            _ => panic!("expected ListEnd"),
+        }
+    }
+}
+#[test]
+fn seven_zip_listing_token_and_selection() {
+    let s = Scratch::new();
+    let bytes = seven_fixture("encoded-solid.7z");
+    fs::write(s.0.join("input"), &bytes).unwrap();
+    let events = execute(Start {
+        action: Action::List {
+            archive: s.path("input"),
+        },
+        limits: Limits::default(),
+    });
+    assert_eq!(terminal(&events).outcome, Outcome::Completed);
+    let list_id = events
+        .into_iter()
+        .find_map(|e| {
+            if let Message::ListEnd { list_id, .. } = e {
+                Some(list_id)
+            } else {
+                None
+            }
+        })
+        .unwrap();
+    assert_eq!(list_id.format, Format::SevenZip);
+    let events = extract(
+        &s,
+        &bytes,
+        None,
+        Selection::EntryIds(vec![3]),
+        Some(list_id),
+        Limits::default(),
+    );
+    assert_eq!(terminal(&events).outcome, Outcome::Completed);
+    assert_eq!(terminal(&events).created_count, 1);
+    assert!(!s.0.join("output/folder").exists());
+    assert_eq!(fs::read_dir(s.0.join("output")).unwrap().count(), 1);
+}
+#[test]
+fn seven_zip_limits_truncation_and_existing_files_are_preserved() {
+    let bytes = seven_fixture("lzma2.7z");
+    for cut in [0, 1, 6, 12, 31, 32, bytes.len() - 1] {
+        let s = Scratch::new();
+        let events = extract(
+            &s,
+            &bytes[..cut],
+            None,
+            Selection::All,
+            None,
+            Limits::default(),
+        );
+        assert_eq!(terminal(&events).outcome, Outcome::Failed);
+        assert_eq!(terminal(&events).publication, Publication::None);
+        assert_eq!(fs::read_dir(s.0.join("output")).unwrap().count(), 0);
+    }
+    let s = Scratch::new();
+    let events = extract(
+        &s,
+        &bytes,
+        None,
+        Selection::All,
+        None,
+        Limits {
+            output: 100,
+            ..Limits::default()
+        },
+    );
+    assert_eq!(terminal(&events).error, ErrorCode::Limit);
+    assert_eq!(fs::read_dir(s.0.join("output")).unwrap().count(), 0);
+    fs::create_dir(s.0.join("output/folder")).unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(s.0.join("output/folder"), fs::Permissions::from_mode(0o700)).unwrap();
+    }
+    fs::write(s.0.join("output/folder/hello.txt"), b"preserve").unwrap();
+    let events = extract(&s, &bytes, None, Selection::All, None, Limits::default());
+    assert_eq!(terminal(&events).error, ErrorCode::Conflict);
+    assert_eq!(
+        fs::read(s.0.join("output/folder/hello.txt")).unwrap(),
+        b"preserve"
+    );
+    let s = Scratch::new();
+    let events = extract(
+        &s,
+        &seven_fixture("bad-trailing.7z"),
+        None,
+        Selection::All,
+        None,
+        Limits::default(),
+    );
+    assert_eq!(terminal(&events).error, ErrorCode::Integrity);
+    assert_eq!(fs::read_dir(s.0.join("output")).unwrap().count(), 0);
+}
+#[test]
+fn seven_zip_parser_honors_cancellation_checkpoints() {
+    let bytes = seven_fixture("long-match.7z");
+    let mut calls = 0;
+    let result = archive::parse(&bytes, Limits::default(), true, &mut || {
+        calls += 1;
+        if calls >= 5 {
+            Err(ErrorCode::None)
+        } else {
+            Ok(())
+        }
+    });
+    assert!(matches!(result, Err(ErrorCode::None)));
+}
+#[test]
+fn pr64_malicious_corpus_is_rejected_without_writes() {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../tests/malicious-archive-fixtures/fixtures");
+    let cases = [
+        ("zip-dotdot.zip", ErrorCode::UnsafePath, 131072, None),
+        (
+            "zip-absolute-posix.zip",
+            ErrorCode::UnsafePath,
+            131072,
+            None,
+        ),
+        (
+            "zip-absolute-drive.zip",
+            ErrorCode::UnsafePath,
+            131072,
+            None,
+        ),
+        (
+            "zip-backslash-dotdot.zip",
+            ErrorCode::UnsafePath,
+            131072,
+            None,
+        ),
+        ("tar-dotdot.tar", ErrorCode::UnsafePath, 131072, None),
+        ("targz-dotdot.tar.gz", ErrorCode::UnsafePath, 131072, None),
+        (
+            "tar-absolute-posix.tar",
+            ErrorCode::UnsafePath,
+            131072,
+            None,
+        ),
+        ("zip-symlink-escape.zip", ErrorCode::Conflict, 131072, None),
+        ("tar-symlink-escape.tar", ErrorCode::Conflict, 131072, None),
+        ("zip-output-limit.zip", ErrorCode::Limit, 1024, None),
+        (
+            "gzip-output-limit.gz",
+            ErrorCode::Limit,
+            1024,
+            Some("payload.bin"),
+        ),
+        ("targz-output-limit.tar.gz", ErrorCode::Limit, 1024, None),
+        (
+            "zip-bad-local-header.zip",
+            ErrorCode::Integrity,
+            131072,
+            None,
+        ),
+        ("tar-bad-checksum.tar", ErrorCode::Integrity, 131072, None),
+        (
+            "gzip-reserved-flags.gz",
+            ErrorCode::Integrity,
+            131072,
+            Some("payload.bin"),
+        ),
+    ];
+    for (name, expected, output, gzip) in cases {
+        let s = Scratch::new();
+        let bytes = fs::read(root.join(name)).unwrap();
+        fs::write(s.0.join("outside.txt"), b"preserve").unwrap();
+        let events = extract(
+            &s,
+            &bytes,
+            gzip,
+            Selection::All,
+            None,
+            Limits {
+                input: 1048576,
+                output,
+                entries: 64,
+            },
+        );
+        assert_eq!(
+            terminal(&events).outcome,
+            Outcome::Failed,
+            "{name}: {events:?}"
+        );
+        assert_eq!(terminal(&events).error, expected, "{name}");
+        assert_eq!(terminal(&events).publication, Publication::None);
+        assert_eq!(terminal(&events).created_count, 0);
+        assert_eq!(terminal(&events).retained_partial_count, 0);
+        assert!(!events.iter().any(|e| matches!(e, Message::Output { .. })));
+        assert_eq!(fs::read_dir(s.0.join("output")).unwrap().count(), 0);
+        assert_eq!(fs::read(s.0.join("outside.txt")).unwrap(), b"preserve");
+        assert_eq!(fs::read(s.0.join("input")).unwrap(), bytes);
+    }
+}
+#[cfg(target_os = "linux")]
+#[test]
+fn seven_zip_reference_reader_accepts_synthetic_fixtures() {
+    let helper = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../tests/rust-archive-worker/seven_zip_reference.py");
+    assert!(
+        Command::new("python3")
+            .arg(helper)
+            .status()
+            .unwrap()
+            .success()
+    );
+}

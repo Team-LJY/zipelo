@@ -125,7 +125,7 @@ macro_rules! enumeration { ($t:ident {$($v:ident=$n:expr),*$(,)?}) => { impl Wir
     fn enc(&self,e:&mut Encoder)->io::Result<()> { (match self {$(Self::$v=>$n,)*} as u8).enc(e) }
     fn dec(d:&mut Decoder<'_>)->io::Result<Self> { match u8::dec(d)? {$($n=>Ok(Self::$v),)*_=>Err(invalid())} }
 } }; }
-enumeration!(Format{Zip=0,Tar=1,Gzip=2,TarGzip=3});
+enumeration!(Format{Zip=0,Tar=1,Gzip=2,TarGzip=3,SevenZip=4});
 enumeration!(Method{Store=0,Deflate=1});
 enumeration!(Encryption{None=0,Aes256=1});
 enumeration!(ActionKind{List=0,Extract=1,CreateZip=2});

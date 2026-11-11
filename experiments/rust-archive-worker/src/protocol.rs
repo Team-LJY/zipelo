@@ -80,6 +80,7 @@ pub enum Format {
     Tar,
     Gzip,
     TarGzip,
+    SevenZip,
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SourceObject {
