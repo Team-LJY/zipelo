@@ -262,61 +262,131 @@ impl Streams {
             folders,
         })
     }
-    fn bounds<'a>(&self, input: &'a [u8], data_end: usize) -> Result<Vec<&'a [u8]>> {
-        let mut at = 32usize
-            .checked_add(self.position)
-            .ok_or(ErrorCode::Integrity)?;
-        let mut slices = Vec::new();
-        for (size, expected) in self.packed.iter().zip(&self.packed_crcs) {
-            let end = at
-                .checked_add(*size)
-                .filter(|end| *end <= data_end)
-                .ok_or(ErrorCode::Integrity)?;
-            let bytes = input.get(at..end).ok_or(ErrorCode::Integrity)?;
-            if expected.is_some_and(|crc| crc32(0, bytes) != crc) {
-                return Err(ErrorCode::Integrity);
-            }
-            slices.push(bytes);
-            at = end;
-        }
-        Ok(slices)
-    }
-    fn decode(
+    fn ranges(
         &self,
-        packed: &[&[u8]],
+        input: &mut std::fs::File,
+        data_end: u64,
         check: &mut impl FnMut() -> Result<()>,
-    ) -> Result<Vec<Vec<u8>>> {
-        self.folders
-            .iter()
-            .zip(packed)
-            .map(|(f, bytes)| {
-                check()?;
-                let out = match f.method.as_slice() {
-                    [0] => {
-                        if !f.properties.is_empty() || bytes.len() != f.size {
-                            return Err(ErrorCode::Integrity);
-                        }
-                        bytes.to_vec()
-                    }
-                    [3, 1, 1] => crate::lzma::decode(bytes, &f.properties, false, f.size, check)?,
-                    [0x21] => crate::lzma::decode(bytes, &f.properties, true, f.size, check)?,
-                    _ => return Err(ErrorCode::UnsupportedFeature),
-                };
-                if f.crc.is_some_and(|crc| crc32(0, &out) != crc) {
+    ) -> Result<Vec<(u64, u64)>> {
+        let mut at = 32u64
+            .checked_add(self.position as u64)
+            .ok_or(ErrorCode::Integrity)?;
+        let mut ranges = Vec::new();
+        for (size, expected) in self.packed.iter().zip(&self.packed_crcs) {
+            let size = *size as u64;
+            let end = at
+                .checked_add(size)
+                .filter(|n| *n <= data_end)
+                .ok_or(ErrorCode::Integrity)?;
+            if let Some(expected) = expected {
+                if digest(input, at, size, check)? != *expected {
                     return Err(ErrorCode::Integrity);
                 }
-                let mut at = 0;
-                for (size, crc) in f.sizes.iter().zip(&f.crcs) {
-                    let end = at + *size;
-                    if crc.is_some_and(|crc| crc32(0, &out[at..end]) != crc) {
+            }
+            ranges.push((at, size));
+            at = end;
+        }
+        Ok(ranges)
+    }
+    fn decode_file(
+        &self,
+        input: &mut std::fs::File,
+        ranges: &[(u64, u64)],
+        output: &mut std::fs::File,
+        check: &mut impl FnMut() -> Result<()>,
+    ) -> Result<()> {
+        use std::io::{Read, Seek, SeekFrom, Write};
+        let total = self.folders.iter().try_fold(0u64, |sum, f| {
+            sum.checked_add(f.size as u64).ok_or(ErrorCode::Limit)
+        })?;
+        crate::space::ensure(output, total)?;
+        for (f, (start, size)) in self.folders.iter().zip(ranges) {
+            check()?;
+            let base = output.stream_position().map_err(crate::space::io_error)?;
+            input
+                .seek(SeekFrom::Start(*start))
+                .map_err(crate::space::io_error)?;
+            match f.method.as_slice() {
+                [0] => {
+                    if !f.properties.is_empty() || *size != f.size as u64 {
                         return Err(ErrorCode::Integrity);
                     }
-                    at = end;
+                    let mut buffer = zeroize::Zeroizing::new([0; 65536]);
+                    let mut remaining = *size;
+                    while remaining != 0 {
+                        check()?;
+                        let n = remaining.min(buffer.len() as u64) as usize;
+                        input
+                            .read_exact(&mut buffer[..n])
+                            .map_err(|_| ErrorCode::Integrity)?;
+                        output
+                            .write_all(&buffer[..n])
+                            .map_err(crate::space::io_error)?;
+                        remaining -= n as u64;
+                    }
                 }
-                Ok(out)
-            })
-            .collect()
+                [3, 1, 1] | [0x21] => crate::lzma::decode_stream(
+                    input,
+                    *size,
+                    &f.properties,
+                    f.method == [0x21],
+                    f.size as u64,
+                    output,
+                    check,
+                )?,
+                _ => return Err(ErrorCode::UnsupportedFeature),
+            }
+            let single = f.sizes.len() == 1 && f.sizes[0] == f.size;
+            let folder_crc = if f.crc.is_some() || single && f.crcs[0].is_some() {
+                Some(digest(output, base, f.size as u64, check)?)
+            } else {
+                None
+            };
+            if f.crc.is_some() && f.crc != folder_crc {
+                return Err(ErrorCode::Integrity);
+            }
+            let mut at = base;
+            for (size, expected) in f.sizes.iter().zip(&f.crcs) {
+                if let Some(expected) = expected {
+                    let actual = if single {
+                        folder_crc.ok_or(ErrorCode::Internal)?
+                    } else {
+                        digest(output, at, *size as u64, check)?
+                    };
+                    if actual != *expected {
+                        return Err(ErrorCode::Integrity);
+                    }
+                }
+                at = at.checked_add(*size as u64).ok_or(ErrorCode::Integrity)?;
+            }
+            output
+                .seek(SeekFrom::Start(base + f.size as u64))
+                .map_err(crate::space::io_error)?;
+        }
+        Ok(())
     }
+}
+fn digest(
+    file: &mut std::fs::File,
+    start: u64,
+    size: u64,
+    check: &mut impl FnMut() -> Result<()>,
+) -> Result<u32> {
+    use std::io::{Read, Seek, SeekFrom};
+    file.seek(SeekFrom::Start(start))
+        .map_err(crate::space::io_error)?;
+    let mut crc = 0;
+    let mut remaining = size;
+    let mut buffer = zeroize::Zeroizing::new([0; 65536]);
+    while remaining != 0 {
+        check()?;
+        let n = remaining.min(buffer.len() as u64) as usize;
+        file.read_exact(&mut buffer[..n])
+            .map_err(crate::space::io_error)?;
+        crc = crc32(crc, &buffer[..n]);
+        remaining -= n as u64;
+    }
+    Ok(crc)
 }
 fn files(
     r: &mut Reader<'_>,
@@ -471,14 +541,26 @@ fn files(
     validate_members(&members)?;
     Ok((members, stream_indices))
 }
-pub(crate) fn parse(
-    input: &[u8],
+pub(crate) fn open(
+    input: &mut std::fs::File,
+    length: u64,
     limits: Limits,
     decode: bool,
     check: &mut impl FnMut() -> Result<()>,
-) -> Result<Vec<Member>> {
+) -> Result<crate::streaming::Catalog> {
+    use std::io::{Read, Seek, SeekFrom};
     check()?;
-    let header = input.get(..32).ok_or(ErrorCode::Integrity)?;
+    if length > limits.input {
+        return Err(ErrorCode::Limit);
+    }
+    input.rewind().map_err(crate::space::io_error)?;
+    let mut header = [0; 32];
+    input
+        .read_exact(&mut header)
+        .map_err(|_| ErrorCode::Integrity)?;
+    if &header[..6] != b"7z\xbc\xaf\x27\x1c" {
+        return Err(ErrorCode::Integrity);
+    }
     if header[6] != 0 || header[7] > 4 {
         return Err(ErrorCode::UnsupportedFeature);
     }
@@ -490,55 +572,61 @@ pub(crate) fn parse(
     if len > MAX_METADATA_BYTES as u64 {
         return Err(ErrorCode::Limit);
     }
-    let start = usize::try_from(offset)
-        .ok()
-        .and_then(|n| n.checked_add(32))
-        .ok_or(ErrorCode::Integrity)?;
-    let end = start
-        .checked_add(len as usize)
-        .filter(|n| *n == input.len())
-        .ok_or(ErrorCode::Integrity)?;
-    let bytes = input.get(start..end).ok_or(ErrorCode::Integrity)?;
-    if crc32(0, bytes) != u32::from_le_bytes(header[28..32].try_into().unwrap()) {
+    let start = offset.checked_add(32).ok_or(ErrorCode::Integrity)?;
+    if start.checked_add(len) != Some(length) {
         return Err(ErrorCode::Integrity);
     }
+    input
+        .seek(SeekFrom::Start(start))
+        .map_err(crate::space::io_error)?;
+    let mut bytes = vec![0; len as usize];
+    input
+        .read_exact(&mut bytes)
+        .map_err(|_| ErrorCode::Integrity)?;
+    if crc32(0, &bytes) != u32::from_le_bytes(header[28..32].try_into().unwrap()) {
+        return Err(ErrorCode::Integrity);
+    }
+    let mut data = crate::spool::temporary()?;
     if bytes.is_empty() {
-        return if start == 32 {
-            Ok(Vec::new())
-        } else {
-            Err(ErrorCode::Integrity)
-        };
+        if start != 32 {
+            return Err(ErrorCode::Integrity);
+        }
+        return Ok(crate::streaming::Catalog {
+            format: Format::SevenZip,
+            members: Vec::new(),
+            offsets: Vec::new(),
+            data,
+        });
     }
     let mut data_end = start;
-    let decoded_header;
-    let bytes = if bytes[0] == 23 {
+    if bytes[0] == 23 {
         let mut r = Reader::new(&bytes[1..]);
-        let mut header_limits = limits;
-        header_limits.output = MAX_METADATA_BYTES as u64;
+        let header_limits = Limits {
+            output: MAX_METADATA_BYTES as u64,
+            ..limits
+        };
         let streams = Streams::read(&mut r, header_limits)?;
         r.end()?;
         if streams.folders.len() != 1 || streams.folders[0].sizes.len() != 1 {
             return Err(ErrorCode::UnsupportedFeature);
         }
-        let packed = streams.bounds(input, data_end)?;
-        decoded_header = streams
-            .decode(&packed, check)?
-            .pop()
+        let ranges = streams.ranges(input, data_end, check)?;
+        streams.decode_file(input, &ranges, &mut data, check)?;
+        data_end = 32u64
+            .checked_add(streams.position as u64)
             .ok_or(ErrorCode::Integrity)?;
-        data_end = 32 + streams.position;
-        &decoded_header
-    } else {
-        bytes
-    };
-    let mut r = Reader::new(bytes);
+        data.rewind().map_err(crate::space::io_error)?;
+        bytes.clear();
+        data.read_to_end(&mut bytes)
+            .map_err(crate::space::io_error)?;
+        data = crate::spool::temporary()?;
+    }
+    let mut r = Reader::new(&bytes);
     r.expect(1)?;
     let mut streams = None;
     let mut tag = r.byte()?;
     if tag == 2 {
-        while {
-            let tag = r.byte()?;
-            tag != 0
-        } {
+        while r.byte()? != 0 {
             let len = r.number(MAX_METADATA_BYTES)?;
             r.take(len)?;
         }
@@ -551,7 +639,7 @@ pub(crate) fn parse(
         streams = Some(Streams::read(&mut r, limits)?);
         tag = r.byte()?;
     }
-    let (mut members, stream_indices) = if tag == 5 {
+    let (members, stream_indices) = if tag == 5 {
         let f = files(&mut r, limits, streams.as_ref())?;
         tag = r.byte()?;
         f
@@ -562,26 +650,60 @@ pub(crate) fn parse(
         return Err(ErrorCode::Integrity);
     }
     r.end()?;
+    let mut offsets = vec![0; members.len()];
     if let Some(streams) = streams {
         if streams.folders.iter().map(|f| f.sizes.len()).sum::<usize>() != stream_indices.len() {
             return Err(ErrorCode::Integrity);
         }
-        let packed = streams.bounds(input, data_end)?;
-        if decode {
-            let output = streams.decode(&packed, check)?;
-            let mut stream_files = stream_indices.into_iter();
-            for (folder, bytes) in streams.folders.iter().zip(output) {
-                let mut at = 0;
-                for size in &folder.sizes {
-                    let member = &mut members[stream_files.next().ok_or(ErrorCode::Integrity)?];
-                    if member.entry.size as usize != *size {
-                        return Err(ErrorCode::Integrity);
-                    }
-                    member.data = bytes[at..at + size].to_vec();
-                    at += size;
-                }
+        let ranges = streams.ranges(input, data_end, check)?;
+        let mut at = 0u64;
+        let mut ids = stream_indices.into_iter();
+        for f in &streams.folders {
+            for size in &f.sizes {
+                offsets[ids.next().ok_or(ErrorCode::Integrity)?] = at;
+                at = at.checked_add(*size as u64).ok_or(ErrorCode::Limit)?;
             }
         }
+        if at > limits.output {
+            return Err(ErrorCode::Limit);
+        }
+        if decode {
+            streams.decode_file(input, &ranges, &mut data, check)?;
+        }
     }
-    Ok(members)
+    Ok(crate::streaming::Catalog {
+        format: Format::SevenZip,
+        members,
+        offsets,
+        data,
+    })
+}
+pub(crate) fn parse(
+    input: &[u8],
+    limits: Limits,
+    decode: bool,
+    check: &mut impl FnMut() -> Result<()>,
+) -> Result<Vec<Member>> {
+    use std::io::{Read, Seek, SeekFrom, Write};
+    let mut source = crate::spool::temporary()?;
+    crate::space::ensure(&source, input.len() as u64)?;
+    source.write_all(input).map_err(crate::space::io_error)?;
+    let mut catalog = open(&mut source, input.len() as u64, limits, decode, check)?;
+    if decode {
+        for (member, offset) in catalog.members.iter_mut().zip(catalog.offsets) {
+            catalog
+                .data
+                .seek(SeekFrom::Start(offset))
+                .map_err(crate::space::io_error)?;
+            member
+                .data
+                .try_reserve_exact(member.entry.size as usize)
+                .map_err(|_| ErrorCode::Limit)?;
+            (&mut catalog.data)
+                .take(member.entry.size)
+                .read_to_end(&mut member.data)
+                .map_err(crate::space::io_error)?;
+        }
+    }
+    Ok(catalog.members)
 }

@@ -2,8 +2,8 @@
 
 별도 프로세스의 stdin/stdout으로 revision 2 요청을 처리합니다. 제품 앱이 공유 codec으로 연결하며 프로세스 분리는 OS sandbox를 뜻하지 않습니다. 암호 기능은 capability=true이며 ZipCrypto 해제, WinZip AES-256 AE-1/AE-2 해제와 AE-2 생성을 지원합니다.
 
-- ZIP32/ZIP64 Store/Deflate 목록과 해제, ZIP32 생성, 기본 TAR/USTAR, GZ, TAR.GZ, 비암호화 7z 해제를 지원합니다. GZ 연결 멤버는 하나의 논리 스트림으로 합칩니다. 다중 볼륨, 비 UTF-8 ZIP 이름, PAX/GNU 확장과 특수 항목 해제는 미지원입니다.
-- ZIP/TAR/GZ/TAR.GZ 목록과 해제는 입력 기본 한도 u64::MAX, 해제 총량 16 GiB, 항목 10,000개입니다. 요청 limits는 이 값을 낮출 수 있습니다. 64 KiB 버퍼와 임시 파일로 입력과 검증 완료 payload를 처리해 모든 출력의 CRC, 크기와 경로를 게시 전에 검사합니다. checkpoint마다 취소, 부모 프로세스 생존과 300초 한도를 확인합니다. 7z, ZIP 생성과 slice 기반 archive parser는 입력 64 MiB/출력 128 MiB의 별도 메모리 상한을 유지합니다.
+- ZIP32/ZIP64 Store/Deflate 목록과 해제, ZIP32/ZIP64 생성, 기본 TAR/USTAR, GZ, TAR.GZ, 비암호화 7z 해제를 지원합니다. GZ 연결 멤버는 하나의 논리 스트림으로 합칩니다. 다중 볼륨, 비 UTF-8 ZIP 이름, PAX/GNU 확장과 특수 항목 해제는 미지원입니다.
+- ZIP/TAR/GZ/TAR.GZ/7z 목록과 해제는 입력 기본 한도 u64::MAX, 해제 총량 16 GiB, 항목 10,000개입니다. 요청 limits는 이 값을 낮출 수 있습니다. 64 KiB 버퍼와 임시 파일로 입력과 검증 완료 payload를 처리해 모든 출력의 CRC, 크기와 경로를 게시 전에 검사합니다. checkpoint마다 취소, 부모 프로세스 생존과 300초 한도를 확인합니다. ZIP 생성은 원본을 하나씩 스냅샷으로 읽어 스트리밍으로 압축하며 원본 크기 합계에 16 GiB 한도를 적용합니다. ZIP64 크기와 오프셋은 필요한 항목에만 기록합니다. slice 기반 archive parser는 입력 64 MiB/출력 128 MiB, slice ZIP builder는 원본 및 결과 128 MiB 한도를 유지합니다.
 - 경로 깊이는 64개 구성 요소, 이름/출력 계획 메타데이터 예산은 8 MiB, 출력 계획 노드는 32,768개로 제한합니다. 이름 복제와 인덱스 비용을 보수적으로 계산해 할당 전에 Limit으로 거부합니다.
 - GZip 내부 형식은 완전한 USTAR magic이 있을 때만 TAR로 판별합니다. magic이 없는 영값 데이터는 길이와 무관하게 raw GZip으로 유지하며 명시 출력명이 필요합니다.
 - ListId는 열린 파일 객체, 전체 입력 SHA-256과 catalog version에 연결됩니다. 입력을 다시 읽어 검증한 전용 임시 파일 스냅샷만 해독합니다. 불일치는 출력 전 SourceChanged이며 목록을 다시 열어야 합니다. 원본의 사후 변경 감시나 파일 잠금 보장은 아닙니다.
@@ -19,7 +19,7 @@ revision 2의 기존 필드와 오류 tag 0~12 및 입력/출력 기본 한도�
 - 입력 캡처 전에 임시 저장소 여유 공간을 확인합니다. ZIP/7z 해제 전에는 전체 임시 해제량과 선택한 출력량을 볼륨별로 합산해 검사하고, 게시 전에도 출력 공간을 재검사합니다. 미리 해제 크기를 알 수 없는 GZ/TAR.GZ는 각 해제 청크를 쓰기 전에 임시 저장소 공간을 확인합니다. Linux 64비트는 열린 핸들의 [fstatvfs](https://man7.org/linux/man-pages/man3/fstatvfs.3.html), Windows는 핸들에서 얻은 디렉터리의 [GetDiskFreeSpaceExW](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-getdiskfreespaceexw)를 사용합니다. 공간 부족은 DiskFull(13), 조회 실패와 권한 등 다른 I/O 오류는 Io(8)로 반환합니다. 실제 생성/쓰기/동기화의 공간 부족에도 같은 구분을 적용합니다. Windows의 공간 부족 코드 39와 112는 [공식 오류 목록](https://learn.microsoft.com/en-us/windows/win32/debug/system-error-codes--0-499-)을 따릅니다.
 - 공간 검사는 논리적 파일 크기에 따른 사전 확인이며 예약이나 모든 메타데이터/할당 단위 비용의 보장이 아닙니다. 다른 작업과 경쟁해 나중에 ENOSPC가 발생하면 기존 부분 출력 정리 정책을 적용합니다. 16 GiB 안에서는 압축비가 매우 큰 파일도 디스크에 풀릴 수 있습니다. 오류 문구는 "디스크 여유 공간이 부족합니다. 공간을 확보한 뒤 다시 시도하세요"이며, detail 문자열을 오류 판정에 사용하지 않습니다.
 - 입력과 검증된 해제 내용은 임시 파일에 저장합니다. Linux는 [O_TMPFILE](https://man7.org/linux/man-pages/man2/open.2.html), 이를 지원하지 않는 Linux 파일시스템에서는 0600 난수 파일을 배타적으로 만든 즉시 unlink하고 링크 수 0을 확인합니다. Windows는 배타적 [DELETE_ON_CLOSE 파일](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-createfilew)을 사용합니다. 마지막 핸들이 닫히면 제거되며 임시 파일명에 아카이브 내부 이름을 사용하지 않습니다. 디스크에는 입력 사본, 해제 내용과 현재 출력 임시 파일이 동시에 필요할 수 있습니다. 임시 폴더가 tmpfs이면 해당 파일 내용은 프로세스 RSS 외의 시스템 메모리를 사용합니다.
-- 64 MiB는 ZIP/TAR/GZ/TAR.GZ 해제 작업자 프로세스의 피크 RSS 시험 목표입니다. OS 메모리 강제 격리나 모든 아카이브의 보장을 뜻하지 않습니다. 7z와 생성은 이 RSS 목표에 포함하지 않습니다. 입력 크기와 무관한 메타데이터 예산은 유지합니다.
+- 64 MiB는 ZIP/TAR/GZ/TAR.GZ/7z 해제와 ZIP 생성 작업자 프로세스의 피크 RSS 시험 목표입니다. OS 메모리 강제 격리나 모든 아카이브의 보장을 뜻하지 않습니다. 입력 크기와 무관한 메타데이터 예산은 유지합니다.
 - Linux는 시작 시 부모 PID를 캡처하고 [getppid](https://man7.org/linux/man-pages/man2/getpid.2.html) 변경을 확인합니다. Windows는 부모 프로세스 핸들과 생성 시간을 확인한 뒤 [WaitForSingleObject](https://learn.microsoft.com/en-us/windows/win32/api/synchapi/nf-synchapi-waitforsingleobject)로 생존을 검사합니다. 부모가 사라지면 checkpoint에서 Io로 중단하고 임시 출력을 정리합니다. 이미 게시한 파일/디렉터리는 유지하며 OS의 블로킹 I/O 강제 중단을 보장하지 않습니다. 기존 단발 요청을 위해 stdin EOF만으로 취소하지 않습니다.
 - tests/rust-archive-worker/hardening.rs는 공용 대용량 생성기를 사용해 Store ZIP/Deflate ZIP/TAR/GZ/TAR.GZ의 1 GiB payload를 실행 시 생성하고 wait4의 ru_maxrss로 피크 RSS를 측정합니다. Linux의 시험 전용 LD_PRELOAD로 ENOSPC와 게시 중 정지를 주입하고 앱 강제 종료 후 작업자 종료/회수와 부분 출력 제거를 확인합니다. 이 시험을 위해 실제 공유 디스크를 채우거나 제품용 환경 변수 우회를 추가하지 않습니다.
 
@@ -28,7 +28,7 @@ revision 2의 기존 필드와 오류 tag 0~12 및 입력/출력 기본 한도�
 비암호화 7z의 단일 입력/출력 coder인 Copy, LZMA와 LZMA2를 Rust 코드로 해독합니다. solid substream, 빈 파일/디렉터리, UTF-16LE 이름과 한 단계 압축 헤더를 처리합니다. 추가 라이브러리나 제품 외부 명령을 사용하지 않습니다. 형식 근거는 [7z 명세](https://www.7-zip.org/7z.html)와 [LZMA SDK 명세 안내](https://www.7-zip.org/sdk.html)입니다.
 
 - 시작 헤더/다음 헤더 CRC, packed/folder/substream CRC가 있을 때 해당 CRC와 크기, 스트림의 끝을 검증합니다. 경로, 충돌과 모든 선택 내용 검증이 끝난 뒤 기존 안전 게시 경로로 넘깁니다. 목록은 데이터 CRC 검증 성공을 뜻하지 않습니다.
-- 입력 64 MiB/출력 128 MiB와 기존 항목/이름 한도를 별도로 적용합니다. 압축 해제된 헤더도 최대 8 MiB이고 헤더 중첩은 한 단계입니다. 사전은 최대 64 MiB, LZMA의 lc+lp는 최대 4입니다. 해독 중 checkpoint에서 취소와 시간 한도를 확인합니다.
+- 기본 입력 한도 u64::MAX, 해제 총량 16 GiB와 기존 항목/이름 한도를 적용합니다. 압축 해제된 헤더도 최대 8 MiB이고 헤더 중첩은 한 단계입니다. 사전은 최대 64 MiB, LZMA의 lc+lp는 최대 4입니다. 최근 8 MiB 사전만 메모리에 두고 더 먼 참조는 임시 파일에서 읽습니다. 먼 거리 참조가 많은 파일은 추가 디스크 I/O가 발생합니다. 해독 중 checkpoint에서 취소와 시간 한도를 확인합니다.
 - 암호화 7z, 다중 coder 필터 체인(BCJ/BCJ2/Delta 등), PPMd/BZip2, 분할/SFX, external metadata, additional streams와 anti 항목은 미지원입니다. 링크, reparse point와 특수 Unix 항목은 거부합니다. 지원하지 않는 구조를 성공으로 처리하지 않습니다.
 - solid 그룹의 압축 크기는 첫 substream에만 기록하고 나머지는 0으로 표시합니다. 각 파일의 정확한 비압축 크기는 유지합니다.
 - 합성 표본은 Python 표준 lzma로 생성합니다. 별도로 시스템 libarchive가 만든 LZMA1/LZMA2 표본을 해제하고, 합성 표본도 libarchive 읽기 API로 검사합니다. libarchive는 Linux 시험의 독립 참조 도구이며 제품 의존성이 아닙니다. 시험 도구와 표본은 tests/rust-archive-worker 아래에 있습니다.
@@ -43,6 +43,10 @@ revision 2의 기존 필드와 오류 tag 0~12 및 입력/출력 기본 한도�
 - 생성은 PasswordPurpose::Encrypt로 한 번 요청하며 빈 암호는 거부합니다. 암호는 최대 1024 UTF-8 바이트입니다. 대기 중 Cancel도 처리하고, 답변 없이 입력 EOF가 오면 Protocol로 종료합니다. 기존 300초 작업 제한에 암호 입력 대기 시간도 포함됩니다.
 - salt는 Linux /dev/urandom 또는 Windows BCryptGenRandom에서 얻으며 실패 시 생성을 중단합니다. 암호, 파생 키와 메모리 복호화 버퍼는 zeroize로 정리하고 AES 키 일정의 zeroize 기능을 켭니다. HMAC 내부 상태, OS 메모리/페이지 캐시 복사본과 임시 저장소의 평문에 대한 완전 소거를 보장하지 않습니다. 임시 평문 파일은 작업 종료 시 닫아 제거하며 보안 삭제를 뜻하지 않습니다.
 - Python hashlib/hmac과 OpenSSL로 만든 AES 표본 4개, Info-ZIP으로 만든 ZipCrypto 표본 2개를 tests/ 아래에 보관합니다. 생성한 AES ZIP도 Linux에서 독립 Python/OpenSSL 검증기로 확인합니다. OpenSSL/Info-ZIP은 시험 도구이며 제품 의존성이 아닙니다.
+
+대용량 7z 표본은 Python LZMA로 실행 시 생성하고 Linux 시스템 libarchive의 스트리밍 판독으로 내용과 CRC를 먼저 확인합니다. libarchive는 시험에만 사용합니다.
+
+7z의 Copy/LZMA/LZMA2 입력과 solid 출력은 고정 버퍼와 임시 파일로 처리합니다. 모든 폴더와 하위 스트림의 CRC와 크기 검증이 끝난 뒤 기존 게시 경로를 사용합니다. ZIP 생성의 압축 및 AES 처리도 64 KiB 버퍼를 사용하며 여유 공간 사전 검사와 실제 쓰기의 DiskFull 구분을 적용합니다. 공간 예약을 보장하지 않으므로 다른 프로세스와의 경쟁으로 쓰기가 실패할 수 있습니다.
 
 ## 공유 codec
 

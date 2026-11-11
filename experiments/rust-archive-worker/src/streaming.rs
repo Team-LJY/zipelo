@@ -58,27 +58,7 @@ impl Catalog {
         let n = len.min(6) as usize;
         at(source, 0, &mut magic[..n])?;
         if magic.starts_with(b"7z\xbc\xaf\x27\x1c") {
-            let bounded = limits.legacy();
-            if len > bounded.input {
-                return Err(ErrorCode::Limit);
-            }
-            let input = bytes(source, 0, len as usize)?;
-            let catalog = archive::parse_with_password(&input, bounded, decode, password, check)?;
-            let mut data = spool::temporary()?;
-            let mut members = catalog.members;
-            let mut offsets = Vec::new();
-            for m in &mut members {
-                offsets.push(io(data.stream_position())?);
-                io(data.write_all(&m.data))?;
-                m.data.clear();
-                m.data.shrink_to_fit();
-            }
-            return Ok(Self {
-                format: Format::SevenZip,
-                members,
-                offsets,
-                data,
-            });
+            return crate::seven_zip::open(source, len, limits, decode, check);
         }
         if magic.starts_with(b"PK\x03\x04")
             || magic.starts_with(b"PK\x05\x06")

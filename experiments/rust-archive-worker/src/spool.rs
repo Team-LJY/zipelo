@@ -95,16 +95,6 @@ impl Snapshot {
         if !before.is_file() {
             return Err(ErrorCode::InvalidRequest);
         }
-        let mut prefix = [0; 6];
-        let prefix_len = before.len().min(prefix.len() as u64) as usize;
-        source
-            .read_exact(&mut prefix[..prefix_len])
-            .map_err(|_| ErrorCode::SourceChanged)?;
-        let limit = if prefix == *b"7z\xbc\xaf\x27\x1c" {
-            limit.min(64 * 1024 * 1024)
-        } else {
-            limit
-        };
         if before.len() > limit {
             return Err(ErrorCode::Limit);
         }
@@ -112,12 +102,12 @@ impl Snapshot {
         let object = filesystem::object(&source)?;
         let mut file = temporary()?;
         crate::space::ensure(&file, before.len())?;
-        let mut buffer = [0; 65536];
+        let mut buffer = zeroize::Zeroizing::new([0; 65536]);
         let mut hash = Sha256::new();
         let mut len = 0u64;
         loop {
             check()?;
-            let n = source.read(&mut buffer).map_err(|_| ErrorCode::Io)?;
+            let n = source.read(&mut buffer[..]).map_err(|_| ErrorCode::Io)?;
             if n == 0 {
                 break;
             }

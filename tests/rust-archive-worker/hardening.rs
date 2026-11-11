@@ -2,6 +2,22 @@ use super::*;
 use std::{fs::File, io::Read};
 
 fn generate(s: &Scratch, kind: &str, size: u64) {
+    if let Some(method) = kind.strip_prefix("7z-") {
+        assert!(
+            Command::new("python3")
+                .arg(
+                    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                        .join("../../tests/rust-archive-worker/seven_zip_large.py")
+                )
+                .arg(&s.0)
+                .arg(method)
+                .arg(size.to_string())
+                .status()
+                .unwrap()
+                .success()
+        );
+        return;
+    }
     assert!(
         Command::new("python3")
             .arg(
@@ -53,7 +69,7 @@ fn assert_zero_file(path: &std::path::Path, length: u64) {
     assert_eq!(total, length);
 }
 #[test]
-fn streaming_defaults_and_legacy_seven_zip_caps() {
+fn streaming_defaults_and_invalid_seven_zip_header() {
     assert_eq!(Limits::default().input, u64::MAX);
     assert_eq!(Limits::default().output, 16 * 1024 * 1024 * 1024);
     assert!(
@@ -66,9 +82,9 @@ fn streaming_defaults_and_legacy_seven_zip_caps() {
     let s = Scratch::new();
     let file = File::create(s.0.join("input")).unwrap();
     (&file).write_all(b"7z\xbc\xaf\x27\x1c").unwrap();
-    file.set_len(1024 * 1024 * 1024).unwrap();
+    file.set_len(32).unwrap();
     let events = execute(start(&s, false, Limits::default().output));
-    assert_eq!(terminal(&events).error, ErrorCode::Limit);
+    assert_eq!(terminal(&events).error, ErrorCode::Integrity);
     assert_eq!(terminal(&events).created_count, 0);
 }
 #[test]
@@ -254,7 +270,7 @@ fn gzip_high_ratio_members_extract_below_total_limit() {
 #[test]
 fn streamed_aes_counter_survives_many_read_chunks() {
     let s = Scratch::new();
-    generate(&s, "store", 2 * 1024 * 1024 + 17);
+    generate(&s, "store", 129 * 1024 * 1024 + 17);
     fs::rename(s.0.join("input"), s.0.join("source")).unwrap();
     let events = interactive(
         Start {
@@ -292,6 +308,89 @@ fn streamed_aes_counter_survives_many_read_chunks() {
         source.metadata().unwrap().len(),
         output.metadata().unwrap().len()
     );
+}
+
+#[test]
+fn seven_zip_output_total_rejects_before_decode() {
+    let s = Scratch::new();
+    let helper = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../tests/rust-archive-worker/seven_zip_large.py");
+    assert!(
+        Command::new("python3")
+            .arg(helper)
+            .arg(&s.0)
+            .arg("lzma2")
+            .arg("1024")
+            .arg((Limits::default().output + 1).to_string())
+            .status()
+            .unwrap()
+            .success()
+    );
+    let events = execute(start(&s, false, Limits::default().output));
+    assert_eq!(terminal(&events).error, ErrorCode::Limit, "{events:?}");
+    assert_eq!(terminal(&events).publication, Publication::None);
+    assert_eq!(fs::read_dir(s.0.join("output")).unwrap().count(), 0);
+}
+#[test]
+fn streamed_creation_limits_sum_source_bytes() {
+    for limit in [131071, 131072] {
+        let s = Scratch::new();
+        fs::write(s.0.join("a"), vec![0; 65536]).unwrap();
+        fs::write(s.0.join("b"), vec![0; 65536]).unwrap();
+        let events = execute(Start {
+            action: Action::CreateZip {
+                sources: vec![
+                    Source {
+                        path: s.path("a"),
+                        archive_name: "a".into(),
+                    },
+                    Source {
+                        path: s.path("b"),
+                        archive_name: "b".into(),
+                    },
+                ],
+                output_file: s.path("input"),
+                method: Method::Deflate,
+                encryption: Encryption::None,
+            },
+            limits: Limits {
+                output: limit,
+                ..Limits::default()
+            },
+        });
+        assert_eq!(
+            terminal(&events).error,
+            if limit == 131072 {
+                ErrorCode::None
+            } else {
+                ErrorCode::Limit
+            },
+            "{events:?}"
+        );
+        assert_eq!(s.0.join("input").exists(), limit == 131072);
+    }
+}
+#[test]
+fn streamed_seven_zip_honors_exact_output_boundary() {
+    for limit in [65535, 65536] {
+        let s = Scratch::new();
+        generate(&s, "7z-lzma2", 65536);
+        let events = execute(start(&s, false, limit));
+        assert_eq!(
+            terminal(&events).error,
+            if limit == 65536 {
+                ErrorCode::None
+            } else {
+                ErrorCode::Limit
+            },
+            "{events:?}"
+        );
+        if limit == 65536 {
+            assert_zero_file(&s.0.join("output/payload.bin"), 65536);
+        } else {
+            assert_eq!(fs::read_dir(s.0.join("output")).unwrap().count(), 0);
+        }
+    }
 }
 
 #[cfg(target_os = "linux")]
@@ -400,6 +499,134 @@ mod linux {
         );
         path
     }
+
+    #[test]
+    fn gigabyte_seven_zip_and_zip_creation_stay_below_64_mib() {
+        let mut measurements = Vec::new();
+        for method in ["copy", "lzma", "lzma2"] {
+            let s = Scratch::new();
+            generate(&s, &format!("7z-{method}"), 1024 * 1024 * 1024);
+            let request = start(&s, false, Limits::default().output);
+            let child = spawn(&s, request, None);
+            let (status, rss) = wait(child.id());
+            assert_eq!(status, 0, "{method}");
+            let events = events(&s);
+            assert_eq!(
+                terminal(&events).outcome,
+                Outcome::Completed,
+                "{method}: {events:?}"
+            );
+            assert_eq!(terminal(&events).publication, Publication::Complete);
+            assert_eq!(terminal(&events).cleanup, Cleanup::Complete);
+            assert_eq!(terminal(&events).created_count, 1);
+            assert!(rss <= 64 * 1024 * 1024, "{method}: RSS {rss}");
+            assert_zero_file(&s.0.join("output/payload.bin"), 1024 * 1024 * 1024);
+            assert_eq!(fs::read_dir(s.0.join("staging")).unwrap().count(), 0);
+            measurements.push(format!("7z-{method}: {rss}"));
+        }
+        for (method, length) in [
+            (Method::Store, 1u64 << 30),
+            (Method::Deflate, 1 << 30),
+            (Method::Deflate, (1 << 32) + 17),
+        ] {
+            let s = Scratch::new();
+            File::create(s.0.join("source"))
+                .unwrap()
+                .set_len(length)
+                .unwrap();
+            let request = Start {
+                action: Action::CreateZip {
+                    sources: vec![Source {
+                        path: s.path("source"),
+                        archive_name: "payload.bin".into(),
+                    }],
+                    output_file: s.path("input"),
+                    method,
+                    encryption: Encryption::None,
+                },
+                limits: Limits::default(),
+            };
+            let child = spawn(&s, request, None);
+            let (status, rss) = wait(child.id());
+            assert_eq!(status, 0);
+            let created = events(&s);
+            assert_eq!(
+                terminal(&created).outcome,
+                Outcome::Completed,
+                "{method:?}: {created:?}"
+            );
+            assert!(rss <= 64 * 1024 * 1024, "{method:?}: RSS {rss}");
+            assert!(Command::new("python3").arg("-c").arg(
+                "import sys,zipfile; z=zipfile.ZipFile(sys.argv[1]); assert z.getinfo('payload.bin').file_size==int(sys.argv[2]); assert z.testzip() is None"
+            ).arg(s.0.join("input")).arg(length.to_string()).status().unwrap().success());
+            fs::remove_dir(s.0.join("staging")).unwrap();
+            let request = start(&s, false, Limits::default().output);
+            let child = spawn(&s, request, None);
+            assert_eq!(wait(child.id()).0, 0);
+            assert_eq!(terminal(&events(&s)).outcome, Outcome::Completed);
+            assert_zero_file(&s.0.join("output/payload.bin"), length);
+            measurements.push(format!("create-{method:?}-{length}: {rss}"));
+        }
+        println!(
+            "1 GiB 7z/creation peak RSS bytes: {}",
+            measurements.join(", ")
+        );
+        fs::write(
+            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("../../tests/ci/seven-zip-streaming-rss.log"),
+            measurements.join("\n") + "\n",
+        )
+        .unwrap();
+    }
+    #[test]
+    fn seven_zip_and_creation_disk_errors_cleanup_staging_and_partial_output() {
+        for create in [false, true] {
+            for mode in ["codec-full", "full", "space-destination", "space-error"] {
+                let s = Scratch::new();
+                let request = if create {
+                    fs::write(s.0.join("source"), vec![0; 1024 * 1024]).unwrap();
+                    Start {
+                        action: Action::CreateZip {
+                            sources: vec![Source {
+                                path: s.path("source"),
+                                archive_name: "payload.bin".into(),
+                            }],
+                            output_file: s.path("input"),
+                            method: Method::Deflate,
+                            encryption: Encryption::None,
+                        },
+                        limits: Limits::default(),
+                    }
+                } else {
+                    generate(&s, "7z-lzma2", 1024 * 1024);
+                    start(&s, false, Limits::default().output)
+                };
+                let child = spawn(&s, request, Some(mode));
+                assert_eq!(wait(child.id()).0, 0);
+                let messages = events(&s);
+                let end = terminal(&messages);
+                assert_eq!(
+                    end.error,
+                    if mode == "space-error" {
+                        ErrorCode::Io
+                    } else {
+                        ErrorCode::DiskFull
+                    },
+                    "{create} {mode}: {messages:?}"
+                );
+                assert_eq!(end.publication, Publication::None);
+                assert_eq!(end.retained_partial_count, 0);
+                assert_eq!(end.cleanup, Cleanup::Complete);
+                assert_eq!(fs::read_dir(s.0.join("staging")).unwrap().count(), 0);
+                if create {
+                    assert!(!s.0.join("input").exists());
+                } else {
+                    assert_eq!(fs::read_dir(s.0.join("output")).unwrap().count(), 0);
+                }
+            }
+        }
+    }
+
     #[test]
     fn gigabyte_formats_stay_below_64_mib_peak_rss() {
         let mut measurements = Vec::new();
@@ -443,7 +670,12 @@ mod linux {
             let s = Scratch::new();
             generate(&s, "store", 1024 * 1024);
             fs::write(s.0.join("preserve"), b"original").unwrap();
-            let request = start(&s, false, Limits::default().output);
+            fs::create_dir(s.0.join("zipelo-source")).unwrap();
+            fs::rename(s.0.join("input"), s.0.join("zipelo-source/zipelo-input")).unwrap();
+            let mut request = start(&s, false, Limits::default().output);
+            if let Action::Extract { archive, .. } = &mut request.action {
+                *archive = s.path("zipelo-source/zipelo-input");
+            }
             let child = spawn(&s, request, Some(mode));
             assert_eq!(wait(child.id()).0, 0);
             let events = events(&s);
@@ -664,5 +896,69 @@ mod linux {
         assert_eq!(terminal(&events).publication, Publication::None);
         assert_eq!(terminal(&events).cleanup, Cleanup::Complete);
         assert_eq!(fs::read_dir(s.0.join("output")).unwrap().count(), 0);
+    }
+}
+
+#[test]
+fn creation_validates_before_password_and_rejects_more_than_16_gib() {
+    let s = Scratch::new();
+    File::create(s.0.join("source"))
+        .unwrap()
+        .set_len(Limits::default().output + 1)
+        .unwrap();
+    let action = |sources, encryption| Start {
+        action: Action::CreateZip {
+            sources,
+            output_file: s.path("input"),
+            method: Method::Deflate,
+            encryption,
+        },
+        limits: Limits::default(),
+    };
+    let source = Source {
+        path: s.path("source"),
+        archive_name: "same".into(),
+    };
+    let rejected = execute(action(
+        vec![source.clone(), source.clone()],
+        Encryption::Aes256,
+    ));
+    assert_eq!(terminal(&rejected).error, ErrorCode::Conflict);
+    assert!(
+        !rejected
+            .iter()
+            .any(|e| matches!(e, Message::PasswordRequired { .. }))
+    );
+    let rejected = execute(action(vec![source], Encryption::None));
+    assert_eq!(terminal(&rejected).error, ErrorCode::Limit);
+    assert!(!s.0.join("input").exists());
+}
+
+#[test]
+fn streamed_empty_aes_members_round_trip() {
+    for method in [Method::Store, Method::Deflate] {
+        let s = Scratch::new();
+        File::create(s.0.join("source")).unwrap();
+        let events = interactive(
+            Start {
+                action: Action::CreateZip {
+                    sources: vec![Source {
+                        path: s.path("source"),
+                        archive_name: "payload.bin".into(),
+                    }],
+                    output_file: s.path("input"),
+                    method,
+                    encryption: Encryption::Aes256,
+                },
+                limits: Limits::default(),
+            },
+            |id, _, _| password_reply(id, TEST_PASSWORD),
+        );
+        assert_eq!(terminal(&events).outcome, Outcome::Completed, "{events:?}");
+        let events = interactive(start(&s, false, Limits::default().output), |id, _, _| {
+            password_reply(id, TEST_PASSWORD)
+        });
+        assert_eq!(terminal(&events).outcome, Outcome::Completed, "{events:?}");
+        assert_zero_file(&s.0.join("output/payload.bin"), 0);
     }
 }

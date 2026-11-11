@@ -1,5 +1,5 @@
 use crate::{
-    archive::{self, Member},
+    archive,
     filesystem::{self, Dir},
     protocol::*,
     wire::{Reader, Writer},
@@ -113,23 +113,6 @@ impl<W: Write> Job<W> {
             total_bytes: total,
             completed_entries: entries,
         })
-    }
-    fn output(
-        &mut self,
-        root: &Dir,
-        name: &str,
-        data: &[u8],
-        id: Option<u32>,
-        last: bool,
-    ) -> Result<()> {
-        self.output_reader(
-            root,
-            name,
-            &mut std::io::Cursor::new(data),
-            data.len() as u64,
-            id,
-            last,
-        )
     }
     fn output_reader(
         &mut self,
@@ -416,33 +399,15 @@ impl<W: Write> Job<W> {
                 method,
                 encryption,
             } => {
-                let limits = start.limits.legacy();
-                if sources.len() > limits.entries as usize {
-                    return Err(ErrorCode::Limit);
-                }
-                let mut members = Vec::new();
-                let mut consumed = 0;
-                for source in sources {
-                    self.check()?;
-                    let name = archive::valid_name(&source.archive_name, false)?;
-                    let snapshot = filesystem::snapshot(
-                        &source.path.to_path()?,
-                        limits.input - consumed,
-                        &mut || self.check(),
-                    )?;
-                    consumed += snapshot.bytes.len() as u64;
-                    members.push(Member {
-                        entry: Entry {
-                            entry_id: members.len() as u32,
-                            name,
-                            kind: EntryKind::File,
-                            size: snapshot.bytes.len() as u64,
-                            compressed_size: 0,
-                            encrypted: false,
-                        },
-                        data: snapshot.bytes,
-                    });
-                }
+                let output = output_file.to_path()?;
+                let leaf = output
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .ok_or(ErrorCode::InvalidRequest)?;
+                let name = archive::valid_name(leaf, false)?;
+                let root = Dir::root(output.parent().ok_or(ErrorCode::InvalidRequest)?)?;
+                filesystem::preflight(&root, &[(name.clone(), EntryKind::File)])?;
+                let members = crate::create::plan(&sources, start.limits)?;
                 let secret = if encryption == Encryption::Aes256 {
                     let secret = self.password(PasswordPurpose::Encrypt, 1)?;
                     if secret.0.is_empty() {
@@ -452,22 +417,16 @@ impl<W: Write> Job<W> {
                 } else {
                     None
                 };
-                let bytes = archive::create_zip_with_password(
+                let (mut data, length) = crate::create::zip(
+                    &sources,
                     &members,
                     method,
-                    limits,
+                    start.limits,
                     secret.as_ref().map(|s| s.0.as_slice()),
                     &mut || self.check(),
                 )?;
-                let output = output_file.to_path()?;
-                let leaf = output
-                    .file_name()
-                    .and_then(|n| n.to_str())
-                    .ok_or(ErrorCode::InvalidRequest)?;
-                let name = archive::valid_name(leaf, false)?;
-                let root = Dir::root(output.parent().ok_or(ErrorCode::InvalidRequest)?)?;
-                filesystem::preflight(&root, &[(name.clone(), EntryKind::File)])?;
-                self.output(&root, &name, &bytes, None, true)?;
+                filesystem::preflight_space(&root, &[(name.clone(), length)], None)?;
+                self.output_reader(&root, &name, &mut data, length, None, true)?;
                 self.terminal.publication = Publication::Complete;
             }
         }
