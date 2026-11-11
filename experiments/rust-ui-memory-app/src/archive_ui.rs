@@ -212,6 +212,7 @@ pub enum HostEvent {
     },
 }
 // 바이트 codec과 프로세스 소유는 작업자 어댑터에서 담당함.
+// 전송 실패 후에도 poll로 양쪽 EOF와 자식 회수 결과를 전달함.
 pub trait Connection {
     fn send(&mut self, request: Request) -> Result<(), String>;
     fn poll(&mut self) -> Option<HostEvent>;
@@ -230,6 +231,7 @@ struct Running {
     outgoing: u64,
     incoming: u64,
     accepted: bool,
+    start_failed: bool,
     start: Start,
     connection: Box<dyn Connection>,
     entries: Vec<Entry>,
@@ -296,8 +298,10 @@ impl Model {
                     && destination.is_absolute()
                     && self.archive.as_ref() == Some(archive)
                     && self.list_id.as_ref() == Some(list_id)
-                    && (list_id.format != Format::Gzip
-                        || gzip_output_name.as_ref().is_some_and(|s| valid_leaf(s)))
+                    && match list_id.format {
+                        Format::Gzip => gzip_output_name.as_ref().is_some_and(|s| valid_leaf(s)),
+                        _ => gzip_output_name.is_none(),
+                    }
                     && match selection {
                         Selection::All => true,
                         Selection::EntryIds(ids) => {
@@ -341,15 +345,17 @@ impl Model {
                 return false;
             }
         };
-        if let Err(e) = connection.send(Request {
-            job_id: id,
-            sequence: 0,
-            command: Command::Start(start.clone()),
-        }) {
-            self.error = Some(e);
-            return false;
-        }
-        if let Start::List { archive } = &start {
+        let send_error = connection
+            .send(Request {
+                job_id: id,
+                sequence: 0,
+                command: Command::Start(start.clone()),
+            })
+            .err();
+        let started = send_error.is_none();
+        if let Start::List { archive } = &start
+            && started
+        {
             self.archive = Some(archive.clone());
             self.list_id = None;
             self.entries.clear();
@@ -361,13 +367,14 @@ impl Model {
         self.progress = None;
         self.outputs.clear();
         self.cancel = None;
-        self.error = None;
+        self.error = send_error;
         self.confirmed = false;
         self.running = Some(Running {
             id,
             outgoing: 1,
             incoming: 0,
             accepted: false,
+            start_failed: !started,
             start,
             connection,
             entries: Vec::new(),
@@ -377,7 +384,7 @@ impl Model {
             exit: None,
             cancel_sequence: None,
         });
-        true
+        started
     }
     pub fn extract(
         &mut self,
@@ -431,7 +438,7 @@ impl Model {
     }
     fn send(&mut self, command: Command) -> Option<u64> {
         let run = self.running.as_mut()?;
-        if self.terminal.is_some() || run.exit.is_some() {
+        if run.start_failed || self.terminal.is_some() || run.exit.is_some() {
             return None;
         }
         let seq = run.outgoing;

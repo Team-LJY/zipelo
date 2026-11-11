@@ -10,6 +10,9 @@ pub struct State {
     sequence: u64,
     pub queue: VecDeque<HostEvent>,
     pub manual: bool,
+    pub list_format: Option<Format>,
+    pub fail_start: bool,
+    pub dropped_connections: usize,
     pause: bool,
 }
 #[derive(Default, Clone)]
@@ -62,11 +65,13 @@ impl State {
                     packed: Some(54),
                     encrypted: false,
                 }));
-                let format = if archive.extension().is_some_and(|x| x == "gz") {
-                    Format::Gzip
-                } else {
-                    Format::Zip
-                };
+                let format = self.list_format.unwrap_or_else(|| {
+                    if archive.extension().is_some_and(|x| x == "gz") {
+                        Format::Gzip
+                    } else {
+                        Format::Zip
+                    }
+                });
                 self.frame(Event::ListEnd {
                     entry_count: 1,
                     list_id: ListId {
@@ -102,6 +107,11 @@ impl State {
 struct FakeConnection {
     state: Rc<RefCell<State>>,
 }
+impl Drop for FakeConnection {
+    fn drop(&mut self) {
+        self.state.borrow_mut().dropped_connections += 1;
+    }
+}
 impl Factory for FakeFactory {
     fn connect(&mut self, job: u64) -> Result<Box<dyn Connection>, String> {
         let mut s = self.state.borrow_mut();
@@ -120,8 +130,25 @@ impl Connection for FakeConnection {
         assert_eq!(s.job, request.job_id);
         match request.command {
             Command::Start(start) => {
+                if let Start::Extract {
+                    list_id,
+                    gzip_output_name,
+                    ..
+                } = &start
+                {
+                    let valid = match list_id.format {
+                        Format::Gzip => gzip_output_name.as_deref().is_some_and(valid_leaf),
+                        _ => gzip_output_name.is_none(),
+                    };
+                    if !valid {
+                        return Err("형식에 맞지 않는 GZIP 출력명".into());
+                    }
+                }
                 s.requests.push((request.sequence, "start"));
                 s.starts.push(start.clone());
+                if s.fail_start {
+                    return Err("Start 전송 실패".into());
+                }
                 if !s.manual {
                     s.frame(Event::Accepted { encryption: false });
                     s.frame(Event::Progress {

@@ -15,3 +15,5 @@ cargo +1.99.1 run --locked --manifest-path experiments/rust-ui-memory-app/Cargo.
 범위는 목록 확인, 선택 해제, GZ 출력명, ZIP 생성, 암호 요청, 진행률, 취소와 닫기 철회, Terminal/EOF/child wait 분리, 오래된 ID/sequence 거부, SourceChanged 재열람, 부분 출력과 불확실 게시 보존임. 구성한 이벤트 시험은 실제 OS 종료나 파일 보안 검증의 증거가 아님.
 
 디자인은 흰 바탕 #FFFFFF, 글자 #182739, 선택 #D3E6F6, 강조 #174C7C를 사용함. 기존 한글 시스템 폰트와 본문/버튼 18px, 제목 26px를 유지함. 상단 작업 버튼, 가운데 파일 목록, 하단 진행/결과의 왼쪽 정렬 구조이며 작은 부가 설명, 장식 카드와 새 아이콘을 추가하지 않음.
+
+풀기 버튼은 raw GZ에만 출력명을 보내며 ZIP/TAR/TAR.GZ에는 None을 보냄. 모델과 가짜 작업자도 이 계약을 검증함. Start 전송 실패 시에는 연결을 보존하고 추가 요청을 막으며, 양쪽 EOF와 child wait가 모두 올 때까지 교체와 닫기를 허용하지 않음. 이때 Terminal이 없어도 종료 후 오류 확인 화면으로 이동하며 성공으로 표시하지 않음.

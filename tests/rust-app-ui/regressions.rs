@@ -493,3 +493,236 @@ fn dropped_native_file_opens_without_ui_reading_contents() {
     pump(&mut app.model);
     assert!(app.model.can_extract());
 }
+
+#[test]
+fn failed_start_retains_connection_until_both_eofs_and_child_wait() {
+    for missing in 0..3 {
+        let mut factory = FakeFactory::manual();
+        factory.state.borrow_mut().fail_start = true;
+        let mut model = Model::default();
+        assert!(!model.begin(
+            Start::List {
+                archive: path("failed.zip")
+            },
+            &mut factory
+        ));
+        assert!(model.busy());
+        assert_eq!(factory.state.borrow().dropped_connections, 0);
+        assert_eq!(model.job_id(), Some(1));
+        model.request_close();
+        model.confirm_close();
+        assert_eq!(model.close, Close::Waiting);
+        assert_eq!(factory.state.borrow().requests, vec![(0, "start")]);
+        let event = |index| match index {
+            0 => HostEvent::StdoutEof,
+            1 => HostEvent::StderrEof,
+            _ => HostEvent::Exited { success: false },
+        };
+        for index in 0..3 {
+            if index != missing {
+                factory.state.borrow_mut().queue.push_back(event(index));
+            }
+        }
+        for _ in 0..20 {
+            model.poll();
+        }
+        assert!(model.busy());
+        assert!(!model.can_extract());
+        assert_eq!(factory.state.borrow().dropped_connections, 0);
+        model.acknowledge_close();
+        assert_eq!(model.close, Close::Waiting);
+        assert!(!model.begin(
+            Start::List {
+                archive: path("replacement.zip")
+            },
+            &mut factory
+        ));
+        factory.state.borrow_mut().queue.push_back(event(missing));
+        pump(&mut model);
+        assert!(!model.confirmed);
+        assert!(model.terminal.is_none());
+        assert_eq!(model.error.as_deref(), Some("Start 전송 실패"));
+        assert_eq!(factory.state.borrow().dropped_connections, 1);
+        assert_eq!(model.close, Close::Review);
+        if missing == 0 {
+            model.acknowledge_close();
+            assert_eq!(model.close, Close::Allowed);
+        } else {
+            model.keep_open();
+            factory.state.borrow_mut().fail_start = false;
+            assert!(model.begin(
+                Start::List {
+                    archive: path("replacement.zip")
+                },
+                &mut factory
+            ));
+            assert_eq!(model.job_id(), Some(2));
+        }
+    }
+}
+
+#[test]
+fn non_gzip_formats_reject_a_gzip_output_name_before_connect() {
+    for format in [Format::Zip, Format::Tar, Format::TarGzip] {
+        let mut factory = FakeFactory::default();
+        factory.state.borrow_mut().list_format = Some(format);
+        let mut model = Model::default();
+        list(&mut model, &mut factory);
+        let count = factory.state.borrow().starts.len();
+        assert!(!model.extract(path("out"), false, Some("stale.txt".into()), &mut factory));
+        assert!(!model.busy());
+        assert_eq!(factory.state.borrow().starts.len(), count);
+        assert!(model.extract(path("out"), false, None, &mut factory));
+        pump(&mut model);
+    }
+}
+
+#[cfg(feature = "ui")]
+#[test]
+fn extract_button_sends_gzip_name_only_for_raw_gzip() {
+    use eframe::egui::{self, epaint::Shape};
+    use zipelo_ui_memory_app::archive_screen::ArchiveApp;
+    for format in [Format::Zip, Format::Tar, Format::TarGzip, Format::Gzip] {
+        let ctx = egui::Context::default();
+        let factory = FakeFactory::default();
+        factory.state.borrow_mut().list_format = Some(format);
+        let mut app = ArchiveApp::new(Box::new(factory.clone()), Some(path("input.archive")), true);
+        pump(&mut app.model);
+        let render = |app: &mut ArchiveApp, events| {
+            fn walk(shape: &Shape, output: &mut Vec<(String, egui::Pos2)>) {
+                match shape {
+                    Shape::Text(text) => output.push((
+                        text.galley.job.text.clone(),
+                        text.pos + text.galley.rect.size() / 2.0,
+                    )),
+                    Shape::Vec(shapes) => {
+                        for shape in shapes {
+                            walk(shape, output);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            let mut frame = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(1060.0, 720.0),
+                    )),
+                    events,
+                    ..Default::default()
+                },
+                |ui| app.show(ui),
+            );
+            frame.textures_delta.clear();
+            let mut output = Vec::new();
+            for shape in frame.shapes {
+                walk(&shape.shape, &mut output);
+            }
+            output
+        };
+        let click = |app: &mut ArchiveApp, point| {
+            render(
+                app,
+                vec![
+                    egui::Event::PointerMoved(point),
+                    egui::Event::PointerButton {
+                        pos: point,
+                        button: egui::PointerButton::Primary,
+                        pressed: true,
+                        modifiers: Default::default(),
+                    },
+                ],
+            );
+            render(
+                app,
+                vec![egui::Event::PointerButton {
+                    pos: point,
+                    button: egui::PointerButton::Primary,
+                    pressed: false,
+                    modifiers: Default::default(),
+                }],
+            );
+        };
+        render(&mut app, vec![]);
+        let texts = render(&mut app, vec![]);
+        let folder = texts
+            .iter()
+            .find(|(text, _)| text == "출력 폴더")
+            .unwrap()
+            .1;
+        click(&mut app, folder + egui::vec2(100.0, 0.0));
+        render(
+            &mut app,
+            vec![egui::Event::Text(
+                path("button-output").to_string_lossy().into_owned(),
+            )],
+        );
+        if format == Format::Gzip {
+            let texts = render(&mut app, vec![]);
+            let name = texts
+                .iter()
+                .find(|(text, _)| text == "출력 파일명")
+                .unwrap()
+                .1;
+            click(&mut app, name + egui::vec2(100.0, 0.0));
+            render(&mut app, vec![egui::Event::Text("plain.txt".into())]);
+        }
+        let texts = render(&mut app, vec![]);
+        let button = texts.iter().find(|(text, _)| text == "풀기").unwrap().1;
+        click(&mut app, button);
+        let state = factory.state.borrow();
+        assert_eq!(
+            state.starts.len(),
+            2,
+            "풀기 버튼의 Start 요청 누락: {format:?}"
+        );
+        match state.starts.last().unwrap() {
+            Start::Extract {
+                gzip_output_name, ..
+            } => assert_eq!(
+                gzip_output_name,
+                &if format == Format::Gzip {
+                    Some("plain.txt".into())
+                } else {
+                    None
+                }
+            ),
+            _ => panic!("Extract 요청 누락"),
+        }
+    }
+}
+
+#[test]
+fn fake_worker_rejects_invalid_format_specific_output_names() {
+    for (format, name) in [
+        (Format::Zip, Some("stale.txt".into())),
+        (Format::Tar, Some(String::new())),
+        (Format::TarGzip, Some("stale.txt".into())),
+        (Format::Gzip, None),
+        (Format::Gzip, Some("../escape".into())),
+    ] {
+        let mut factory = FakeFactory::default();
+        factory.state.borrow_mut().list_format = Some(format);
+        let mut model = Model::default();
+        list(&mut model, &mut factory);
+        let mut connection = factory.connect(2).unwrap();
+        let previous = factory.state.borrow().starts.len();
+        assert!(
+            connection
+                .send(Request {
+                    job_id: 2,
+                    sequence: 0,
+                    command: Command::Start(Start::Extract {
+                        archive: model.archive.clone().unwrap(),
+                        destination: path("output"),
+                        selection: Selection::All,
+                        list_id: model.list_id.clone().unwrap(),
+                        gzip_output_name: name,
+                    }),
+                })
+                .is_err()
+        );
+        assert_eq!(factory.state.borrow().starts.len(), previous);
+    }
+}

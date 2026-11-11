@@ -175,7 +175,11 @@ impl ArchiveApp {
                             self.model.extract(
                                 PathBuf::from(&self.destination),
                                 self.selected_only,
-                                Some(self.gzip_name.clone()),
+                                self.model
+                                    .list_id
+                                    .as_ref()
+                                    .filter(|id| id.format == Format::Gzip)
+                                    .map(|_| self.gzip_name.clone()),
                                 self.factory.as_mut(),
                             );
                         }
