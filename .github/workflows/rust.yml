@@ -1,0 +1,44 @@
+name: Manual Windows verification
+
+on:
+    workflow_dispatch:
+
+permissions:
+    contents: read
+
+concurrency:
+    group: rust-${{ github.workflow }}-${{ github.ref }}
+    cancel-in-progress: true
+
+jobs:
+    rust:
+        name: Windows build and tests
+        runs-on: windows-latest
+        timeout-minutes: 45
+        env:
+            CARGO_TERM_COLOR: always
+            CARGO_BUILD_JOBS: 1
+            CARGO_TARGET_DIR: ${{ github.workspace }}/tests/ci/target
+            RUST_BACKTRACE: 1
+        steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+              env:
+                  GIT_CONFIG_COUNT: 1
+                  GIT_CONFIG_KEY_0: core.autocrlf
+                  GIT_CONFIG_VALUE_0: false
+              with:
+                  persist-credentials: false
+            - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+              with:
+                  python-version: '3.13'
+            - name: Install Rust
+              run: rustup toolchain install 1.99.1 --profile minimal --no-self-update
+            - name: Check CI runner
+              run: python -m unittest discover -s tests/ci -p 'test_*.py' -v
+            - name: Build every Rust crate and test harness
+              timeout-minutes: 20
+              run: python tests/ci/run_rust.py build
+            - name: Run Rust tests
+              if: ${{ !cancelled() }}
+              timeout-minutes: 20
+              run: python tests/ci/run_rust.py test
