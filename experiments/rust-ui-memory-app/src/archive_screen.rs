@@ -11,6 +11,8 @@ pub struct ArchiveApp {
     sources: String,
     zip_output: String,
     password: String,
+    password_challenge: Option<u64>,
+    aes256: bool,
     create: bool,
     open: bool,
     selected_only: bool,
@@ -28,6 +30,8 @@ impl ArchiveApp {
             sources: String::new(),
             zip_output: String::new(),
             password: String::new(),
+            password_challenge: None,
+            aes256: false,
             create: false,
             open: false,
             selected_only: false,
@@ -39,8 +43,12 @@ impl ArchiveApp {
         }
         app
     }
+    fn clear_password(&mut self) {
+        let mut bytes = std::mem::take(&mut self.password).into_bytes();
+        bytes.fill(0);
+    }
     pub fn open_path(&mut self, archive: PathBuf) {
-        self.password.clear();
+        self.clear_password();
         self.model
             .begin(Start::List { archive }, self.factory.as_mut());
     }
@@ -58,16 +66,19 @@ impl ArchiveApp {
                 .join("\n");
             self.create = true;
         } else {
-            self.model.error = Some("ZIP 생성 경로는 현재 UTF-8 입력만 지원합니다".into());
+            self.model.input_error = Some("ZIP 생성 경로는 현재 UTF-8 입력만 지원합니다".into());
         }
     }
 }
 impl ArchiveApp {
     pub fn show(&mut self, root: &mut egui::Ui) {
         self.model.poll();
-        if self.model.challenge.is_none() {
-            self.password.clear();
+        let challenge = self.model.challenge.map(|(id, _, _)| id);
+        let new_challenge = challenge != self.password_challenge;
+        if new_challenge || challenge.is_none() {
+            self.clear_password();
         }
+        self.password_challenge = challenge;
         let ctx = root.ctx().clone();
         let dropped = ctx.input(|i| {
             i.raw
@@ -104,7 +115,7 @@ impl ArchiveApp {
                     .add_enabled(self.model.busy(), egui::Button::new("취소 요청"))
                     .clicked()
                 {
-                    self.password.clear();
+                    self.clear_password();
                     self.model.cancel();
                 }
             });
@@ -267,7 +278,7 @@ impl ArchiveApp {
                             ui.selectable_value(&mut self.method, Method::Deflate, "압축");
                             ui.selectable_value(&mut self.method, Method::Store, "묶기");
                         });
-                        ui.label("암호 ZIP 생성은 작업자 지원 후 활성화됩니다");
+                        ui.checkbox(&mut self.aes256, "암호로 보호");
                         if ui.button("ZIP 만들기").clicked() {
                             let sources = self
                                 .sources
@@ -287,7 +298,7 @@ impl ArchiveApp {
                                     sources,
                                     output_file: self.zip_output.clone().into(),
                                     method: self.method,
-                                    aes256: false,
+                                    aes256: self.aes256,
                                 },
                                 self.factory.as_mut(),
                             ) {
@@ -308,12 +319,23 @@ impl ArchiveApp {
             })
             .collapsible(false)
             .show(&ctx, |ui| {
-                ui.label(format!("암호 입력 요청 {attempt}"));
+                ui.label(if encrypt {
+                    "사용할 암호를 입력하세요"
+                } else if attempt > 1 {
+                    "암호가 맞지 않습니다. 다시 입력하세요"
+                } else {
+                    "암호를 입력하세요"
+                });
+                ui.label("암호");
                 let edit = ui.add(
                     egui::TextEdit::singleline(&mut self.password)
                         .password(true)
+                        .id(egui::Id::new("archive-password-input"))
                         .char_limit(1024),
                 );
+                if new_challenge {
+                    edit.request_focus();
+                }
                 if ui.button("암호 전달").clicked()
                     || (edit.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)))
                 {
@@ -321,7 +343,7 @@ impl ArchiveApp {
                     self.model.password(text);
                 }
                 if ui.button("작업 취소").clicked() {
-                    self.password.clear();
+                    self.clear_password();
                     self.model.cancel();
                 }
             });
@@ -379,5 +401,11 @@ impl ArchiveApp {
 impl eframe::App for ArchiveApp {
     fn ui(&mut self, root: &mut egui::Ui, _: &mut eframe::Frame) {
         self.show(root);
+    }
+}
+
+impl Drop for ArchiveApp {
+    fn drop(&mut self) {
+        self.clear_password();
     }
 }

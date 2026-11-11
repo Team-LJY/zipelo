@@ -1,23 +1,22 @@
 {
     "command": "python3 tests/ci/run_rust.py local",
     "platform": "linux-desktop-2",
-    "base_remote_main": "4160fcc4e80070b6ab9ea50c78705c0458b2384a",
-    "local_baseline_head": "b8811fa1bcb169c1ec8e5b14dbe6a46c510da0d1",
-    "source_state": "최신 PR69와 기존 SevenZip 앱 변환 및 암호 의존성 lockfile을 통합한 커밋에서 전체 검증함. 검증 후 이 증거 JSON만 갱신함.",
+    "base_remote_main": "e497fac4309018a2824b2f296a366a648f4429bf",
+    "local_baseline_head": "a1f6e48dfbff07d853a590a610d8673e72075661",
+    "source_state": "승인된 암호창과 main의 7z 구현을 동작 변경 없이 병합한 커밋에서 전체 검증함. 검증 후 이 증거 JSON만 갱신함.",
     "linux_build_crates": 19,
     "linux_test_targets": 19,
-    "rust_tests_passed": 895,
-    "new_archive_ui_tests_passed": 22,
+    "rust_tests_passed": 906,
+    "new_archive_ui_tests_passed": 23,
     "windows_cross_build_crates": 19,
     "windows_runtime_tested": false,
     "native_visual_check": "Headless egui Context used actual widget pointer/key events and the real OS worker process on Linux. Native OS window/input automation and Windows execution were not performed.",
-    "prior_failures": "최초 실행은 공유 캐시의 기존 7z 미지원 작업자로 화면 시험 1개가 실패함. 추출 소스의 타임스탬프를 갱신하여 다시 빌드한 뒤 LZMA/LZMA2 화면 시험과 전체 실행이 통과함.",
+    "prior_failures": "Retained locally: first build drop API/legacy harness references; second and third egui renderer harness texture/first-frame setup; final runner passed.",
     "limitations": [
-        "Normal ZIP/TAR.GZ/7z listing and extraction plus ZIP creation/reopen/extraction use the actual worker executable and OS pipes.",
-        "Four successful screen tests run headless egui widgets, including LZMA/LZMA2 7z fixtures, not native OS GUI automation.",
-        "Malformed, wrong-action, early-exit and disposal fault cases use a separate test-only probe; serialization failure and late cancellation use the actual worker.",
-        "No Windows runtime, encryption ZIP, large-file performance, OS sandbox or exhaustive malicious-input validation in this frontend integration.",
-        "Manual path text is UTF-8; native archive CLI/drop paths retain PathBuf and NativePath."
+        "Headless egui widgets with actual Linux child processes and OS pipes; no native OS window/input automation or Windows runtime.",
+        "Passwords are public synthetic fixture data. The tests verify masking and lifecycle cleanup, not an exhaustive process-memory audit.",
+        "No backend cryptography, wire contract, installer or 7z changes in this branch.",
+        "The UI and probe lockfiles include the existing PR67 crypto dependencies. Existing package versions remain unchanged."
     ],
     "tested_files": [
         {
@@ -34,11 +33,11 @@
         },
         {
             "path": "experiments/rust-ui-memory-app/src/archive_screen.rs",
-            "sha256": "04b7a55c7405d89467fc821db27e0714fb0aa00612e614835b5fee901e5ca940"
+            "sha256": "3f8858d5fb18f329b6e3a1753a45e909f1caf973f1019402e93d97077b1d96fd"
         },
         {
             "path": "experiments/rust-ui-memory-app/src/archive_ui.rs",
-            "sha256": "f26557645cea07350843c7e88225e07bb4316ab673dc2581b036567f01d66d6e"
+            "sha256": "438beb387c57c6b0da206066f76a1d7349dae95eb9f33be006338af7cf1ac2ef"
         },
         {
             "path": "experiments/rust-ui-memory-app/src/desktop.rs",
@@ -62,7 +61,7 @@
         },
         {
             "path": "tests/rust-app-real-worker/README.md",
-            "sha256": "7253cd2a765dc594e3a27970fd3811eb50645d1179c2728b57eee2d440b3e367"
+            "sha256": "9924a1dbb6b687c3c08ec9785835ae73628867bbfa5deec8db0f8504f8de859a"
         },
         {
             "path": "tests/rust-app-real-worker/fixtures/sample.tar.gz",
@@ -74,7 +73,7 @@
         },
         {
             "path": "tests/rust-app-real-worker/flows.rs",
-            "sha256": "23501dfcfcefa5404d1587d5295915a227a18ba53ccbdf56eaa35b101011d115"
+            "sha256": "bda6f27f50b8a332444de63463f3194b3ee75a2a897a495cc384d55e40f7279f"
         },
         {
             "path": "tests/rust-app-real-worker/generate.py",
@@ -98,7 +97,11 @@
         },
         {
             "path": "tests/rust-app-ui/regressions.rs",
-            "sha256": "a4c3685a380cb73fd506a290270b2a5308529ef4f843c203127c2bc9a2df2a80"
+            "sha256": "9ddea054018426523bbbd8d913141244455aef32a40553ef5f76a42e3d0854c6"
+        },
+        {
+            "path": "tests/rust-app-real-worker/password_flows.rs",
+            "sha256": "2617f66bc85a889aab1d2c98466b67e949628f830d47a578db2635474ccb7898"
         },
         {
             "path": "tests/rust-app-real-worker/formats.rs",
@@ -113,17 +116,22 @@
         "오류 후 명시적 정리는 child wait 전에 닫기를 허용하지 않음",
         "정상 정리 신호는 EOF를 대신하지 않음",
         "정상 종료 뒤 채널 닫힘과 늦은 취소가 최종 결과를 오류로 바꾸지 않음",
-        "child 회수 전 늦은 취소의 실제 작업자 경합 100회와 Terminal 없는 종료의 실패 유지"
+        "child 회수 전 늦은 취소의 실제 작업자 경합 100회와 Terminal 없는 종료의 실패 유지",
+        "빈 암호 입력 뒤 취소와 정상 종료 확인",
+        "UTF-8 1024바이트 초과 입력 뒤 취소와 출력 없음",
+        "입력 오류 뒤 창 닫기 시 child 회수 후 종료 허용",
+        "입력 오류와 암호 재입력이 기존 통신 오류를 지우지 않음"
     ],
-    "before_review_fix": "Earlier PR62 fixes reproduced 3 failures before repair. Integration tests additionally reproduced normal channel shutdown and late-cancel races before repair. PR68 review race reproduced with the new test before repair; all 100 iterations passed after repair.",
+    "before_review_fix": "Earlier PR62 fixes reproduced 3 failures before repair. Integration tests additionally reproduced normal channel shutdown and late-cancel races before repair. PR68 review race reproduced with the new test before repair; all 100 iterations passed after repair. PR72 수정 전 동일 화면 회귀 시험의 빈 암호 뒤 취소, 초과 길이 뒤 취소, 오류 뒤 창 닫기 3개가 confirmed assertion에서 실패했고 수정 뒤 통과함.",
     "approved_ui_head": "423a7c80c9d7182e07d29adee03a97d09a19b11f",
-    "tested_local_head": "496415fbd6fa6bc359f85775a88ed56cd71fa2e5",
-    "real_worker_tests_passed": 11,
+    "tested_local_head": "dfb1e3848fae714d3716f14000f3a4ae434f98d3",
+    "real_worker_tests_passed": 21,
     "runner_tests_passed": 23,
+    "password_screen_tests_passed": 10,
+    "password_flow": "Actual widget input and real worker validated ZipCrypto, AES-256 AE-1/AE-2 Store/Deflate extraction, retry, three failures, cancel, UTF-8 byte limits and cold-start AES ZIP creation/reopen/extraction.",
     "format_contract_tests_passed": 2,
-    "prerequisite_heads": {
-        "PR69": "8614f8431a6d7f1967822c233a812d383e574000"
-    },
-    "format_extension": "Existing tags 0..3 unchanged; SevenZip=4. Full ListEnd golden frame, both platform identities and Extract codec roundtrip verified.",
-    "lockfile_update": "PR71 159d51a의 앱 및 probe 암호 의존성 고정과 동일함. 기존 패키지 버전을 변경하지 않음."
+    "merge_heads": {
+        "password_pr72": "ff86e6ddb7100781c4d3dc0dd388d10e86d2025c",
+        "main": "e497fac4309018a2824b2f296a366a648f4429bf"
+    }
 }

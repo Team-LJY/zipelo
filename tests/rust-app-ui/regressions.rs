@@ -807,3 +807,42 @@ fn error_cleanup_requires_child_wait_without_fabricating_terminal() {
     assert_eq!(model.error.as_deref(), Some("pipe error"));
     assert_eq!(model.close, Close::Review);
 }
+
+#[test]
+fn password_validation_and_retry_do_not_erase_transport_failure() {
+    let mut factory = FakeFactory::default();
+    let mut model = Model::default();
+    assert!(model.begin(
+        Start::List {
+            archive: path("locked.zip")
+        },
+        &mut factory
+    ));
+    for _ in 0..10 {
+        model.poll();
+        if model.challenge.is_some() {
+            break;
+        }
+    }
+    assert!(model.challenge.is_some());
+    factory
+        .state
+        .borrow_mut()
+        .queue
+        .push_back(HostEvent::Fault("pipe error".into()));
+    for _ in 0..10 {
+        model.poll();
+        if model.error.is_some() {
+            break;
+        }
+    }
+    assert_eq!(model.error.as_deref(), Some("pipe error"));
+    assert!(!model.password(String::new()));
+    assert!(model.input_error.as_ref().unwrap().contains("1~1024바이트"));
+    assert_eq!(model.error.as_deref(), Some("pipe error"));
+    assert!(model.password("synthetic password".into()));
+    pump(&mut model);
+    assert!(model.input_error.is_none());
+    assert_eq!(model.error.as_deref(), Some("pipe error"));
+    assert!(!model.confirmed);
+}

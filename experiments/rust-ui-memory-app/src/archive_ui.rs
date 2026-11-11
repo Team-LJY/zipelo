@@ -54,10 +54,12 @@ pub enum Start {
 pub struct Secret(Vec<u8>);
 impl Secret {
     pub fn new(text: String) -> Result<Self, &'static str> {
-        if text.is_empty() || text.len() > 1024 {
+        let mut bytes = text.into_bytes();
+        if bytes.is_empty() || bytes.len() > 1024 {
+            bytes.fill(0);
             return Err("암호는 UTF-8 1~1024바이트로 입력하세요");
         }
-        Ok(Self(text.into_bytes()))
+        Ok(Self(bytes))
     }
     pub fn as_bytes(&self) -> &[u8] {
         &self.0
@@ -268,6 +270,7 @@ pub struct Model {
     pub outputs: Vec<(String, Disposition)>,
     pub cancel: Option<CancelStatus>,
     pub error: Option<String>,
+    pub input_error: Option<String>,
     pub encryption: bool,
     pub close: Close,
     pub confirmed: bool,
@@ -323,19 +326,17 @@ impl Model {
             Start::CreateZip {
                 sources,
                 output_file,
-                aes256,
                 ..
             } => {
                 !sources.is_empty()
                     && output_file.is_absolute()
-                    && (!aes256 || self.encryption)
                     && sources
                         .iter()
                         .all(|(p, n)| p.is_absolute() && valid_relative(n))
             }
         };
         if !validation {
-            self.error = Some("입력 경로, 출력명과 선택한 목록을 확인하세요".into());
+            self.input_error = Some("입력 경로, 출력명과 선택한 목록을 확인하세요".into());
             return false;
         }
         let Some(id) = self.next_id.checked_add(1) else {
@@ -371,6 +372,7 @@ impl Model {
         self.progress = None;
         self.outputs.clear();
         self.cancel = None;
+        self.input_error = None;
         self.error = send_error;
         self.confirmed = false;
         self.running = Some(Running {
@@ -423,7 +425,7 @@ impl Model {
         let secret = match Secret::new(text) {
             Ok(s) => s,
             Err(e) => {
-                self.error = Some(e.into());
+                self.input_error = Some(e.into());
                 return false;
             }
         };
@@ -435,7 +437,7 @@ impl Model {
             .is_some()
         {
             self.challenge = None;
-            self.error = None;
+            self.input_error = None;
             true
         } else {
             false
@@ -475,6 +477,7 @@ impl Model {
             if let Some(seq) = self.send(Command::Cancel) {
                 self.running.as_mut().unwrap().cancel_sequence = Some(seq);
                 self.challenge = None;
+                self.input_error = None;
             }
         }
     }
@@ -556,6 +559,7 @@ impl Model {
                 self.selected.clear();
             }
             self.challenge = None;
+            self.input_error = None;
             if matches!(self.close, Close::Waiting | Close::Confirm) {
                 self.close = Close::Review;
             }
@@ -668,7 +672,7 @@ impl Model {
         }
     }
     pub fn status(&self) -> String {
-        if let Some(error) = &self.error {
+        if let Some(error) = self.error.as_ref().or(self.input_error.as_ref()) {
             return error.clone();
         }
         if self.busy() {
