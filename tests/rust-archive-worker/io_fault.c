@@ -63,8 +63,11 @@ int open64(const char *path, int flags, ...) {
         va_end(args);
     }
     const char *fault = getenv("ZIPELO_TEST_FAULT");
+    const char *name = strrchr(path, '/');
+    name = name ? name + 1 : path;
+    int named_temp = (flags & O_CREAT) && !strncmp(name, "zipelo-", 7);
     if (fault && !strcmp(fault, "temp-full")
-            && (((flags & O_TMPFILE) == O_TMPFILE) || strstr(path, "/zipelo-"))) {
+            && (((flags & O_TMPFILE) == O_TMPFILE) || named_temp)) {
         errno = ENOSPC;
         return -1;
     }

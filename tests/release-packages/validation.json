@@ -1,0 +1,103 @@
+{
+    "base_remote_main": "3b9b5910383295e5597be9b66edcfe444f9ff2ea",
+    "package_source_local_commit": "10aad21",
+    "tested_source_local_commit": "7048d97b20a3eaa903cbaa7e992ae3df1fcf7027",
+    "tested_code_tree": "fb20221c8ec4bbf3e9cd86e1f048d3e6a77551d1",
+    "product_code_unchanged_from_base": true,
+    "build_profile": "release",
+    "package_version": "0.1.0 development",
+    "artifacts": {
+        "ubuntu": {
+            "path": "tests/release-packages/runs/ubuntu-release/zipelo_0.1.0~dev1_amd64.deb",
+            "bytes": 4966530,
+            "sha256": "b5824125075f957633ee8c1e08abccfa083027e4ba40a94281c76e397638cf15"
+        },
+        "windows": {
+            "path": "tests/release-packages/runs/windows-release/Zipelo-0.1.0-dev-windows-x64-setup.exe",
+            "bytes": 5614970,
+            "sha256": "8331b43b82349f6b7a65b8865bc5b40a899082f67b796528f7726d8009fe1dab"
+        }
+    },
+    "local": {
+        "command": "python3 tests/ci/run_rust.py local",
+        "exit_code": 0,
+        "rust_tests_passed": 937,
+        "runner_checks_passed": 34,
+        "linux_build_targets_passed": 21,
+        "linux_test_targets_passed": 21,
+        "windows_cross_targets_passed": 21
+    },
+    "ubuntu": {
+        "platform": "Ubuntu 26.04 amd64",
+        "installed": true,
+        "mime_defaults_verified": [
+            "application/zip",
+            "application/x-7z-compressed",
+            "application/x-compressed-tar"
+        ],
+        "native_window": "Xvfb X11, installed /usr/bin/zipelo with real worker",
+        "list_screen_reviewed": "example.txt, 27 bytes, completed",
+        "removed_and_purged": true,
+        "previous_mime_settings_restored": true
+    },
+    "windows": {
+        "installer_compiled": true,
+        "payload_pe_architecture": "x64",
+        "runtime_tested": false
+    },
+    "regression": {
+        "initial_local_exit_code": 1,
+        "initial_failure": "cancel_racing_child_exit_preserves_completed_result_before_poll: Cancelled instead of Completed after a fixed 2ms wait",
+        "fix": "Wait for the real Exited event and buffer responses before model polling; product code unchanged",
+        "focused_iterations": 100,
+        "focused_passed": true,
+        "full_local_after_fix_passed": true
+    },
+    "limitations": [
+        "Automatic MIME defaults require SUDO_USER; GUI/service installs without user identity only register a candidate",
+        "Windows runtime and native Wayland session not tested",
+        "Rebuild final distribution after pending 7z/ZIP streaming integration"
+    ],
+    "local_evidence": [
+        "tests/release-packages/runs/ubuntu-release-build.log",
+        "tests/release-packages/runs/windows-release-build.log",
+        "tests/release-packages/runs/ubuntu-smoke.log",
+        "tests/release-packages/runs/ubuntu-purge.log",
+        "tests/release-packages/runs/cancel-regression.log",
+        "tests/release-packages/runs/local.log",
+        "tests/release-packages/runs/local-fixed.log",
+        "tests/release-packages/runs/smoke/installed-window.png"
+    ],
+    "evidence_note": "Validation JSON added after tests; the tested code tree matches the remote code tree.",
+    "lifecycle_fix": {
+        "tested_source_local_commit": "64278d557270ceead65729a2a7484c90806cce97",
+        "changes": [
+            "최초 configure에서만 기본 앱 적용, 업그레이드 및 재설정은 기존 선택 보존",
+            "설치 시도 실패에도 purge 실행, purge 실패와 별개로 MIME 복원",
+            "외부 MIME 변경은 보존하며 다른 파일 복원 지속, 원래 실패와 정리 실패 모두 보고"
+        ],
+        "regression_command": "python3 -m unittest discover -s tests/release-packages -p \"test_*.py\" -v",
+        "regression_tests_passed": 7,
+        "local": {
+            "exit_code": 0,
+            "rust_tests_passed": 937,
+            "runner_checks_passed": 34,
+            "linux_build_targets_passed": 21,
+            "linux_test_targets_passed": 21,
+            "windows_cross_targets_passed": 21
+        },
+        "ubuntu_repackaged": {
+            "path": "tests/release-packages/runs/ubuntu-lifecycle/zipelo_0.1.0~dev1_amd64.deb",
+            "bytes": 4966540,
+            "sha256": "bbab8fcd97b004c6bbb62a3a3f76d519dc517d35f72b617f01f37f18e46ec97a",
+            "payload_reused_from": "10aad21",
+            "postinst_updated": true
+        },
+        "actual_installation_rerun": false,
+        "windows_runtime_tested": false,
+        "logs": [
+            "tests/release-packages/runs/lifecycle-regression.log",
+            "tests/release-packages/runs/local-lifecycle.log"
+        ]
+    }
+}

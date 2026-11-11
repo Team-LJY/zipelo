@@ -670,7 +670,12 @@ mod linux {
             let s = Scratch::new();
             generate(&s, "store", 1024 * 1024);
             fs::write(s.0.join("preserve"), b"original").unwrap();
-            let request = start(&s, false, Limits::default().output);
+            fs::create_dir(s.0.join("zipelo-source")).unwrap();
+            fs::rename(s.0.join("input"), s.0.join("zipelo-source/zipelo-input")).unwrap();
+            let mut request = start(&s, false, Limits::default().output);
+            if let Action::Extract { archive, .. } = &mut request.action {
+                *archive = s.path("zipelo-source/zipelo-input");
+            }
             let child = spawn(&s, request, Some(mode));
             assert_eq!(wait(child.id()).0, 0);
             let events = events(&s);
