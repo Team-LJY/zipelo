@@ -66,7 +66,7 @@ impl ArchiveApp {
                 .join("\n");
             self.create = true;
         } else {
-            self.model.error = Some("ZIP 생성 경로는 현재 UTF-8 입력만 지원합니다".into());
+            self.model.input_error = Some("ZIP 생성 경로는 현재 UTF-8 입력만 지원합니다".into());
         }
     }
 }

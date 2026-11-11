@@ -45,7 +45,9 @@ impl Screen {
             },
             egui::Event::Text(text.into()),
         ]);
-        assert!(!rendered.iter().any(|(value, _)| value.contains(text)));
+        if !text.is_empty() {
+            assert!(!rendered.iter().any(|(value, _)| value.contains(text)));
+        }
         self.click("암호 전달");
     }
     fn start_password_extract(&mut self, output: &Path) {
@@ -135,7 +137,7 @@ fn wrong_password_retry_clears_input_and_succeeds_without_partial_output() {
         screen
             .app
             .model
-            .error
+            .input_error
             .as_ref()
             .unwrap()
             .contains("1~1024바이트")
@@ -256,7 +258,7 @@ fn oversized_utf8_password_stays_in_dialog_then_accepts_valid_input() {
         screen
             .app
             .model
-            .error
+            .input_error
             .as_ref()
             .unwrap()
             .contains("1~1024바이트")
@@ -265,4 +267,67 @@ fn oversized_utf8_password_stays_in_dialog_then_accepts_valid_input() {
     screen.password_answer(FIXTURE_PASSWORD);
     screen.finish_password_job(Outcome::Completed);
     assert_reaped(&observed);
+}
+
+fn invalid_password_then_cancel(invalid: &str, close: bool) {
+    let scratch = Scratch::new();
+    let source = scratch.path("private.txt");
+    fs::write(&source, b"preserve").unwrap();
+    let archive = scratch.path("cancelled.zip");
+    let (factory, observed) = observed_factory();
+    let mut screen = Screen::new(factory);
+    screen.start_encrypted_zip(&source, &archive);
+    let challenge = screen.password_request(1, true);
+    screen.password_answer(invalid);
+    assert_eq!(screen.app.model.challenge, Some((challenge, 1, true)));
+    assert!(screen.app.model.status().contains("1~1024바이트"));
+    if close {
+        screen.app.model.request_close();
+        screen.app.model.confirm_close();
+        assert_eq!(screen.app.model.close, Close::Waiting);
+        assert!(!screen.app.model.confirmed);
+    } else {
+        screen.click("작업 취소");
+    }
+    screen.finish_password_job(Outcome::Cancelled);
+    assert_eq!(screen.app.model.status(), "작업 취소됨");
+    assert_eq!(
+        screen.app.model.terminal.as_ref().unwrap().publication,
+        Publication::None
+    );
+    assert_eq!(screen.app.model.terminal.as_ref().unwrap().created_count, 0);
+    assert_eq!(
+        screen
+            .app
+            .model
+            .terminal
+            .as_ref()
+            .unwrap()
+            .retained_partial_count,
+        0
+    );
+    assert!(!archive.exists());
+    assert_eq!(fs::read(&source).unwrap(), b"preserve");
+    assert_eq!(fs::read_dir(&scratch.0).unwrap().count(), 1);
+    assert_reaped(&observed);
+    if close {
+        assert_eq!(screen.app.model.close, Close::Review);
+        screen.app.model.acknowledge_close();
+        assert_eq!(screen.app.model.close, Close::Allowed);
+    } else {
+        screen.open(&encrypted_fixture(&scratch, "aes2-store.zip"));
+        assert_reaped(&observed);
+    }
+}
+#[test]
+fn empty_password_then_cancel_confirms_worker_exit() {
+    invalid_password_then_cancel("", false);
+}
+#[test]
+fn oversized_password_then_cancel_confirms_worker_exit() {
+    invalid_password_then_cancel(&"가".repeat(342), false);
+}
+#[test]
+fn invalid_password_then_close_confirms_worker_exit() {
+    invalid_password_then_cancel("", true);
 }

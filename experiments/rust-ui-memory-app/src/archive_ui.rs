@@ -269,6 +269,7 @@ pub struct Model {
     pub outputs: Vec<(String, Disposition)>,
     pub cancel: Option<CancelStatus>,
     pub error: Option<String>,
+    pub input_error: Option<String>,
     pub encryption: bool,
     pub close: Close,
     pub confirmed: bool,
@@ -334,7 +335,7 @@ impl Model {
             }
         };
         if !validation {
-            self.error = Some("입력 경로, 출력명과 선택한 목록을 확인하세요".into());
+            self.input_error = Some("입력 경로, 출력명과 선택한 목록을 확인하세요".into());
             return false;
         }
         let Some(id) = self.next_id.checked_add(1) else {
@@ -370,6 +371,7 @@ impl Model {
         self.progress = None;
         self.outputs.clear();
         self.cancel = None;
+        self.input_error = None;
         self.error = send_error;
         self.confirmed = false;
         self.running = Some(Running {
@@ -422,7 +424,7 @@ impl Model {
         let secret = match Secret::new(text) {
             Ok(s) => s,
             Err(e) => {
-                self.error = Some(e.into());
+                self.input_error = Some(e.into());
                 return false;
             }
         };
@@ -434,7 +436,7 @@ impl Model {
             .is_some()
         {
             self.challenge = None;
-            self.error = None;
+            self.input_error = None;
             true
         } else {
             false
@@ -474,6 +476,7 @@ impl Model {
             if let Some(seq) = self.send(Command::Cancel) {
                 self.running.as_mut().unwrap().cancel_sequence = Some(seq);
                 self.challenge = None;
+                self.input_error = None;
             }
         }
     }
@@ -555,6 +558,7 @@ impl Model {
                 self.selected.clear();
             }
             self.challenge = None;
+            self.input_error = None;
             if matches!(self.close, Close::Waiting | Close::Confirm) {
                 self.close = Close::Review;
             }
@@ -667,7 +671,7 @@ impl Model {
         }
     }
     pub fn status(&self) -> String {
-        if let Some(error) = &self.error {
+        if let Some(error) = self.error.as_ref().or(self.input_error.as_ref()) {
             return error.clone();
         }
         if self.busy() {
