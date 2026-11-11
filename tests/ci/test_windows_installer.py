@@ -57,7 +57,7 @@ class InstallerInputTests(unittest.TestCase):
     def test_nsis_compiles_payloads_and_finish_callbacks(self):
         payload = self.root / "payload"
         payload.mkdir()
-        for name in ("Zipelo.exe", "zipelo-archive-worker.exe", "LICENSE", "BUILD-INFO.json"):
+        for name in ("Zipelo.exe", "zipelo-archive-worker.exe", "LICENSE", "BUILD-INFO.json", "THIRD-PARTY-LICENSES.txt"):
             (payload / name).write_bytes(b"compile-only test fixture")
         shutil.copyfile(ROOT / "packaging/windows/rust/installer.nsi", self.root / "installer.nsi")
         completed = subprocess.run(["makensis", "-WX", "installer.nsi"], cwd=self.root,

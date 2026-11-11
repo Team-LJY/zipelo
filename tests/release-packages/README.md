@@ -13,3 +13,13 @@ Ubuntu 실기 스모크는 이 패키지를 sudo로 설치하고 ZIP, 7z, TAR.GZ
 sudo 비대화형 권한, Xvfb, xdotool과 ImageMagick import가 필요합니다. 이 검사는 실제 시스템 패키지를 설치하고 사용자 기본 앱을 임시로 바꾸므로 실행 전에 해당 작업의 승인이 필요합니다. 출력은 runs/에 남고 Git에는 포함하지 않습니다.
 
 Windows 설치와 설정 화면, 제거의 실기 검증은 이 Linux 시험에 포함되지 않습니다. release 게시와 다운로드 버튼 갱신도 수행하지 않습니다.
+
+
+## 라이선스 대조
+
+```sh
+python3 -m unittest discover -s tests/release-packages -p "test_*.py"
+python3 packaging/licenses.py --manifest experiments/rust-ui-memory-app/Cargo.toml --manifest experiments/rust-archive-worker/Cargo.toml --output tests/release-packages/runs/THIRD-PARTY-LICENSES.txt --audit tests/release-packages/runs/license-inventory.json
+```
+
+고지의 crate 목록은 두 Cargo.lock과 metadata의 합집합을 기준으로 합니다. 플랫폼이나 활성 기능을 기준으로 항목을 줄이지 않습니다. 원문 파일이 없는 crate는 라이선스 식만으로 대체하지 않으며 최종 파일을 생성하지 않습니다. audit JSON은 누락 원인 확인용이며 배포 고지가 아닙니다. 대조 시험은 원문 보존, 변경된 캐시 거부, metadata 누락과 두 패키지의 조기 중단을 검증합니다.

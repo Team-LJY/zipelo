@@ -99,6 +99,7 @@ Section "Zipelo"
     File "payload\Zipelo.exe"
     File "payload\zipelo-archive-worker.exe"
     File "payload\LICENSE"
+    File "payload\THIRD-PARTY-LICENSES.txt"
     File "payload\BUILD-INFO.json"
     IfErrors failed
     WriteUninstaller "$INSTDIR\Uninstall.exe"
@@ -141,6 +142,7 @@ Function Rollback
     Delete "$INSTDIR\Zipelo.exe"
     Delete "$INSTDIR\zipelo-archive-worker.exe"
     Delete "$INSTDIR\LICENSE"
+    Delete "$INSTDIR\THIRD-PARTY-LICENSES.txt"
     Delete "$INSTDIR\BUILD-INFO.json"
     Delete "$INSTDIR\install.ini"
     Delete "$INSTDIR\Uninstall.exe"
@@ -225,6 +227,7 @@ Section "Uninstall"
     Delete "$INSTDIR\zipelo-archive-worker.exe"
     IfErrors uninstall_failed
     Delete "$INSTDIR\LICENSE"
+    Delete "$INSTDIR\THIRD-PARTY-LICENSES.txt"
     Delete "$INSTDIR\BUILD-INFO.json"
     Delete "$SMPROGRAMS\Zipelo 개발판.lnk"
     IfErrors uninstall_failed
