@@ -1550,3 +1550,5 @@ fn seven_zip_reference_reader_accepts_synthetic_fixtures() {
             .success()
     );
 }
+
+mod hardening;

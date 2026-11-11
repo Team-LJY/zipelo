@@ -440,6 +440,22 @@ pub fn publish(
     data: &[u8],
     check: &mut impl FnMut(bool) -> Result<()>,
 ) -> Published {
+    publish_reader(
+        root,
+        name,
+        &mut std::io::Cursor::new(data),
+        data.len() as u64,
+        check,
+    )
+}
+
+pub fn publish_reader(
+    root: &Dir,
+    name: &str,
+    data: &mut impl Read,
+    length: u64,
+    check: &mut impl FnMut(bool) -> Result<()>,
+) -> Published {
     let mut result = Published {
         created: false,
         uncertain: false,
@@ -457,11 +473,25 @@ pub fn publish(
             std::process::id(),
             TEMP.fetch_add(1, Ordering::Relaxed)
         );
-        let mut file = dir.create(&temp).map_err(|_| ErrorCode::Conflict)?;
+        let mut file = dir.create(&temp).map_err(|e| {
+            if e.kind() == std::io::ErrorKind::AlreadyExists {
+                ErrorCode::Conflict
+            } else {
+                ErrorCode::Io
+            }
+        })?;
         let written = (|| {
-            for chunk in data.chunks(65536) {
+            let mut buffer = zeroize::Zeroizing::new([0; 65536]);
+            let mut remaining = length;
+            while remaining != 0 {
                 check(false)?;
-                file.write_all(chunk).map_err(|_| ErrorCode::Io)?;
+                let count = remaining.min(buffer.len() as u64) as usize;
+                let n = data.read(&mut buffer[..count]).map_err(|_| ErrorCode::Io)?;
+                if n == 0 {
+                    return Err(ErrorCode::Io);
+                }
+                file.write_all(&buffer[..n]).map_err(|_| ErrorCode::Io)?;
+                remaining -= n as u64;
             }
             file.sync_all().map_err(|_| ErrorCode::Io)
         })();
