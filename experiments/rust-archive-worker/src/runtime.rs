@@ -6,7 +6,7 @@ use crate::{
 };
 use std::{
     collections::BTreeSet,
-    io::{Read, Write},
+    io::{Read, Seek, SeekFrom, Write},
     sync::{Arc, Condvar, Mutex},
     time::{Duration, Instant},
 };
@@ -27,6 +27,7 @@ struct Job<W> {
     next_challenge: u64,
     started: Instant,
     terminal: Terminal,
+    parent: crate::parent::Parent,
 }
 impl<W: Write> Job<W> {
     fn password(&mut self, purpose: PasswordPurpose, attempt: u32) -> Result<Secret> {
@@ -45,6 +46,7 @@ impl<W: Write> Job<W> {
             })
             .map_err(|_| ErrorCode::Io)?;
         loop {
+            self.parent.check()?;
             if let Some(error) = state.fault {
                 return Err(error);
             }
@@ -76,6 +78,7 @@ impl<W: Write> Job<W> {
         })
     }
     fn check(&mut self) -> Result<()> {
+        self.parent.check()?;
         if self.started.elapsed() > Duration::from_secs(300) {
             return Err(ErrorCode::Limit);
         }
@@ -119,14 +122,32 @@ impl<W: Write> Job<W> {
         id: Option<u32>,
         last: bool,
     ) -> Result<()> {
+        self.output_reader(
+            root,
+            name,
+            &mut std::io::Cursor::new(data),
+            data.len() as u64,
+            id,
+            last,
+        )
+    }
+    fn output_reader(
+        &mut self,
+        root: &Dir,
+        name: &str,
+        data: &mut impl Read,
+        length: u64,
+        id: Option<u32>,
+        last: bool,
+    ) -> Result<()> {
         self.check()?;
         self.progress(
             Stage::Write,
             0,
-            Some(data.len() as u64),
+            Some(length),
             self.terminal.created_count as u32,
         )?;
-        let p = filesystem::publish(root, name, data, &mut |commit| {
+        let p = filesystem::publish_reader(root, name, data, length, &mut |commit| {
             if commit && last {
                 self.cutoff()
             } else {
@@ -194,8 +215,8 @@ impl<W: Write> Job<W> {
                 let extract = matches!(start.action, Action::Extract { .. });
                 let path = source.to_path()?;
                 self.progress(Stage::Read, 0, None, 0)?;
-                let snapshot =
-                    filesystem::snapshot(&path, start.limits.input, &mut || self.check())?;
+                let mut snapshot =
+                    crate::spool::Snapshot::open(&path, start.limits.input, &mut || self.check())?;
                 if let Action::Extract {
                     list_id: Some(expected),
                     ..
@@ -203,25 +224,26 @@ impl<W: Write> Job<W> {
                 {
                     if expected.catalog_version != 1
                         || expected.source_object != snapshot.object
-                        || expected.archive_bytes != snapshot.bytes.len() as u64
+                        || expected.archive_bytes != snapshot.len
                         || expected.archive_sha256 != snapshot.hash
                     {
                         return Err(ErrorCode::SourceChanged);
                     }
                 }
-                self.progress(
-                    Stage::Decode,
-                    snapshot.bytes.len() as u64,
-                    Some(snapshot.bytes.len() as u64),
-                    0,
+                self.progress(Stage::Decode, snapshot.len, Some(snapshot.len), 0)?;
+                let mut catalog = crate::streaming::Catalog::open(
+                    &mut snapshot.file,
+                    snapshot.len,
+                    start.limits,
+                    false,
+                    None,
+                    &mut || self.check(),
                 )?;
-                let mut catalog =
-                    archive::parse(&snapshot.bytes, start.limits, false, &mut || self.check())?;
                 let list_id = ListId {
                     catalog_version: 1,
                     format: catalog.format,
                     source_object: snapshot.object,
-                    archive_bytes: snapshot.bytes.len() as u64,
+                    archive_bytes: snapshot.len,
                     archive_sha256: snapshot.hash,
                 };
                 if !extract {
@@ -269,28 +291,6 @@ impl<W: Write> Job<W> {
                     {
                         return Err(ErrorCode::UnsafePath);
                     }
-                    let encrypted = catalog.members.iter().any(|m| m.entry.encrypted);
-                    for attempt in 1..=3 {
-                        let secret = if encrypted {
-                            Some(self.password(PasswordPurpose::Decrypt, attempt)?)
-                        } else {
-                            None
-                        };
-                        match archive::parse_with_password(
-                            &snapshot.bytes,
-                            start.limits,
-                            true,
-                            secret.as_ref().map(|s| s.0.as_slice()),
-                            &mut || self.check(),
-                        ) {
-                            Ok(decoded) => {
-                                catalog = decoded;
-                                break;
-                            }
-                            Err(ErrorCode::WrongPassword) if attempt < 3 => continue,
-                            Err(error) => return Err(error),
-                        }
-                    }
                     if catalog.format == Format::Gzip {
                         let name = gzip_output_name.ok_or(ErrorCode::InvalidRequest)?;
                         let checked = archive::valid_name(&name, false)
@@ -303,6 +303,55 @@ impl<W: Write> Job<W> {
                         return Err(ErrorCode::InvalidRequest);
                     }
                     let root = Dir::root(&destination.to_path()?)?;
+                    let output_sizes = catalog
+                        .members
+                        .iter()
+                        .filter(|m| {
+                            m.entry.kind == EntryKind::File
+                                && selected
+                                    .as_ref()
+                                    .is_none_or(|s| s.contains(&m.entry.entry_id))
+                        })
+                        .map(|m| (m.entry.name.clone(), m.entry.size))
+                        .collect::<Vec<_>>();
+                    let staged = if matches!(catalog.format, Format::Zip | Format::SevenZip) {
+                        Some((
+                            &catalog.data,
+                            catalog.members.iter().try_fold(0u64, |sum, m| {
+                                sum.checked_add(m.entry.size).ok_or(ErrorCode::Limit)
+                            })?,
+                        ))
+                    } else {
+                        None
+                    };
+                    filesystem::preflight_space(&root, &output_sizes, staged)?;
+                    let encrypted = catalog.members.iter().any(|m| m.entry.encrypted);
+                    if matches!(catalog.format, Format::Zip | Format::SevenZip) {
+                        for attempt in 1..=3 {
+                            let secret = if encrypted {
+                                Some(self.password(PasswordPurpose::Decrypt, attempt)?)
+                            } else {
+                                None
+                            };
+                            match crate::streaming::Catalog::open(
+                                &mut snapshot.file,
+                                snapshot.len,
+                                start.limits,
+                                true,
+                                secret.as_ref().map(|s| s.0.as_slice()),
+                                &mut || self.check(),
+                            ) {
+                                Ok(decoded) => {
+                                    catalog = decoded;
+                                    break;
+                                }
+                                Err(ErrorCode::WrongPassword) if attempt < 3 => continue,
+                                Err(error) => return Err(error),
+                            }
+                        }
+                    }
+                    let offsets = catalog.offsets;
+                    let mut data = catalog.data;
                     let members = catalog
                         .members
                         .into_iter()
@@ -327,9 +376,11 @@ impl<W: Write> Job<W> {
                             .map(|m| (m.entry.name.clone(), EntryKind::File)),
                     );
                     filesystem::preflight(&root, &names)?;
+                    filesystem::preflight_space(&root, &output_sizes, None)?;
                     for name in dirs {
                         self.check()?;
-                        let (created, durability) = filesystem::directory(&root, &name)?;
+                        let (created, durability, sync_error) =
+                            filesystem::directory(&root, &name)?;
                         if created {
                             self.terminal.created_count += 1;
                             self.terminal.publication = Publication::Partial;
@@ -339,16 +390,19 @@ impl<W: Write> Job<W> {
                                 relative_name: name,
                                 disposition: Disposition::Created,
                             })?;
-                            if durability == Durability::Failed {
-                                return Err(ErrorCode::Io);
+                            if let Some(error) = sync_error {
+                                return Err(error);
                             }
                         }
                     }
                     for (index, m) in files.iter().enumerate() {
-                        self.output(
+                        data.seek(SeekFrom::Start(offsets[m.entry.entry_id as usize]))
+                            .map_err(|_| ErrorCode::Io)?;
+                        self.output_reader(
                             &root,
                             &m.entry.name,
-                            &m.data,
+                            &mut (&mut data).take(m.entry.size),
+                            m.entry.size,
                             Some(m.entry.entry_id),
                             index + 1 == files.len(),
                         )?;
@@ -362,7 +416,8 @@ impl<W: Write> Job<W> {
                 method,
                 encryption,
             } => {
-                if sources.len() > start.limits.entries as usize {
+                let limits = start.limits.legacy();
+                if sources.len() > limits.entries as usize {
                     return Err(ErrorCode::Limit);
                 }
                 let mut members = Vec::new();
@@ -372,7 +427,7 @@ impl<W: Write> Job<W> {
                     let name = archive::valid_name(&source.archive_name, false)?;
                     let snapshot = filesystem::snapshot(
                         &source.path.to_path()?,
-                        start.limits.input - consumed,
+                        limits.input - consumed,
                         &mut || self.check(),
                     )?;
                     consumed += snapshot.bytes.len() as u64;
@@ -400,7 +455,7 @@ impl<W: Write> Job<W> {
                 let bytes = archive::create_zip_with_password(
                     &members,
                     method,
-                    start.limits,
+                    limits,
                     secret.as_ref().map(|s| s.0.as_slice()),
                     &mut || self.check(),
                 )?;
@@ -424,6 +479,8 @@ pub fn serve<R: Read + Send + 'static, W: Write + Send + 'static>(
     input: R,
     output: W,
 ) -> std::io::Result<()> {
+    let parent = crate::parent::Parent::capture()
+        .map_err(|_| std::io::Error::other("worker parent unavailable"))?;
     let mut reader = Reader::new(input);
     let (job, _, message) = reader
         .read()?
@@ -517,6 +574,7 @@ pub fn serve<R: Read + Send + 'static, W: Write + Send + 'static>(
         state: Arc::clone(&state),
         wake,
         next_challenge: 0,
+        parent,
         started: Instant::now(),
         terminal: Terminal {
             outcome: Outcome::Completed,
@@ -555,6 +613,12 @@ pub fn serve<R: Read + Send + 'static, W: Write + Send + 'static>(
             ErrorCode::None => "취소됨",
             ErrorCode::UnsupportedFeature => "암호 또는 해당 기능 미지원",
             ErrorCode::SourceChanged => "파일이 변경됨. 다시 열어 목록을 확인해야 함",
+            ErrorCode::DiskFull => {
+                "디스크 여유 공간이 부족합니다. 공간을 확보한 뒤 다시 시도하세요"
+            }
+            ErrorCode::Io => {
+                "파일을 읽거나 쓰지 못했습니다. 디스크 여유 공간과 접근 권한을 확인하세요"
+            }
             _ => "작업 실패. 오류 코드와 게시 상태를 확인해야 함",
         }
         .to_owned();

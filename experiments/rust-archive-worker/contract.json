@@ -1,7 +1,7 @@
 {
-    "status": "frontend-conditions-addressed-codec-not-implemented",
+    "status": "implemented-streaming-runtime",
     "version": 1,
-    "scope": "One job per separately spawned Rust worker; shared std-only binary codec. Process separation is not an OS sandbox.",
+    "scope": "One job per separately spawned Rust worker; shared binary codec. Process separation is not an OS sandbox.",
     "frame": {
         "magic": "ZAW1",
         "header_bytes": 32,
@@ -31,7 +31,7 @@
         "Cancel": "Matching header job_id and empty body; command header sequence identifies the request. See CancelAck. Request acceptance is separate from final outcome. EOF alone is not successful cancellation."
     },
     "events": {
-        "Accepted": "Action and capabilities; encryption capability remains false until implementation and verification are complete.",
+        "Accepted": "Action and capabilities; encryption capability is true for implemented ZipCrypto extraction and WinZip AES-256 extraction/creation.",
         "Entry": "entry_id, name, kind File|Directory|Link|Other, declared sizes, encrypted; ordinal u32 IDs belong to this List job only until its ListEnd token and Completed Terminal are confirmed. Metadata only, no CRC success claim.",
         "ListEnd": "entry_count:u32 and list_id:ListId for a complete listing. Entry IDs are deterministic zero-based ordinals in archive traversal order. App associates this token with this job entries only after Completed Terminal, both stream EOFs and successful child wait/exit.",
         "PasswordRequired": "challenge_id, attempt and purpose Decrypt|Encrypt; no secret diagnostics.",
@@ -39,7 +39,7 @@
         "Output": "entry_id:optional, relative_name, disposition Created|PartialRetained|Removed|CommitUncertain; only this job outputs.",
         "Terminal": {
             "outcome": "Completed|Failed|Cancelled",
-            "error": "None|Integrity|UnsupportedFormat|UnsupportedFeature|WrongPassword|UnsafePath|Conflict|Limit|Io|Protocol|Internal|SourceChanged|InvalidRequest",
+            "error": "None|Integrity|UnsupportedFormat|UnsupportedFeature|WrongPassword|UnsafePath|Conflict|Limit|Io|Protocol|Internal|SourceChanged|InvalidRequest|DiskFull",
             "publication": "None|Partial|Complete|Uncertain",
             "created_count": "u64",
             "retained_partial_count": "u64",
@@ -73,17 +73,9 @@
         "CRC/size/stream-end validation precedes committed output events; preserve commit/durability/cleanup distinctions."
     ],
     "pending": [
-        "Frontend draft acceptance was conditional on these three clarifications, now specified. Shared codec and app/worker integration remain unimplemented and unverified.",
-        "RustCrypto version selection, encryption implementation and verification; capability remains unavailable until complete.",
-        "Actual Linux and Windows build/runtime results; neither claimed yet."
+        "7z streaming and ZIP creation streaming remain deferred with separate legacy quotas.",
+        "Windows native runtime, forced interruption of blocked OS I/O and a current full dependency advisory audit are not verified."
     ],
-    "performed": {
-        "implementation": false,
-        "cargo_build": false,
-        "tests": false,
-        "worker_runs": false,
-        "remote_branch_or_pr": false
-    },
     "crypto": {
         "rustcrypto_allowed": true,
         "approval_message_id": "2966b0ad-a3e0-49b8-aef8-fb51c4e1c5a5",
@@ -93,7 +85,9 @@
     "revision": 2,
     "coordination": {
         "frontend_message_id": "41a0e5a5-27d0-437f-805d-d39313082096",
-        "basis": "Frontend can use the draft subject to three clarifications. This revision specifies list identity, explicit raw GZip output naming and cancellation acknowledgement. It does not claim implementation or runtime verification."
+        "basis": "Revision 2 list identity, explicit raw GZip output naming and cancellation acknowledgement are implemented. Field order and tags remain unchanged.",
+        "streaming_frontend_message_id": "59142fd4-22d3-4dc5-a875-5347e1b054da",
+        "disk_full_frontend_message_id": "3b01f4c4-c9b4-4c72-a9a0-b3df39979ea1"
     },
     "list_identity": {
         "ListId": {
@@ -148,5 +142,46 @@
         "agreement_message_id": "5a36fd89-af36-42be-9f79-bca39415e84d",
         "compatibility": "Existing format values 0 through 3, fields, message tags and frame version stay unchanged. Older clients reject format 4. App Format and bidirectional conversion require an update.",
         "regression": "Preserve existing format bytes and round-trip SevenZip in ListEnd/ListId."
+    },
+    "streaming_limits": {
+        "agreement": "Revision 2 fields and frame encoding unchanged. Ratio-rejection removal and advisory disk-space checks follow manager decision d6bc0d37-89d1-4cd2-a00b-883b5eb23ec0. DiskFull tag 13 and preserving Io tag 8 for query/access failures were agreed with frontend in message 3b01f4c4-c9b4-4c72-a9a0-b3df39979ea1.",
+        "default_input_bytes": 18446744073709551615,
+        "default_output_bytes": 17179869184,
+        "default_entries": 10000,
+        "lower_limits": "Callers can lower the input, output and entry quotas. input=u64::MAX means no input-size quota; resource and duration checks still apply.",
+        "zip_ratio": "No compression-ratio rejection. Validate declared and actual output sizes, stream end, CRC and HMAC; sum of declared output sizes must fit output quota before decoding.",
+        "gzip_ratio": "No compression-ratio rejection, including concatenated members. Aggregate decoded bytes, including TAR headers/padding, cannot exceed output quota.",
+        "tar_ratio": "Plain TAR copies declared nonoverlapping ranges within the captured input. The sum of file sizes cannot exceed output quota.",
+        "arithmetic": "Checked u64 offsets and totals; free-space block-to-byte conversion uses u128 to avoid multiplication overflow.",
+        "memory_target": "ZIP/TAR/GZ/TAR.GZ List/Extract: worker process peak RSS <=64 MiB in Linux regression with independently generated 1 GiB payloads. This is a measured target, not an OS-enforced RSS cap. Metadata budget remains 8 MiB.",
+        "staging": "64 KiB buffers; immutable input capture and verified decoded content use private temporary files that are removed on last-handle close. No decoded content is published until the entire catalog and integrity checks succeed. Temporary disk usage can include the archive plus expanded content plus current destination temporary file; disk exhaustion fails with DiskFull and closes/removes unpublished data.",
+        "legacy": "7z and ZIP creation retain separate 64 MiB input /128 MiB output caps until their streaming implementation. The slice-based archive parser also retains these legacy memory bounds.",
+        "parent_lifetime": "Capture native parent before reading Start. At decode/read/write/password checkpoints, fail Io if parent is gone; close anonymous staging and remove current unpublished destination temp. stdin EOF alone remains valid for one-shot requests. Already published entries and directories are reported and retained. A blocked OS file operation cannot be forcibly interrupted by this cooperative guard.",
+        "disk_space": "Advisory free-space checks use opened Linux x86_64 filesystem handles (fstatvfs) or the Windows handle-derived directory (GetDiskFreeSpaceExW). Before ZIP/7z decoding and before publication, group remaining staging and selected output logical bytes by volume. For GZip with unknown expanded size, check staging space before each decoded chunk, then preflight selected output. Input capture also checks its snapshot space. Insufficient space returns DiskFull tag 13. Query failure and other I/O errors retain Io tag 8. Checks do not reserve space or account for every metadata/block-allocation overhead; later ENOSPC still closes staging and removes current unpublished output.",
+        "remaining_risk": "High compression ratios within 16 GiB may expand fully onto disk. Resource duration, cooperative cancellation and measured memory target remain. Free-space checks can race with other disk users; already published outputs are retained on failure."
+    },
+    "validation": "Implementation results belong in the PR verification record. No OS sandbox or native Windows execution claim.",
+    "error_tags": {
+        "None": 0,
+        "Integrity": 1,
+        "UnsupportedFormat": 2,
+        "UnsupportedFeature": 3,
+        "WrongPassword": 4,
+        "UnsafePath": 5,
+        "Conflict": 6,
+        "Limit": 7,
+        "Io": 8,
+        "Protocol": 9,
+        "Internal": 10,
+        "SourceChanged": 11,
+        "InvalidRequest": 12,
+        "DiskFull": 13
+    },
+    "disk_full_extension": {
+        "agreement_message_id": "3b01f4c4-c9b4-4c72-a9a0-b3df39979ea1",
+        "compatibility": "Existing error tags 0 through 12, fields, message tags, revision 2 and frame version stay unchanged. Older clients reject error 13; app error mapping and worker must be updated together before integration.",
+        "mapping": "Insufficient preflight space and StorageFull I/O failures return DiskFull 13. Windows ERROR_HANDLE_DISK_FULL 39 and ERROR_DISK_FULL 112 also map to DiskFull. Query failure, permission errors and other I/O failures return Io 8. No error classification by localized detail text.",
+        "detail": "디스크 여유 공간이 부족합니다. 공간을 확보한 뒤 다시 시도하세요",
+        "publication": "Keep existing publication, durability and cleanup semantics. DiskFull does not imply rollback or absence of previously published outputs."
     }
 }

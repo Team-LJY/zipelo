@@ -133,7 +133,7 @@ enumeration!(EntryKind{File=0,Directory=1,Link=2,Other=3});
 enumeration!(Stage{Scan=0,Read=1,Decode=2,Write=3,Verify=4,Commit=5});
 enumeration!(Disposition{Created=0,PartialRetained=1,Removed=2,CommitUncertain=3});
 enumeration!(Outcome{Completed=0,Failed=1,Cancelled=2});
-enumeration!(ErrorCode{None=0,Integrity=1,UnsupportedFormat=2,UnsupportedFeature=3,WrongPassword=4,UnsafePath=5,Conflict=6,Limit=7,Io=8,Protocol=9,Internal=10,SourceChanged=11,InvalidRequest=12});
+enumeration!(ErrorCode{None=0,Integrity=1,UnsupportedFormat=2,UnsupportedFeature=3,WrongPassword=4,UnsafePath=5,Conflict=6,Limit=7,Io=8,Protocol=9,Internal=10,SourceChanged=11,InvalidRequest=12,DiskFull=13});
 enumeration!(Publication{None=0,Partial=1,Complete=2,Uncertain=3});
 enumeration!(Durability{NotApplicable=0,Synced=1,Unconfirmed=2,Failed=3});
 enumeration!(Cleanup{Complete=0,Failed=1,Unconfirmed=2});

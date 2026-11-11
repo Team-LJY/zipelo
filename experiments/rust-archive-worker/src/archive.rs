@@ -205,7 +205,7 @@ fn gzip(input: &[u8], limits: Limits, check: &mut impl FnMut() -> Result<()>) ->
     }
     Ok(result)
 }
-fn tar_string(b: &[u8]) -> Result<String> {
+pub(crate) fn tar_string(b: &[u8]) -> Result<String> {
     let n = b.iter().position(|v| *v == 0).unwrap_or(b.len());
     if b[n..].iter().any(|v| *v != 0) {
         return Err(ErrorCode::Integrity);
@@ -214,7 +214,7 @@ fn tar_string(b: &[u8]) -> Result<String> {
         .map(str::to_owned)
         .map_err(|_| ErrorCode::UnsupportedFeature)
 }
-fn octal(b: &[u8]) -> Result<u64> {
+pub(crate) fn octal(b: &[u8]) -> Result<u64> {
     if b.first().is_some_and(|x| x & 128 != 0) {
         return Err(ErrorCode::UnsupportedFeature);
     }
@@ -315,11 +315,11 @@ fn tar(
     Ok(members)
 }
 #[derive(Clone, Copy, PartialEq, Eq)]
-struct AesExtra {
-    version: u16,
-    method: u16,
+pub(crate) struct AesExtra {
+    pub version: u16,
+    pub method: u16,
 }
-fn aes_extra(extra: &[u8]) -> Result<Option<AesExtra>> {
+pub(crate) fn aes_extra(extra: &[u8]) -> Result<Option<AesExtra>> {
     let mut at = 0;
     let mut found = None;
     while at < extra.len() {
@@ -576,7 +576,11 @@ pub fn parse_with_password(
     password: Option<&[u8]>,
     check: &mut impl FnMut() -> Result<()>,
 ) -> Result<Catalog> {
-    if !limits.valid() || input.len() as u64 > limits.input {
+    if !limits.valid() {
+        return Err(ErrorCode::Limit);
+    }
+    let limits = limits.legacy();
+    if input.len() as u64 > limits.input {
         return Err(ErrorCode::Limit);
     }
     if input.starts_with(b"7z\xbc\xaf\x27\x1c") {
@@ -668,6 +672,10 @@ pub fn create_zip_with_password(
     password: Option<&[u8]>,
     check: &mut impl FnMut() -> Result<()>,
 ) -> Result<Vec<u8>> {
+    if !limits.valid() {
+        return Err(ErrorCode::Limit);
+    }
+    let limits = limits.legacy();
     if members.len() > limits.entries as usize || members.len() >= 65535 {
         return Err(ErrorCode::Limit);
     }

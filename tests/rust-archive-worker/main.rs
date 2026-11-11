@@ -1550,3 +1550,46 @@ fn seven_zip_reference_reader_accepts_synthetic_fixtures() {
             .success()
     );
 }
+
+mod hardening;
+
+#[test]
+fn disk_full_error_tag_preserves_previous_tags_and_rejects_unknown() {
+    for (tag, error) in [
+        ErrorCode::None,
+        ErrorCode::Integrity,
+        ErrorCode::UnsupportedFormat,
+        ErrorCode::UnsupportedFeature,
+        ErrorCode::WrongPassword,
+        ErrorCode::UnsafePath,
+        ErrorCode::Conflict,
+        ErrorCode::Limit,
+        ErrorCode::Io,
+        ErrorCode::Protocol,
+        ErrorCode::Internal,
+        ErrorCode::SourceChanged,
+        ErrorCode::InvalidRequest,
+        ErrorCode::DiskFull,
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let message = Message::Terminal(Terminal {
+            outcome: Outcome::Failed,
+            error,
+            publication: Publication::None,
+            created_count: 0,
+            retained_partial_count: 0,
+            durability: Durability::NotApplicable,
+            cleanup: Cleanup::Complete,
+            detail: String::new(),
+        });
+        let mut bytes = Vec::new();
+        Writer::new(&mut bytes, 17).send(&message).unwrap();
+        assert_eq!(bytes[33], tag as u8);
+        let decoded = Reader::new(bytes.as_slice()).read().unwrap().unwrap().2;
+        assert_eq!(terminal(&[decoded]).error, error);
+        bytes[33] = 14;
+        assert!(Reader::new(bytes.as_slice()).read().is_err());
+    }
+}

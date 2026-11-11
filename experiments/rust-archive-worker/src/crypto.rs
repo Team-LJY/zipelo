@@ -87,7 +87,7 @@ pub(crate) fn aes_encrypt(
     result.extend(&mac[..10]);
     Ok(result)
 }
-fn random(bytes: &mut [u8]) -> Result<()> {
+pub(crate) fn random(bytes: &mut [u8]) -> Result<()> {
     #[cfg(target_os = "linux")]
     {
         use std::io::Read;
@@ -144,16 +144,8 @@ pub(crate) fn zipcrypto_decrypt(
         return Err(ErrorCode::Integrity);
     }
     let mut key = Zeroizing::new([0x12345678u32, 0x23456789, 0x34567890]);
-    fn update(key: &mut [u32; 3], byte: u8) {
-        key[0] = (key[0] >> 8) ^ CRC_TABLE[((key[0] as u8) ^ byte) as usize];
-        key[1] = key[1]
-            .wrapping_add(key[0] & 255)
-            .wrapping_mul(134775813)
-            .wrapping_add(1);
-        key[2] = (key[2] >> 8) ^ CRC_TABLE[((key[2] as u8) ^ ((key[1] >> 24) as u8)) as usize];
-    }
     for &byte in password {
-        update(&mut key, byte);
+        zip_update(&mut key, byte);
     }
     let mut out = Zeroizing::new(Vec::with_capacity(packed.len() - 12));
     for (index, &byte) in packed.iter().enumerate() {
@@ -162,7 +154,7 @@ pub(crate) fn zipcrypto_decrypt(
         }
         let temp = key[2] | 2;
         let plain = byte ^ ((temp.wrapping_mul(temp ^ 1) >> 8) as u8);
-        update(&mut key, plain);
+        zip_update(&mut key, plain);
         if index == 11 && plain != verifier {
             return Err(ErrorCode::WrongPassword);
         }
@@ -171,4 +163,135 @@ pub(crate) fn zipcrypto_decrypt(
         }
     }
     Ok(out)
+}
+
+pub(crate) enum Decryptor {
+    Plain,
+    Zip(Zeroizing<[u32; 3]>),
+    Aes {
+        cipher: Aes256,
+        counter: u128,
+        mask: [u8; 16],
+        used: usize,
+    },
+}
+fn zip_update(key: &mut [u32; 3], byte: u8) {
+    key[0] = (key[0] >> 8) ^ CRC_TABLE[((key[0] as u8) ^ byte) as usize];
+    key[1] = key[1]
+        .wrapping_add(key[0] & 255)
+        .wrapping_mul(134775813)
+        .wrapping_add(1);
+    key[2] = (key[2] >> 8) ^ CRC_TABLE[((key[2] as u8) ^ ((key[1] >> 24) as u8)) as usize];
+}
+impl Decryptor {
+    pub fn prepare(
+        file: &mut std::fs::File,
+        offset: u64,
+        length: u64,
+        password: &[u8],
+        aes: bool,
+        verifier: u8,
+        check: &mut impl FnMut() -> Result<()>,
+    ) -> Result<(Self, u64, u64)> {
+        use std::io::{Read, Seek, SeekFrom};
+        file.seek(SeekFrom::Start(offset))
+            .map_err(|_| ErrorCode::Io)?;
+        if aes {
+            if length < 28 {
+                return Err(ErrorCode::Integrity);
+            }
+            let mut header = [0; 18];
+            file.read_exact(&mut header)
+                .map_err(|_| ErrorCode::Integrity)?;
+            let key = keys(password, &header[..16]);
+            if !bool::from(key[64..].ct_eq(&header[16..])) {
+                return Err(ErrorCode::WrongPassword);
+            }
+            let mut mac =
+                <Sha1Mac as Mac>::new_from_slice(&key[32..64]).map_err(|_| ErrorCode::Internal)?;
+            let mut remaining = length - 28;
+            let mut buffer = [0; 65536];
+            while remaining != 0 {
+                check()?;
+                let n = remaining.min(buffer.len() as u64) as usize;
+                file.read_exact(&mut buffer[..n])
+                    .map_err(|_| ErrorCode::Integrity)?;
+                mac.update(&buffer[..n]);
+                remaining -= n as u64;
+            }
+            let mut tag = [0; 10];
+            file.read_exact(&mut tag)
+                .map_err(|_| ErrorCode::Integrity)?;
+            mac.verify_truncated_left(&tag)
+                .map_err(|_| ErrorCode::Integrity)?;
+            let cipher = Aes256::new_from_slice(&key[..32]).map_err(|_| ErrorCode::Internal)?;
+            Ok((
+                Self::Aes {
+                    cipher,
+                    counter: 1,
+                    mask: [0; 16],
+                    used: 16,
+                },
+                offset + 18,
+                length - 28,
+            ))
+        } else {
+            if length < 12 {
+                return Err(ErrorCode::Integrity);
+            }
+            let mut key = Zeroizing::new([0x12345678, 0x23456789, 0x34567890]);
+            for &b in password {
+                zip_update(&mut key, b);
+            }
+            let mut decoder = Self::Zip(key);
+            let mut header = [0; 12];
+            file.read_exact(&mut header)
+                .map_err(|_| ErrorCode::Integrity)?;
+            decoder.apply(&mut header);
+            if header[11] != verifier {
+                return Err(ErrorCode::WrongPassword);
+            }
+            header.zeroize();
+            Ok((decoder, offset + 12, length - 12))
+        }
+    }
+    pub fn apply(&mut self, bytes: &mut [u8]) {
+        match self {
+            Self::Plain => {}
+            Self::Zip(key) => {
+                for byte in bytes {
+                    let temp = key[2] | 2;
+                    *byte ^= (temp.wrapping_mul(temp ^ 1) >> 8) as u8;
+                    zip_update(key, *byte);
+                }
+            }
+            Self::Aes {
+                cipher,
+                counter,
+                mask,
+                used,
+            } => {
+                for byte in bytes {
+                    if *used == 16 {
+                        let mut block = counter.to_le_bytes().into();
+                        cipher.encrypt_block(&mut block);
+                        mask.copy_from_slice(&block);
+                        block.as_mut_slice().zeroize();
+                        *counter += 1;
+                        *used = 0;
+                    }
+                    *byte ^= mask[*used];
+                    *used += 1;
+                }
+            }
+        }
+    }
+}
+impl Drop for Decryptor {
+    fn drop(&mut self) {
+        if let Self::Aes { mask, counter, .. } = self {
+            mask.zeroize();
+            counter.zeroize();
+        }
+    }
 }

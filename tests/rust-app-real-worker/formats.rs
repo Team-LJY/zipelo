@@ -127,4 +127,49 @@ mod adapter {
             }
         }
     }
+    #[test]
+    fn disk_full_terminal_roundtrip_displays_space_guidance_and_preserves_cleanup() {
+        for (error, expected, guidance) in [
+            (
+                wire::ErrorCode::DiskFull,
+                ui::ErrorCode::DiskFull,
+                "디스크 여유 공간이 부족합니다. 공간을 확보한 뒤 다시 시도하세요",
+            ),
+            (
+                wire::ErrorCode::Io,
+                ui::ErrorCode::Io,
+                "파일을 읽거나 쓰지 못했습니다. 파일과 폴더의 접근 권한을 확인하세요",
+            ),
+        ] {
+            let message = wire::Message::Terminal(wire::Terminal {
+                outcome: wire::Outcome::Failed,
+                error,
+                publication: wire::Publication::Partial,
+                created_count: 2,
+                retained_partial_count: 0,
+                durability: wire::Durability::Synced,
+                cleanup: wire::Cleanup::Complete,
+                detail: "internal path must not appear".into(),
+            });
+            let mut frame = Vec::new();
+            codec::Writer::new(&mut frame, 99).send(&message).unwrap();
+            let (_, _, decoded) = codec::Reader::new(frame.as_slice())
+                .read()
+                .unwrap()
+                .unwrap();
+            let ui::Event::Terminal(terminal) = event_to_ui(decoded, None).unwrap() else {
+                panic!("종료 응답이 아님");
+            };
+            assert_eq!(terminal.error, Some(expected));
+            assert_eq!(terminal.outcome, ui::Outcome::Failed);
+            assert_eq!(terminal.publication, ui::Publication::Partial);
+            assert_eq!(terminal.created_count, 2);
+            assert_eq!(terminal.retained_partial_count, 0);
+            assert_eq!(terminal.cleanup, ui::Cleanup::Complete);
+            let lines = ui::terminal_lines(&terminal);
+            assert!(lines.iter().any(|line| line == guidance));
+            assert!(lines.iter().any(|line| line.contains("일부 파일 게시됨")));
+            assert!(!lines.iter().any(|line| line.contains("internal path")));
+        }
+    }
 }

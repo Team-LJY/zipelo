@@ -57,13 +57,21 @@ pub struct Limits {
 impl Default for Limits {
     fn default() -> Self {
         Self {
-            input: 64 * 1024 * 1024,
-            output: 128 * 1024 * 1024,
+            input: u64::MAX,
+            output: 16 * 1024 * 1024 * 1024,
             entries: 10_000,
         }
     }
 }
 impl Limits {
+    pub(crate) fn legacy(self) -> Self {
+        Self {
+            input: self.input.min(64 * 1024 * 1024),
+            output: self.output.min(128 * 1024 * 1024),
+            entries: self.entries,
+        }
+    }
+
     pub fn valid(self) -> bool {
         let hard = Self::default();
         self.input > 0
@@ -213,6 +221,7 @@ pub enum ErrorCode {
     Internal,
     SourceChanged,
     InvalidRequest,
+    DiskFull,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Publication {
