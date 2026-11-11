@@ -128,6 +128,7 @@ pub enum ErrorCode {
     Conflict,
     Limit,
     Io,
+    DiskFull,
     Protocol,
     Internal,
     SourceChanged,
@@ -804,7 +805,12 @@ pub fn terminal_lines(t: &Terminal) -> Vec<String> {
                 ErrorCode::UnsafePath => "안전하지 않은 경로가 있어 중단했습니다",
                 ErrorCode::Conflict => "같은 이름의 파일이 있습니다. 다른 출력 폴더를 선택하세요",
                 ErrorCode::Limit => "처리 한도를 초과했습니다",
-                ErrorCode::Io => "파일을 읽거나 쓰지 못했습니다",
+                ErrorCode::Io => {
+                    "파일을 읽거나 쓰지 못했습니다. 파일과 폴더의 접근 권한을 확인하세요"
+                }
+                ErrorCode::DiskFull => {
+                    "디스크 여유 공간이 부족합니다. 공간을 확보한 뒤 다시 시도하세요"
+                }
                 ErrorCode::Protocol => "작업자 응답이 올바르지 않습니다",
                 ErrorCode::Internal => "작업자 처리 오류입니다",
                 ErrorCode::SourceChanged => "원본 파일이 바뀌었습니다. 압축파일을 다시 여세요",

@@ -209,6 +209,7 @@ fn error_to_ui(error: wire::ErrorCode) -> Option<ui::ErrorCode> {
         wire::ErrorCode::Conflict => ui::ErrorCode::Conflict,
         wire::ErrorCode::Limit => ui::ErrorCode::Limit,
         wire::ErrorCode::Io => ui::ErrorCode::Io,
+        wire::ErrorCode::DiskFull => ui::ErrorCode::DiskFull,
         wire::ErrorCode::Protocol => ui::ErrorCode::Protocol,
         wire::ErrorCode::Internal => ui::ErrorCode::Internal,
         wire::ErrorCode::SourceChanged => ui::ErrorCode::SourceChanged,
