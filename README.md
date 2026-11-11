@@ -2,9 +2,11 @@
 
 쉽고 빠른 압축과 압축 해제를 목표로 만드는 MIT 오픈소스 프로그램입니다.
 
-![Windows용 다운로드 준비 중](assets/download-pending.svg)
+[![Zipelo 다운로드](assets/download-pending.svg)](https://github.com/Team-LJY/zipelo/releases/latest)
 
-**설치 파일은 아직 없습니다.** 위 이미지는 준비 상태를 나타내며 다운로드 링크가 아닙니다.
+**[다운로드 (최신 릴리스)](https://github.com/Team-LJY/zipelo/releases/latest)**
+
+설치 파일은 아직 게시되지 않았습니다. 첫 릴리스가 올라오면 위 버튼에서 받을 수 있습니다.
 
 현재 비암호화 ZIP 목록 열람을 작업자 프로세스에 연결했습니다. 검증 담당자가 Windows 개발
 검증 빌드에서 새 ZIP 생성과 저장, 기존 파일 충돌 시 보존, 파일 선택 취소 후 재시도 성공을
