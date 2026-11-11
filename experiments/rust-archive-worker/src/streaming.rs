@@ -36,7 +36,7 @@ fn add(a: u64, b: u64) -> Result<u64> {
     a.checked_add(b).ok_or(ErrorCode::Integrity)
 }
 fn io<T>(v: std::io::Result<T>) -> Result<T> {
-    v.map_err(|_| ErrorCode::Io)
+    v.map_err(crate::space::io_error)
 }
 
 pub(crate) struct Catalog {

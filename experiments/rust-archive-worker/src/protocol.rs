@@ -221,6 +221,7 @@ pub enum ErrorCode {
     Internal,
     SourceChanged,
     InvalidRequest,
+    DiskFull,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Publication {

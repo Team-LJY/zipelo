@@ -39,7 +39,7 @@
         "Output": "entry_id:optional, relative_name, disposition Created|PartialRetained|Removed|CommitUncertain; only this job outputs.",
         "Terminal": {
             "outcome": "Completed|Failed|Cancelled",
-            "error": "None|Integrity|UnsupportedFormat|UnsupportedFeature|WrongPassword|UnsafePath|Conflict|Limit|Io|Protocol|Internal|SourceChanged|InvalidRequest",
+            "error": "None|Integrity|UnsupportedFormat|UnsupportedFeature|WrongPassword|UnsafePath|Conflict|Limit|Io|Protocol|Internal|SourceChanged|InvalidRequest|DiskFull",
             "publication": "None|Partial|Complete|Uncertain",
             "created_count": "u64",
             "retained_partial_count": "u64",
@@ -86,7 +86,8 @@
     "coordination": {
         "frontend_message_id": "41a0e5a5-27d0-437f-805d-d39313082096",
         "basis": "Revision 2 list identity, explicit raw GZip output naming and cancellation acknowledgement are implemented. Field order and tags remain unchanged.",
-        "streaming_frontend_message_id": "59142fd4-22d3-4dc5-a875-5347e1b054da"
+        "streaming_frontend_message_id": "59142fd4-22d3-4dc5-a875-5347e1b054da",
+        "disk_full_frontend_message_id": "3b01f4c4-c9b4-4c72-a9a0-b3df39979ea1"
     },
     "list_identity": {
         "ListId": {
@@ -143,7 +144,7 @@
         "regression": "Preserve existing format bytes and round-trip SevenZip in ListEnd/ListId."
     },
     "streaming_limits": {
-        "agreement": "Revision 2 fields, tags and frame encoding unchanged. Ratio-rejection removal and disk-space advisory checks are proposed under manager decision d6bc0d37-89d1-4cd2-a00b-883b5eb23ec0; frontend confirmation pending.",
+        "agreement": "Revision 2 fields and frame encoding unchanged. Ratio-rejection removal and advisory disk-space checks follow manager decision d6bc0d37-89d1-4cd2-a00b-883b5eb23ec0. DiskFull tag 13 and preserving Io tag 8 for query/access failures were agreed with frontend in message 3b01f4c4-c9b4-4c72-a9a0-b3df39979ea1.",
         "default_input_bytes": 18446744073709551615,
         "default_output_bytes": 17179869184,
         "default_entries": 10000,
@@ -153,11 +154,34 @@
         "tar_ratio": "Plain TAR copies declared nonoverlapping ranges within the captured input. The sum of file sizes cannot exceed output quota.",
         "arithmetic": "Checked u64 offsets and totals; free-space block-to-byte conversion uses u128 to avoid multiplication overflow.",
         "memory_target": "ZIP/TAR/GZ/TAR.GZ List/Extract: worker process peak RSS <=64 MiB in Linux regression with independently generated 1 GiB payloads. This is a measured target, not an OS-enforced RSS cap. Metadata budget remains 8 MiB.",
-        "staging": "64 KiB buffers; immutable input capture and verified decoded content use private temporary files that are removed on last-handle close. No decoded content is published until the entire catalog and integrity checks succeed. Temporary disk usage can include the archive plus expanded content plus current destination temporary file; disk exhaustion fails with Io and closes/removes unpublished data.",
+        "staging": "64 KiB buffers; immutable input capture and verified decoded content use private temporary files that are removed on last-handle close. No decoded content is published until the entire catalog and integrity checks succeed. Temporary disk usage can include the archive plus expanded content plus current destination temporary file; disk exhaustion fails with DiskFull and closes/removes unpublished data.",
         "legacy": "7z and ZIP creation retain separate 64 MiB input /128 MiB output caps until their streaming implementation. The slice-based archive parser also retains these legacy memory bounds.",
         "parent_lifetime": "Capture native parent before reading Start. At decode/read/write/password checkpoints, fail Io if parent is gone; close anonymous staging and remove current unpublished destination temp. stdin EOF alone remains valid for one-shot requests. Already published entries and directories are reported and retained. A blocked OS file operation cannot be forcibly interrupted by this cooperative guard.",
-        "disk_space": "Advisory free-space checks use opened Linux x86_64 filesystem handles (fstatvfs) or the Windows handle-derived directory (GetDiskFreeSpaceExW). Before ZIP/7z decoding and before publication, group remaining staging and selected output logical bytes by volume. For GZip with unknown expanded size, check staging space before each decoded chunk, then preflight selected output. Input capture also checks its snapshot space. Query failure or insufficient space returns existing Io tag 8. Checks do not reserve space or account for every metadata/block-allocation overhead; later ENOSPC still closes staging and removes current unpublished output.",
+        "disk_space": "Advisory free-space checks use opened Linux x86_64 filesystem handles (fstatvfs) or the Windows handle-derived directory (GetDiskFreeSpaceExW). Before ZIP/7z decoding and before publication, group remaining staging and selected output logical bytes by volume. For GZip with unknown expanded size, check staging space before each decoded chunk, then preflight selected output. Input capture also checks its snapshot space. Insufficient space returns DiskFull tag 13. Query failure and other I/O errors retain Io tag 8. Checks do not reserve space or account for every metadata/block-allocation overhead; later ENOSPC still closes staging and removes current unpublished output.",
         "remaining_risk": "High compression ratios within 16 GiB may expand fully onto disk. Resource duration, cooperative cancellation and measured memory target remain. Free-space checks can race with other disk users; already published outputs are retained on failure."
     },
-    "validation": "Implementation results belong in the PR verification record. No OS sandbox or native Windows execution claim."
+    "validation": "Implementation results belong in the PR verification record. No OS sandbox or native Windows execution claim.",
+    "error_tags": {
+        "None": 0,
+        "Integrity": 1,
+        "UnsupportedFormat": 2,
+        "UnsupportedFeature": 3,
+        "WrongPassword": 4,
+        "UnsafePath": 5,
+        "Conflict": 6,
+        "Limit": 7,
+        "Io": 8,
+        "Protocol": 9,
+        "Internal": 10,
+        "SourceChanged": 11,
+        "InvalidRequest": 12,
+        "DiskFull": 13
+    },
+    "disk_full_extension": {
+        "agreement_message_id": "3b01f4c4-c9b4-4c72-a9a0-b3df39979ea1",
+        "compatibility": "Existing error tags 0 through 12, fields, message tags, revision 2 and frame version stay unchanged. Older clients reject error 13; app error mapping and worker must be updated together before integration.",
+        "mapping": "Insufficient preflight space and StorageFull I/O failures return DiskFull 13. Windows ERROR_HANDLE_DISK_FULL 39 and ERROR_DISK_FULL 112 also map to DiskFull. Query failure, permission errors and other I/O failures return Io 8. No error classification by localized detail text.",
+        "detail": "디스크 여유 공간이 부족합니다. 공간을 확보한 뒤 다시 시도하세요",
+        "publication": "Keep existing publication, durability and cleanup semantics. DiskFull does not imply rollback or absence of previously published outputs."
+    }
 }

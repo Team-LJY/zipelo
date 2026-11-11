@@ -13,6 +13,7 @@
 static ssize_t (*real_write)(int, const void *, size_t);
 static int (*real_openat)(int, const char *, int, ...);
 static int (*real_open64)(const char *, int, ...);
+static int (*real_fsync)(int);
 static int (*real_fstatvfs)(int, struct statvfs *);
 static int started;
 
@@ -20,6 +21,7 @@ __attribute__((constructor)) static void initialize(void) {
     real_write = dlsym(RTLD_NEXT, "write");
     real_openat = dlsym(RTLD_NEXT, "openat");
     real_open64 = dlsym(RTLD_NEXT, "open64");
+    real_fsync = dlsym(RTLD_NEXT, "fsync");
     real_fstatvfs = dlsym(RTLD_NEXT, "fstatvfs");
 }
 
@@ -43,8 +45,9 @@ int openat(int fd, const char *path, int flags, ...) {
         va_end(args);
     }
     const char *fault = getenv("ZIPELO_TEST_FAULT");
-    if (fault && !strcmp(fault, "create-full") && !strncmp(path, ".zipelo-", 8)) {
-        errno = ENOSPC;
+    if (fault && (!strcmp(fault, "create-full") || !strcmp(fault, "create-denied"))
+            && !strncmp(path, ".zipelo-", 8)) {
+        errno = !strcmp(fault, "create-full") ? ENOSPC : EACCES;
         return -1;
     }
     return real_openat(fd, path, flags, mode);
@@ -59,6 +62,11 @@ int open64(const char *path, int flags, ...) {
         va_end(args);
     }
     const char *fault = getenv("ZIPELO_TEST_FAULT");
+    if (fault && !strcmp(fault, "temp-full")
+            && (((flags & O_TMPFILE) == O_TMPFILE) || strstr(path, "/zipelo-"))) {
+        errno = ENOSPC;
+        return -1;
+    }
     if (fault && !strcmp(fault, "fallback") && ((flags & O_TMPFILE) == O_TMPFILE)) {
         int marker = real_openat(AT_FDCWD, getenv("ZIPELO_TEST_MARKER"), O_CREAT | O_WRONLY, 0600);
         if (marker >= 0) close(marker);
@@ -71,6 +79,7 @@ int open64(const char *path, int flags, ...) {
 ssize_t write(int fd, const void *bytes, size_t count) {
     const char *fault = getenv("ZIPELO_TEST_FAULT");
     if (!fault || !output_file(fd)) return real_write(fd, bytes, count);
+    if (!strcmp(fault, "write-io")) { errno = EIO; return -1; }
     if (!strcmp(fault, "full") || !strcmp(fault, "stage-full")) {
         if (!started++) return real_write(fd, bytes, count < 7 ? count : 7);
         errno = ENOSPC;
@@ -103,4 +112,16 @@ int fstatvfs(int fd, struct statvfs *value) {
     if (!strcmp(fault, "space-error")) { errno = EIO; return -1; }
     value->f_bavail = !strcmp(fault, "space-combined") ? (1536 * 1024) / value->f_frsize : 0;
     return 0;
+}
+
+int fsync(int fd) {
+    const char *fault = getenv("ZIPELO_TEST_FAULT");
+    struct stat st;
+    int directory_full = fault && !strcmp(fault, "dir-sync-full")
+        && !fstat(fd, &st) && S_ISDIR(st.st_mode);
+    if (directory_full || (fault && !strcmp(fault, "sync-full") && output_file(fd))) {
+        errno = ENOSPC;
+        return -1;
+    }
+    return real_fsync(fd);
 }

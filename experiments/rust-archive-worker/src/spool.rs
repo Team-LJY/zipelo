@@ -13,14 +13,18 @@ pub(crate) fn temporary() -> Result<File> {
     {
         use std::os::unix::fs::OpenOptionsExt;
         // 이름 없는 임시 파일은 마지막 핸들을 닫으면 제거됨.
-        if let Ok(file) = OpenOptions::new()
+        match OpenOptions::new()
             .read(true)
             .write(true)
             .custom_flags(0x410000 | 0x80)
             .mode(0o600)
             .open(std::env::temp_dir())
         {
-            return Ok(file);
+            Ok(file) => return Ok(file),
+            Err(ref error) if error.kind() == std::io::ErrorKind::StorageFull => {
+                return Err(ErrorCode::DiskFull);
+            }
+            Err(_) => {}
         }
         let mut random = [0; 16];
         crate::crypto::random(&mut random)?;
@@ -36,7 +40,7 @@ pub(crate) fn temporary() -> Result<File> {
             .mode(0o600)
             .custom_flags(0x20000)
             .open(&path)
-            .map_err(|_| ErrorCode::Io)?;
+            .map_err(crate::space::io_error)?;
         std::fs::remove_file(path).map_err(|_| ErrorCode::Io)?;
         use std::os::unix::fs::MetadataExt;
         if file.metadata().map_err(|_| ErrorCode::Io)?.nlink() != 0 {
@@ -62,7 +66,7 @@ pub(crate) fn temporary() -> Result<File> {
             .custom_flags(0x04000000 | 0x00200000)
             .attributes(0x100)
             .open(std::env::temp_dir().join(format!("zipelo-{name}.tmp")))
-            .map_err(|_| ErrorCode::Io)
+            .map_err(crate::space::io_error)
     }
 }
 
@@ -121,7 +125,8 @@ impl Snapshot {
                 .checked_add(n as u64)
                 .filter(|n| *n <= limit)
                 .ok_or(ErrorCode::Limit)?;
-            file.write_all(&buffer[..n]).map_err(|_| ErrorCode::Io)?;
+            file.write_all(&buffer[..n])
+                .map_err(crate::space::io_error)?;
             hash.update(&buffer[..n]);
         }
         let after = source.metadata().map_err(|_| ErrorCode::Io)?;

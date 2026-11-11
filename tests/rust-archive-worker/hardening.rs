@@ -433,7 +433,13 @@ mod linux {
     }
     #[test]
     fn enospc_at_create_or_after_partial_write_cleans_output() {
-        for mode in ["create-full", "full", "stage-full"] {
+        for mode in [
+            "create-full",
+            "full",
+            "stage-full",
+            "temp-full",
+            "sync-full",
+        ] {
             let s = Scratch::new();
             generate(&s, "store", 1024 * 1024);
             fs::write(s.0.join("preserve"), b"original").unwrap();
@@ -442,7 +448,11 @@ mod linux {
             assert_eq!(wait(child.id()).0, 0);
             let events = events(&s);
             let t = terminal(&events);
-            assert_eq!(t.error, ErrorCode::Io, "{mode}: {events:?}");
+            assert_eq!(t.error, ErrorCode::DiskFull, "{mode}: {events:?}");
+            assert_eq!(
+                t.detail,
+                "디스크 여유 공간이 부족합니다. 공간을 확보한 뒤 다시 시도하세요"
+            );
             assert_eq!(t.publication, Publication::None);
             assert_eq!(t.retained_partial_count, 0);
             assert_eq!(t.cleanup, Cleanup::Complete);
@@ -465,12 +475,78 @@ mod linux {
             assert_eq!(wait(child.id()).0, 0);
             let events = events(&s);
             let t = terminal(&events);
-            assert_eq!(t.error, ErrorCode::Io, "{mode}: {events:?}");
+            let expected = if mode == "space-error" {
+                ErrorCode::Io
+            } else {
+                ErrorCode::DiskFull
+            };
+            assert_eq!(t.error, expected, "{mode}: {events:?}");
             assert_eq!(t.publication, Publication::None);
             assert_eq!(t.cleanup, Cleanup::Complete);
             assert_eq!(t.created_count, 0);
             assert!(t.detail.contains("디스크 여유 공간"));
             assert!(s.0.join("paused").exists());
+            assert_eq!(fs::read_dir(s.0.join("output")).unwrap().count(), 0);
+            assert_eq!(fs::read_dir(s.0.join("staging")).unwrap().count(), 0);
+        }
+    }
+    #[test]
+    fn disk_full_during_directory_sync_retains_reported_outputs() {
+        for nested in [false, true] {
+            let s = Scratch::new();
+            fs::write(s.0.join("source"), vec![0; 1024]).unwrap();
+            let name = if nested {
+                "folder/payload.bin"
+            } else {
+                "payload.bin"
+            };
+            let created = execute(Start {
+                action: Action::CreateZip {
+                    sources: vec![Source {
+                        path: s.path("source"),
+                        archive_name: name.into(),
+                    }],
+                    output_file: s.path("input"),
+                    method: Method::Store,
+                    encryption: Encryption::None,
+                },
+                limits: Limits::default(),
+            });
+            assert_eq!(terminal(&created).outcome, Outcome::Completed);
+            let request = start(&s, false, Limits::default().output);
+            let child = spawn(&s, request, Some("dir-sync-full"));
+            assert_eq!(wait(child.id()).0, 0);
+            let events = events(&s);
+            let t = terminal(&events);
+            assert_eq!(t.error, ErrorCode::DiskFull, "{events:?}");
+            assert_eq!(t.publication, Publication::Partial);
+            assert_eq!(t.created_count, 1);
+            assert_eq!(t.durability, Durability::Failed);
+            assert_eq!(t.cleanup, Cleanup::Complete);
+            assert_eq!(t.retained_partial_count, 0);
+            assert_eq!(fs::read_dir(s.0.join("staging")).unwrap().count(), 0);
+            assert_eq!(fs::read_dir(s.0.join("output")).unwrap().count(), 1);
+            if nested {
+                assert_eq!(fs::read_dir(s.0.join("output/folder")).unwrap().count(), 0);
+            } else {
+                assert_zero_file(&s.0.join("output/payload.bin"), 1024);
+            }
+        }
+    }
+    #[test]
+    fn permission_and_generic_write_errors_remain_io() {
+        for mode in ["create-denied", "write-io"] {
+            let s = Scratch::new();
+            generate(&s, "store", 1024 * 1024);
+            let request = start(&s, false, Limits::default().output);
+            let child = spawn(&s, request, Some(mode));
+            assert_eq!(wait(child.id()).0, 0);
+            let events = events(&s);
+            let t = terminal(&events);
+            assert_eq!(t.error, ErrorCode::Io, "{mode}: {events:?}");
+            assert_eq!(t.publication, Publication::None);
+            assert_eq!(t.retained_partial_count, 0);
+            assert_eq!(t.cleanup, Cleanup::Complete);
             assert_eq!(fs::read_dir(s.0.join("output")).unwrap().count(), 0);
             assert_eq!(fs::read_dir(s.0.join("staging")).unwrap().count(), 0);
         }

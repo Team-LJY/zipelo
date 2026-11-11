@@ -232,7 +232,7 @@ mod platform {
                     let n = CString::new(n).map_err(|_| ErrorCode::UnsafePath)?;
                     // 고정 부모 안에 새 전용 디렉터리를 생성함.
                     if unsafe { mkdirat(self.file.as_raw_fd(), n.as_ptr(), 0o700) } != 0 {
-                        return Err(ErrorCode::Io);
+                        return Err(crate::space::io_error(std::io::Error::last_os_error()));
                     }
                     let file = open(
                         &self.file,
@@ -289,11 +289,11 @@ mod platform {
             unsafe { unlinkat(self.file.as_raw_fd(), n.as_ptr(), 0) == 0 }
         }
         pub fn sync(&self) -> Durability {
-            if self.file.sync_all().is_ok() {
-                Durability::Synced
-            } else {
-                Durability::Failed
-            }
+            self.sync_checked().unwrap_or(Durability::Failed)
+        }
+        pub(crate) fn sync_checked(&self) -> Result<Durability> {
+            self.file.sync_all().map_err(crate::space::io_error)?;
+            Ok(Durability::Synced)
         }
     }
 }
@@ -361,7 +361,7 @@ mod platform {
                     if !create {
                         return Ok(None);
                     }
-                    std::fs::create_dir(&p).map_err(|_| ErrorCode::Io)?;
+                    std::fs::create_dir(&p).map_err(crate::space::io_error)?;
                 }
                 Err(_) => return Err(ErrorCode::Io),
             }
@@ -393,6 +393,9 @@ mod platform {
         }
         pub fn sync(&self) -> Durability {
             Durability::Unconfirmed
+        }
+        pub(crate) fn sync_checked(&self) -> Result<Durability> {
+            Ok(Durability::Unconfirmed)
         }
     }
 }
@@ -463,13 +466,16 @@ pub(crate) fn preflight_space(
     }
     Ok(())
 }
-pub fn directory(root: &Dir, name: &str) -> Result<(bool, Durability)> {
+pub fn directory(root: &Dir, name: &str) -> Result<(bool, Durability, Option<ErrorCode>)> {
     let (d, leaf) = parent(root, name, false)?.ok_or(ErrorCode::Io)?;
     if d.child(&leaf, false)?.is_some() {
-        return Ok((false, Durability::NotApplicable));
+        return Ok((false, Durability::NotApplicable, None));
     }
     d.child(&leaf, true)?.ok_or(ErrorCode::Io)?;
-    Ok((true, d.sync()))
+    Ok(match d.sync_checked() {
+        Ok(durability) => (true, durability, None),
+        Err(error) => (true, Durability::Failed, Some(error)),
+    })
 }
 pub struct Published {
     pub created: bool,
@@ -523,7 +529,7 @@ pub fn publish_reader(
             if e.kind() == std::io::ErrorKind::AlreadyExists {
                 ErrorCode::Conflict
             } else {
-                ErrorCode::Io
+                crate::space::io_error(e)
             }
         })?;
         let written = (|| {
@@ -537,29 +543,33 @@ pub fn publish_reader(
                 if n == 0 {
                     return Err(ErrorCode::Io);
                 }
-                file.write_all(&buffer[..n]).map_err(|_| ErrorCode::Io)?;
+                file.write_all(&buffer[..n])
+                    .map_err(crate::space::io_error)?;
                 remaining -= n as u64;
             }
-            file.sync_all().map_err(|_| ErrorCode::Io)
+            file.sync_all().map_err(crate::space::io_error)
         })();
-        let closed = close(file).map_err(|_| ErrorCode::Io);
+        let closed = close(file).map_err(crate::space::io_error);
         let mut finish = written.and(closed).and_then(|_| check(true));
         if finish.is_ok() {
             match dir.link(&temp, &leaf) {
                 Ok(()) => {
                     result.created = true;
-                    result.durability = dir.sync();
-                    if result.durability == Durability::Failed {
-                        finish = Err(ErrorCode::Io);
+                    match dir.sync_checked() {
+                        Ok(durability) => result.durability = durability,
+                        Err(error) => {
+                            result.durability = Durability::Failed;
+                            finish = Err(error);
+                        }
                     }
                 }
                 Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
                     finish = Err(ErrorCode::Conflict)
                 }
-                Err(_) => {
+                Err(error) => {
                     result.uncertain = true;
                     result.durability = Durability::Unconfirmed;
-                    finish = Err(ErrorCode::Io);
+                    finish = Err(crate::space::io_error(error));
                 }
             }
         }
@@ -574,9 +584,11 @@ pub fn publish_reader(
                 finish = Err(ErrorCode::Io);
             }
         }
-        if result.created && dir.sync() == Durability::Failed {
-            result.durability = Durability::Failed;
-            finish = Err(ErrorCode::Io);
+        if result.created {
+            if let Err(error) = dir.sync_checked() {
+                result.durability = Durability::Failed;
+                finish = Err(error);
+            }
         }
         finish
     })();

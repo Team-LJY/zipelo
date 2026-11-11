@@ -14,7 +14,7 @@ pub(crate) fn ensure(file: &File, bytes: u64) -> Result<()> {
     if bytes == 0 || bytes as u128 <= available(file)? {
         Ok(())
     } else {
-        Err(ErrorCode::Io)
+        Err(ErrorCode::DiskFull)
     }
 }
 
@@ -121,3 +121,20 @@ fn available(file: &File) -> Result<u128> {
     }
     Ok(free as u128)
 }
+
+// 공간 부족만 전용 오류로 변환함.
+pub(crate) fn io_error(error: std::io::Error) -> ErrorCode {
+    #[cfg(windows)]
+    if matches!(error.raw_os_error(), Some(39 | 112)) {
+        return ErrorCode::DiskFull;
+    }
+    if error.kind() == std::io::ErrorKind::StorageFull {
+        ErrorCode::DiskFull
+    } else {
+        ErrorCode::Io
+    }
+}
+
+#[cfg(test)]
+#[path = "../../../tests/rust-archive-worker/space_errors.rs"]
+mod tests;

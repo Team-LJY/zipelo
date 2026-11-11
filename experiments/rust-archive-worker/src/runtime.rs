@@ -379,7 +379,8 @@ impl<W: Write> Job<W> {
                     filesystem::preflight_space(&root, &output_sizes, None)?;
                     for name in dirs {
                         self.check()?;
-                        let (created, durability) = filesystem::directory(&root, &name)?;
+                        let (created, durability, sync_error) =
+                            filesystem::directory(&root, &name)?;
                         if created {
                             self.terminal.created_count += 1;
                             self.terminal.publication = Publication::Partial;
@@ -389,8 +390,8 @@ impl<W: Write> Job<W> {
                                 relative_name: name,
                                 disposition: Disposition::Created,
                             })?;
-                            if durability == Durability::Failed {
-                                return Err(ErrorCode::Io);
+                            if let Some(error) = sync_error {
+                                return Err(error);
                             }
                         }
                     }
@@ -612,6 +613,9 @@ pub fn serve<R: Read + Send + 'static, W: Write + Send + 'static>(
             ErrorCode::None => "취소됨",
             ErrorCode::UnsupportedFeature => "암호 또는 해당 기능 미지원",
             ErrorCode::SourceChanged => "파일이 변경됨. 다시 열어 목록을 확인해야 함",
+            ErrorCode::DiskFull => {
+                "디스크 여유 공간이 부족합니다. 공간을 확보한 뒤 다시 시도하세요"
+            }
             ErrorCode::Io => {
                 "파일을 읽거나 쓰지 못했습니다. 디스크 여유 공간과 접근 권한을 확인하세요"
             }
