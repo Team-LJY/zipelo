@@ -21,9 +21,10 @@ class LargeArchiveFixtureTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(dir=ROOT / "tests/ci") as scratch:
             directory = Path(scratch) / "corpus"
             manifest = GENERATOR.build(directory)
-            self.assertEqual(len(manifest["cases"]), 6)
+            self.assertEqual(len(manifest["cases"]), 11)
             self.assertFalse(manifest["worker_execution_verified"])
-            for name, artifact in manifest["artifacts"].items():
+            for name in ("boundary.zip", "boundary.tar.gz"):
+                artifact = manifest["artifacts"][name]
                 path = directory / name
                 self.assertEqual(GENERATOR.digest(path), artifact["sha256"])
                 if name.endswith(".zip"):
@@ -42,9 +43,24 @@ class LargeArchiveFixtureTests(unittest.TestCase):
                 self.assertGreater(decoded / artifact["archive_bytes"], 100)
             for case in manifest["cases"]:
                 decoded = manifest["artifacts"][case["file"]]["decoded_bytes"]
-                failed = decoded > case["limits"]["output"]
+                exceeded = GENERATOR.violations(manifest["artifacts"][case["file"]], case["limits"])
+                self.assertEqual(exceeded, case["violated_limits"])
+                self.assertLessEqual(len(exceeded), 1)
+                self.assertEqual(case["limits"]["input"], 2 ** 64 - 1)
+                failed = bool(exceeded)
                 self.assertEqual(case["expected"]["error"], "Limit" if failed else "None")
                 self.assertEqual(case["expected"]["created_count"], 0 if failed else 1)
+
+    def test_ratio_boundary_is_exact_and_below_output_limit(self):
+        with tempfile.TemporaryDirectory(dir=ROOT / "tests/ci") as scratch:
+            manifest = GENERATOR.build(Path(scratch) / "corpus")
+            for suffix, delta in (("below", -1), ("equal", 0), ("above", 1)):
+                name = "ratio-" + suffix + ".gz"
+                artifact = manifest["artifacts"][name]
+                self.assertEqual(artifact["decoded_bytes"] - 1000 * artifact["ratio_input_bytes"], delta)
+                self.assertLess(artifact["decoded_bytes"], GENERATOR.OUTPUT_LIMIT)
+                payload = gzip.decompress((Path(scratch) / "corpus" / name).read_bytes())
+                self.assertEqual(payload, bytes(artifact["payload_bytes"]))
 
     def test_generator_rejects_existing_destination_without_changes(self):
         with tempfile.TemporaryDirectory(dir=ROOT / "tests/ci") as scratch:

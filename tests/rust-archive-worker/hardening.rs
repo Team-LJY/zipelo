@@ -124,6 +124,31 @@ fn zip64_directory_and_descriptor_interoperate() {
     }
 }
 #[test]
+fn zip64_offset_only_keeps_32_bit_descriptors() {
+    for kind in ["offset64-descriptor-signed", "offset64-descriptor-unsigned"] {
+        let s = Scratch::new();
+        generate(&s, kind, 65536 + 19);
+        let events = execute(Start {
+            action: Action::List {
+                archive: s.path("input"),
+            },
+            limits: Limits::default(),
+        });
+        assert_eq!(
+            terminal(&events).outcome,
+            Outcome::Completed,
+            "{kind}: {events:?}"
+        );
+        let events = execute(start(&s, false, Limits::default().output));
+        assert_eq!(
+            terminal(&events).outcome,
+            Outcome::Completed,
+            "{kind}: {events:?}"
+        );
+        assert_zero_file(&s.0.join("output/payload.bin"), 65536 + 19);
+    }
+}
+#[test]
 fn untrusted_zip64_u64_sizes_and_offsets_never_allocate_or_publish() {
     for (kind, error) in [
         ("central64-size-overflow", ErrorCode::Limit),

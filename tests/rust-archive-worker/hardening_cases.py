@@ -18,7 +18,33 @@ spec.loader.exec_module(fixtures)
 def generate(directory, kind, size):
     directory = Path(directory)
     output = directory / "input"
-    if kind.startswith("central64"):
+    if kind.startswith("offset64-descriptor"):
+        class Pipe(io.BytesIO):
+            def seekable(self):
+                return False
+            def seek(self, *args):
+                raise io.UnsupportedOperation()
+        data = Pipe()
+        with zipfile.ZipFile(data, "w", compression=zipfile.ZIP_STORED) as archive:
+            archive.writestr(fixtures.NAME, bytes(size))
+        original = data.getvalue()
+        central_at = struct.unpack_from("<I", original, len(original) - 6)[0]
+        body = bytearray(original[:central_at])
+        struct.pack_into("<H", body, 4, 45)
+        central = bytearray(original[central_at:-22])
+        struct.pack_into("<H", central, 6, 45)
+        struct.pack_into("<H", central, 30, 12)
+        struct.pack_into("<I", central, 42, 0xffffffff)
+        central += struct.pack("<HHQ", 1, 8, 0)
+        if kind.endswith("unsigned"):
+            assert body[-16:-12] == b"PK\x07\x08"
+            body = body[:-16] + body[-12:]
+        end = bytearray(original[-22:])
+        struct.pack_into("<II", end, 12, len(central), len(body))
+        output.write_bytes(body + central + end)
+        with zipfile.ZipFile(output) as reference:
+            assert reference.read(fixtures.NAME) == bytes(size)
+    elif kind.startswith("central64"):
         data = io.BytesIO()
         with zipfile.ZipFile(data, "w", compression=zipfile.ZIP_STORED) as archive:
             archive.writestr(fixtures.NAME, bytes(size))

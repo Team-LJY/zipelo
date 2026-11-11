@@ -13,27 +13,30 @@ fn main() {
     let args: Vec<_> = std::env::args_os().skip(1).collect();
     assert_eq!(
         args.len(),
-        6,
-        "worker archive destination output_limit outcome payload_size"
+        9,
+        "worker archive destination input_limit output_limit entries outcome payload_size gzip"
     );
     let source = PathBuf::from(&args[1]);
     let destination = PathBuf::from(&args[2]);
     assert_eq!(fs::read_dir(&destination).unwrap().count(), 0);
-    let failed = args[4] == "Failed";
-    assert!(failed || args[4] == "Completed");
-    let output_limit = args[3].to_str().unwrap().parse().unwrap();
-    let payload_size: u64 = args[5].to_str().unwrap().parse().unwrap();
+    let failed = args[6] == "Failed";
+    assert!(failed || args[6] == "Completed");
+    let input_limit = args[3].to_str().unwrap().parse().unwrap();
+    let output_limit = args[4].to_str().unwrap().parse().unwrap();
+    let entries_limit = args[5].to_str().unwrap().parse().unwrap();
+    let payload_size: u64 = args[7].to_str().unwrap().parse().unwrap();
     let start = Start {
         action: Action::Extract {
             archive: NativePath::from_path(&source),
             destination: NativePath::from_path(&destination),
             selection: Selection::All,
             list_id: None,
-            gzip_output_name: None,
+            gzip_output_name: (args[8] == "Gzip").then(|| "payload.bin".to_owned()),
         },
         limits: Limits {
+            input: input_limit,
             output: output_limit,
-            ..Limits::default()
+            entries: entries_limit,
         },
     };
     let mut request = Vec::new();

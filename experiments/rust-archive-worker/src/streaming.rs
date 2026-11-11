@@ -471,7 +471,6 @@ fn zip(
         }
         let name = std::str::from_utf8(&raw).map_err(|_| ErrorCode::Integrity)?;
         let (aes, large) = extra(&bytes(source, cursor + 46 + nn, ne as usize)?)?;
-        let central_zip64 = large.is_some();
         let mut large = large.as_deref().unwrap_or(&[]);
         let size = large_value(u32at(&h, 24), &mut large)?;
         let compressed = large_value(u32at(&h, 20), &mut large)?;
@@ -542,9 +541,7 @@ fn zip(
         if local_aes != aes {
             return Err(ErrorCode::Integrity);
         }
-        let zip64 = central_zip64
-            || local_large.is_some()
-            || u32at(&h, 20) == u32::MAX
+        let size_zip64 = u32at(&h, 20) == u32::MAX
             || u32at(&h, 24) == u32::MAX
             || u32at(&lh, 18) == u32::MAX
             || u32at(&lh, 22) == u32::MAX;
@@ -561,7 +558,7 @@ fn zip(
             return Err(ErrorCode::Integrity);
         }
         if flags & 8 != 0 {
-            let descriptor_len = if zip64 { 20 } else { 12 };
+            let descriptor_len = if size_zip64 { 20 } else { 12 };
             if add(stop, descriptor_len)? > central {
                 return Err(ErrorCode::Integrity);
             }
@@ -573,7 +570,7 @@ fn zip(
                 return Err(ErrorCode::Integrity);
             }
             let d = bytes(source, stop, descriptor_len as usize)?;
-            let (pc, ps) = if zip64 {
+            let (pc, ps) = if size_zip64 {
                 (u64at(&d, 4), u64at(&d, 12))
             } else {
                 (u32at(&d, 4) as u64, u32at(&d, 8) as u64)
