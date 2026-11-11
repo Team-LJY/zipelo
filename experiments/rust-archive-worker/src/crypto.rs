@@ -295,3 +295,48 @@ impl Drop for Decryptor {
         }
     }
 }
+
+pub(crate) fn aes_encrypt_file(
+    input: &mut std::fs::File,
+    length: u64,
+    output: &mut std::fs::File,
+    password: &[u8],
+    check: &mut impl FnMut() -> Result<()>,
+) -> Result<()> {
+    use std::io::{Read, Write};
+    check()?;
+    let mut salt = [0; 16];
+    random(&mut salt)?;
+    let key = keys(password, &salt);
+    output.write_all(&salt).map_err(crate::space::io_error)?;
+    output
+        .write_all(&key[64..])
+        .map_err(crate::space::io_error)?;
+    let mut cipher = Decryptor::Aes {
+        cipher: Aes256::new_from_slice(&key[..32]).map_err(|_| ErrorCode::Internal)?,
+        counter: 1,
+        mask: [0; 16],
+        used: 16,
+    };
+    let mut mac =
+        <Sha1Mac as Mac>::new_from_slice(&key[32..64]).map_err(|_| ErrorCode::Internal)?;
+    let mut remaining = length;
+    let mut buffer = Zeroizing::new([0; 65536]);
+    while remaining != 0 {
+        check()?;
+        let n = remaining.min(buffer.len() as u64) as usize;
+        input
+            .read_exact(&mut buffer[..n])
+            .map_err(crate::space::io_error)?;
+        cipher.apply(&mut buffer[..n]);
+        mac.update(&buffer[..n]);
+        output
+            .write_all(&buffer[..n])
+            .map_err(crate::space::io_error)?;
+        remaining -= n as u64;
+    }
+    output
+        .write_all(&mac.finalize().into_bytes()[..10])
+        .map_err(crate::space::io_error)?;
+    Ok(())
+}

@@ -21,3 +21,7 @@ zlib-rs = { version = "=0.6.8", default-features = false, features = ["rust-allo
 [[test]]
 name = "archive_worker"
 path = "../../tests/rust-archive-worker/main.rs"
+
+# 대용량 시험의 CRC와 Deflate에도 배포판의 최적화를 적용함.
+[profile.dev.package.zlib-rs]
+opt-level = 3
