@@ -1,0 +1,140 @@
+{
+    "status": "frontend-conditions-addressed-codec-not-implemented",
+    "version": 1,
+    "scope": "One job per separately spawned Rust worker; shared std-only binary codec. Process separation is not an OS sandbox.",
+    "frame": {
+        "magic": "ZAW1",
+        "header_bytes": 32,
+        "fields_le": [
+            "magic[4]",
+            "version:u16=1",
+            "kind:u16",
+            "body_bytes:u32",
+            "reserved:u32=0",
+            "job_id:u64(nonzero)",
+            "sequence:u64"
+        ],
+        "sequence": "Independent direction counters start0 and increase exactly once; reject duplicates, gaps and wrap.",
+        "max_body_bytes": 1048576,
+        "max_frames_per_job": 1000000,
+        "payload": "Fixed enum tags and LE integers; length-prefix byte/string/vector values with allocation bounds; reject unknown tags and trailing fields."
+    },
+    "paths": {
+        "unix": "tag1 and exact native bytes",
+        "windows": "tag2 and UTF-16LE units",
+        "rules": "Platform encoding must match. Reject NUL and nonabsolute roots; Windows UNC/device paths unsupported. No lossy execution paths.",
+        "archive_names": "Separate validated UTF-8 relative names; entry IDs are opaque ordinal u32, not paths."
+    },
+    "commands": {
+        "Start": "Exactly once: List{archive}, Extract{archive,destination,selection:All|EntryIds{ids:[u32]},list_id:optional<ListId>,gzip_output_name:optional<UTF8>}, CreateZip{sources:[source_path,archive_name],output_file,method:Store|Deflate,encryption:None|Aes256}. App supplies job_id; caller can lower worker hard limits. Extract destination is always an absolute output directory. EntryIds requires list_id; All may supply list_id to bind extraction to a displayed list.",
+        "Password": "Matching outstanding challenge_id:u64 and max1024 UTF-8 bytes; never log, Debug, echo or persist secrets.",
+        "Cancel": "Matching header job_id and empty body; command header sequence identifies the request. See CancelAck. Request acceptance is separate from final outcome. EOF alone is not successful cancellation."
+    },
+    "events": {
+        "Accepted": "Action and capabilities; encryption capability remains false until implementation and verification are complete.",
+        "Entry": "entry_id, name, kind File|Directory|Link|Other, declared sizes, encrypted; ordinal u32 IDs belong to this List job only until its ListEnd token and Completed Terminal are confirmed. Metadata only, no CRC success claim.",
+        "ListEnd": "entry_count:u32 and list_id:ListId for a complete listing. Entry IDs are deterministic zero-based ordinals in archive traversal order. App associates this token with this job entries only after Completed Terminal, both stream EOFs and successful child wait/exit.",
+        "PasswordRequired": "challenge_id, attempt and purpose Decrypt|Encrypt; no secret diagnostics.",
+        "Progress": "stage Scan|Read|Decode|Write|Verify|Commit, processed_bytes,total_bytes:optional,completed_entries; observational only.",
+        "Output": "entry_id:optional, relative_name, disposition Created|PartialRetained|Removed|CommitUncertain; only this job outputs.",
+        "Terminal": {
+            "outcome": "Completed|Failed|Cancelled",
+            "error": "None|Integrity|UnsupportedFormat|UnsupportedFeature|WrongPassword|UnsafePath|Conflict|Limit|Io|Protocol|Internal|SourceChanged|InvalidRequest",
+            "publication": "None|Partial|Complete|Uncertain",
+            "created_count": "u64",
+            "retained_partial_count": "u64",
+            "durability": "NotApplicable|Synced|Unconfirmed|Failed",
+            "cleanup": "Complete|Failed|Unconfirmed",
+            "detail": "Bounded local description, not a substitute for typed errors."
+        },
+        "CancelAck": {
+            "request_sequence": "u64: echoed Cancel command header sequence; separate from this event header sequence.",
+            "status": "Requested|AlreadyRequested|TooLate|Finished",
+            "Requested": "Cancellation flag was latched for the first time before the job cancellation cutoff. Cooperative request acceptance; not a guarantee of Cancelled, no outputs or rollback.",
+            "AlreadyRequested": "Cancellation was already latched and the job can still observe it. The flag stays latched; no second request or reset.",
+            "TooLate": "Final job completion/commit decision has been sealed so cancellation can no longer influence the outcome; final outcome may still be Failed or publication Uncertain. Previously created entries alone do not make a multi-entry job TooLate.",
+            "Finished": "Business outcome has already been fixed, but Terminal has not yet been emitted. Does not establish success, EOF, child exit or reaping.",
+            "ordering": "Each well-formed Cancel consumed before Terminal is acknowledged once before Terminal. Terminal is the last worker protocol frame. A Cancel racing with Terminal/exit may remain unread and have no acknowledgement; app uses Terminal plus EOF and wait, never synthesizes a worker acknowledgement or successful cancellation."
+        }
+    },
+    "lifecycle": [
+        "Start once; no automatic retry or overwrite. Password/Cancel remain readable during work.",
+        "Parent drains both streams concurrently. Stdout is protocol only; stderr is bounded diagnostics without secrets.",
+        "Exactly one Terminal ends business results and is the final worker protocol frame; CancelAck can precede but never follow it. Worker exits0 after delivered terminal, including Failed/Cancelled. Malformed protocol or crash can exit nonzero without terminal.",
+        "App requires matching terminal, stdout/stderr EOF and owned child wait/exit before replacement/close. EOF/exit0 alone is not success.",
+        "Lost/killed worker preserves observed outputs; unobserved commit/cleanup stays uncertain, never synthetic Cancelled/rollback/absent output.",
+        "Cancellation retains completed outputs; cleanup removes only owned temporary files and reports any retained partial.",
+        "Completed is not OS sandboxing or release evidence. No security-setting changes."
+    ],
+    "safe_output": [
+        "Reject absolute/dotdot/drive/UNC/device/reserved/alternate-stream names and case/path collisions before writes.",
+        "Reject archive links/special entries on extraction. Do not follow output parent symlinks/reparse points.",
+        "Create output files exclusively; never truncate or write pre-existing files. GZip FNAME does not choose destination.",
+        "CRC/size/stream-end validation precedes committed output events; preserve commit/durability/cleanup distinctions."
+    ],
+    "pending": [
+        "Frontend draft acceptance was conditional on these three clarifications, now specified. Shared codec and app/worker integration remain unimplemented and unverified.",
+        "RustCrypto version selection, encryption implementation and verification; capability remains unavailable until complete.",
+        "Actual Linux and Windows build/runtime results; neither claimed yet."
+    ],
+    "performed": {
+        "implementation": false,
+        "cargo_build": false,
+        "tests": false,
+        "worker_runs": false,
+        "remote_branch_or_pr": false
+    },
+    "crypto": {
+        "rustcrypto_allowed": true,
+        "approval_message_id": "2966b0ad-a3e0-49b8-aef8-fb51c4e1c5a5",
+        "implementation_verified": false,
+        "policy": "Human approved pure Rust RustCrypto under MIT/Apache. No home-grown AES or password KDF; approval alone does not enable encryption capability."
+    },
+    "revision": 2,
+    "coordination": {
+        "frontend_message_id": "41a0e5a5-27d0-437f-805d-d39313082096",
+        "basis": "Frontend can use the draft subject to three clarifications. This revision specifies list identity, explicit raw GZip output naming and cancellation acknowledgement. It does not claim implementation or runtime verification."
+    },
+    "list_identity": {
+        "ListId": {
+            "catalog_version": "u16=1; reject unsupported versions without remapping entry IDs.",
+            "format": "ZIP|TAR|GZIP|TAR_GZIP; detected parser mode, not the filename extension.",
+            "source_object": "Tagged native identity from the opened source handle: Unix{device:u64,inode:u64} or Windows{volume_serial:u64,file_id:[u8;16]}. Platform must match; unavailable reliable identity returns UnsupportedFeature.",
+            "archive_bytes": "u64: exact complete compressed/source byte length, bounded by worker limits.",
+            "archive_sha256": "[u8;32]: SHA-256 of every source byte, using the permitted RustCrypto implementation; not CRC or path/size/mtime alone."
+        },
+        "capture": [
+            "Open the regular source file once and keep its handle. Copy through bounded reads into a private job-owned snapshot while computing full SHA-256. Check source handle identity, length and modification metadata before/after capture; detected mutation rejects the capture. Check the named source still resolves to the same object at the validation boundary.",
+            "The completed private snapshot is the sole input to parsing and decoding for this job; never hash one file and later reopen the path to decode. Snapshot storage is bounded, exclusively owned and not writable through attacker-selected names. Failure to establish a stable private snapshot fails before creating destination outputs.",
+            "List builds the deterministic catalog from that snapshot and returns its ListId only with successful ListEnd. A failed/cancelled/truncated listing provides no reusable selection token."
+        ],
+        "extract_validation": [
+            "Treat every supplied ListId and entry ID as untrusted. EntryIds without ListId, empty/duplicate IDs or IDs outside the recomputed catalog fail InvalidRequest before destination output creation.",
+            "Capture the Extract source into a new private snapshot, recompute identity/length/SHA-256/format/catalog version and compare every ListId field before creating any destination output. A mismatch returns Terminal Failed/SourceChanged with publication None and zero created/retained outputs. The app invalidates the displayed selection and asks the user to reopen/list; no automatic extraction retry or ordinal remapping.",
+            "When All supplies ListId, apply the same comparison. All without ListId means extract the current captured archive without claiming it matches any earlier listing.",
+            "EntryIds refer to the recomputed catalog ordinals, never names supplied by the app; extract the selected members in archive traversal order. Link/special-entry and output path guards remain mandatory after identity validation."
+        ],
+        "boundary": "This binds extraction to verified snapshot bytes and observed native identity at capture/validation time. It is not authorization, a signed token, an exclusive filesystem lock or a promise to detect every external edit after capture or a byte-identical change-and-restore. Later source changes cannot change the bytes decoded from the private snapshot."
+    },
+    "gzip_output": {
+        "destination": "Always the output directory, never a full output filename.",
+        "gzip_output_name": "Required Some(nonempty validated UTF-8 single leaf filename) for raw GZIP extraction, for both All and EntryIds. Reject absolute/drive/UNC/device/alternate-stream/reserved names, separators, dot/dotdot and invalid leaf names before creating outputs. Missing/invalid value returns InvalidRequest; no implicit basename or FNAME fallback.",
+        "other_formats": "Must be None for ZIP, TAR and TAR_GZIP; reject Some as InvalidRequest rather than silently ignoring it. TAR_GZIP uses validated inner TAR member names.",
+        "gzip_catalog": "Raw GZIP is one logical stream entry with entry_id0. Its listed display name is not an output path; entry selection still requires ListId.",
+        "publication": "Resolve the supplied leaf under destination using the same no-follow and exclusive-create guards. Existing destination files return Conflict; never overwrite, rename to an automatic alternative or retry."
+    },
+    "design_references": [
+        {
+            "url": "https://docs.rs/sha2/latest/sha2/",
+            "purpose": "RustCrypto SHA-256 implementation documentation; dependency version and advisories still require selection-time verification."
+        },
+        {
+            "url": "https://learn.microsoft.com/en-us/windows/win32/api/winbase/ns-winbase-file_id_info",
+            "purpose": "Native Windows opened-file identity fields."
+        },
+        {
+            "url": "https://man7.org/linux/man-pages/man2/stat.2.html",
+            "purpose": "Source metadata from the open file descriptor rather than a later path reopen."
+        }
+    ]
+}
