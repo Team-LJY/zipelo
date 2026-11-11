@@ -2,7 +2,7 @@
 
 별도 프로세스의 stdin/stdout으로 revision 2 요청을 처리합니다. 제품 앱 연결과 OS sandbox를 제공하는 단계는 아닙니다. 암호 기능은 capability=true이며 ZipCrypto 해제, WinZip AES-256 AE-1/AE-2 해제와 AE-2 생성을 지원합니다.
 
-- ZIP32 Store/Deflate 목록, 해제, 생성, 기본 TAR/USTAR, GZ, TAR.GZ 해제를 지원합니다. GZ 연결 멤버는 하나의 논리 스트림으로 합칩니다. ZIP64, 다중 볼륨, 비 UTF-8 ZIP 이름, PAX/GNU 확장과 특수 항목 해제는 미지원입니다.
+- ZIP32 Store/Deflate 목록, 해제, 생성, 기본 TAR/USTAR, GZ, TAR.GZ, 비암호화 7z 해제를 지원합니다. GZ 연결 멤버는 하나의 논리 스트림으로 합칩니다. ZIP64, 다중 볼륨, 비 UTF-8 ZIP 이름, PAX/GNU 확장과 특수 항목 해제는 미지원입니다.
 - 입력은 최대 64 MiB, 해독/생성 출력은 최대 128 MiB, 항목은 최대 10,000개입니다. 요청 limits는 이 값을 낮출 수 있습니다. 입력과 검증 완료 payload를 메모리에 보관해 모든 선택 출력의 CRC, 크기와 경로를 쓰기 전에 검사합니다. checkpoint마다 취소와 300초 한도를 확인합니다.
 - 경로 깊이는 64개 구성 요소, 이름/출력 계획 메타데이터 예산은 8 MiB, 출력 계획 노드는 32,768개로 제한합니다. 이름 복제와 인덱스 비용을 보수적으로 계산해 할당 전에 Limit으로 거부합니다.
 - GZip 내부 형식은 완전한 USTAR magic이 있을 때만 TAR로 판별합니다. magic이 없는 영값 데이터는 길이와 무관하게 raw GZip으로 유지하며 명시 출력명이 필요합니다.
@@ -10,6 +10,17 @@
 - 출력 폴더는 미리 존재해야 합니다. Linux는 소유 UID가 같고 group/other 쓰기가 없는 폴더만 허용합니다. openat/O_NOFOLLOW로 디렉터리를 고정하고 새 임시 파일을 배타적으로 만든 뒤 hard link로 게시합니다. 기존 파일과 링크를 덮어쓰지 않습니다. Windows는 reparse point를 거부하고 부모 디렉터리 핸들에서 delete sharing을 제한합니다.
 - 파일 sync/close는 게시 전에 확인합니다. 게시 후 부모 sync와 임시 파일 정리 실패는 게시 사실과 따로 보고합니다. Windows의 디렉터리 내구성은 Unconfirmed입니다. hard link의 결과가 불명확하면 CommitUncertain/Uncertain이며 자동 재시도나 rollback은 없습니다.
 - 생성한 디렉터리와 게시한 파일은 취소 시 유지하고 Output으로 보고합니다. 실패한 임시 파일 정리는 실제 임시 이름과 PartialRetained로 보고합니다. 실파일 close/sync/link 장애 주입과 Windows 실기 검증은 아직 수행하지 않았습니다.
+
+## 7z 해제
+
+비암호화 7z의 단일 입력/출력 coder인 Copy, LZMA와 LZMA2를 Rust 코드로 해독합니다. solid substream, 빈 파일/디렉터리, UTF-16LE 이름과 한 단계 압축 헤더를 처리합니다. 추가 라이브러리나 제품 외부 명령을 사용하지 않습니다. 형식 근거는 [7z 명세](https://www.7-zip.org/7z.html)와 [LZMA SDK 명세 안내](https://www.7-zip.org/sdk.html)입니다.
+
+- 시작 헤더/다음 헤더 CRC, packed/folder/substream CRC가 있을 때 해당 CRC와 크기, 스트림의 끝을 검증합니다. 경로, 충돌과 모든 선택 내용 검증이 끝난 뒤 기존 안전 게시 경로로 넘깁니다. 목록은 데이터 CRC 검증 성공을 뜻하지 않습니다.
+- 입력/출력/항목/이름의 기존 한도를 적용합니다. 압축 해제된 헤더도 최대 8 MiB이고 헤더 중첩은 한 단계입니다. 사전은 최대 64 MiB, LZMA의 lc+lp는 최대 4입니다. 해독 중 checkpoint에서 취소와 시간 한도를 확인합니다.
+- 암호화 7z, 다중 coder 필터 체인(BCJ/BCJ2/Delta 등), PPMd/BZip2, 분할/SFX, external metadata, additional streams와 anti 항목은 미지원입니다. 링크, reparse point와 특수 Unix 항목은 거부합니다. 지원하지 않는 구조를 성공으로 처리하지 않습니다.
+- solid 그룹의 압축 크기는 첫 substream에만 기록하고 나머지는 0으로 표시합니다. 각 파일의 정확한 비압축 크기는 유지합니다.
+- 합성 표본은 Python 표준 lzma로 생성합니다. 별도로 시스템 libarchive가 만든 LZMA1/LZMA2 표본을 해제하고, 합성 표본도 libarchive 읽기 API로 검사합니다. libarchive는 Linux 시험의 독립 참조 도구이며 제품 의존성이 아닙니다. 시험 도구와 표본은 tests/rust-archive-worker 아래에 있습니다.
+- 히나타 님과 합의한 확장은 Format::SevenZip=4뿐입니다. 기존 값 0~3과 필드, 메시지 tag, 프레임 version은 유지합니다. 구버전 앱은 값 4를 거부하므로 앱 Format과 양방향 변환도 갱신해야 합니다. 이 백엔드 변경은 frontend 코드를 수정하지 않습니다.
 
 ## 암호 ZIP
 

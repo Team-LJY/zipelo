@@ -61,3 +61,9 @@ ZipCrypto와 AES의 Store/Deflate 목록 및 해제를 실제 화면 위젯과 �
 원본이 보존되며 Terminal, 양쪽 EOF 및 child wait 후 연결이 정리되는지 확인함.
 암호 표시를 가리고 재요청, 취소 및 창 해제 때 앱이 소유한 입력 버퍼를 지움.
 Windows 실행이나 네이티브 OS 창 입력 자동화 검증은 포함하지 않음.
+
+7z 앱 연동은 revision 2의 기존 Format 값 0~3을 유지하고 SevenZip 값 4를 추가함.
+formats.rs는 전체 ListEnd 프레임을 고정 바이트와 비교하고 Unix/Windows 식별자가
+목록 응답과 해제 요청 사이에서 보존되는지 확인함. 화면 흐름 시험은 PR69의 LZMA와
+LZMA2 표본을 실제 작업자로 열고, 받은 ListId로 풀어 원본 바이트를 확인함.
+구버전 앱은 새 형식 값을 해석할 수 없으므로 앱과 작업자를 함께 갱신해야 함.

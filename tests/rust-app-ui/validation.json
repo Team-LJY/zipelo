@@ -1,12 +1,12 @@
 {
     "command": "python3 tests/ci/run_rust.py local",
     "platform": "linux-desktop-2",
-    "base_remote_main": "4160fcc4e80070b6ab9ea50c78705c0458b2384a",
-    "local_baseline_head": "1c1a30f8beb3658242e4c856057c70b1e4d649dd",
-    "source_state": "Tested committed integration source. Only this evidence JSON was updated after the full runner completed; hashes identify the tested code and fixtures.",
+    "base_remote_main": "e497fac4309018a2824b2f296a366a648f4429bf",
+    "local_baseline_head": "a1f6e48dfbff07d853a590a610d8673e72075661",
+    "source_state": "승인된 암호창과 main의 7z 구현을 동작 변경 없이 병합한 커밋에서 전체 검증함. 검증 후 이 증거 JSON만 갱신함.",
     "linux_build_crates": 19,
     "linux_test_targets": 19,
-    "rust_tests_passed": 893,
+    "rust_tests_passed": 906,
     "new_archive_ui_tests_passed": 23,
     "windows_cross_build_crates": 19,
     "windows_runtime_tested": false,
@@ -25,11 +25,11 @@
         },
         {
             "path": "experiments/rust-ui-memory-app/Cargo.toml",
-            "sha256": "dd23a3958123c9271f8201793d655b99b28f055cfd94ac22288ee56408d093a4"
+            "sha256": "d2ba4202c0920af4b090fb59245f92b59c14f0590930ca4c6d8874d77057a577"
         },
         {
             "path": "experiments/rust-ui-memory-app/src/archive_process.rs",
-            "sha256": "52cebb8d1ec237dfbf56d2bb4449d6fce26dc66c594767ac086a9a6577fe2767"
+            "sha256": "a75457134618ba7c8b0e8ee7800e14ec5c77fadac5c62fdac2ccf1fa663bd142"
         },
         {
             "path": "experiments/rust-ui-memory-app/src/archive_screen.rs",
@@ -37,7 +37,7 @@
         },
         {
             "path": "experiments/rust-ui-memory-app/src/archive_ui.rs",
-            "sha256": "ef7d8c6f2b51a899a0240358234de6f81483c2e056a9847cb0b7a553a3dce8f2"
+            "sha256": "438beb387c57c6b0da206066f76a1d7349dae95eb9f33be006338af7cf1ac2ef"
         },
         {
             "path": "experiments/rust-ui-memory-app/src/desktop.rs",
@@ -61,7 +61,7 @@
         },
         {
             "path": "tests/rust-app-real-worker/README.md",
-            "sha256": "3273a5530087fd9f8b6021eaeec6e9e30ca91b77b1b18aceb5673612f1f6a9bf"
+            "sha256": "9924a1dbb6b687c3c08ec9785835ae73628867bbfa5deec8db0f8504f8de859a"
         },
         {
             "path": "tests/rust-app-real-worker/fixtures/sample.tar.gz",
@@ -73,7 +73,7 @@
         },
         {
             "path": "tests/rust-app-real-worker/flows.rs",
-            "sha256": "06bffea50c485edfb10a2dfa9158d02159da11efbdf4a5183f76ced96f86a9c1"
+            "sha256": "bda6f27f50b8a332444de63463f3194b3ee75a2a897a495cc384d55e40f7279f"
         },
         {
             "path": "tests/rust-app-real-worker/generate.py",
@@ -102,6 +102,10 @@
         {
             "path": "tests/rust-app-real-worker/password_flows.rs",
             "sha256": "2617f66bc85a889aab1d2c98466b67e949628f830d47a578db2635474ccb7898"
+        },
+        {
+            "path": "tests/rust-app-real-worker/formats.rs",
+            "sha256": "50532a4ee144ab533a43e1fefa5d1baf1131638892b585c20c9d4715a904e006"
         }
     ],
     "review_regressions": [
@@ -120,9 +124,14 @@
     ],
     "before_review_fix": "Earlier PR62 fixes reproduced 3 failures before repair. Integration tests additionally reproduced normal channel shutdown and late-cancel races before repair. PR68 review race reproduced with the new test before repair; all 100 iterations passed after repair. PR72 수정 전 동일 화면 회귀 시험의 빈 암호 뒤 취소, 초과 길이 뒤 취소, 오류 뒤 창 닫기 3개가 confirmed assertion에서 실패했고 수정 뒤 통과함.",
     "approved_ui_head": "423a7c80c9d7182e07d29adee03a97d09a19b11f",
-    "tested_local_head": "fd4ad94bb5f0046831037b742f3a25a8735431ae",
-    "real_worker_tests_passed": 20,
+    "tested_local_head": "dfb1e3848fae714d3716f14000f3a4ae434f98d3",
+    "real_worker_tests_passed": 21,
     "runner_tests_passed": 23,
     "password_screen_tests_passed": 10,
-    "password_flow": "Actual widget input and real worker validated ZipCrypto, AES-256 AE-1/AE-2 Store/Deflate extraction, retry, three failures, cancel, UTF-8 byte limits and cold-start AES ZIP creation/reopen/extraction."
+    "password_flow": "Actual widget input and real worker validated ZipCrypto, AES-256 AE-1/AE-2 Store/Deflate extraction, retry, three failures, cancel, UTF-8 byte limits and cold-start AES ZIP creation/reopen/extraction.",
+    "format_contract_tests_passed": 2,
+    "merge_heads": {
+        "password_pr72": "ff86e6ddb7100781c4d3dc0dd388d10e86d2025c",
+        "main": "e497fac4309018a2824b2f296a366a648f4429bf"
+    }
 }
