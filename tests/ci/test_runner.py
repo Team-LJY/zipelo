@@ -1,9 +1,10 @@
 from contextlib import redirect_stdout
 from io import StringIO
 import json
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 import tempfile
 import subprocess
+import sys
 import unittest
 from unittest.mock import patch
 
@@ -90,6 +91,8 @@ class RunnerTests(unittest.TestCase):
                 report_path = root / f"tests/ci/{phase}-results.json"
                 with (
                     patch.object(run_rust, "ROOT", root),
+                    patch.object(run_rust, "prepare_tools"),
+                    patch.object(run_rust, "prepare_local_tools"),
                     patch.object(run_rust.sys, "argv", ["run_rust.py", phase]),
                     patch.object(run_rust.sys, "platform", platform),
                     patch.dict(run_rust.os.environ, {"GITHUB_STEP_SUMMARY": ""}),
@@ -119,6 +122,101 @@ class RunnerTests(unittest.TestCase):
                 }])
                 self.assertFalse(failed["windows_runtime_tested"])
                 execute.assert_called_once()
+
+    @unittest.skipUnless(sys.platform == "linux", "Linux MinGW 실행 파일 탐색 시험임")
+    def test_linked_worktree_finds_setup_tools_without_path_export(self):
+        with tempfile.TemporaryDirectory(dir=run_rust.ROOT / "tests/ci") as directory:
+            base = Path(directory)
+            root = base / "linked"
+            tools = base / "tests/ci/tools"
+            binaries = tools / "mingw/usr/bin"
+            binaries.mkdir(parents=True)
+            for name in ("gcc", "g++"):
+                executable = binaries / f"x86_64-w64-mingw32-{name}-posix"
+                executable.write_text("#!/bin/sh\nexit 0\n")
+                executable.chmod(0o700)
+            rustup = tools / "rustup"
+            (rustup / "toolchains/1.99.1-x86_64-unknown-linux-gnu").mkdir(parents=True)
+            with (
+                patch.dict(run_rust.os.environ, {"PATH": ""}, clear=True),
+                patch.object(run_rust.subprocess, "check_output", return_value=str(base / ".git")),
+            ):
+                run_rust.prepare_tools(root)
+                run_rust.prepare_cross_build()
+                self.assertEqual(run_rust.os.environ["RUSTUP_HOME"], str(rustup))
+                self.assertEqual(
+                    run_rust.os.environ["CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER"],
+                    str(binaries / "x86_64-w64-mingw32-gcc-posix"),
+                )
+
+    def test_local_bootstraps_missing_cross_tools_and_reloads_paths(self):
+        for root in (Path("/repo"), PurePosixPath("/repo"), PureWindowsPath("C:/repo")):
+            with self.subTest(root=root):
+                with (
+                    patch.object(run_rust, "prepare_cross_build", side_effect=[ValueError("missing"), None]) as detect,
+                    patch.object(run_rust.subprocess, "run") as setup,
+                    patch.object(run_rust, "prepare_tools") as reload,
+                ):
+                    run_rust.prepare_local_tools(root)
+                setup.assert_called_once_with(
+                    ["bash", str(root / "tests/ci/setup_windows.sh")], cwd=root, check=True,
+                )
+                reload.assert_called_once_with(root)
+                self.assertEqual(detect.call_count, 2)
+
+    def test_existing_cross_tools_do_not_trigger_downloads(self):
+        with (
+            patch.object(run_rust, "prepare_cross_build"),
+            patch.object(run_rust.subprocess, "run") as setup,
+        ):
+            run_rust.prepare_local_tools(Path("/repo"))
+        setup.assert_not_called()
+
+    def test_explicit_tools_directory_does_not_fall_back_to_other_worktree(self):
+        with (
+            patch.dict(run_rust.os.environ, {"PATH": "", "ZIPELO_CI_TOOLS": "/missing"}, clear=True),
+            patch.object(run_rust.subprocess, "check_output") as git,
+        ):
+            run_rust.prepare_tools(Path("/repo"))
+            git.assert_not_called()
+            with self.assertRaisesRegex(ValueError, "setup_windows.sh"):
+                run_rust.prepare_cross_build()
+
+    @unittest.skipUnless(sys.platform == "linux", "Linux 파일시스템과 소유권 검사 시험임")
+    def test_filesystem_skip_is_limited_to_publication_test_crates(self):
+        with tempfile.TemporaryDirectory(dir=run_rust.ROOT / "tests/ci") as directory:
+            root = Path(directory)
+            for name in run_rust.FILE_FIXTURES:
+                (root / "tests" / name).mkdir(parents=True)
+            paths = [
+                root / "tests/rust-file-publication/Cargo.toml",
+                root / "tests/rust-gzip-file-job/Cargo.toml",
+                root / "tests/rust-file-snapshot/Cargo.toml",
+                root / "experiments/rust-file-publication/Cargo.toml",
+            ]
+            with (
+                patch.object(run_rust, "manifests", return_value=paths),
+                patch.object(run_rust.subprocess, "check_output", return_value="1021994\n"),
+                patch.object(run_rust.subprocess, "run", return_value=subprocess.CompletedProcess([], 0)) as cargo,
+            ):
+                results = run_rust.run(root, "test")
+                self.assertEqual([row["status"] for row in results], [
+                    "not-applicable", "not-applicable", "passed", "passed",
+                ])
+                self.assertIn("0x1021994", results[0]["reason"])
+                self.assertEqual(cargo.call_count, 2)
+                cargo.reset_mock()
+                results = run_rust.run(root, "cross-build")
+                self.assertTrue(all(row["status"] == "passed" for row in results))
+                self.assertEqual(cargo.call_count, 4)
+
+    def test_unknown_filesystem_probe_error_is_failure(self):
+        with (
+            patch.object(run_rust, "prepare_fixtures", side_effect=subprocess.CalledProcessError(1, "stat")),
+            patch.object(run_rust.sys, "platform", "linux"),
+        ):
+            results = run_rust.execute_phases(run_rust.ROOT, ["test"])
+        self.assertEqual(results[0]["status"], "failed")
 
     def test_cargo_contract(self):
         args = run_rust.command(Path("tests/example/Cargo.toml"), "test")
