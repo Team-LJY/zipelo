@@ -61,6 +61,21 @@ class RunnerTests(unittest.TestCase):
                 )
                 self.assertEqual((run_rust.ROOT / name).read_bytes(), expected)
 
+    def test_cross_build_never_executes_tests(self):
+        args = run_rust.command(Path("tests/example/Cargo.toml"), "cross-build")
+        self.assertEqual(args[2], "build")
+        self.assertIn(run_rust.WINDOWS_TARGET, args)
+        self.assertNotIn("--test-threads=1", args)
+
+    def test_preflight_failure_is_reported_without_hiding_other_phase(self):
+        with (
+            patch.object(run_rust, "prepare_cross_build", side_effect=ValueError("missing linker")),
+            patch.object(run_rust, "run", return_value=[{"manifest": "sample", "status": "passed"}]),
+        ):
+            results = run_rust.execute_phases(Path("/repo"), ["build", "cross-build"])
+        self.assertEqual([row["status"] for row in results], ["passed", "failed"])
+        self.assertEqual(results[1]["reason"], "missing linker")
+
     def test_cargo_contract(self):
         args = run_rust.command(Path("tests/example/Cargo.toml"), "test")
         self.assertIn("--locked", args)

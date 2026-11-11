@@ -2,6 +2,7 @@ import argparse
 import json
 import os
 from pathlib import Path
+import shutil
 import stat
 import subprocess
 import sys
@@ -9,6 +10,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[2]
 TOOLCHAIN = "+1.99.1"
+WINDOWS_TARGET = "x86_64-pc-windows-gnu"
 LINUX_ONLY = {
     "rust-file-publication",
     "rust-file-snapshot",
@@ -33,19 +35,24 @@ def command(manifest, phase):
     arguments = [
         "cargo",
         TOOLCHAIN,
-        phase,
+        "build" if phase == "cross-build" else phase,
         "--manifest-path",
         str(manifest),
         "--locked",
         "--all-targets",
         "--all-features",
     ]
+    if phase == "cross-build":
+        arguments += ["--target", WINDOWS_TARGET]
     if phase == "test":
         arguments += ["--", "--test-threads=1"]
     return arguments
 
 
 def prepare_fixtures(root):
+    socket = root / "tests/rust-file-publication/runs/case-2147483647-99/parent/output"
+    if len(os.fsencode(socket)) >= 108:
+        raise ValueError("Unix 소켓 시험을 위해 더 짧은 checkout 경로가 필요함")
     for name in sorted(FILE_FIXTURES):
         path = root / "tests" / name / "runs"
         if not path.exists() and not path.is_symlink():
@@ -92,23 +99,87 @@ def run(root, phase):
     return results
 
 
+def prepare_cross_build():
+    for variable, names in (
+        ("CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER", [
+            "x86_64-w64-mingw32-gcc", "x86_64-w64-mingw32-gcc-posix",
+        ]),
+        ("CC_x86_64_pc_windows_gnu", [
+            "x86_64-w64-mingw32-gcc", "x86_64-w64-mingw32-gcc-posix",
+        ]),
+        ("CXX_x86_64_pc_windows_gnu", [
+            "x86_64-w64-mingw32-g++", "x86_64-w64-mingw32-g++-posix",
+        ]),
+    ):
+        candidate = os.environ.get(variable)
+        if not candidate:
+            candidate = next((shutil.which(name) for name in names if shutil.which(name)), None)
+        if not candidate or not shutil.which(candidate):
+            raise ValueError(f"Windows 교차 컴파일 도구가 없음: {variable}")
+        os.environ[variable] = candidate
+
+
+def execute_phases(root, phases):
+    results = []
+    for phase in phases:
+        try:
+            if phase == "cross-build":
+                prepare_cross_build()
+            rows = run(root, phase)
+        except (OSError, ValueError) as error:
+            rows = [{"manifest": "preflight", "status": "failed", "reason": str(error)}]
+        for row in rows:
+            results.append({"phase": phase, **row})
+    return results
+
+
 def main():
-    parser = argparse.ArgumentParser(description="Rust crate 전체 빌드와 tests/ 회귀 실행")
-    parser.add_argument("phase", choices=["build", "test"])
+    parser = argparse.ArgumentParser(description="로컬 Linux 시험과 Windows 교차 빌드")
+    parser.add_argument("phase", choices=["local", "build", "test", "cross-build"])
     args = parser.parse_args()
-    os.environ.setdefault("CARGO_BUILD_JOBS", "1")
+    if args.phase == "local" and sys.platform != "linux":
+        parser.error("local 모드는 Linux에서 실행해야 함")
+    tools = Path(os.environ.get("ZIPELO_CI_TOOLS", ROOT / "tests/ci/tools")).resolve()
+    if (tools / "rustup/toolchains/1.99.1-x86_64-unknown-linux-gnu").is_dir():
+        os.environ.setdefault("RUSTUP_HOME", str(tools / "rustup"))
+    if (tools / "mingw/usr/bin").is_dir():
+        os.environ["PATH"] = str(tools / "mingw/usr/bin") + os.pathsep + os.environ["PATH"]
+    os.environ.setdefault("CARGO_BUILD_JOBS", "2")
     os.environ.setdefault("CARGO_TARGET_DIR", str(ROOT / "tests/ci/target"))
-    results = run(ROOT, args.phase)
-    (ROOT / f"tests/ci/{args.phase}-results.json").write_text(
-        json.dumps(results, ensure_ascii=False, indent=4) + "\n", encoding="utf-8"
+    phases = ["build", "test", "cross-build"] if args.phase == "local" else [args.phase]
+    checks = subprocess.run(
+        [sys.executable, "-m", "unittest", "discover", "-s", "tests/ci", "-p", "test_*.py"],
+        cwd=ROOT, check=False,
     )
+    if checks.returncode != 0:
+        return checks.returncode
+    results = execute_phases(ROOT, phases)
+    report = {
+        "head": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
+        "platform": sys.platform,
+        "windows_cross_target": WINDOWS_TARGET if "cross-build" in phases else None,
+        "windows_runtime_tested": sys.platform == "win32" and "test" in phases,
+        "results": results,
+    }
+    (ROOT / f"tests/ci/{args.phase}-results.json").write_text(
+        json.dumps(report, ensure_ascii=False, indent=4) + "\n", encoding="utf-8"
+    )
+    lines = []
+    for phase in phases:
+        selected = [row for row in results if row["phase"] == phase]
+        counts = {status: sum(row["status"] == status for row in selected)
+                  for status in ("passed", "failed", "not-applicable")}
+        lines.append(f"{phase}: " + ", ".join(f"{key}={value}" for key, value in counts.items()))
+    for row in results:
+        if row["status"] == "failed":
+            lines.append(f"FAIL {row['phase']} {row['manifest']}: {row.get('reason', row.get('exit_code'))}")
+    if "cross-build" in phases:
+        lines.append("Windows: cross-build only; runtime tests not executed")
+    print("\n".join(lines), flush=True)
     summary = os.environ.get("GITHUB_STEP_SUMMARY")
     if summary:
         with open(summary, "a", encoding="utf-8") as output:
-            output.write(f"\nRust {args.phase} ({sys.platform})\n\n")
-            for result in results:
-                output.write(f"- {result['manifest']}: {result['status']}\n")
-            output.write("\nGUI harness는 컴파일만 확인하며 실제 화면 시나리오는 실행하지 않음.\n")
+            output.write("\n" + "\n\n".join(lines) + "\n")
     return int(any(result["status"] == "failed" for result in results))
 
 

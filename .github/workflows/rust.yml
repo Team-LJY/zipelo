@@ -1,9 +1,6 @@
-name: Rust build and tests
+name: Manual Windows verification
 
 on:
-    pull_request:
-    push:
-        branches: [main]
     workflow_dispatch:
 
 permissions:
@@ -15,13 +12,9 @@ concurrency:
 
 jobs:
     rust:
-        name: Rust (${{ matrix.os }})
-        runs-on: ${{ matrix.os }}
+        name: Windows build and tests
+        runs-on: windows-latest
         timeout-minutes: 45
-        strategy:
-            fail-fast: false
-            matrix:
-                os: [ubuntu-latest, windows-latest]
         env:
             CARGO_TERM_COLOR: always
             CARGO_BUILD_JOBS: 1
@@ -40,11 +33,6 @@ jobs:
                   python-version: '3.13'
             - name: Install Rust
               run: rustup toolchain install 1.99.1 --profile minimal --no-self-update
-            - name: Install Linux GUI build dependencies and test font
-              if: runner.os == 'Linux'
-              run: |
-                  sudo apt-get update
-                  sudo apt-get install -y pkg-config libxkbcommon-dev libwayland-dev libgl1-mesa-dev fonts-noto-cjk
             - name: Check CI runner
               run: python -m unittest discover -s tests/ci -p 'test_*.py' -v
             - name: Build every Rust crate and test harness
