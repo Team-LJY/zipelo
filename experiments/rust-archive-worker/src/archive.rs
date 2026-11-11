@@ -1,8 +1,39 @@
 use crate::protocol::*;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use zlib_rs::{Deflate, DeflateFlush, Inflate, InflateFlush, Status, crc32::crc32};
 
 type Result<T> = std::result::Result<T, ErrorCode>;
+pub const MAX_PATH_DEPTH: usize = 64;
+pub const MAX_METADATA_BYTES: usize = 8 * 1024 * 1024;
+pub const MAX_OUTPUT_NODES: usize = 32_768;
+
+#[derive(Default)]
+struct MetadataBudget {
+    bytes: usize,
+    nodes: usize,
+}
+impl MetadataBudget {
+    fn charge(&mut self, name: &str) -> Result<()> {
+        // 이름 복제와 인덱스 노드 비용을 할당 전에 계산함.
+        let cost = name
+            .len()
+            .checked_mul(4)
+            .and_then(|n| n.checked_add(256))
+            .ok_or(ErrorCode::Limit)?;
+        self.bytes = self
+            .bytes
+            .checked_add(cost)
+            .filter(|n| *n <= MAX_METADATA_BYTES)
+            .ok_or(ErrorCode::Limit)?;
+        self.nodes = self
+            .nodes
+            .checked_add(1)
+            .filter(|n| *n <= MAX_OUTPUT_NODES)
+            .ok_or(ErrorCode::Limit)?;
+        Ok(())
+    }
+}
+
 #[derive(Debug)]
 pub struct Member {
     pub entry: Entry,
@@ -39,6 +70,9 @@ pub fn valid_name(name: &str, directory: bool) -> Result<String> {
     {
         return Err(ErrorCode::UnsafePath);
     }
+    if name.split('/').count() > MAX_PATH_DEPTH {
+        return Err(ErrorCode::Limit);
+    }
     for component in name.split('/') {
         if component.is_empty()
             || matches!(component, "." | "..")
@@ -66,7 +100,9 @@ pub fn valid_name(name: &str, directory: bool) -> Result<String> {
 }
 pub fn validate_members(members: &[Member]) -> Result<()> {
     let mut names = BTreeMap::<String, bool>::new();
+    let mut budget = MetadataBudget::default();
     for member in members {
+        budget.charge(&member.entry.name)?;
         let directory = member.entry.kind == EntryKind::Directory;
         let name = valid_name(&member.entry.name, directory)?.to_lowercase();
         if names.insert(name, directory).is_some() {
@@ -84,6 +120,27 @@ pub fn validate_members(members: &[Member]) -> Result<()> {
     }
     Ok(())
 }
+pub(crate) fn output_directories(members: &[Member]) -> Result<BTreeSet<String>> {
+    validate_members(members)?;
+    let mut budget = MetadataBudget::default();
+    let mut dirs = BTreeSet::new();
+    for member in members {
+        budget.charge(&member.entry.name)?;
+        if member.entry.kind == EntryKind::Directory && !dirs.contains(member.entry.name.as_str()) {
+            dirs.insert(member.entry.name.clone());
+        }
+        let mut name = member.entry.name.as_str();
+        while let Some((parent, _)) = name.rsplit_once('/') {
+            if !dirs.contains(parent) {
+                budget.charge(parent)?;
+                dirs.insert(parent.to_owned());
+            }
+            name = parent;
+        }
+    }
+    Ok(dirs)
+}
+
 fn bounded_append(output: &mut Vec<u8>, data: &[u8], limit: u64) -> Result<()> {
     if (output.len() as u64)
         .checked_add(data.len() as u64)
@@ -178,6 +235,7 @@ fn tar(
     let mut at = 0;
     let mut members = Vec::new();
     let mut total = 0u64;
+    let mut metadata = MetadataBudget::default();
     loop {
         check()?;
         let header = part(input, at, 512)?;
@@ -234,6 +292,7 @@ fn tar(
             .ok_or(ErrorCode::Limit)?;
         let size = usize::try_from(size).map_err(|_| ErrorCode::Limit)?;
         let bytes = part(input, at + 512, size)?;
+        metadata.charge(&name)?;
         let name = valid_name(&name, kind == EntryKind::Directory)?;
         let data = if decode { bytes.to_vec() } else { Vec::new() };
         members.push(Member {
@@ -295,6 +354,7 @@ fn zip(
     let mut members = Vec::new();
     let mut spans = Vec::new();
     let mut total = 0u64;
+    let mut metadata = MetadataBudget::default();
     for id in 0..count {
         check()?;
         let h = part(input, at, 46)?;
@@ -337,6 +397,7 @@ fn zip(
             }
             _ => EntryKind::Other,
         };
+        metadata.charge(name)?;
         let name = valid_name(name, kind == EntryKind::Directory)?;
         let local = u32at(h, 42)? as usize;
         let lh = part(input, local, 30)?;
@@ -449,9 +510,7 @@ pub fn parse(
     }
     if input.starts_with(&[31, 139]) {
         let bytes = gzip(input, limits, check)?;
-        if bytes.len() >= 512
-            && (bytes[257..262] == *b"ustar" || bytes[..512].iter().all(|b| *b == 0))
-        {
+        if bytes.len() >= 512 && matches!(&bytes[257..263], b"ustar\0" | b"ustar ") {
             return Ok(Catalog {
                 format: Format::TarGzip,
                 members: tar(&bytes, limits, decode, check)?,

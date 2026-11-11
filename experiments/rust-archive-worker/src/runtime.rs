@@ -249,21 +249,11 @@ impl<W: Write> Job<W> {
                                 .is_none_or(|s| s.contains(&m.entry.entry_id))
                         })
                         .collect::<Vec<_>>();
-                    let mut dirs = BTreeSet::new();
+                    let dirs = archive::output_directories(&members)?;
                     let files = members
                         .iter()
                         .filter(|m| m.entry.kind == EntryKind::File)
                         .collect::<Vec<_>>();
-                    for m in &members {
-                        if m.entry.kind == EntryKind::Directory {
-                            dirs.insert(m.entry.name.clone());
-                        }
-                        let mut name = m.entry.name.as_str();
-                        while let Some((parent, _)) = name.rsplit_once('/') {
-                            dirs.insert(parent.to_owned());
-                            name = parent;
-                        }
-                    }
                     let mut names = dirs
                         .iter()
                         .map(|n| (n.clone(), EntryKind::Directory))
@@ -273,7 +263,6 @@ impl<W: Write> Job<W> {
                             .iter()
                             .map(|m| (m.entry.name.clone(), EntryKind::File)),
                     );
-                    archive::validate_members(&members)?;
                     filesystem::preflight(&root, &names)?;
                     for name in dirs {
                         self.check()?;

@@ -4,6 +4,8 @@
 
 - ZIP32 Store/Deflate 목록, 해제, 생성, 기본 TAR/USTAR, GZ, TAR.GZ 해제를 지원합니다. GZ 연결 멤버는 하나의 논리 스트림으로 합칩니다. ZIP64, 다중 볼륨, 비 UTF-8 ZIP 이름, PAX/GNU 확장과 특수 항목 해제는 미지원입니다.
 - 입력은 최대 64 MiB, 해독/생성 출력은 최대 128 MiB, 항목은 최대 10,000개입니다. 요청 limits는 이 값을 낮출 수 있습니다. 입력과 검증 완료 payload를 메모리에 보관해 모든 선택 출력의 CRC, 크기와 경로를 쓰기 전에 검사합니다. checkpoint마다 취소와 300초 한도를 확인합니다.
+- 경로 깊이는 64개 구성 요소, 이름/출력 계획 메타데이터 예산은 8 MiB, 출력 계획 노드는 32,768개로 제한합니다. 이름 복제와 인덱스 비용을 보수적으로 계산해 할당 전에 Limit으로 거부합니다.
+- GZip 내부 형식은 완전한 USTAR magic이 있을 때만 TAR로 판별합니다. magic이 없는 영값 데이터는 길이와 무관하게 raw GZip으로 유지하며 명시 출력명이 필요합니다.
 - ListId는 열린 파일 객체, 전체 입력 SHA-256과 catalog version에 연결됩니다. 입력을 다시 읽어 검증한 전용 메모리 스냅샷만 해독합니다. 불일치는 출력 전 SourceChanged이며 목록을 다시 열어야 합니다. 원본의 사후 변경 감시나 파일 잠금 보장은 아닙니다.
 - 출력 폴더는 미리 존재해야 합니다. Linux는 소유 UID가 같고 group/other 쓰기가 없는 폴더만 허용합니다. openat/O_NOFOLLOW로 디렉터리를 고정하고 새 임시 파일을 배타적으로 만든 뒤 hard link로 게시합니다. 기존 파일과 링크를 덮어쓰지 않습니다. Windows는 reparse point를 거부하고 부모 디렉터리 핸들에서 delete sharing을 제한합니다.
 - 파일 sync/close는 게시 전에 확인합니다. 게시 후 부모 sync와 임시 파일 정리 실패는 게시 사실과 따로 보고합니다. Windows의 디렉터리 내구성은 Unconfirmed입니다. hard link의 결과가 불명확하면 CommitUncertain/Uncertain이며 자동 재시도나 rollback은 없습니다.

@@ -51,12 +51,38 @@ fn execute(start: Start) -> Vec<Message> {
     Writer::new(&mut data, 17)
         .send(&Message::Start(start))
         .unwrap();
-    let mut child = Command::new(env!("CARGO_BIN_EXE_zipelo-archive-worker"))
+    let mut command = Command::new(env!("CARGO_BIN_EXE_zipelo-archive-worker"));
+    command
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .unwrap();
+        .stderr(Stdio::piped());
+    #[cfg(target_os = "linux")]
+    {
+        use std::os::unix::process::CommandExt;
+        #[repr(C)]
+        struct Limit {
+            soft: usize,
+            hard: usize,
+        }
+        unsafe extern "C" {
+            fn setrlimit(resource: i32, limit: *const Limit) -> i32;
+        }
+        // 자식 프로세스의 주소 공간만 512 MiB로 제한함.
+        unsafe {
+            command.pre_exec(|| {
+                let limit = Limit {
+                    soft: 512 * 1024 * 1024,
+                    hard: 512 * 1024 * 1024,
+                };
+                if setrlimit(9, &limit) == 0 {
+                    Ok(())
+                } else {
+                    Err(std::io::Error::last_os_error())
+                }
+            });
+        }
+    }
+    let mut child = command.spawn().unwrap();
     child.stdin.take().unwrap().write_all(&data).unwrap();
     let output = child.wait_with_output().unwrap();
     assert!(output.status.success(), "{:?}", output.stderr);
@@ -605,4 +631,173 @@ fn uncertain_report_survives_codec() {
         other => panic!("{other:?}"),
     };
     assert!(reader.read().unwrap().is_none());
+}
+
+fn path_fixture_zip(names: &[String]) -> Vec<u8> {
+    let mut output = Vec::new();
+    let mut central = Vec::new();
+    for name in names {
+        let offset = output.len() as u32;
+        output.extend(b"PK\x03\x04");
+        for value in [20u16, 0x0800, 0, 0, 33] {
+            output.extend(value.to_le_bytes());
+        }
+        for value in [0u32, 0, 0] {
+            output.extend(value.to_le_bytes());
+        }
+        output.extend((name.len() as u16).to_le_bytes());
+        output.extend(0u16.to_le_bytes());
+        output.extend(name.as_bytes());
+        central.extend(b"PK\x01\x02");
+        for value in [0x0314u16, 20, 0x0800, 0, 0, 33] {
+            central.extend(value.to_le_bytes());
+        }
+        for value in [0u32, 0, 0] {
+            central.extend(value.to_le_bytes());
+        }
+        central.extend((name.len() as u16).to_le_bytes());
+        for value in [0u16, 0, 0, 0] {
+            central.extend(value.to_le_bytes());
+        }
+        central.extend((0o100600u32 << 16).to_le_bytes());
+        central.extend(offset.to_le_bytes());
+        central.extend(name.as_bytes());
+    }
+    let offset = output.len() as u32;
+    output.extend(&central);
+    output.extend(b"PK\x05\x06");
+    for value in [0u16, 0, names.len() as u16, names.len() as u16] {
+        output.extend(value.to_le_bytes());
+    }
+    output.extend((central.len() as u32).to_le_bytes());
+    output.extend(offset.to_le_bytes());
+    output.extend(0u16.to_le_bytes());
+    output
+}
+
+fn assert_metadata_limit(names: &[String]) {
+    let scratch = Scratch::new();
+    let events = extract(
+        &scratch,
+        &path_fixture_zip(names),
+        None,
+        Selection::All,
+        None,
+        Limits::default(),
+    );
+    let result = terminal(&events);
+    assert_eq!(result.outcome, Outcome::Failed, "{events:?}");
+    assert_eq!(result.error, ErrorCode::Limit, "{events:?}");
+    assert_eq!(result.publication, Publication::None);
+    assert_eq!(result.created_count, 0);
+    assert_eq!(fs::read_dir(scratch.0.join("output")).unwrap().count(), 0);
+}
+
+#[test]
+fn deep_zip_returns_limit_without_abort_or_writes() {
+    let names = (0..100)
+        .map(|i| format!("{}file{i:03}", "a/".repeat(2000)))
+        .collect::<Vec<_>>();
+    assert_metadata_limit(&names);
+}
+
+#[test]
+fn shallow_zip_parent_metadata_is_bounded() {
+    let names = (0..500)
+        .map(|i| {
+            format!(
+                "d{i:04}{}/{}file",
+                "a".repeat(180),
+                format!("{}/", "b".repeat(200)).repeat(7)
+            )
+        })
+        .collect::<Vec<_>>();
+    assert!(
+        names
+            .iter()
+            .all(|n| n.split('/').count() <= archive::MAX_PATH_DEPTH)
+    );
+    assert!(
+        archive::parse(
+            &path_fixture_zip(&names),
+            Limits::default(),
+            false,
+            &mut || Ok(())
+        )
+        .is_ok()
+    );
+    assert_metadata_limit(&names);
+}
+
+#[test]
+fn aggregate_archive_name_metadata_is_bounded() {
+    let names = (0..1100)
+        .map(|i| {
+            format!(
+                "d{i:04}{}/{}file",
+                "a".repeat(180),
+                format!("{}/", "b".repeat(200)).repeat(9)
+            )
+        })
+        .collect::<Vec<_>>();
+    let bytes = path_fixture_zip(&names);
+    assert!((bytes.len() as u64) < Limits::default().input);
+    assert!(matches!(
+        archive::parse(&bytes, Limits::default(), false, &mut || Ok(())),
+        Err(ErrorCode::Limit)
+    ));
+    assert_metadata_limit(&names);
+}
+
+#[test]
+fn path_depth_boundary_is_explicit() {
+    let accepted = format!("{}file", "a/".repeat(archive::MAX_PATH_DEPTH - 1));
+    let rejected = format!("{}file", "a/".repeat(archive::MAX_PATH_DEPTH));
+    assert!(archive::valid_name(&accepted, false).is_ok());
+    assert_eq!(archive::valid_name(&rejected, false), Err(ErrorCode::Limit));
+}
+
+fn zeros_gzip(length: usize) -> Vec<u8> {
+    let mut gzip = vec![31, 139, 8, 0, 0, 0, 0, 0, 0, 255];
+    let mut left = length;
+    loop {
+        let size = left.min(u16::MAX as usize) as u16;
+        left -= size as usize;
+        gzip.push(u8::from(left == 0));
+        gzip.extend(size.to_le_bytes());
+        gzip.extend((!size).to_le_bytes());
+        gzip.resize(gzip.len() + size as usize, 0);
+        if left == 0 {
+            break;
+        }
+    }
+    gzip.extend(zlib_rs::crc32::crc32(0, &vec![0; length]).to_le_bytes());
+    gzip.extend((length as u32).to_le_bytes());
+    gzip
+}
+
+#[test]
+fn zero_payload_gzip_is_not_tar() {
+    for length in [512, 1024, 1536] {
+        let scratch = Scratch::new();
+        let bytes = zeros_gzip(length);
+        let parsed = archive::parse(&bytes, Limits::default(), true, &mut || Ok(())).unwrap();
+        assert_eq!(parsed.format, Format::Gzip);
+        let events = extract(
+            &scratch,
+            &bytes,
+            Some("zeros.bin"),
+            Selection::All,
+            None,
+            Limits::default(),
+        );
+        assert_eq!(terminal(&events).outcome, Outcome::Completed, "{events:?}");
+        assert_eq!(
+            fs::read(scratch.0.join("output/zeros.bin")).unwrap(),
+            vec![0; length]
+        );
+        fs::write(scratch.0.join("input"), &bytes).unwrap();
+        let list_id = listing(&scratch);
+        assert_eq!(list_id.format, Format::Gzip);
+    }
 }
