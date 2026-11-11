@@ -24,4 +24,6 @@ python3 packaging/licenses.py --manifest experiments/rust-ui-memory-app/Cargo.to
 
 고지의 crate 목록은 두 Cargo.lock과 metadata의 합집합을 기준으로 합니다. 플랫폼이나 활성 기능을 기준으로 항목을 줄이지 않습니다. 원문 파일이 없는 crate는 라이선스 식만으로 대체하지 않으며 최종 파일을 생성하지 않습니다. audit JSON은 누락 원인 확인용이며 배포 고지가 아닙니다. 대조 시험은 원문 보존, 변경된 캐시 거부, metadata 누락과 두 패키지의 조기 중단을 검증합니다.
 
-로컬 crate에 원문이 없으면 packaging/license-supplements.json의 해당 버전 공식 upstream 원문을 사용합니다. 보충 파일에는 고정 출처 URL, crate 버전과 VCS 커밋, Cargo SPDX 식, UTF-8 원문과 SHA-256이 들어 있습니다. 생성기는 SPDX와 게시된 crate 커밋 및 원문 해시를 오프라인으로 검증합니다. upstream에도 원문이 없는 항목은 링크 설명만으로 대체하지 않고 계속 빌드를 차단합니다.
+로컬 crate에 원문이 없으면 packaging/license-supplements.json의 해당 버전 공식 upstream 원문을 사용합니다. 보충 파일에는 고정 출처 URL, crate 버전과 VCS 커밋, Cargo SPDX 식, UTF-8 원문과 SHA-256이 들어 있습니다. 생성기는 SPDX와 게시된 crate 커밋 및 원문 해시를 오프라인으로 검증합니다. 승인된 표준 보충도 없는 항목은 링크 설명만으로 대체하지 않고 계속 빌드를 차단합니다.
+
+upstream에도 원문이 없는 승인된 12개 항목은 SPDX의 MIT 표준 원문과 해당 버전 Cargo.toml의 저자 고지로 보충합니다. 고지에 표준 원문 보충 사유, 선택한 라이선스, 원문과 저자 고지의 출처 및 SHA-256을 표시합니다. Cargo 메타데이터의 전체 라이선스 식은 그대로 보존합니다.

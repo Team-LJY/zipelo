@@ -20,4 +20,6 @@ sudo로 처음 설치하면 postinst가 SUDO_USER의 ZIP, 7z, TAR.GZ, GZ, TAR �
 
 처음 준비할 때 각 manifest에 cargo +1.99.1 fetch --locked --manifest-path 명령으로 모든 플랫폼의 의존성을 캐시에 받아 두어야 합니다. 고지 생성 중에는 네트워크를 사용하지 않습니다. Windows에는 설치 폴더에, Ubuntu에는 /usr/share/doc/zipelo/THIRD-PARTY-LICENSES.txt에 포함합니다. 파일 동봉 자체가 별도 라이선스 준수 검토를 대신하지는 않습니다.
 
-로컬 crate에 원문이 없으면 packaging/license-supplements.json의 해당 버전 공식 upstream 원문을 사용합니다. 보충 파일에는 고정 출처 URL, crate 버전과 VCS 커밋, Cargo SPDX 식, UTF-8 원문과 SHA-256이 들어 있습니다. 생성기는 SPDX와 게시된 crate 커밋 및 원문 해시를 오프라인으로 검증합니다. upstream에도 원문이 없는 항목은 링크 설명만으로 대체하지 않고 계속 빌드를 차단합니다.
+로컬 crate에 원문이 없으면 packaging/license-supplements.json의 해당 버전 공식 upstream 원문을 사용합니다. 보충 파일에는 고정 출처 URL, crate 버전과 VCS 커밋, Cargo SPDX 식, UTF-8 원문과 SHA-256이 들어 있습니다. 생성기는 SPDX와 게시된 crate 커밋 및 원문 해시를 오프라인으로 검증합니다. 승인된 표준 보충도 없는 항목은 링크 설명만으로 대체하지 않고 계속 빌드를 차단합니다.
+
+upstream에도 원문이 없는 승인된 12개 항목은 SPDX의 MIT 표준 원문과 해당 버전 Cargo.toml의 저자 고지로 보충합니다. 고지에 표준 원문 보충 사유, 선택한 라이선스, 원문과 저자 고지의 출처 및 SHA-256을 표시합니다. Cargo 메타데이터의 전체 라이선스 식은 그대로 보존합니다.

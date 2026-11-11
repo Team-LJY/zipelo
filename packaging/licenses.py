@@ -3,6 +3,7 @@
 import argparse
 import hashlib
 import json
+import re
 from pathlib import Path
 import subprocess
 import tarfile
@@ -86,8 +87,46 @@ def supplemental_files(package, supplement_path):
     archive = root.parents[2] / "cache" / root.parent.name / (root.name + ".crate")
     with tarfile.open(archive, "r:gz") as source:
         vcs = json.load(source.extractfile(root.name + "/.cargo_vcs_info.json"))
+        manifest_bytes = source.extractfile(root.name + "/Cargo.toml").read()
     if vcs["git"]["sha1"] != row["rev"]:
         raise ValueError(f"보충 버전 커밋 불일치: {package['name']}")
+    def checked_file(url):
+        file = data["files"][url]
+        if file["url"] != url or hashlib.sha256(file["text"].encode("utf-8")).hexdigest() != file["sha256"]:
+            raise ValueError(f"보충 원문 해시 불일치: {url}")
+        return file
+
+    if row.get("standard_license"):
+        chosen = row["standard_license"]
+        alternatives = package["license"].split(" OR ")
+        if chosen != "MIT" or chosen not in alternatives:
+            raise ValueError("표준 원문 SPDX 선택 불일치")
+        url = data["standards"][chosen]
+        if not re.fullmatch(r"https://raw\.githubusercontent\.com/spdx/license-list-data/v[0-9]+\.[0-9]+\.[0-9]+/text/MIT\.txt", url):
+            raise ValueError("표준 원문 출처 고정 오류")
+        standard = checked_file(url)
+        attribution_url = row["attribution_source"]
+        attribution = checked_file(attribution_url)
+        manifest = tomllib.loads(attribution["text"])
+        if attribution_url.startswith("crate:"):
+            if (attribution_url != "crate:" + root.name + "/Cargo.toml"
+                    or attribution["text"].encode("utf-8") != manifest_bytes):
+                raise ValueError("게시 crate 저자 원문 불일치")
+            authors = manifest["package"].get("authors")
+        else:
+            expected = "https://raw.githubusercontent.com/madsmtm/objc2/" + row["rev"] + "/Cargo.toml"
+            if attribution_url != expected or manifest["workspace"]["package"]["version"] != row["version"]:
+                raise ValueError("upstream 저자 출처 불일치")
+            authors = manifest["workspace"]["package"].get("authors")
+        if not authors or authors != row["authors"]:
+            raise ValueError("저자 고지 불일치")
+        note = ("upstream에 원문이 없어 표준 원문으로 보충함\n"
+                + "Selected license: " + chosen + "\n"
+                + "Authors (Cargo.toml): " + ", ".join(authors) + "\n"
+                + "Attribution source: " + attribution_url + "\n"
+                + "Attribution SHA-256: " + attribution["sha256"])
+        return [{"path": url, "sha256": standard["sha256"], "text": standard["text"], "note": note}]
+
     records = []
     for url in row["files"]:
         file = data["files"][url]
@@ -143,7 +182,10 @@ def render(records):
         lines.extend(["=" * 72, f'Crate: {record["name"]} {record["version"]}',
                       f'Source: {record["source"]}', f'License: {record["license"]}', f'Version: {record["version"]}', ""])
         for file in record["files"]:
-            lines.extend([f'File: {file["path"]}', f'SHA-256: {file["sha256"]}', "", file["text"], ""])
+            lines.extend([f'File: {file["path"]}', f'SHA-256: {file["sha256"]}'])
+            if file.get("note"):
+                lines.append(file["note"])
+            lines.extend(["", file["text"], ""])
     return "\n".join(lines)
 
 

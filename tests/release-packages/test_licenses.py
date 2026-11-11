@@ -114,7 +114,8 @@ class LicenseTests(unittest.TestCase):
         self.assertIn("--all-features", command)
 
     def supplement_fixture(self, license="MIT", revision="a" * 40):
-        self.fixture({".cargo_vcs_info.json": json.dumps({"git": {"sha1": "a" * 40}}).encode()})
+        self.fixture({".cargo_vcs_info.json": json.dumps({"git": {"sha1": "a" * 40}}).encode(),
+                      "Cargo.toml": b'[package]\nname = "sample"\nversion = "1.0.0"\nauthors = ["Fixture author"]\n'})
         url = "https://raw.githubusercontent.com/example/sample/" + revision + "/LICENSE"
         original = "Fixture permission text\\r\\n"
         data = {"packages": [{"name": "sample", "version": "1.0.0", "license": license,
@@ -169,6 +170,52 @@ class LicenseTests(unittest.TestCase):
             self.assertEqual(len(matches), 1)
             self.assertEqual(matches[0]["license"], row["license"])
             self.assertTrue(matches[0]["files"])
+
+    def standard_fixture(self):
+        path, data, _ = self.supplement_fixture()
+        source = "crate:sample-1.0.0/Cargo.toml"
+        content = (self.registry / "Cargo.toml").read_text()
+        url = "https://raw.githubusercontent.com/spdx/license-list-data/v3.26.0/text/MIT.txt"
+        data["standards"] = {"MIT": url}
+        for location, text in [(source, content), (url, "Fixture standard MIT text")]:
+            data["files"][location] = {"url": location, "text": text,
+                                      "sha256": hashlib.sha256(text.encode()).hexdigest()}
+        data["packages"][0].update(standard_license="MIT", attribution_source=source,
+                                   authors=["Fixture author"])
+        path.write_text(json.dumps(data))
+        return path, data
+
+    def test_standard_supplement_records_authors_source_and_reason(self):
+        path, _ = self.standard_fixture()
+        files = LICENSES.supplemental_files(self.package, path)
+        self.assertIn("upstream에 원문이 없어 표준 원문으로 보충함", files[0]["note"])
+        self.assertIn("Fixture author", files[0]["note"])
+        self.assertIn("crate:sample-1.0.0/Cargo.toml", files[0]["note"])
+
+    def test_standard_supplement_rejects_wrong_license_choice(self):
+        path, data = self.standard_fixture()
+        data["packages"][0]["standard_license"] = "Apache-2.0"
+        path.write_text(json.dumps(data))
+        with self.assertRaisesRegex(ValueError, "SPDX 선택 불일치"):
+            LICENSES.supplemental_files(self.package, path)
+
+    def test_standard_supplement_rejects_changed_attribution(self):
+        path, data = self.standard_fixture()
+        data["packages"][0]["authors"] = ["Invented author"]
+        path.write_text(json.dumps(data))
+        with self.assertRaisesRegex(ValueError, "저자 고지 불일치"):
+            LICENSES.supplemental_files(self.package, path)
+
+    def test_complete_notice_has_zero_omissions_against_metadata(self):
+        manifests = [ROOT / "experiments" / crate / "Cargo.toml"
+                     for crate in ["rust-ui-memory-app", "rust-archive-worker"]]
+        records = LICENSES.inventory(manifests)
+        expected = {LICENSES.identity(p) for manifest in manifests for p in LICENSES.metadata(manifest)}
+        self.assertEqual({(r["name"], r["version"], r["source"]) for r in records}, expected)
+        text = LICENSES.render(records)
+        self.assertEqual(text.count("\nCrate: "), len(expected))
+        self.assertTrue(all(r["files"] for r in records))
+        self.assertEqual(text.count("upstream에 원문이 없어 표준 원문으로 보충함"), 12)
 
     def test_both_packagers_stop_before_build_on_missing_licenses(self):
         for builder, binaries in [(WINDOWS, WINDOWS), (UBUNTU, UBUNTU.WINDOWS)]:
