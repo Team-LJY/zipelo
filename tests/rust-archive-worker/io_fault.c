@@ -16,6 +16,7 @@ static int (*real_open64)(const char *, int, ...);
 static int (*real_fsync)(int);
 static int (*real_fstatvfs)(int, struct statvfs *);
 static int started;
+static int snapshot_fd = -1;
 
 __attribute__((constructor)) static void initialize(void) {
     real_write = dlsym(RTLD_NEXT, "write");
@@ -32,7 +33,7 @@ static int output_file(int fd) {
     if (count < 0) return 0;
     path[count] = 0;
     const char *fault = getenv("ZIPELO_TEST_FAULT");
-    if (fault && !strcmp(fault, "stage-full")) return strstr(path, "/#") && strstr(path, "(deleted)");
+    if (fault && (!strcmp(fault, "stage-full") || !strcmp(fault, "codec-full"))) return strstr(path, "/#") && strstr(path, "(deleted)");
     return strstr(path, "/.zipelo-") != NULL;
 }
 
@@ -62,8 +63,11 @@ int open64(const char *path, int flags, ...) {
         va_end(args);
     }
     const char *fault = getenv("ZIPELO_TEST_FAULT");
+    const char *name = strrchr(path, '/');
+    name = name ? name + 1 : path;
+    int named_temp = (flags & O_CREAT) && !strncmp(name, "zipelo-", 7);
     if (fault && !strcmp(fault, "temp-full")
-            && (((flags & O_TMPFILE) == O_TMPFILE) || strstr(path, "/zipelo-"))) {
+            && (((flags & O_TMPFILE) == O_TMPFILE) || named_temp)) {
         errno = ENOSPC;
         return -1;
     }
@@ -79,6 +83,13 @@ int open64(const char *path, int flags, ...) {
 ssize_t write(int fd, const void *bytes, size_t count) {
     const char *fault = getenv("ZIPELO_TEST_FAULT");
     if (!fault || !output_file(fd)) return real_write(fd, bytes, count);
+    if (!strcmp(fault, "codec-full")) {
+        if (snapshot_fd == -1) snapshot_fd = fd;
+        if (fd == snapshot_fd) return real_write(fd, bytes, count);
+        if (!started++) return real_write(fd, bytes, count < 7 ? count : 7);
+        errno = ENOSPC;
+        return -1;
+    }
     if (!strcmp(fault, "write-io")) { errno = EIO; return -1; }
     if (!strcmp(fault, "full") || !strcmp(fault, "stage-full")) {
         if (!started++) return real_write(fd, bytes, count < 7 ? count : 7);
