@@ -19,6 +19,8 @@ Cargo 1.99.1, Windows GNU Rust target, MinGW-w64와 makensis가 필요합니다.
 
 설치 파일을 더블클릭하면 현재 사용자의 LocalAppData/Programs/Zipelo-Dev에
 Zipelo.exe, zipelo-archive-worker.exe, MIT LICENSE, BUILD-INFO.json과 제거 프로그램을 설치합니다.
+설치 경로는 위 위치로 고정되며 명령행 /D로 다른 위치를 지정해도 파일 쓰기 전에 고정 위치를 적용합니다.
+설치와 제거는 같은 경로 상수를 사용합니다.
 기존 폴더나 등록이 있으면 중단하며 덮어쓰기 업데이트는 지원하지 않습니다.
 시작 메뉴에 Zipelo 개발판 바로가기를 추가합니다.
 

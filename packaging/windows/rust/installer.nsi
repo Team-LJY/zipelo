@@ -6,7 +6,8 @@ Unicode true
 !include "FileFunc.nsh"
 Name "Zipelo 개발판"
 OutFile "Zipelo-0.1.0-dev-windows-x64-setup.exe"
-InstallDir "$LOCALAPPDATA\Programs\Zipelo-Dev"
+!define INSTALLROOT "$LOCALAPPDATA\Programs\Zipelo-Dev"
+InstallDir "${INSTALLROOT}"
 RequestExecutionLevel user
 SetCompressor /SOLID lzma
 SetOverwrite off
@@ -50,6 +51,8 @@ Function .onInit
 FunctionEnd
 
 Section "Zipelo"
+    ; /D로 바뀐 경로를 파일 쓰기 전에 고정하여 제거 경로와 일치시킴.
+    StrCpy $INSTDIR "${INSTALLROOT}"
     ; 기존 설치와 등록을 덮어쓰지 않음.
     IfFileExists "$INSTDIR" failed
     System::Call 'advapi32::RegOpenKeyExW(p 0x80000001, w "${APPKEY}", i 0, i 0x20119, *p.r1) i.r0'
@@ -205,7 +208,7 @@ Function un.onInit
     ${OrIf} $1 != 0
         Abort
     ${EndIf}
-    StrCmp $INSTDIR "$LOCALAPPDATA\Programs\Zipelo-Dev" 0 invalid
+    StrCmp $INSTDIR "${INSTALLROOT}" 0 invalid
     ReadINIStr $0 "$INSTDIR\install.ini" "Zipelo" "Location"
     StrCmp $0 $INSTDIR 0 invalid
     Return

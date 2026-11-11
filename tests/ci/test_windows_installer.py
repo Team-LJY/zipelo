@@ -2,6 +2,7 @@ import argparse
 import importlib.util
 from pathlib import Path
 import struct
+import re
 import shutil
 import subprocess
 import tempfile
@@ -65,6 +66,19 @@ class InstallerInputTests(unittest.TestCase):
         installer = self.root / "Zipelo-0.1.0-dev-windows-x64-setup.exe"
         self.assertIn(MODULE.pe_machine(installer), (0x14C, 0x8664))
         self.assertGreater(installer.stat().st_size, 100000)
+
+    def test_command_line_directory_is_reset_before_install_side_effects(self):
+        source = (ROOT / "packaging/windows/rust/installer.nsi").read_text()
+        section = source.split('Section "Zipelo"', 1)[1].split("SectionEnd", 1)[0]
+        commands = [line.strip() for line in section.splitlines()
+                    if line.strip() and not line.strip().startswith(";")]
+        self.assertEqual(commands[0], 'StrCpy $INSTDIR "${INSTALLROOT}"')
+        root = re.search(r'^!define INSTALLROOT "([^"\n]+)"$', source, re.MULTILINE)
+        self.assertIsNotNone(root)
+        self.assertEqual(root.group(1), "$LOCALAPPDATA\\Programs\\Zipelo-Dev")
+        self.assertIn('InstallDir "${INSTALLROOT}"', source)
+        uninstaller = source.split("Function un.onInit", 1)[1].split("FunctionEnd", 1)[0]
+        self.assertIn('StrCmp $INSTDIR "${INSTALLROOT}" 0 invalid', uninstaller)
 
     def test_source_commit_change_cannot_reuse_an_old_binary(self):
         repo = self.root / "source"
