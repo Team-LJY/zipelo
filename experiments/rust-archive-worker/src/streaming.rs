@@ -338,6 +338,40 @@ fn large_value(value: u32, extra: &mut &[u8]) -> Result<u64> {
     *extra = &extra[8..];
     Ok(result)
 }
+fn expanded(value: u64, maximum: u64, large: u64) -> Result<u64> {
+    if value == maximum || value == large {
+        Ok(large)
+    } else {
+        Err(ErrorCode::Integrity)
+    }
+}
+fn disk_start(value: u16, extra: &mut &[u8]) -> Result<u32> {
+    if value != u16::MAX {
+        return Ok(value as u32);
+    }
+    if extra.len() < 4 {
+        return Err(ErrorCode::Integrity);
+    }
+    let result = u32at(extra, 0);
+    *extra = &extra[4..];
+    Ok(result)
+}
+fn local_sizes(size: u32, compressed: u32, extra: Option<&[u8]>) -> Result<(u64, u64)> {
+    if let Some(extra) = extra {
+        // 로컬 ZIP64 추가 필드에는 두 크기가 함께 들어감.
+        if extra.len() < 16 {
+            return Err(ErrorCode::Integrity);
+        }
+        Ok((
+            expanded(size as u64, u32::MAX as u64, u64at(extra, 0))?,
+            expanded(compressed as u64, u32::MAX as u64, u64at(extra, 8))?,
+        ))
+    } else if size == u32::MAX || compressed == u32::MAX {
+        Err(ErrorCode::Integrity)
+    } else {
+        Ok((size as u64, compressed as u64))
+    }
+}
 fn zip(
     source: &mut File,
     len: u64,
@@ -358,18 +392,16 @@ fn zip(
         })
         .ok_or(ErrorCode::Integrity)?;
     let h = &tail[end..];
-    if u16at(h, 4) != 0 || u16at(h, 6) != 0 {
-        return Err(ErrorCode::UnsupportedFeature);
-    }
+    let mut disk = u16at(h, 4) as u64;
+    let mut central_disk = u16at(h, 6) as u64;
+    let mut entries_on_disk = u16at(h, 8) as u64;
     let mut count = u16at(h, 10) as u64;
-    if count != u16at(h, 8) as u64 {
-        return Err(ErrorCode::UnsupportedFeature);
-    }
     let mut central_size = u32at(h, 12) as u64;
     let mut central = u32at(h, 16) as u64;
     let mut central_end = tail_at + end as u64;
-    let required_zip64 =
-        count == u16::MAX as u64 || central_size == u32::MAX as u64 || central == u32::MAX as u64;
+    let required_zip64 = [disk, central_disk, entries_on_disk, count].contains(&(u16::MAX as u64))
+        || central_size == u32::MAX as u64
+        || central == u32::MAX as u64;
     let locator = if central_end >= 20 {
         bytes(source, central_end - 20, 20)?
     } else {
@@ -396,20 +428,17 @@ fn zip(
         {
             return Err(ErrorCode::Integrity);
         }
-        if u32at(&large, 16) != 0
-            || u32at(&large, 20) != 0
-            || u64at(&large, 24) != u64at(&large, 32)
-        {
-            return Err(ErrorCode::UnsupportedFeature);
-        }
-        let (n, size, start) = (u64at(&large, 32), u64at(&large, 40), u64at(&large, 48));
-        if (count != u16::MAX as u64 && count != n)
-            || (central_size != u32::MAX as u64 && central_size != size)
-            || (central != u32::MAX as u64 && central != start)
-        {
-            return Err(ErrorCode::Integrity);
-        }
-        (count, central_size, central, central_end) = (n, size, start, offset);
+        // 각 필드의 확장값을 해석한 뒤 단일 디스크 조건을 검사함.
+        disk = expanded(disk, u16::MAX as u64, u32at(&large, 16) as u64)?;
+        central_disk = expanded(central_disk, u16::MAX as u64, u32at(&large, 20) as u64)?;
+        entries_on_disk = expanded(entries_on_disk, u16::MAX as u64, u64at(&large, 24))?;
+        count = expanded(count, u16::MAX as u64, u64at(&large, 32))?;
+        central_size = expanded(central_size, u32::MAX as u64, u64at(&large, 40))?;
+        central = expanded(central, u32::MAX as u64, u64at(&large, 48))?;
+        central_end = offset;
+    }
+    if disk != 0 || central_disk != 0 || entries_on_disk != count {
+        return Err(ErrorCode::UnsupportedFeature);
     }
     if count > limits.entries as u64 {
         return Err(ErrorCode::Limit);
@@ -434,7 +463,7 @@ fn zip(
         }
         let flags = u16at(&h, 8);
         let method = u16at(&h, 10);
-        if flags & !0x080f != 0 || !matches!(method, 0 | 8 | 99) || u16at(&h, 34) != 0 {
+        if flags & !0x080f != 0 || !matches!(method, 0 | 8 | 99) {
             return Err(ErrorCode::UnsupportedFeature);
         }
         let crc = u32at(&h, 16);
@@ -460,7 +489,7 @@ fn zip(
         let size = large_value(u32at(&h, 24), &mut large)?;
         let compressed = large_value(u32at(&h, 20), &mut large)?;
         let local = large_value(u32at(&h, 42), &mut large)?;
-        if u16at(&h, 34) == 65535 && (large.len() < 4 || u32at(large, 0) != 0) {
+        if disk_start(u16at(&h, 34), &mut large)? != 0 {
             return Err(ErrorCode::UnsupportedFeature);
         }
         let encrypted = flags & 1 != 0;
@@ -522,17 +551,17 @@ fn zip(
             return Err(ErrorCode::Integrity);
         }
         let (local_aes, local_large) = extra(&bytes(source, local + 30 + ln, le as usize)?)?;
-        if local_aes != aes {
+        if local_aes != aes || local_large.as_ref().is_some_and(|values| values.len() < 16) {
             return Err(ErrorCode::Integrity);
         }
         let size_zip64 = u32at(&h, 20) == u32::MAX
             || u32at(&h, 24) == u32::MAX
             || u32at(&lh, 18) == u32::MAX
-            || u32at(&lh, 22) == u32::MAX;
+            || u32at(&lh, 22) == u32::MAX
+            || local_large.is_some();
         if flags & 8 == 0 {
-            let mut values = local_large.as_deref().unwrap_or(&[]);
-            let local_size = large_value(u32at(&lh, 22), &mut values)?;
-            let local_compressed = large_value(u32at(&lh, 18), &mut values)?;
+            let (local_size, local_compressed) =
+                local_sizes(u32at(&lh, 22), u32at(&lh, 18), local_large.as_deref())?;
             if u32at(&lh, 14) != crc || local_size != size || local_compressed != compressed {
                 return Err(ErrorCode::Integrity);
             }
