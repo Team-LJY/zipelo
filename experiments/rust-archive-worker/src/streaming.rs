@@ -392,11 +392,20 @@ fn zip(
     let mut central_size = u32at(h, 12) as u64;
     let mut central = u32at(h, 16) as u64;
     let mut central_end = tail_at + end as u64;
-    if count == u16::MAX as u64 || central_size == u32::MAX as u64 || central == u32::MAX as u64 {
-        if central_end < 20 {
+    let required_zip64 =
+        count == u16::MAX as u64 || central_size == u32::MAX as u64 || central == u32::MAX as u64;
+    let locator = if central_end >= 20 {
+        bytes(source, central_end - 20, 20)?
+    } else {
+        Vec::new()
+    };
+    // 중앙 디렉터리 주석의 동일 서명을 locator로 오인하지 않음
+    let has_locator =
+        locator.starts_with(b"PK\x06\x07") && add(central, central_size)? != central_end;
+    if required_zip64 || has_locator {
+        if locator.len() != 20 {
             return Err(ErrorCode::Integrity);
         }
-        let locator = bytes(source, central_end - 20, 20)?;
         if &locator[..4] != b"PK\x06\x07" || u32at(&locator, 4) != 0 || u32at(&locator, 16) != 1 {
             return Err(ErrorCode::UnsupportedFeature);
         }

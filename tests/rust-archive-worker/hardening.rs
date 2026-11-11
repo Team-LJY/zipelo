@@ -149,6 +149,47 @@ fn zip64_offset_only_keeps_32_bit_descriptors() {
     }
 }
 #[test]
+fn zip64_locator_with_ordinary_eocd_fields_interoperates() {
+    let s = Scratch::new();
+    generate(&s, "locator64", 20);
+    assert_eq!(fs::metadata(s.0.join("input")).unwrap().len(), 260);
+    let events = execute(Start {
+        action: Action::List {
+            archive: s.path("input"),
+        },
+        limits: Limits::default(),
+    });
+    assert_eq!(terminal(&events).outcome, Outcome::Completed, "{events:?}");
+    let events = execute(start(&s, false, Limits::default().output));
+    assert_eq!(terminal(&events).outcome, Outcome::Completed, "{events:?}");
+    assert_zero_file(&s.0.join("output/payload.bin"), 20);
+}
+#[test]
+fn zip64_locator_corruption_never_publishes() {
+    for (kind, error) in [
+        ("locator64-bad-offset", ErrorCode::Integrity),
+        ("locator64-bad-size", ErrorCode::Integrity),
+        ("locator64-conflicting-count", ErrorCode::Integrity),
+        ("locator64-multidisk", ErrorCode::UnsupportedFeature),
+    ] {
+        let s = Scratch::new();
+        generate(&s, kind, 20);
+        let events = execute(start(&s, false, Limits::default().output));
+        assert_eq!(terminal(&events).error, error, "{kind}: {events:?}");
+        assert_eq!(terminal(&events).publication, Publication::None);
+        assert_eq!(terminal(&events).cleanup, Cleanup::Complete);
+        assert_eq!(fs::read_dir(s.0.join("output")).unwrap().count(), 0);
+    }
+}
+#[test]
+fn classic_directory_comment_is_not_a_zip64_locator() {
+    let s = Scratch::new();
+    generate(&s, "classic-locator-decoy", 20);
+    let events = execute(start(&s, false, Limits::default().output));
+    assert_eq!(terminal(&events).outcome, Outcome::Completed, "{events:?}");
+    assert_zero_file(&s.0.join("output/payload.bin"), 20);
+}
+#[test]
 fn untrusted_zip64_u64_sizes_and_offsets_never_allocate_or_publish() {
     for (kind, error) in [
         ("central64-size-overflow", ErrorCode::Limit),
