@@ -1,17 +1,17 @@
 {
     "command": "python3 tests/ci/run_rust.py local",
     "platform": "linux-desktop-2",
-    "base_remote_main": "3f51510fcc613c3f72e29c3b421aab178bf94186",
-    "local_baseline_head": "c2fba601990de3b0ad660342fdd9762e35b35147",
-    "source_state": "Tested committed integration source. Only this evidence JSON was updated after the full runner completed; hashes identify the tested code and fixtures.",
+    "base_remote_main": "4160fcc4e80070b6ab9ea50c78705c0458b2384a",
+    "local_baseline_head": "b8811fa1bcb169c1ec8e5b14dbe6a46c510da0d1",
+    "source_state": "최신 PR69와 기존 SevenZip 앱 변환 및 암호 의존성 lockfile을 통합한 커밋에서 전체 검증함. 검증 후 이 증거 JSON만 갱신함.",
     "linux_build_crates": 19,
     "linux_test_targets": 19,
-    "rust_tests_passed": 883,
+    "rust_tests_passed": 895,
     "new_archive_ui_tests_passed": 22,
     "windows_cross_build_crates": 19,
     "windows_runtime_tested": false,
     "native_visual_check": "Headless egui Context used actual widget pointer/key events and the real OS worker process on Linux. Native OS window/input automation and Windows execution were not performed.",
-    "prior_failures": "Retained locally: first build drop API/legacy harness references; second and third egui renderer harness texture/first-frame setup; final runner passed.",
+    "prior_failures": "최초 실행은 공유 캐시의 기존 7z 미지원 작업자로 화면 시험 1개가 실패함. 추출 소스의 타임스탬프를 갱신하여 다시 빌드한 뒤 LZMA/LZMA2 화면 시험과 전체 실행이 통과함.",
     "limitations": [
         "Normal ZIP/TAR.GZ/7z listing and extraction plus ZIP creation/reopen/extraction use the actual worker executable and OS pipes.",
         "Four successful screen tests run headless egui widgets, including LZMA/LZMA2 7z fixtures, not native OS GUI automation.",
@@ -22,7 +22,7 @@
     "tested_files": [
         {
             "path": "experiments/rust-ui-memory-app/Cargo.lock",
-            "sha256": "791935d3b7eb17f68ccd08e35e6839e3ff42fecf9fd51cce4ce69fb7bb717197"
+            "sha256": "f5515522ce9eebb3918f9bb4905a4aa8ae5e299c544ad5a14327ce1fcda3ec1f"
         },
         {
             "path": "experiments/rust-ui-memory-app/Cargo.toml",
@@ -54,7 +54,7 @@
         },
         {
             "path": "tests/rust-app-real-worker/Cargo.lock",
-            "sha256": "6fce2f154d57e28e975582755ca13d9ebb4d2d6927a53c42f03e8a9b5f78f78c"
+            "sha256": "2b47293130e0653e22b4b40f821e58aa2e0dc2441e56b2278679664060e5b0e9"
         },
         {
             "path": "tests/rust-app-real-worker/Cargo.toml",
@@ -74,7 +74,7 @@
         },
         {
             "path": "tests/rust-app-real-worker/flows.rs",
-            "sha256": "a6ae9c4c56860f572667465c657c2167e619d5892469d986d6c8615ee9c2ae6d"
+            "sha256": "23501dfcfcefa5404d1587d5295915a227a18ba53ccbdf56eaa35b101011d115"
         },
         {
             "path": "tests/rust-app-real-worker/generate.py",
@@ -117,13 +117,13 @@
     ],
     "before_review_fix": "Earlier PR62 fixes reproduced 3 failures before repair. Integration tests additionally reproduced normal channel shutdown and late-cancel races before repair. PR68 review race reproduced with the new test before repair; all 100 iterations passed after repair.",
     "approved_ui_head": "423a7c80c9d7182e07d29adee03a97d09a19b11f",
-    "tested_local_head": "0f26ed65d784b9cfb332168f3f3c619d53566325",
+    "tested_local_head": "496415fbd6fa6bc359f85775a88ed56cd71fa2e5",
     "real_worker_tests_passed": 11,
-    "runner_tests_passed": 17,
+    "runner_tests_passed": 23,
     "format_contract_tests_passed": 2,
     "prerequisite_heads": {
-        "PR68": "d2db6625c50376de363670ee5658060445b433d1",
-        "PR69": "745c62b746bb1546cdcbe0440a1446b6d3004b80"
+        "PR69": "8614f8431a6d7f1967822c233a812d383e574000"
     },
-    "format_extension": "Existing tags 0..3 unchanged; SevenZip=4. Full ListEnd golden frame, both platform identities and Extract codec roundtrip verified."
+    "format_extension": "Existing tags 0..3 unchanged; SevenZip=4. Full ListEnd golden frame, both platform identities and Extract codec roundtrip verified.",
+    "lockfile_update": "PR71 159d51a의 앱 및 probe 암호 의존성 고정과 동일함. 기존 패키지 버전을 변경하지 않음."
 }

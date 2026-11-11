@@ -144,7 +144,12 @@ fn wait(model: &mut Model) {
 }
 fn completed(model: &Model) {
     assert!(model.confirmed, "{}", model.status());
-    assert_eq!(model.terminal.as_ref().unwrap().outcome, Outcome::Completed);
+    assert_eq!(
+        model.terminal.as_ref().unwrap().outcome,
+        Outcome::Completed,
+        "terminal: {:?}",
+        model.terminal
+    );
 }
 #[cfg(feature = "ui")]
 mod screen {

@@ -1,4 +1,5 @@
 pub mod archive;
+mod crypto;
 pub mod filesystem;
 mod lzma;
 pub mod protocol;
