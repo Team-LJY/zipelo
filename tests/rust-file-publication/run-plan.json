@@ -1,0 +1,54 @@
+{
+    "schema": "zipelo.file-publication.execution-plan.v1",
+    "gate": "Compile/no-run/discovery and any candidate publication execution require separate review of the fixed test head and manifest. No Rust execution at source/static stage.",
+    "target": "publication_public_api",
+    "scope": "Only the new tests/rust-file-publication tree and its synthetic runs. No retained snapshot paths modified. Local raw logs/binary only; no independent transfer.",
+    "preflight": [
+        "Hold the current room's blocking exclusive flock during every shared build/cache/fixture/log mutation, re-read git status and pinned inputs inside the lock.",
+        "Verify 10 fixed production files, source manifest, test manifest and all deliverables. Pin head, bytes, SHA256, Git blob/mode, environment allowlist and existing toolchain versions.",
+        "Refuse a preexisting nonempty runs path, any symlink/path escape, wrong owner/mode or unknown supported-filesystem status. Fresh run ID and exclusive artifact directory; no reuse after failure.",
+        "Use installed 1.99.1-x86_64-unknown-linux-gnu and existing libc cache, no install/network/fallback. CARGO_NET_OFFLINE=true, dedicated target below this test root.",
+        "Linux ef53/ext-family or XFS magic is a prerequisite only. The first real test may still fail on O_TMPFILE/linkat/fsync; preserve and stop."
+    ],
+    "order": [
+        "Locked/offline cargo test --no-run for exactly the single explicit test target.",
+        "Extract the unique executable artifact from cargo JSON; require its path below the dedicated target and record SHA256.",
+        "Run --list --format terse once. Validate every nonempty line, unique exact names and complete set of 54.",
+        "Run each sorted name exactly once with --exact NAME --test-threads=1 --nocapture. Each success must have exactly one expected name and 1 passed/0 failed/0 ignored/0 measured/53 filtered.",
+        "After each child: collect wait exit and pipe EOF, rehash frozen inputs and binary, inspect runs without following links or reading special files. Stop on nonzero, unknown result, mismatch, residue or cap.",
+        "Keep raw logs, exact names/classes and source-before/after/binary hashes. Do not rerun or change expectations after first failure."
+    ],
+    "commands": [
+        "CARGO_TARGET_DIR=tests/rust-file-publication/target cargo test --manifest-path tests/rust-file-publication/Cargo.toml --locked --offline --test publication_public_api --no-run --message-format=json",
+        "<fixed-binary> --list --format terse",
+        "<fixed-binary> --exact <contract-name> --test-threads=1 --nocapture"
+    ],
+    "bounds": {
+        "compile_seconds": 120,
+        "discovery_seconds": 30,
+        "per_case_seconds": 30,
+        "channel_wait_seconds": 5,
+        "cleanup_observation_seconds": 10,
+        "per_command_log_bytes": 8388608,
+        "synthetic_case_bytes": 134217728,
+        "publishers_per_collision_case": 2,
+        "other_cases_parallelism": 1,
+        "termination_grace_seconds": 2,
+        "reap_grace_seconds": 5
+    },
+    "enforcement": "Use a parent command supervisor with bounded streaming stdout/stderr, elapsed deadlines and retained prefix on overflow. On failure signal only the harness-owned child/process group, record termination and bounded reap separately. Never assert that timeout interrupts uninterruptible I/O. Logical synthetic sizes can be monitored but are not a filesystem quota.",
+    "cleanup": "All Rust assertions precede Sandbox::finish. Successful case directories removed explicitly; empty runs owner root and evidence/target retained. No cleanup on failed assertions/panic. On interruption or timeout preserve remaining paths; do not remove uncertain/replaced paths. join follows bounded response receipt; external process limit bounds observation if join does not return.",
+    "unsupported": "Fail/stop, not ignore, mock success or weaker fallback. No security/permission changes, mounts, proc substitution, launcher or Windows/VM operations.",
+    "report_fields": [
+        "head",
+        "manifest SHA256",
+        "commands/cwd/env allowlist",
+        "exact discovered/executed/passed/failed/ignored/filtered names",
+        "evidence classes",
+        "raw stdout/stderr hashes",
+        "binary hash",
+        "input before/after hashes",
+        "residual paths and process/reap state",
+        "unverified boundaries"
+    ]
+}

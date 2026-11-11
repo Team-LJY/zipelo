@@ -1,0 +1,18 @@
+[package]
+name = "zipelo-file-publication"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.99"
+license = "MIT"
+publish = false
+autotests = false
+autoexamples = false
+autobenches = false
+
+[lib]
+doctest = false
+
+[target.'cfg(target_os = "linux")'.dependencies]
+libc = { version = "=0.2.191", default-features = false, features = ["std"] }
+
+[workspace]

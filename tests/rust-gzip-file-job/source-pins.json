@@ -1,0 +1,240 @@
+{
+    "head": "4c6ae4b3a7ab12a992598e94e7b02f3a167fbbd4",
+    "tree": "9a01a37623b163c35ca4ff25963b2e11c61a0c35",
+    "files": [
+        {
+            "path": "experiments/rust-file-publication/Cargo.lock",
+            "git_blob": "207c18a163029bf5059414e443d47340f701973e",
+            "mode": "100644",
+            "sha256": "b38bcde0e0c7286f53254ecbc357a55a0b18e803fd7294dec1025fcb34eb6092"
+        },
+        {
+            "path": "experiments/rust-file-publication/Cargo.toml",
+            "git_blob": "769cad258dde0179ea8e32bd3d13a7579a791497",
+            "mode": "100644",
+            "sha256": "e6d911fb2c215dcab367116b0eac2544a3e37abe0d69ba6f0323c0d0308b329d"
+        },
+        {
+            "path": "experiments/rust-file-publication/LICENSE",
+            "git_blob": "5014abac33298592fd3450b51a9b414191e1aabc",
+            "mode": "100644",
+            "sha256": "0714945e52a4d5b560c02c9a18478519f8c4e2572cbf87bd6d52adcfb2b63c62"
+        },
+        {
+            "path": "experiments/rust-file-publication/SHA256SUMS",
+            "git_blob": "b77cca2d6328d6c4512e3c62a65ca0b032937836",
+            "mode": "100644",
+            "sha256": "cc4e4cc64a8f3b537df554c7d2895ea3722fbfb0906f1ada767d5cf9b5d8bbc6"
+        },
+        {
+            "path": "experiments/rust-file-publication/THIRD-PARTY-NOTICES.txt",
+            "git_blob": "fba3cf10cd0ff76bb025c1ff9cee6f17b4844197",
+            "mode": "100644",
+            "sha256": "83bd16a9177040f87f726c5ff9c0e14e7e3fc0096c743abe0d7b1b97ab1fc425"
+        },
+        {
+            "path": "experiments/rust-file-publication/contract.json",
+            "git_blob": "e348369c0f9f0f0bb5bab9b26b4ed4659aac134b",
+            "mode": "100644",
+            "sha256": "fc091b378311e5a5898f770b4a91317ada5d2daebbb3cfb795e1026736334161"
+        },
+        {
+            "path": "experiments/rust-file-publication/dependencies.json",
+            "git_blob": "85b978be36080547024565031bc6a433e6a4b321",
+            "mode": "100644",
+            "sha256": "75757b6b770ea09d7b345ca3beaf3d75fdbbe7c792d00d3aec7465b9968ce4f5"
+        },
+        {
+            "path": "experiments/rust-file-publication/src/lib.rs",
+            "git_blob": "19dcc817be97c8cbb18cb863b98ce6524e164406",
+            "mode": "100644",
+            "sha256": "8304a9c37e8d0a2e21f6657483c58d28c23ba4a4c2ed9ae7e43d389d0f3c2bc3"
+        },
+        {
+            "path": "experiments/rust-file-publication/src/linux.rs",
+            "git_blob": "75a7194329af66458195b08e64d3e96a08495110",
+            "mode": "100644",
+            "sha256": "75225159189cb2418b24c5e35c4db804dfe2f0171bf957f59578ae284f046d0c"
+        },
+        {
+            "path": "experiments/rust-file-publication/static-validation.json",
+            "git_blob": "7ac04313d01dd90ac905275c2e08cd2991789656",
+            "mode": "100644",
+            "sha256": "75ed00e7059990abe5c3ba7bc0aae87801e3ffa915824c900d09ed31a61f8159"
+        },
+        {
+            "path": "experiments/rust-file-snapshot/Cargo.lock",
+            "git_blob": "f78b06aafe24e649c3b8dbf1e80f84875665916d",
+            "mode": "100644",
+            "sha256": "ba55ac17dc748d1f91d7a6e5d5ebb4c6b9c84d09173a17d4cac31cf149fb771b"
+        },
+        {
+            "path": "experiments/rust-file-snapshot/Cargo.toml",
+            "git_blob": "5f13cef3e22861c18da16a0aa45ed990a448d1bf",
+            "mode": "100644",
+            "sha256": "e641f091c0acabd3e6fbfa3ed6bf53e05be3ca6c2fc90d67980721b378840f0f"
+        },
+        {
+            "path": "experiments/rust-file-snapshot/LICENSE",
+            "git_blob": "5014abac33298592fd3450b51a9b414191e1aabc",
+            "mode": "100644",
+            "sha256": "0714945e52a4d5b560c02c9a18478519f8c4e2572cbf87bd6d52adcfb2b63c62"
+        },
+        {
+            "path": "experiments/rust-file-snapshot/SHA256SUMS",
+            "git_blob": "76201cbad9d40111091cb320744f59bb07b4bc65",
+            "mode": "100644",
+            "sha256": "668b1c3f140a033a6a0768b84ec52f111ee5fbfaf707632d2fc9a5a380758120"
+        },
+        {
+            "path": "experiments/rust-file-snapshot/THIRD-PARTY-NOTICES.txt",
+            "git_blob": "c18cb9011479d97d247bf403c128e5923fa769c9",
+            "mode": "100644",
+            "sha256": "066b8c0623b870c0c3998a0499b0323f3cfe8d3cfd60bf6bbc833be0e523a06e"
+        },
+        {
+            "path": "experiments/rust-file-snapshot/contract.json",
+            "git_blob": "93c7b53f2441eee3d98db58dcca8ece47b1094d6",
+            "mode": "100644",
+            "sha256": "8b54705382c3af1168b684fbcf3e25efd256eb145c636972fe6e26b8cb898ff2"
+        },
+        {
+            "path": "experiments/rust-file-snapshot/dependencies.json",
+            "git_blob": "cf8c2f473069573ba29b9cf278d7a09eac83adca",
+            "mode": "100644",
+            "sha256": "ea113f15ec27f9903eed985e1e55f49114b9867b0c7c707e2cd15009fa02c6c0"
+        },
+        {
+            "path": "experiments/rust-file-snapshot/src/lib.rs",
+            "git_blob": "b119facbf8cef61cb1877b7cef9f921f4d63d311",
+            "mode": "100644",
+            "sha256": "e087714fc3e30b8efdd1cf16e1d8944ebc3518c757b8917d6e32d3b3dc3936c9"
+        },
+        {
+            "path": "experiments/rust-file-snapshot/src/linux.rs",
+            "git_blob": "ed9af89904de5a4b44673b098e944b35faa3075f",
+            "mode": "100644",
+            "sha256": "88aa71907bfd07ef61697eb2c71e8ffbdc178c68ea9fcae8d26957be4751fa21"
+        },
+        {
+            "path": "experiments/rust-gzip-file-job/Cargo.lock",
+            "git_blob": "ac727b854d6d077e6e82cd6f2a6ec8687fb90a0a",
+            "mode": "100644",
+            "sha256": "a7c66f4a02cbae817a7147ce4c08d0b9a53e0e94b38fc6e66352bbd9b7709629"
+        },
+        {
+            "path": "experiments/rust-gzip-file-job/Cargo.toml",
+            "git_blob": "e8b16d664942b3f6782e0daa27d3965eabfa7716",
+            "mode": "100644",
+            "sha256": "0a994efa506a648fdad3615a944f1d78c83ef2f5a23a6b2420e5e9dfaeb5e65c"
+        },
+        {
+            "path": "experiments/rust-gzip-file-job/LICENSE",
+            "git_blob": "5014abac33298592fd3450b51a9b414191e1aabc",
+            "mode": "100644",
+            "sha256": "0714945e52a4d5b560c02c9a18478519f8c4e2572cbf87bd6d52adcfb2b63c62"
+        },
+        {
+            "path": "experiments/rust-gzip-file-job/SHA256SUMS",
+            "git_blob": "c7ac5be9104abbe123d3cd66762a3f046dade0f0",
+            "mode": "100644",
+            "sha256": "ef32ad5306d2d98751836846f631f66c562e4b55caf5d3422e120305aa78b37f"
+        },
+        {
+            "path": "experiments/rust-gzip-file-job/THIRD-PARTY-NOTICES.txt",
+            "git_blob": "93ab1f0bd590597015c867ce9ee7dee5a01b1a1d",
+            "mode": "100644",
+            "sha256": "3e2e572d0aa960ae002b6cdf3fb68008323d1e50b014d6ae2d3adf1845e7a3c3"
+        },
+        {
+            "path": "experiments/rust-gzip-file-job/contract.json",
+            "git_blob": "f1f7ec8d84b644486d46e084dd64509f7e1925ce",
+            "mode": "100644",
+            "sha256": "2b617a3792b520c421d4ac8f6dd8e95de7425303a3d8b134200419a8de07ba45"
+        },
+        {
+            "path": "experiments/rust-gzip-file-job/dependencies.json",
+            "git_blob": "552885ea312260dc2e289366f14407c605e3c8d9",
+            "mode": "100644",
+            "sha256": "52cfbf2e1363b604dc52b1a343b8f76589e920b71f1ac7564a7e413a0d3fe40d"
+        },
+        {
+            "path": "experiments/rust-gzip-file-job/source-pins.json",
+            "git_blob": "a080b5d20ca65f1f8d14d6321faa626fe8ac5217",
+            "mode": "100644",
+            "sha256": "01d5b0afef63b979c04fdcc6e7077915f00982dbfc44e3cbc84899c619c5c7d9"
+        },
+        {
+            "path": "experiments/rust-gzip-file-job/src/lib.rs",
+            "git_blob": "e7f1ee35efb71a1022c52a2e2e44b35780ae98e4",
+            "mode": "100644",
+            "sha256": "dad3309af8706359c1c34e6e1f56d5eb5f4ddf7f101d81f4621bbf9772592b45"
+        },
+        {
+            "path": "experiments/rust-gzip-file-job/src/types.rs",
+            "git_blob": "58f1966f7b9b20a15a27cdc11ac217fbfd1ab9e5",
+            "mode": "100644",
+            "sha256": "07f98df13fe48edeef5a23905a2cb9c1d257066e97c7d413cd06a754d44b7b4b"
+        },
+        {
+            "path": "experiments/rust-gzip-file-job/static-validation.json",
+            "git_blob": "8ba55e6b262a3fb2677bac8a022e3583f08b914f",
+            "mode": "100644",
+            "sha256": "274a8fb2ea9991633856fdda6802044e409bffe325af09372fa18e85e684b10c"
+        },
+        {
+            "path": "experiments/rust-memory-gzip-reader/Cargo.lock",
+            "git_blob": "a638f9b00ea1d76a99ccd93ea465ef9df4163c7a",
+            "mode": "100644",
+            "sha256": "511197f27b89d37c86f82ae1e8dda4229a3e5082ede9274efe8480df6e650d24"
+        },
+        {
+            "path": "experiments/rust-memory-gzip-reader/Cargo.toml",
+            "git_blob": "1b1b77e23d39cde1f05e55f73b62f68cf77dd9c6",
+            "mode": "100644",
+            "sha256": "ae76aededbb85cdd6c9227b4c06a1c8fef1bb7f203f1703e787b68f30ccfab6a"
+        },
+        {
+            "path": "experiments/rust-memory-gzip-reader/LICENSE",
+            "git_blob": "5014abac33298592fd3450b51a9b414191e1aabc",
+            "mode": "100644",
+            "sha256": "0714945e52a4d5b560c02c9a18478519f8c4e2572cbf87bd6d52adcfb2b63c62"
+        },
+        {
+            "path": "experiments/rust-memory-gzip-reader/SHA256SUMS",
+            "git_blob": "e248c4827c2fb2e82a5e92f80deb0d744209c65c",
+            "mode": "100644",
+            "sha256": "13e41e7d8ce2442cd8d93b1229211a5257e0568acc3466d5f9ec37f03c72a736"
+        },
+        {
+            "path": "experiments/rust-memory-gzip-reader/THIRD-PARTY-NOTICES.txt",
+            "git_blob": "f56aa8d736e78465701ac62fa5ad26d4d7dc05c9",
+            "mode": "100644",
+            "sha256": "655ad3bee8c41a593c2b00cbb0a12be11e7246c41dda00319c223dd3f904910e"
+        },
+        {
+            "path": "experiments/rust-memory-gzip-reader/contract.json",
+            "git_blob": "02729ca349d5629b1a9fcd7040441db2e2660065",
+            "mode": "100644",
+            "sha256": "1346c0b6f0ce5221acb9aef5067b0169e08ea6752f4db41a8b9c36b10ef9b43b"
+        },
+        {
+            "path": "experiments/rust-memory-gzip-reader/dependencies.json",
+            "git_blob": "bf9da9b737d9d574d5e31fb8343f844b61e4c192",
+            "mode": "100644",
+            "sha256": "3f71220451f8cd55dafdb6e6ae901572ec7bbe1be9c93d78953b44244aec6b07"
+        },
+        {
+            "path": "experiments/rust-memory-gzip-reader/src/budget.rs",
+            "git_blob": "0fa6fd1cdb541896540b7003168e5db71c11cb4b",
+            "mode": "100644",
+            "sha256": "b0d0b891a048712baba2038b8439d809a0359638f390b806f88496733753d61c"
+        },
+        {
+            "path": "experiments/rust-memory-gzip-reader/src/lib.rs",
+            "git_blob": "1811dfc7ec0917da607727e7942b5a268ac7330a",
+            "mode": "100644",
+            "sha256": "a865a114fdb9d79b66226387b9f0e3fa601aad29cfe65ab443c946d6cbd74062"
+        }
+    ]
+}

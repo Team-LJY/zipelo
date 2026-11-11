@@ -1,0 +1,63 @@
+{
+    "schema": 1,
+    "branch": "features/rust-ui-system-fonts",
+    "base": "f7fc8cbece281e2f9a6374b4640ca4dd9d321fbc",
+    "scope": "UI 진입점의 폰트 공급만 분리함. 화면 구조/색/크기/Controller/파일-job 변경 없음",
+    "api": {
+        "module": "experiments/rust-ui-memory-app/src/system_font.rs",
+        "visibility": "binary 내부 pub(super) 경계임. library public API 추가 없음",
+        "load": "fn load() -> std::io::Result<RuntimeFont>",
+        "value": "RuntimeFont { bytes: Vec<u8>, face_index: u32 }",
+        "ownership": "설치된 글꼴을 실행 시 메모리로 읽어 기존 FontData::from_owned로 이동함. 파일 쓰기/번들/다운로드 없음"
+    },
+    "platforms": {
+        "linux": {
+            "file": "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+            "face_index": 1,
+            "preserved": "기존 std::fs::read I/O 오류를 원형으로 ? 반환하고 AppCreation(Box<io::Error>)로 매핑함. 기본 글꼴로 조용히 대체하지 않음"
+        },
+        "windows": {
+            "file": "SystemRoot 환경값 아래 Fonts/malgun.ttf",
+            "face_index": 0,
+            "root": "std::env::var_os로 Unicode 손실 없이 읽음. 미설정 NotFound, 상대/UNC/장치 prefix는 InvalidInput으로 실패함. local absolute Disk prefix만 허용함",
+            "read": "파일 읽기 I/O 오류는 원형으로 반환함. missing file 설치/자동 탐색/다른 글꼴 대체 없음",
+            "limit": "환경값은 OS API로 인증한 Windows directory가 아님. 정상 프로세스 환경을 전제로 한 최소 공급 경계이며 시스템 폰트의 진위/글리프/포맷 유효성을 별도로 입증하지 않음",
+            "reference": "https://learn.microsoft.com/en-us/typography/font-list/malgun-gothic"
+        },
+        "other": "io::ErrorKind::Unsupported로 명시 실패함"
+    },
+    "dependencies": {
+        "new_external": 0,
+        "cargo_changes": 0,
+        "font_distribution": false
+    },
+    "validation": {
+        "state": "source/static only. build/run/metadata/GUI/Windows compile 없음",
+        "performed": [
+            "rustfmt +1.99.1 --edition 2024 --check",
+            "base app Git blob 대조",
+            "변경 파일 SHA256와 원격 tree 제한 변경 대조"
+        ],
+        "linux_plan": [
+            "고정 overlay manifest와 base blob/mode, dependency/lock 불변 확인",
+            "기존 toolchain locked/offline GUI build 및 headless 31개 회귀 이름 대조/각1회",
+            "Linux 공급 bytes가 기존 Noto bytes와 같고 index=1임을 확인. missing/unreadable I/O 오류를 합성 소유 환경의 loader 시험에서 확인",
+            "분리 Xvfb의 실제 앱으로 초기 한글/18px 본문/26px 제목/목록/미리보기/오류 상태 및 idle 종료 확인",
+            "PR47 harness는 자체 Linux 폰트 로더를 보존한 별도 시험임. 해당 결과를 새 앱 로더의 검증으로 합산하지 않음"
+        ],
+        "windows_plan": [
+            "기존 Windows 도구체인 확보와 별도 실행 승인 후 locked/offline native build",
+            "정상 SystemRoot 및 설치 Malgun 글꼴에서 index0/한글/읽기 전용/정상 닫기 확인",
+            "SystemRoot 없음/상대경로/UNC/장치 경로는 각각 NotFound/InvalidInput 판정 확인. Fonts/malgun.ttf 없음/읽기 오류 원형 보존 확인",
+            "한글 목록/미리보기/취소/닫기 및 키보드/크기 변경을 실제 Windows 화면에서 검증. 이 전에는 지원 완료로 표시하지 않음"
+        ],
+        "failure": "첫 실패에서 중단하고 source/expectation 변경이나 자동 재실행 없음. 명령/exit/raw로그/hash/입력 전후/소유 process 정리 기록",
+        "historical_pins": "기존 tests/rust-ui-memory-app/SHA256SUMS 및 각 frozen source pin은 기존 head 증거로 보존함. app.rs 변경 때문에 원래 전체 고정 hash 검사를 새 head에 통과했다고 말하지 않음. 새 sources.json overlay가 이 후보의 변경을 명시함",
+        "limits": [
+            "Windows 도구체인 없음",
+            "폰트 parse/글리프 검증 미실행",
+            "사용자 display/IME/전체 접근성 미검증",
+            "기존 빌드/GUI 결과를 이 변경 head로 승격하지 않음"
+        ]
+    }
+}

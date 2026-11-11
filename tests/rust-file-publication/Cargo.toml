@@ -1,0 +1,20 @@
+[package]
+name = "zipelo-file-publication-regressions"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.99"
+license = "MIT"
+publish = false
+autotests = false
+autoexamples = false
+autobenches = false
+
+[[test]]
+name = "publication_public_api"
+path = "main.rs"
+
+[dependencies]
+publication = { package = "zipelo-file-publication", path = "../../experiments/rust-file-publication" }
+libc = { version = "=0.2.191", default-features = false, features = ["std"] }
+
+[workspace]

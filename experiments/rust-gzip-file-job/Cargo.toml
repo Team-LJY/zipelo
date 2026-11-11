@@ -1,0 +1,20 @@
+[package]
+name = "zipelo-gzip-file-job"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.99"
+license = "MIT"
+publish = false
+autotests = false
+autoexamples = false
+autobenches = false
+
+[lib]
+doctest = false
+
+[dependencies]
+zipelo-file-snapshot = { path = "../rust-file-snapshot", version = "=0.1.0" }
+zipelo-memory-gzip-reader = { path = "../rust-memory-gzip-reader", version = "=0.1.0" }
+zipelo-file-publication = { path = "../rust-file-publication", version = "=0.1.0" }
+
+[workspace]

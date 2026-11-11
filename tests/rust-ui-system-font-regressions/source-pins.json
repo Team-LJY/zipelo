@@ -1,0 +1,575 @@
+{
+    "head": "8600cee802bc08bfad171278133a22d94b64b597",
+    "files": [
+        {
+            "path": "experiments/rust-app-core-memory/Cargo.lock",
+            "git_blob": "37b438af0cb4997dc0e9745e3985e77e31dbb3d0",
+            "mode": "100644",
+            "sha256": "a96a436875a8365e5b7e8f837a02df818b400790615076b83903f12c3ad7116e"
+        },
+        {
+            "path": "experiments/rust-app-core-memory/Cargo.toml",
+            "git_blob": "625f39eb96a492a2f4673b1e9065f6331e73a3e9",
+            "mode": "100644",
+            "sha256": "d47e6b080a13005dd3c195f64d42f581bbc2050062ca4396fc41e32317a76c98"
+        },
+        {
+            "path": "experiments/rust-app-core-memory/LICENSE",
+            "git_blob": "5014abac33298592fd3450b51a9b414191e1aabc",
+            "mode": "100644",
+            "sha256": "0714945e52a4d5b560c02c9a18478519f8c4e2572cbf87bd6d52adcfb2b63c62"
+        },
+        {
+            "path": "experiments/rust-app-core-memory/SHA256SUMS",
+            "git_blob": "526e870c3e8667de26bbb3ad408521cb33df22e9",
+            "mode": "100644",
+            "sha256": "13afa3d9bf53fd5a1c69af085842b722953dd36de1d63d305fea93bf78580b8d"
+        },
+        {
+            "path": "experiments/rust-app-core-memory/THIRD-PARTY-NOTICES.txt",
+            "git_blob": "951447a0637ecc008123dbc2e8a8743741144d83",
+            "mode": "100644",
+            "sha256": "b6ee40e53b19b59bdcc9464ecd759364264ee5ce9c320cf5616d0f656ec1df68"
+        },
+        {
+            "path": "experiments/rust-app-core-memory/contract.json",
+            "git_blob": "716afdb8b471ef0e5403ba9a5c4a25f9a01e70e5",
+            "mode": "100644",
+            "sha256": "beffc5271a3355b8ef784d3d15179f4172d2af5c2dc71c1072ae4673e2971c3f"
+        },
+        {
+            "path": "experiments/rust-app-core-memory/dependencies.json",
+            "git_blob": "3e550f1fbc0331f27972a3cafd412d87cf11611d",
+            "mode": "100644",
+            "sha256": "39294cd19d2eb2ad02cf034e527c690348ca07492986b05000d11a053b6aa7e1"
+        },
+        {
+            "path": "experiments/rust-app-core-memory/sources.json",
+            "git_blob": "74a3dec78cc76fe45aa7822e07549ec130657604",
+            "mode": "100644",
+            "sha256": "a1d536e851130f37fb02c1269cebe8933e43fecf30403da8978e0726746ac15e"
+        },
+        {
+            "path": "experiments/rust-app-core-memory/src/lib.rs",
+            "git_blob": "3bea6de7efe5657614a4747f2b071abe35de21d9",
+            "mode": "100644",
+            "sha256": "2540ab5f801d78f27e4d2a0a751f15378863ba5b14a4d564b3be4dc996cb7571"
+        },
+        {
+            "path": "experiments/rust-memory-gzip-reader/Cargo.lock",
+            "git_blob": "a638f9b00ea1d76a99ccd93ea465ef9df4163c7a",
+            "mode": "100644",
+            "sha256": "511197f27b89d37c86f82ae1e8dda4229a3e5082ede9274efe8480df6e650d24"
+        },
+        {
+            "path": "experiments/rust-memory-gzip-reader/Cargo.toml",
+            "git_blob": "1b1b77e23d39cde1f05e55f73b62f68cf77dd9c6",
+            "mode": "100644",
+            "sha256": "ae76aededbb85cdd6c9227b4c06a1c8fef1bb7f203f1703e787b68f30ccfab6a"
+        },
+        {
+            "path": "experiments/rust-memory-gzip-reader/LICENSE",
+            "git_blob": "5014abac33298592fd3450b51a9b414191e1aabc",
+            "mode": "100644",
+            "sha256": "0714945e52a4d5b560c02c9a18478519f8c4e2572cbf87bd6d52adcfb2b63c62"
+        },
+        {
+            "path": "experiments/rust-memory-gzip-reader/SHA256SUMS",
+            "git_blob": "e248c4827c2fb2e82a5e92f80deb0d744209c65c",
+            "mode": "100644",
+            "sha256": "13e41e7d8ce2442cd8d93b1229211a5257e0568acc3466d5f9ec37f03c72a736"
+        },
+        {
+            "path": "experiments/rust-memory-gzip-reader/THIRD-PARTY-NOTICES.txt",
+            "git_blob": "f56aa8d736e78465701ac62fa5ad26d4d7dc05c9",
+            "mode": "100644",
+            "sha256": "655ad3bee8c41a593c2b00cbb0a12be11e7246c41dda00319c223dd3f904910e"
+        },
+        {
+            "path": "experiments/rust-memory-gzip-reader/contract.json",
+            "git_blob": "02729ca349d5629b1a9fcd7040441db2e2660065",
+            "mode": "100644",
+            "sha256": "1346c0b6f0ce5221acb9aef5067b0169e08ea6752f4db41a8b9c36b10ef9b43b"
+        },
+        {
+            "path": "experiments/rust-memory-gzip-reader/dependencies.json",
+            "git_blob": "bf9da9b737d9d574d5e31fb8343f844b61e4c192",
+            "mode": "100644",
+            "sha256": "3f71220451f8cd55dafdb6e6ae901572ec7bbe1be9c93d78953b44244aec6b07"
+        },
+        {
+            "path": "experiments/rust-memory-gzip-reader/src/budget.rs",
+            "git_blob": "0fa6fd1cdb541896540b7003168e5db71c11cb4b",
+            "mode": "100644",
+            "sha256": "b0d0b891a048712baba2038b8439d809a0359638f390b806f88496733753d61c"
+        },
+        {
+            "path": "experiments/rust-memory-gzip-reader/src/lib.rs",
+            "git_blob": "1811dfc7ec0917da607727e7942b5a268ac7330a",
+            "mode": "100644",
+            "sha256": "a865a114fdb9d79b66226387b9f0e3fa601aad29cfe65ab443c946d6cbd74062"
+        },
+        {
+            "path": "experiments/rust-memory-ustar-reader/Cargo.lock",
+            "git_blob": "4016006d7b01deb8efebff0e1d44218a0dd4b376",
+            "mode": "100644",
+            "sha256": "2a5d774e8cd96caa426d2d97d9c112062a57c156a026ae588932bced0af015ae"
+        },
+        {
+            "path": "experiments/rust-memory-ustar-reader/Cargo.toml",
+            "git_blob": "42de96e4aa4c89a243ad988fa7a7f724ff70dc01",
+            "mode": "100644",
+            "sha256": "08f2cb43c2f541c4420deab0c6097ce732cd7ca6e32f9895c9cbc48dc7722734"
+        },
+        {
+            "path": "experiments/rust-memory-ustar-reader/LICENSE",
+            "git_blob": "5014abac33298592fd3450b51a9b414191e1aabc",
+            "mode": "100644",
+            "sha256": "0714945e52a4d5b560c02c9a18478519f8c4e2572cbf87bd6d52adcfb2b63c62"
+        },
+        {
+            "path": "experiments/rust-memory-ustar-reader/SHA256SUMS",
+            "git_blob": "b8868532047fb561fc9fc987b1cbbb9c8daab298",
+            "mode": "100644",
+            "sha256": "a7cf6f6ad510173bf9ccbf0245ad20fd06cad08bcab4cc601031006e95305d28"
+        },
+        {
+            "path": "experiments/rust-memory-ustar-reader/THIRD-PARTY-NOTICES.txt",
+            "git_blob": "8540c10d9c03253ce1ed31142fe98229ab6d90cf",
+            "mode": "100644",
+            "sha256": "e4d82397ea8ad7780bfcf97344548f2a7784e2ae6384441e54193b351bf8dad6"
+        },
+        {
+            "path": "experiments/rust-memory-ustar-reader/contract.json",
+            "git_blob": "8ae86c21671984209bc30973605d61327259aa16",
+            "mode": "100644",
+            "sha256": "21cb673b63a14af1641406d8adb20cfcfd47adfad1ce15ff3c7c2d9840077b06"
+        },
+        {
+            "path": "experiments/rust-memory-ustar-reader/dependencies.json",
+            "git_blob": "f9d8b8d2f82f758894ad2698c50107b2341fb183",
+            "mode": "100644",
+            "sha256": "7c793eb80dbc167fddc8c0660123507fc80c6ebb763cbd06821f6b95735b9271"
+        },
+        {
+            "path": "experiments/rust-memory-ustar-reader/src/budget.rs",
+            "git_blob": "1eab0733b90b66fc12b5db2931fb7dcb08d80c13",
+            "mode": "100644",
+            "sha256": "5d511a2519ed26e0fa8fb84b2d8cc0479679e9c3b5815a3c0e20790a283c923e"
+        },
+        {
+            "path": "experiments/rust-memory-ustar-reader/src/header.rs",
+            "git_blob": "d278d372076b40715c6f73e1f0c67b54293566ca",
+            "mode": "100644",
+            "sha256": "263c2a610d522c0f5bf24ceef14be184735b4858a40277963252bae439d4112e"
+        },
+        {
+            "path": "experiments/rust-memory-ustar-reader/src/lib.rs",
+            "git_blob": "ce8e3b751a53a66f5d0cfaab15ffdeea92fae98f",
+            "mode": "100644",
+            "sha256": "9b57f771c1d89ffc74aea604d7f3476202ad62914c91a5246802706294e5bfcd"
+        },
+        {
+            "path": "experiments/rust-memory-zip-create/Cargo.lock",
+            "git_blob": "aed6fe07391fce292edebb5206f98a617d2c4376",
+            "mode": "100644",
+            "sha256": "bb094be9b047cc7a9100492e1e7aa69ddbbc2a3d8bf2c4e8eaa49024160fd2c3"
+        },
+        {
+            "path": "experiments/rust-memory-zip-create/Cargo.toml",
+            "git_blob": "899e96fbbd98053ff521d7f29aa2b682fccafb08",
+            "mode": "100644",
+            "sha256": "c8483ab032ce94e35ba84b56a4b127e669358f7e9f9b945b3ba60b472ab87b0e"
+        },
+        {
+            "path": "experiments/rust-memory-zip-create/SHA256SUMS",
+            "git_blob": "b6738fe846fa737f5cacd53147a1492e917b73d5",
+            "mode": "100644",
+            "sha256": "c4d5651a956429a97e830906c132b537dca6e1c7c491f8148cbdd27d1cb63469"
+        },
+        {
+            "path": "experiments/rust-memory-zip-create/contract.json",
+            "git_blob": "6be643ca9603b688f705eae172bb276d4afff35a",
+            "mode": "100644",
+            "sha256": "d3fc6cc43fa7f70f0a6cfb5e441348a3c011dac8d8e08b3061c0df5fce8e9206"
+        },
+        {
+            "path": "experiments/rust-memory-zip-create/src/lib.rs",
+            "git_blob": "08cea1778ec21e4403f752901de9bfc7fa1ee8c9",
+            "mode": "100644",
+            "sha256": "3b2019fd963600155fd4dc01f55fef7f3e5c8ceec944a36597de984d5a8b7e8b"
+        },
+        {
+            "path": "experiments/rust-memory-zip-create/src/storage.rs",
+            "git_blob": "1b61dd18f5e41e86ffdde752fc6ebc828a2c1b8c",
+            "mode": "100644",
+            "sha256": "1f81f5b1830eaf5f5e5e510841e10f3dd692f6d310a1871ce46fe4445dff9706"
+        },
+        {
+            "path": "experiments/rust-ui-memory-app/Cargo.lock",
+            "git_blob": "ac33c507896385a564b5c43c7c0ee5038b8e2777",
+            "mode": "100644",
+            "sha256": "d591ec67b8f1a1ea448b6bdd971e0b8c039a33a492c8f068b085bdd20b3a64ae"
+        },
+        {
+            "path": "experiments/rust-ui-memory-app/Cargo.toml",
+            "git_blob": "eb63fb6b15134eccce5223f35ee82e300ffc4d25",
+            "mode": "100644",
+            "sha256": "7a74a5d5be456dc6d080c0dd78a25eaf8bd12ef43a3b921f26bbb7e35901040f"
+        },
+        {
+            "path": "experiments/rust-ui-memory-app/LICENSE",
+            "git_blob": "5014abac33298592fd3450b51a9b414191e1aabc",
+            "mode": "100644",
+            "sha256": "0714945e52a4d5b560c02c9a18478519f8c4e2572cbf87bd6d52adcfb2b63c62"
+        },
+        {
+            "path": "experiments/rust-ui-memory-app/THIRD-PARTY-NOTICES.txt",
+            "git_blob": "e8bbe2fcdbd2fc0e7a7755f581c0776de54ec2d9",
+            "mode": "100644",
+            "sha256": "5b98107ae51806d6d4cb4337bea3b979f55070eba6dc7c0c294e13e7686ab4c6"
+        },
+        {
+            "path": "experiments/rust-ui-memory-app/src/app.rs",
+            "git_blob": "31cbd6e783de8a081a1948d47d43635da255ebfa",
+            "mode": "100644",
+            "sha256": "5bef670594b8edf6d9b979871da56447342c92126fd56c6acd9eb7e3a9cece95"
+        },
+        {
+            "path": "experiments/rust-ui-memory-app/src/controller.rs",
+            "git_blob": "2adeae347a3309f33ea6ee546565239167285747",
+            "mode": "100644",
+            "sha256": "51dc979b88e395c209444900511aa7d56bcc8ccc31205fca22191f25dc6468e2"
+        },
+        {
+            "path": "experiments/rust-ui-memory-app/src/lib.rs",
+            "git_blob": "0f0f5e2bcbaccb8a2ca21336e4061ae784f22c0d",
+            "mode": "100644",
+            "sha256": "58d303d44c6b8580168f14c3ceb0eb878fc7a003f197f162584286873a904ddc"
+        },
+        {
+            "path": "experiments/rust-ui-memory-app/src/runtime.rs",
+            "git_blob": "1389c589ab7e8c54b97e170ba1f36304ef3a07e8",
+            "mode": "100644",
+            "sha256": "c1c1dde16263ea7ed4cf5808b3182e21878b8ffadfe8850974a8cbdbd4607b3f"
+        },
+        {
+            "path": "experiments/rust-ui-memory-app/src/system_font.rs",
+            "git_blob": "1dbe29039a1fde2686366422eb04c30a4068f7bc",
+            "mode": "100644",
+            "sha256": "f15657021dcb48bf3d0bb570dbcea1e36c4f7c9694cde21be972e350580851f7"
+        },
+        {
+            "path": "experiments/rust-ui-memory-app/src/transport.rs",
+            "git_blob": "39c50acd5d1943009483f9198d3a7e0a9fe2a903",
+            "mode": "100644",
+            "sha256": "7aef227ed4424e13cfa750373a9e1f32bebae12308589c81d051f41ea84991ac"
+        },
+        {
+            "path": "tests/rust-memory-gzip-reader/Cargo.lock",
+            "git_blob": "46a7653b949febc573a3429aa7811b8c34508dc6",
+            "mode": "100644",
+            "sha256": "5932825be6b65fda2dc957a18992db63673e6eecdd55853fb743c133f359262c"
+        },
+        {
+            "path": "tests/rust-memory-gzip-reader/Cargo.toml",
+            "git_blob": "b803e4a1c2495736b3758e4d993e40a86ef7f50d",
+            "mode": "100644",
+            "sha256": "2e8476195852aaec340015755ecb37ef8fa65d5ba375f8c7a60e3b8d0643ed1e"
+        },
+        {
+            "path": "tests/rust-memory-gzip-reader/SHA256SUMS",
+            "git_blob": "cb0292aab9f320eca2fd4b3395c10f84ca898ff6",
+            "mode": "100644",
+            "sha256": "1633895d78cca4c38f63c6efdf164d2c2d5ca1561c7eeb87dc5144159f05fd77"
+        },
+        {
+            "path": "tests/rust-memory-gzip-reader/budgets.rs",
+            "git_blob": "0ec6e8818c277600841f4f37d069a5acce1c306e",
+            "mode": "100644",
+            "sha256": "d1b5132d656d514d73ac0f510991fab70d0c8783b9a10bf6314149a6d7a3649c"
+        },
+        {
+            "path": "tests/rust-memory-gzip-reader/checkpoints.rs",
+            "git_blob": "5fa98cc9affaa4554562308663716ea5b2841636",
+            "mode": "100644",
+            "sha256": "6e995ed0edf29c0b4f513ddb0a9e56b427cefbd58e78351674ad0e4ee490de74"
+        },
+        {
+            "path": "tests/rust-memory-gzip-reader/contract.json",
+            "git_blob": "c6d4feae43bd9e67ffd1009b3b0dff653f7952ff",
+            "mode": "100644",
+            "sha256": "aa6640e76fd821168afe6e78ae6f29aed27514a4100b5abab8054625d7aef79b"
+        },
+        {
+            "path": "tests/rust-memory-gzip-reader/fixtures.hex",
+            "git_blob": "80e41d988d8d13c45b54d640468ca4939e84d7fa",
+            "mode": "100644",
+            "sha256": "e0768b8c44a7e6586bc423eea561da49eecbf5114130d88992b2c6c5893ae355"
+        },
+        {
+            "path": "tests/rust-memory-gzip-reader/fixtures.json",
+            "git_blob": "d52a90d943151d7ba2c9dc1da76addccd661e4e4",
+            "mode": "100644",
+            "sha256": "329cbac0a9b5b064ef1db4c59d83860c97a6d2819e4659405b75e17bdc82b45d"
+        },
+        {
+            "path": "tests/rust-memory-gzip-reader/format.rs",
+            "git_blob": "302adf4151f5f5c8100133eab82ad6f5e72003d5",
+            "mode": "100644",
+            "sha256": "b5a6c624e9911aa4e818612cc7a868a43313ee1e1c63b6352b8410ed896154c5"
+        },
+        {
+            "path": "tests/rust-memory-gzip-reader/generate_fixtures.py",
+            "git_blob": "e48f324c331e429312c434761b1f40920957ca0d",
+            "mode": "100644",
+            "sha256": "1cde1dd2f913820f77458e5accfcdb91aec5a1319e3c0fb2d91fd7e385690831"
+        },
+        {
+            "path": "tests/rust-memory-gzip-reader/main.rs",
+            "git_blob": "de62741b5834c691c67a0a606417237d3a45108b",
+            "mode": "100644",
+            "sha256": "036865bd2661062ea59d84362fdd747d9ce79d9b78400f12be3bea7703466020"
+        },
+        {
+            "path": "tests/rust-memory-gzip-reader/static_check.py",
+            "git_blob": "74f7ca66d71692e7bec4f690ab6595d5344b0dfb",
+            "mode": "100644",
+            "sha256": "c37887322e014c6b96c71f0e979856a2be88713af57462e4436697ee7034407e"
+        },
+        {
+            "path": "tests/rust-memory-gzip-reader/static_check_helper_tests.py",
+            "git_blob": "e5ab9c60a4107c6ed21995f35d4b2a695de86e1d",
+            "mode": "100644",
+            "sha256": "de4908b609ddb6789777901875ea224f962a9f96e9f17cd85765bb05d8231beb"
+        },
+        {
+            "path": "tests/rust-memory-gzip-reader/support.rs",
+            "git_blob": "b0a0bd05bc3f7d331fad375cbb0d0eddbd825b48",
+            "mode": "100644",
+            "sha256": "a4d39c7b9b9270eb31fb3e73d9ebd57c9ba78a99b73851944bdd4d645e8d5fc5"
+        },
+        {
+            "path": "tests/rust-memory-ustar-reader/Cargo.lock",
+            "git_blob": "62a03ba78153130ca889b63c7be046264f8ede1f",
+            "mode": "100644",
+            "sha256": "6e4cce2848f1e4b120b28722fb73956dca7f759419029e299b6c09acc1e0dfc5"
+        },
+        {
+            "path": "tests/rust-memory-ustar-reader/Cargo.toml",
+            "git_blob": "1dc8fe5f69638e504c6f88a4ba4f1562b285f39f",
+            "mode": "100644",
+            "sha256": "5a7e53d47ff3c08b5531ed1fed5e574d917ed5b7f8af0a52c8de401ca6bcb792"
+        },
+        {
+            "path": "tests/rust-memory-ustar-reader/SHA256SUMS",
+            "git_blob": "0093ed9578bab969ea69bb332d36fb5d980c4846",
+            "mode": "100644",
+            "sha256": "5740d93c2429dc81f9859c6fe29fdac9cf417f8783c07029a1f28a1f3a4d37fe"
+        },
+        {
+            "path": "tests/rust-memory-ustar-reader/budget.rs",
+            "git_blob": "60ccf1de5f9f17ec0ad9e569fbe167241ea2472d",
+            "mode": "100644",
+            "sha256": "c3d80703b31a3e9712509168b0b1d947b985918d40aac6dfa8e4f4c0f31569f3"
+        },
+        {
+            "path": "tests/rust-memory-ustar-reader/callbacks.rs",
+            "git_blob": "3676cc4adda6596d4ea6d14741e70268bded1356",
+            "mode": "100644",
+            "sha256": "fe9f476dbee65e044adc3edd8f58c7a5183ec92b6802e05a0ac010319e0170f4"
+        },
+        {
+            "path": "tests/rust-memory-ustar-reader/contract.json",
+            "git_blob": "08b8b17997818ee2685149f2cc0781cf2da1982a",
+            "mode": "100644",
+            "sha256": "a4e4eb34896295b85dacc22dfa9344eba12854d912e20fc83c7f788b83bbbef9"
+        },
+        {
+            "path": "tests/rust-memory-ustar-reader/format.rs",
+            "git_blob": "80eecfd680669804add50ea14195eacd21de3a3e",
+            "mode": "100644",
+            "sha256": "40934ec14e2e30994170118dbf9350c29a28ef9ae65aa4b10748216a35314c8b"
+        },
+        {
+            "path": "tests/rust-memory-ustar-reader/main.rs",
+            "git_blob": "b993568c08adcfd0be8648108432e3e3219961dd",
+            "mode": "100644",
+            "sha256": "50714865d7b6e53e0419ca0e26536f62237117b743dc98097912fe453d78c558"
+        },
+        {
+            "path": "tests/rust-memory-ustar-reader/names.rs",
+            "git_blob": "89c9df6bf935b7084aa24fedd3cd6ccf18307b23",
+            "mode": "100644",
+            "sha256": "2611bfd6b8ca37bccb6110fbc954b15e810741d453edd6349efc0cdb114180c2"
+        },
+        {
+            "path": "tests/rust-memory-ustar-reader/selection.rs",
+            "git_blob": "e35f28c7c7897bda7270ad4a9f9bb925fd8d2c8e",
+            "mode": "100644",
+            "sha256": "b62dc7bbefee258dd110632aeff9140d512fb881a7d5edc7054ca31784cd6d99"
+        },
+        {
+            "path": "tests/rust-memory-ustar-reader/static_check.py",
+            "git_blob": "ebeb48b3c016a57b0e883a4de409c99800a6b2f0",
+            "mode": "100644",
+            "sha256": "e0d113edb4b150be4a5ecb1abb055fab91218461bc168bbf9787041c4fe2f09e"
+        },
+        {
+            "path": "tests/rust-memory-ustar-reader/support.rs",
+            "git_blob": "a280942626fab1e193d3d6ed8ca87d139c9b1d4e",
+            "mode": "100644",
+            "sha256": "6c30a2c7ce9598f9e89d0f28b6a0512d1abb10462b1777a8c9042f9591c2bae7"
+        },
+        {
+            "path": "tests/rust-memory-zip-create/SHA256SUMS",
+            "git_blob": "b3fa66b24d8878f42a324df91440f7845dd88aa5",
+            "mode": "100644",
+            "sha256": "be63110eb2df851d26a7a6c929d4b0d6c1c1f7d0ddff47de2e3034350fc48b00"
+        },
+        {
+            "path": "tests/rust-memory-zip-create/api.rs",
+            "git_blob": "7f8ff939763613aa35c226e5884085a6965e8c6e",
+            "mode": "100644",
+            "sha256": "69239e5ef0c9d78fa5db14ef45cfcc49b8be79ffd68402d98d61173282377ad5"
+        },
+        {
+            "path": "tests/rust-memory-zip-create/contract.json",
+            "git_blob": "9d154572a4f76db6ee702d70c7f39923f7af21ff",
+            "mode": "100644",
+            "sha256": "68ad1c93c78a73bcbecfc5413cdfcabbd70142daf5bc0ac33640e0975b4bfd21"
+        },
+        {
+            "path": "tests/rust-memory-zip-create/lifecycle.rs",
+            "git_blob": "09c271403d06557cf98151929e538ee22dc43921",
+            "mode": "100644",
+            "sha256": "ddb80e1ad74197fe5fd57356a1ff918ee60eeea442eb1997a585d1f9afb9bbc0"
+        },
+        {
+            "path": "tests/rust-memory-zip-create/limits.rs",
+            "git_blob": "727b74081ebe164942a2a570c5cfa7c18e96d313",
+            "mode": "100644",
+            "sha256": "2abd7c04fb7e1b614179d38f9f865e655c8468df3002069c8058f3e84bb1b4e5"
+        },
+        {
+            "path": "tests/rust-memory-zip-create/names.rs",
+            "git_blob": "7545050d770bb62be53cbd492d2f5d901065fb5f",
+            "mode": "100644",
+            "sha256": "dcd350774e6c597401f70de3bbf32be7f37187ecc6adf3260698346226ee1f11"
+        },
+        {
+            "path": "tests/rust-memory-zip-create/roundtrip.rs",
+            "git_blob": "ed0cc4a0aa775c65215cd5f3671b6932ab927094",
+            "mode": "100644",
+            "sha256": "6e9688326e9e31bb8cdedc013bd03d1d656ac3067e341f69d62ba5abed21c21a"
+        },
+        {
+            "path": "tests/rust-memory-zip-create/storage.rs",
+            "git_blob": "08aefae839d9ede99396062e17d670d8b8ee3efe",
+            "mode": "100644",
+            "sha256": "76a63e576d5db521d3b2af179a1251681ddbac5a2f7a62b3015eb75adcda0ee2"
+        },
+        {
+            "path": "tests/rust-memory-zip-create/support.rs",
+            "git_blob": "a1bba5fd57e8edbe29df6d13c7597583a9e4c3cc",
+            "mode": "100644",
+            "sha256": "971bdf33eb3e7d5ea64293fd70063e166019a47a229f3900fdcd416af8cdccb5"
+        },
+        {
+            "path": "tests/rust-ui-memory-app/SHA256SUMS",
+            "git_blob": "3a181927e444a8653bd0ac55ff3141faee92d2e1",
+            "mode": "100644",
+            "sha256": "4896269f9fc034ee306e24a4fcbdf44b97c95798a1fbd876a0ae8a32d5d8b081"
+        },
+        {
+            "path": "tests/rust-ui-memory-app/contract.json",
+            "git_blob": "c6be500af1528649e3ee599dbd9bf0e8aa1e5e84",
+            "mode": "100644",
+            "sha256": "5a9a48f08dea0d3b103a359251bde06dd82e2568be02bdb905f5b0ceb7bb6dd9"
+        },
+        {
+            "path": "tests/rust-ui-memory-app/dependencies.json",
+            "git_blob": "974263c30900ca5c97e430006a07188c477fb302",
+            "mode": "100644",
+            "sha256": "5ee41a973a0e976fbb6fe36d4a3fcb0ed026e638e997042a0bef8c2f238f0599"
+        },
+        {
+            "path": "tests/rust-ui-memory-app/dependency_audit.py",
+            "git_blob": "9f1fdd3425a79dde475b76705545f0ace4e98a74",
+            "mode": "100644",
+            "sha256": "8536779d3551eb86a82f4c8b814bb26ddeaff04f992d3e080ae06321f10e3453"
+        },
+        {
+            "path": "tests/rust-ui-memory-app/files.json",
+            "git_blob": "d8a83b43bfcf0b6c056a42f4f2c54fced4af5c9a",
+            "mode": "100644",
+            "sha256": "97c0bc5c804d85fb523da4c76abff2bec3aed3ae1e02b68db1c19792e9843808"
+        },
+        {
+            "path": "tests/rust-ui-memory-app/fixtures/payload.txt",
+            "git_blob": "4420a227971404a8d65c92a95cd96868822e9082",
+            "mode": "100644",
+            "sha256": "ce7c1973b4eab97e4e49257ce4dbc5cb35c5a1eaae7c666a04b548fe1fd41dba"
+        },
+        {
+            "path": "tests/rust-ui-memory-app/fixtures/sample.gz",
+            "git_blob": "2c3647b19081c0fc72243f847412fbbd67c12e71",
+            "mode": "100644",
+            "sha256": "6adcdc0775bca7b8c1ff8e41adeecf8a724f876f8b469f7f8fc611406a626e61"
+        },
+        {
+            "path": "tests/rust-ui-memory-app/fixtures/sample.tar",
+            "git_blob": "6e3bf5fb02e4686b69d8e88be0d2f68df4c7dd0c",
+            "mode": "100644",
+            "sha256": "910cb4573b57fd26f122376f3f4eae0e4397163b83e32a3c850758d42f88dc55"
+        },
+        {
+            "path": "tests/rust-ui-memory-app/license-supplement.json",
+            "git_blob": "4ea3c4e4af294beb1f7216252ad2892addb2153a",
+            "mode": "100644",
+            "sha256": "09aca74cb3f20f1ed5b3e03fd647c80ef8e872f6ff97e17882cf2fda8b108b2c"
+        },
+        {
+            "path": "tests/rust-ui-memory-app/reference-ui.lock",
+            "git_blob": "8ece34821ead493e020bcdc07996d1a51ae94bcb",
+            "mode": "100644",
+            "sha256": "865d69b95660fefe8c9ad6129d2692cff8007ecc3d55de1a049fe162173f434d"
+        },
+        {
+            "path": "tests/rust-ui-memory-app/regressions.rs",
+            "git_blob": "7bd471cf648854e5b8c534c4aa0658d1259f2f9f",
+            "mode": "100644",
+            "sha256": "4eec2f9e036bc0fc04a1ff0af31aa28e593c185f8d1d230c8105a8fefc92fc4d"
+        },
+        {
+            "path": "tests/rust-ui-memory-app/sources.json",
+            "git_blob": "fc1e788191ed5bf0f74e6b150a1f7d62e18163bc",
+            "mode": "100644",
+            "sha256": "f6a7b3df44869c206ff517f32653885c5fcd2f335ef4e8eff94d6ab626ca4119"
+        },
+        {
+            "path": "tests/rust-ui-memory-app/static_check.py",
+            "git_blob": "76cf33d6efdff8113c3d2b0cab13fcc8ab3b91d7",
+            "mode": "100644",
+            "sha256": "6a756de6da66731b1ea9eaaacedfbe32096bd6a918eab591a392bc45529184f5"
+        },
+        {
+            "path": "tests/rust-ui-system-fonts/SHA256SUMS",
+            "git_blob": "b4da374d81a8ded161bbae6a874fe6a29d9863b9",
+            "mode": "100644",
+            "sha256": "14ff411b1a3a96bfd957c0713a9782f1cba27b98543f03cfc4709bac96603db7"
+        },
+        {
+            "path": "tests/rust-ui-system-fonts/contract.json",
+            "git_blob": "7449ce3649a0c92d04be0553b90bc06c0ea9b826",
+            "mode": "100644",
+            "sha256": "c3fab0200d3ce39f8cf2411eab698811b12037d45aeb22984a9be7f6be4d3902"
+        },
+        {
+            "path": "tests/rust-ui-system-fonts/sources.json",
+            "git_blob": "62cae50416a370477e4192c577b262410672cddf",
+            "mode": "100644",
+            "sha256": "5d62336ecbbf963b9957849e27785a3d7a8f9342951244097cbd1db70b1450ca"
+        }
+    ]
+}

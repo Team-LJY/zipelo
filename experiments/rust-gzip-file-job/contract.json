@@ -1,0 +1,127 @@
+{
+    "schema": 1,
+    "package": "zipelo-gzip-file-job",
+    "status": "source-static-only",
+    "branch": "features/rust-gzip-file-job",
+    "base_head": "f7fc8cbece281e2f9a6374b4640ca4dd9d321fbc",
+    "imported_head": "1c16f1bffd79129dc1dbd4df4f5a3433f1ccbf65",
+    "scope": [
+        "experiments/rust-gzip-file-job/"
+    ],
+    "preservation": {
+        "main_blobs": 305,
+        "pr51_blobs": 239,
+        "union_blobs": 331,
+        "conflicts": 0,
+        "rule": "Keep every inherited blob and mode, including all original C# and Rust source/test files. Add 26 PR51-only files unchanged and the new adapter only. No deletion, rewrites, or unrelated evidence imports.",
+        "source_pins": "source-pins.json"
+    },
+    "api": {
+        "entry": "FileJob::new() -> (FileJob, Cancellation); FileJob::run(self, Request<'_>, observer) -> Report<E>",
+        "request": "Explicit input Path, output parent Path, single output OsStr leaf, and three native Limits. No archive-derived destination names, global path state, UI, CLI, server or public product entry point.",
+        "sequence": [
+            "Call native snapshot::capture once. On failure return Outcome::SnapshotFailed with the original snapshot::Failure<E>, including original cause and usage.",
+            "Retain private snapshot identity/SHA256 observations. Consume its owned Vec into a Box<[u8]> without reopening the source pathname.",
+            "Construct one gzip::Budget and call gzip::read once with selected=true. Native single-member header, DEFLATE, CRC32, ISIZE and exact EOF validation must all return successfully before publication.",
+            "Return original gzip::Error<E> on decode failure; preserve budget.usage() even when the final failed charge followed the last checkpoint.",
+            "Require selected output and its length to match native boundary.inflated_bytes. Adapter invariant failures have their own typed variants and never call publication.",
+            "Borrow precisely the validated owned output Vec to the original one-shot publication::Publication::publish. Return its entire native Report<E> unchanged."
+        ],
+        "outputs": [
+            "Outcome::SnapshotFailed(snapshot::Failure<E>)",
+            "Outcome::DecodeFailed(gzip::Error<E>)",
+            "Outcome::AdapterFailed(AdapterFailure)",
+            "Outcome::Publication(publication::Report<E>)"
+        ],
+        "observations": "SnapshotObservation and GzipObservation have private fields and no public constructor/Default/Deserialize. They are in-process observations, not authorization tokens or worker evidence. Snapshot SHA256 covers compressed captured bytes; GZip boundary CRC32 is not an output cryptographic hash.",
+        "callbacks": "Checkpoint { event: native Snapshot/Decode/Publication checkpoint, usage: three native cumulative counters }. Caller Stop::Callback(E) retains E without formatting/boxing or replacement by a later cancellation/deadline. Stop::Cancelled maps to the reached native stage's cancellation. No synthetic postcommit/final observer callback.",
+        "receipts": "No product Published state or job-wide success boolean. Outcome::Publication can contain NotCommitted, CommitUncertain or Committed with native durability and cleanup kept separate. Native private file receipt proves only observed file-layer commit."
+    },
+    "budgets": {
+        "policy": "One consumed FileJob, one call per native stage, no retries, no refunds or resets within a stage. Preserve each original accounting algorithm and units. A future caller creating a new job must aggregate retries externally; this API does not implement a retry/shared cross-job budget.",
+        "ledger": "Usage { snapshot: snapshot::Usage, gzip: gzip::Usage, publication: publication::Usage }. Zero counters for unreached stages; outcome and optional observations distinguish reach/completion. Each field is copied from the native final report or owned Budget after its stage, including failures; do not sum unlike counters.",
+        "snapshot": {
+            "payload_bytes": 16777216,
+            "reserved_read_bytes": 134217728,
+            "read_calls": 131072,
+            "default_seconds": 30,
+            "max_seconds": 300,
+            "mechanism": "Native reserve-before-read through capture plus compare pass; actual and compared bytes remain separate."
+        },
+        "gzip": {
+            "input_bytes": 16777216,
+            "processed_bytes": 134217728,
+            "selected_output_bytes": 16777216,
+            "metadata_bytes": 1048576,
+            "default_seconds": 300,
+            "max_seconds": 300,
+            "mechanism": "Same owned native Budget across header, inflate, output, CRC/size/trailing checks. Existing clamp-to-hard-cap semantics remain unchanged; input size is per invocation."
+        },
+        "publication": {
+            "payload_bytes": 16777216,
+            "reserved_io_bytes": 134217728,
+            "io_calls": 131072,
+            "default_seconds": 30,
+            "max_seconds": 300,
+            "mechanism": "Native write/read/EOF reservation and actual transfer counters, sync/link/close accounting unchanged."
+        },
+        "memory": "At handoff, captured input is at most 16 MiB and selected output at most 16 MiB, plus native bounded scratch/backend allocations. No extra Vec clone; Vec::into_boxed_slice may shrink/reallocate through the standard infallible allocator. Native try_reserve failures remain typed; allocator abort/panic, callback allocations, kernel/filesystem memory and process RSS are not fully bounded.",
+        "elapsed": "Native per-stage clock starts on entry to that stage. No single whole-job deadline or hard syscall/callback/allocator cutoff. Postcommit sync and close are never interrupted or relabelled by elapsed/cancellation. Defaults sum to 360 seconds of cooperative stage limits, not a hard wall-clock promise."
+    },
+    "cancellation": {
+        "identity": "Every FileJob owns the original one-shot Publication gate from construction. All Cancellation clones refer to that gate and one private AtomicBool.",
+        "order": "Cancellation::request first calls the original native CAS decision. Only Requested/AlreadyRequested sets the front-stage accepted flag; original Requested/AlreadyRequested/TooLate/Finished is returned unchanged.",
+        "early": "Snapshot/decode observers run first to preserve original callback cause, then poll accepted cancellation. A racing accepted request may propagate after another cooperative checkpoint; publication's native gate was already cancelled and cannot commit.",
+        "commit": "Original Pending->Cancelled versus Pending->Committing CAS remains authoritative. No new observer runs after native begin_commit. TooLate or Finished does not set a new cancellation flag or rewrite native outcomes.",
+        "termination": "Dropping an unused Publication marks its gate Finished per original API; this is not proof of rollback, file cleanup, worker exit or cancellation as the returned cause.",
+        "observer_stop": "Observer Stop::Cancelled is a local native stage stop, not an extra call to Cancellation::request. Original callback errors can win over a simultaneously accepted cancellation."
+    },
+    "filesystem": {
+        "behavior": "Reuse frozen Linux snapshot and single-file publication as implemented. Parent dirfd, O_TMPFILE, procfs linkat no-clobber, trusted parent and ext-family/XFS checks remain native. No weak fallback or overwrite.",
+        "names": "Caller chooses explicit parent/leaf. GZip FNAME/FCOMMENT is never interpreted as a path, extension, command, or output name.",
+        "uncertainty": "All native non-EEXIST link failures remain CommitUncertain; no automatic retry, unlink, rollback or claim that the target is absent. Successful link with failed parent sync remains Committed with ParentSyncFailed. Every original close failure remains in Cleanup.",
+        "limits": "No original pathname persistence, coherent/atomic input snapshot, inotify history, output contents hash, durable physical deletion or crash-recovery proof.",
+        "other_os": "No Windows implementation or substitute adapter. Reached native unsupported-platform errors are preserved."
+    },
+    "dependencies": {
+        "local": [
+            "../rust-file-snapshot",
+            "../rust-memory-gzip-reader",
+            "../rust-file-publication"
+        ],
+        "external": "Exactly the 11 existing locked registry packages; selected native features unchanged, no new registry version, process launcher, async runtime, UI or network dependency.",
+        "ownership": "No inherited Cargo.toml, Cargo.lock, API, shared type or production source changed.",
+        "audit": "Cache archive/SHA256 and 661 regular source files plus license bytes checked. Current advisory audit not performed; no vulnerability-free claim."
+    },
+    "execution_boundary": {
+        "completed": [
+            "Rustfmt syntax/format check on new source only",
+            "Cargo 1.99.1 generate-lockfile --offline",
+            "Cargo 1.99.1 metadata --locked --offline",
+            "Inherited blob/mode/SHA256 comparison",
+            "Dependency cache/hash/license comparison",
+            "Read-only source/control-flow review"
+        ],
+        "not_completed": [
+            "Rust type checking",
+            "Rust compilation or test discovery",
+            "New module execution or end-to-end regression",
+            "User file processing",
+            "OS worker or sandbox isolation",
+            "Product UI/Published integration",
+            "Windows/Ubuntu 24.04 validation"
+        ],
+        "future_review": "Fix this source/manifest/remote head before separate compile/run authorization. Regression code belongs only in root tests/. Existing parent test evidence is not a run of this adapter.",
+        "exclusions": [
+            "Folder extraction",
+            "New format support",
+            "Automatic repair",
+            "Password handling",
+            "Old-source edits",
+            "GUI/VM",
+            "Held memfd/execveat probes",
+            "Publishing/releasing the product",
+            "Main merge"
+        ]
+    }
+}
