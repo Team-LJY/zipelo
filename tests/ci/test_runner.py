@@ -1,9 +1,10 @@
 from contextlib import redirect_stdout
 from io import StringIO
 import json
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 import tempfile
 import subprocess
+import sys
 import unittest
 from unittest.mock import patch
 
@@ -122,6 +123,7 @@ class RunnerTests(unittest.TestCase):
                 self.assertFalse(failed["windows_runtime_tested"])
                 execute.assert_called_once()
 
+    @unittest.skipUnless(sys.platform == "linux", "Linux MinGW 실행 파일 탐색 시험임")
     def test_linked_worktree_finds_setup_tools_without_path_export(self):
         with tempfile.TemporaryDirectory(dir=run_rust.ROOT / "tests/ci") as directory:
             base = Path(directory)
@@ -148,18 +150,19 @@ class RunnerTests(unittest.TestCase):
                 )
 
     def test_local_bootstraps_missing_cross_tools_and_reloads_paths(self):
-        root = Path("/repo")
-        with (
-            patch.object(run_rust, "prepare_cross_build", side_effect=[ValueError("missing"), None]) as detect,
-            patch.object(run_rust.subprocess, "run") as setup,
-            patch.object(run_rust, "prepare_tools") as reload,
-        ):
-            run_rust.prepare_local_tools(root)
-        setup.assert_called_once_with(
-            ["bash", "/repo/tests/ci/setup_windows.sh"], cwd=root, check=True,
-        )
-        reload.assert_called_once_with(root)
-        self.assertEqual(detect.call_count, 2)
+        for root in (Path("/repo"), PurePosixPath("/repo"), PureWindowsPath("C:/repo")):
+            with self.subTest(root=root):
+                with (
+                    patch.object(run_rust, "prepare_cross_build", side_effect=[ValueError("missing"), None]) as detect,
+                    patch.object(run_rust.subprocess, "run") as setup,
+                    patch.object(run_rust, "prepare_tools") as reload,
+                ):
+                    run_rust.prepare_local_tools(root)
+                setup.assert_called_once_with(
+                    ["bash", str(root / "tests/ci/setup_windows.sh")], cwd=root, check=True,
+                )
+                reload.assert_called_once_with(root)
+                self.assertEqual(detect.call_count, 2)
 
     def test_existing_cross_tools_do_not_trigger_downloads(self):
         with (
@@ -179,6 +182,7 @@ class RunnerTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "setup_windows.sh"):
                 run_rust.prepare_cross_build()
 
+    @unittest.skipUnless(sys.platform == "linux", "Linux 파일시스템과 소유권 검사 시험임")
     def test_filesystem_skip_is_limited_to_publication_test_crates(self):
         with tempfile.TemporaryDirectory(dir=run_rust.ROOT / "tests/ci") as directory:
             root = Path(directory)
@@ -191,7 +195,6 @@ class RunnerTests(unittest.TestCase):
                 root / "experiments/rust-file-publication/Cargo.toml",
             ]
             with (
-                patch.object(run_rust.sys, "platform", "linux"),
                 patch.object(run_rust, "manifests", return_value=paths),
                 patch.object(run_rust.subprocess, "check_output", return_value="1021994\n"),
                 patch.object(run_rust.subprocess, "run", return_value=subprocess.CompletedProcess([], 0)) as cargo,
