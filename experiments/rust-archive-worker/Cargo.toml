@@ -1,0 +1,17 @@
+[package]
+name = "zipelo-archive-worker"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+publish = false
+autotests = false
+
+[dependencies]
+sha2 = "=0.10.9"
+zlib-rs = { version = "=0.6.8", default-features = false, features = ["rust-allocator"] }
+
+[workspace]
+
+[[test]]
+name = "archive_worker"
+path = "../../tests/rust-archive-worker/main.rs"
