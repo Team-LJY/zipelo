@@ -1,0 +1,18 @@
+[package]
+name = "zipelo-large-archive-probe"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+publish = false
+autotests = false
+
+[workspace]
+
+[dependencies]
+zipelo-archive-worker = { path = "../../experiments/rust-archive-worker" }
+
+[[bin]]
+name = "zipelo-large-archive-probe"
+path = "probe.rs"
+test = false
+bench = false
