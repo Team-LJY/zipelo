@@ -114,7 +114,7 @@
             "sha256": "ecce7538871a999dec566684b1aa91a49c983110041f64cdf206640955201015",
             "error_any_of": [
                 "UnsafePath",
-                "UnsupportedFeature"
+                "Conflict"
             ],
             "link_name": "link",
             "link_target": "../outside"
@@ -127,7 +127,7 @@
             "sha256": "a33e70ad9ce988bf30cbf9b8c03d6a617b2d82b3d59f49b02cb9447c39b4ccf9",
             "error_any_of": [
                 "UnsafePath",
-                "UnsupportedFeature"
+                "Conflict"
             ],
             "link_name": "link",
             "link_target": "../outside"

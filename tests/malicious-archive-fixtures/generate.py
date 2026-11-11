@@ -92,7 +92,7 @@ def build():
         ("tar-symlink-escape.tar", tar_bytes(entries), "TAR"),
     ):
         add(name, data, "symlink-escape", format_name,
-            ["UnsafePath", "UnsupportedFeature"], link_name="link", link_target="../outside")
+            ["UnsafePath", "Conflict"], link_name="link", link_target="../outside")
 
     entries = [PREFIX, ("large.txt", BOMB, None)]
     for name, data, format_name, expanded in (

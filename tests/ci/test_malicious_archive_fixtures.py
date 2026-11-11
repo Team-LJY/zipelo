@@ -72,6 +72,8 @@ class MaliciousFixtureTests(unittest.TestCase):
         self.assertFalse(self.manifest["worker_execution_verified"])
         for case in self.cases:
             self.assertTrue(case["error_any_of"])
+            if case["category"] == "symlink-escape":
+                self.assertEqual(case["error_any_of"], ["UnsafePath", "Conflict"])
 
     def test_hostile_paths_follow_valid_member(self):
         for case in self.cases:

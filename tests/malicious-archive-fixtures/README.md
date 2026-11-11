@@ -11,7 +11,7 @@ ZIP/TAR 경로, 링크, 손상 표본과 ZIP/TAR.GZ 폭탄에는 정상 파일 b
 
 ## 기대 결과와 실행 조건
 
-expectations.json의 request_defaults에 각 case의 limits와 gzip_output_name을 덮어써 Extract 요청을 구성합니다. file은 fixtures/ 아래의 입력 파일이며 실제 요청에는 절대 경로를 사용합니다. 목록 재사용 없이 Selection::All과 list_id=None으로 시작합니다. 각 case의 error_any_of는 허용하는 오류 코드이며 나머지 공통 expected 조건은 모두 충족해야 합니다.
+expectations.json의 request_defaults에 각 case의 limits와 gzip_output_name을 덮어써 Extract 요청을 구성합니다. file은 fixtures/ 아래의 입력 파일이며 실제 요청에는 절대 경로를 사용합니다. 목록 재사용 없이 Selection::All과 list_id=None으로 시작합니다. 각 case의 error_any_of는 허용하는 오류 코드이며 나머지 공통 expected 조건은 모두 충족해야 합니다. 링크 표본 2개는 UnsafePath 또는 Conflict를 허용합니다. 링크 아래 파일과 비디렉터리 부모의 충돌을 먼저 감지할 수 있으므로 오류 종류보다 쓰기 없는 거부를 확인합니다.
 
 - 새 시험 디렉터리 안에 비어 있는 소유 destination과 sibling outside를 준비합니다. Linux의 새 디렉터리는 처음부터 0700으로 생성하며 기존 경로 권한을 변경하지 않습니다.
 - 두 폴더와 입력 파일의 바이트, 이름, 링크, 메타데이터를 실행 전후 비교합니다. 작업자 프로세스는 제한된 시험 환경에서만 실행하고 사용자 파일이나 실제 압축파일은 사용하지 않습니다.
@@ -38,4 +38,4 @@ python3 tests/malicious-archive-fixtures/generate.py
 
 생성기는 Python 표준 라이브러리만 사용합니다. 현재 환경에서 재생성한 바이트가 저장된 표본과 같아야 합니다. 다른 Python/zlib 버전에서 압축 바이트가 달라지면 원인을 확인하고 검토 후 갱신하며 검사를 우회하지 않습니다. 생성기를 실행하면 이 디렉터리의 알려진 표본과 기대값만 갱신합니다.
 
-worker_execution_verified=false는 실제 작업자 검증이 아직 없다는 뜻입니다. 후속 리뷰에서는 사용한 작업자 커밋, 개별 표본 결과, 쓰기 관측 방식과 실행 환경을 별도로 보고해야 합니다. Windows 실기, 암호, 파일시스템 경합, OS sandbox 검증은 포함하지 않습니다.
+worker_execution_verified=false는 생성기가 제공하는 기대값 자체를 작업자 실행 증거로 취급하지 않는다는 뜻입니다. 실제 작업자 검증 결과는 사용한 커밋과 함께 PR 본문에 기록합니다. 후속 리뷰에서는 사용한 작업자 커밋, 개별 표본 결과, 쓰기 관측 방식과 실행 환경을 별도로 보고해야 합니다. Windows 실기, 암호, 파일시스템 경합, OS sandbox 검증은 포함하지 않습니다.
