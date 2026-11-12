@@ -1,17 +1,17 @@
 {
-    "recorded_at_utc": "2026-11-12T05:39:34.543131+00:00",
-    "tested_local_commit": "d67235bd171df49426cf053f16c29055e6a907e0",
-    "tested_source_tree": "54a04f8d09096de37a12f2cc2dc329a847a36ac5",
-    "equivalent_remote_source_commit": "0a0eef33e792890407cffca29251ff08f6399421",
+    "recorded_at_utc": "2026-11-12T06:10:29.553068+00:00",
+    "tested_local_commit": "ac9d4c5adcc33ba315d67642f26f0573002b6b05",
+    "tested_source_tree": "58444c30df553b552c901de8c5c9455fe203df18",
+    "equivalent_remote_source_commit": "8e66fe78e4f9132e38f994a67b3176ccbcdd534b",
     "command": "python3 tests/ci/run_rust.py local",
     "exit_code": 0,
-    "rust_tests_passed": 1008,
+    "rust_tests_passed": 1011,
     "runner_tests_passed": 34,
-    "ui_suite_tests_passed": 61,
+    "ui_suite_tests_passed": 64,
     "actual_worker_ui_tests_passed": 26,
-    "local_log_sha256": "8ae8adbfdcea292668d98340b5845e3b881efa41a12b2c53092fb276ee82c530",
+    "local_log_sha256": "fdfb73c327102444fd639f5d0e414400381c62bddd77d376caca52b05394f019",
     "local_results": {
-        "head": "d67235bd171df49426cf053f16c29055e6a907e0",
+        "head": "ac9d4c5adcc33ba315d67642f26f0573002b6b05",
         "platform": "linux",
         "windows_cross_target": "x86_64-pc-windows-gnu",
         "windows_runtime_tested": false,
@@ -420,7 +420,7 @@
             "sha256": "07914ea158c697c02ac5151ca0363cb2dd99e99ef2d14b8c6f684dbe801f12a7"
         }
     ],
-    "screenshot_scope": "Actual eframe rendering with synthetic listing and three toolbar actions; existing captures predate the GZ dialog and filter-only correction, which does not alter these three views.",
+    "screenshot_scope": "The three toolbar images use actual eframe with synthetic listing and predate the GZ and portal-error corrections. Separate portal-failure images verify the new visible error states.",
     "historical_screenshots": "before, after and minimum folders record the previous UI and are not current verification.",
     "coverage": {
         "virtual_folders_and_current_folder_search": "browser_builds_virtual_folders_and_expands_only_the_selected_subtree; keyboard_opens_virtual_folder_and_searches_only_its_children",
@@ -470,11 +470,44 @@
                 "sample.Zip",
                 "sample.zIp"
             ],
-            "scope": "Pure unit test verifies the filter list passed to rfd; actual worker tests inject native dialog answers. Native filter UI interaction is not tested."
+            "scope": "Pure unit test verifies the shared native filter list; Windows passes it to rfd and Linux converts it to portal globs. Actual worker tests inject dialog answers. Successful native filter interaction is not tested."
+        },
+        "native_dialog_failure": {
+            "tests": [
+                "portal_response_distinguishes_cancellation_from_backend_failure",
+                "missing_portal_returns_errors_for_every_dialog",
+                "dialog_failures_show_alerts_while_cancelled_dialogs_remain_silent"
+            ],
+            "ui_purposes": [
+                "Open",
+                "Files",
+                "Folder",
+                "Destination",
+                "SaveZip",
+                "SaveGzip"
+            ],
+            "actual_linux_backend_purposes": [
+                "Open",
+                "Files",
+                "Folder",
+                "Destination",
+                "Retry",
+                "SaveZip",
+                "SaveGzip",
+                "RetryGzip"
+            ],
+            "assertions": [
+                "Explicit portal cancellation remains silent and starts no job",
+                "Backend failures, missing portal, non-file URI errors and empty success responses show a friendly error",
+                "A single visible alert is rendered in the active screen or create modal",
+                "Cancellation after recovery clears the obsolete backend error and starts no job"
+            ],
+            "isolation": "Actual NativeDialogs runs in a child process with a nonexistent private D-Bus endpoint; the parent session environment is unchanged. UI failure responses are additionally injected for six action paths.",
+            "dependency_reuse": "Linux directly uses the ashpd 0.11.1 and pollster 0.4.0 already present through rfd. No new package nodes or versions were added. Windows retains rfd."
         }
     },
     "licenses": {
-        "command": "python3 packaging/licenses.py --manifest experiments/rust-ui-memory-app/Cargo.toml --manifest experiments/rust-archive-worker/Cargo.toml --output tests/ui-redesign/runs/THIRD-PARTY-LICENSES.txt --audit tests/ui-redesign/runs/toolbar-license-audit.json",
+        "command": "python3 packaging/licenses.py --manifest experiments/rust-ui-memory-app/Cargo.toml --manifest experiments/rust-archive-worker/Cargo.toml --output tests/ui-redesign/runs/THIRD-PARTY-LICENSES.txt --audit tests/ui-redesign/runs/portal-license-audit.json",
         "exit_code": 0,
         "packages": 451,
         "missing": 0,
@@ -509,7 +542,7 @@
     },
     "limitations": [
         "Windows cross-build only; the new UI, installation and native dialog interaction have not been executed on Windows.",
-        "Linux portal native dialogs are compiled but not interactively tested; dialog cancellation and returned paths use injected responses.",
+        "Linux native backend failure is exercised through a child process and Xvfb. Successful portal selection and actual user cancellation interaction remain untested; their response handling has unit and injected UI coverage.",
         "Xvfb images use synthetic listing data; real file operations are separately tested with the actual worker.",
         "Full assistive-technology audit and actual OS file-manager launching are not included."
     ],
@@ -518,5 +551,26 @@
         "압축하기",
         "압축해제"
     ],
-    "existing_archive_reencryption": "Excluded from v0.1; no toolbar action."
+    "existing_archive_reencryption": "Excluded from v0.1; no toolbar action.",
+    "portal_failure_screenshots_source_local_commit": "ac9d4c5adcc33ba315d67642f26f0573002b6b05",
+    "portal_failure_screenshots": [
+        {
+            "state": "dialog-unavailable",
+            "path": "tests/ui-redesign/screenshots/portal-failure/dialog-unavailable.png",
+            "width": 1060,
+            "height": 720,
+            "sha256": "79088d332dd8f36b4b8ea65a390b4ecf226388dc25e45604cad97cd62cdc3278"
+        },
+        {
+            "state": "create-dialog-unavailable",
+            "path": "tests/ui-redesign/screenshots/portal-failure/create-dialog-unavailable.png",
+            "width": 1060,
+            "height": 720,
+            "sha256": "d00e76552e16fd88e3eca61e2b674ec6fa522f8d5ddf57f0fd90d3eed67c26f8"
+        }
+    ],
+    "portal_failure_screenshot_scope": "Actual eframe and NativeDialogs Linux backend with an unreachable private D-Bus address and synthetic archive listing. Success-path portal interaction is not covered.",
+    "validation_notes": [
+        "Two ad hoc cargo test attempts using default parallelism intermittently failed to start copied worker probes in existing tests. The required local runner uses --test-threads=1 and all 26 real-worker tests passed. No worker or probe implementation was changed."
+    ]
 }
