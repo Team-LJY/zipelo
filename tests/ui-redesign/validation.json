@@ -1,17 +1,17 @@
 {
-    "recorded_at_utc": "2026-11-12T05:02:52.049350+00:00",
-    "tested_local_commit": "6d1583e429c057d244e94795269a444c8d31e8b5",
-    "tested_source_tree": "99450f4d30ce91e78f32c03a4e7ed2a7b6bc37cb",
-    "equivalent_remote_source_commit": "801ed4358cd17510357b3341b3e4f02799b933a3",
+    "recorded_at_utc": "2026-11-12T05:11:58.558008+00:00",
+    "tested_local_commit": "53829027d861c0a152e18f31e551ddea54400b7a",
+    "tested_source_tree": "5437d935fdca9ed035b751a94e29c3835e82b59a",
+    "equivalent_remote_source_commit": "d4d4df7532e6528a4b8a104f21c2c5aa375ab7b3",
     "command": "python3 tests/ci/run_rust.py local",
     "exit_code": 0,
     "rust_tests_passed": 1003,
     "runner_tests_passed": 34,
     "ui_suite_tests_passed": 58,
     "actual_worker_ui_tests_passed": 24,
-    "local_log_sha256": "ab2629b1fd2e4ca93c299856d8e5675be10eee68fcd43057201ada8ac48de507",
+    "local_log_sha256": "81e5a21c47b8f1f91c59bb1900b3d7dfe2770b18e5b849a6806be0cec2bd0488",
     "local_results": {
-        "head": "6d1583e429c057d244e94795269a444c8d31e8b5",
+        "head": "53829027d861c0a152e18f31e551ddea54400b7a",
         "platform": "linux",
         "windows_cross_target": "x86_64-pc-windows-gnu",
         "windows_runtime_tested": false,
@@ -396,31 +396,31 @@
             }
         ]
     },
-    "screenshots_source_local_commit": "fe6914358a659ffea0093c7b1ef4c4c14270720e",
+    "screenshots_source_local_commit": "53829027d861c0a152e18f31e551ddea54400b7a",
     "screenshots": [
         {
             "state": "toolbar-root",
             "path": "tests/ui-redesign/screenshots/toolbar/toolbar-root.png",
             "width": 1060,
             "height": 720,
-            "sha256": "bfe322b42c5c419a9cc4f9bf29bc89bc9d111be85e1dd0fdec5e4c8cf767b578"
+            "sha256": "3fd44fbbfdbec77dc749adfa0563003a2f05d8badd7566c879389d3d2b2bcdc4"
         },
         {
             "state": "toolbar-folder",
             "path": "tests/ui-redesign/screenshots/toolbar/toolbar-folder.png",
             "width": 1060,
             "height": 720,
-            "sha256": "ac9f6fdc018b5f40068b148ed10fdc9dc7581b5b8de99fea66f336aa95c36216"
+            "sha256": "98570928b8f5b9550a21ca904d257728d94a579f67e5febe2344bd123a93c614"
         },
         {
             "state": "toolbar-create",
             "path": "tests/ui-redesign/screenshots/toolbar/toolbar-create.png",
             "width": 1060,
             "height": 720,
-            "sha256": "bffa2e2d012406017c08313d20f11a90c07945e1555b10a2003e881a25215c88"
+            "sha256": "07914ea158c697c02ac5151ca0363cb2dd99e99ef2d14b8c6f684dbe801f12a7"
         }
     ],
-    "screenshot_scope": "Actual eframe rendering with synthetic archive listing; the selection correction does not change these empty-selection views.",
+    "screenshot_scope": "Actual eframe rendering with synthetic archive listing and three toolbar actions.",
     "historical_screenshots": "before, after and minimum folders record the previous UI and are not current verification.",
     "coverage": {
         "virtual_folders_and_current_folder_search": "browser_builds_virtual_folders_and_expands_only_the_selected_subtree; keyboard_opens_virtual_folder_and_searches_only_its_children",
@@ -428,12 +428,12 @@
         "folder_request_ids": "native_destination_expands_directory_ids_and_uses_archive_parent_default; extraction_completion_matches_actual_worker_selection_matrix",
         "selection_exclusion": "excluding_a_child_after_folder_selection_does_not_restore_it_during_extraction",
         "dropped_path_validation": "invalid_source_batch_is_rejected_without_starting_or_adding_valid_members; dropped-file tests never read file bytes on UI thread",
-        "encryption_tool": "encryption_tool_opens_protected_zip_modal_without_starting_work; real-worker AES ZIP create/extract tests",
         "enter_policy": "Focused buttons activate with Enter; password input submission is the only exception. toolbar_and_modal_keyboard_do_not_submit_from_secondary_controls; password_secondary_enter_does_not_submit_valid_input",
         "durability": "completed_results_keep_folder_action_and_distinguish_durability; durability_warning_visibility_matches_completed_failed_and_partial_results (9 combinations)",
         "private_destination": "auto_destination_is_private_under_desktop_umask",
         "minimum_size": "create_dialog_keeps_title_and_actions_visible_after_resize (760x540)",
-        "renderer_and_contract": "Renderer fallback and contract revision 2 remain unchanged and pass local suites."
+        "renderer_and_contract": "Renderer fallback and contract revision 2 remain unchanged and pass local suites.",
+        "zip_password_option": "toolbar_has_three_actions_and_zip_password_option_remains_available; real-worker AES ZIP create/extract tests"
     },
     "licenses": {
         "command": "python3 packaging/licenses.py --manifest experiments/rust-ui-memory-app/Cargo.toml --manifest experiments/rust-archive-worker/Cargo.toml --output tests/ui-redesign/runs/THIRD-PARTY-LICENSES.txt --audit tests/ui-redesign/runs/toolbar-license-audit.json",
@@ -474,5 +474,11 @@
         "Linux portal native dialogs are compiled but not interactively tested; dialog cancellation and returned paths use injected responses.",
         "Xvfb images use synthetic listing data; real file operations are separately tested with the actual worker.",
         "Full assistive-technology audit and actual OS file-manager launching are not included."
-    ]
+    ],
+    "toolbar_actions": [
+        "열기",
+        "압축하기",
+        "압축해제"
+    ],
+    "existing_archive_reencryption": "Excluded from v0.1; no toolbar action."
 }
