@@ -33,40 +33,50 @@ fn unicode_path(raw: &[u8], name: &str) -> Vec<u8> {
     extra
 }
 
-/// 저장 방식 항목 하나짜리 ZIP을 만듦. 확장 필드는 로컬과 중앙 헤더에 똑같이 기록함.
+/// 저장 방식 항목 하나짜리 ZIP을 만듦.
 fn single_entry_zip(raw: &[u8], flags: u16, extra: &[u8], data: &[u8]) -> Vec<u8> {
-    let checksum = crc(data);
-    let mut output = b"PK\x03\x04".to_vec();
-    for value in [20u16, flags, 0, 0, 33] {
-        output.extend(value.to_le_bytes());
+    stored_entries_zip(&[(raw, flags, extra, data)])
+}
+
+/// 확장 필드를 로컬과 중앙 헤더에 똑같이 기록함.
+fn stored_entries_zip(entries: &[(&[u8], u16, &[u8], &[u8])]) -> Vec<u8> {
+    let mut output = Vec::new();
+    let mut central = Vec::new();
+    for &(raw, flags, extra, data) in entries {
+        let offset = output.len() as u32;
+        let checksum = crc(data);
+        output.extend(b"PK\x03\x04");
+        for value in [20u16, flags, 0, 0, 33] {
+            output.extend(value.to_le_bytes());
+        }
+        for value in [checksum, data.len() as u32, data.len() as u32] {
+            output.extend(value.to_le_bytes());
+        }
+        output.extend((raw.len() as u16).to_le_bytes());
+        output.extend((extra.len() as u16).to_le_bytes());
+        output.extend(raw);
+        output.extend(extra);
+        output.extend(data);
+        central.extend(b"PK\x01\x02");
+        for value in [0x0314u16, 20, flags, 0, 0, 33] {
+            central.extend(value.to_le_bytes());
+        }
+        for value in [checksum, data.len() as u32, data.len() as u32] {
+            central.extend(value.to_le_bytes());
+        }
+        central.extend((raw.len() as u16).to_le_bytes());
+        for value in [extra.len() as u16, 0, 0, 0] {
+            central.extend(value.to_le_bytes());
+        }
+        central.extend((0o100644u32 << 16).to_le_bytes());
+        central.extend(offset.to_le_bytes());
+        central.extend(raw);
+        central.extend(extra);
     }
-    for value in [checksum, data.len() as u32, data.len() as u32] {
-        output.extend(value.to_le_bytes());
-    }
-    output.extend((raw.len() as u16).to_le_bytes());
-    output.extend((extra.len() as u16).to_le_bytes());
-    output.extend(raw);
-    output.extend(extra);
-    output.extend(data);
     let central_at = output.len() as u32;
-    let mut central = b"PK\x01\x02".to_vec();
-    for value in [0x0314u16, 20, flags, 0, 0, 33] {
-        central.extend(value.to_le_bytes());
-    }
-    for value in [checksum, data.len() as u32, data.len() as u32] {
-        central.extend(value.to_le_bytes());
-    }
-    central.extend((raw.len() as u16).to_le_bytes());
-    for value in [extra.len() as u16, 0, 0, 0] {
-        central.extend(value.to_le_bytes());
-    }
-    central.extend((0o100644u32 << 16).to_le_bytes());
-    central.extend(0u32.to_le_bytes());
-    central.extend(raw);
-    central.extend(extra);
     output.extend(&central);
     output.extend(b"PK\x05\x06");
-    for value in [0u16, 0, 1, 1] {
+    for value in [0u16, 0, entries.len() as u16, entries.len() as u16] {
         output.extend(value.to_le_bytes());
     }
     output.extend((central.len() as u32).to_le_bytes());
@@ -184,6 +194,56 @@ fn unicode_path_extra_is_used_only_when_its_crc_matches() {
         names_agree(&single_entry_zip(b"a.txt", 0x0800, &ignored, b"hi\n")).unwrap(),
         ["a.txt"]
     );
+}
+
+fn assert_rejected_without_output(bytes: &[u8], error: ErrorCode) {
+    assert_eq!(names_agree(bytes), Err(error));
+    let s = Scratch::new();
+    let events = extract(&s, bytes, None, Selection::All, None, Limits::default());
+    let result = terminal(&events);
+    assert_eq!(result.outcome, Outcome::Failed, "{events:?}");
+    assert_eq!(result.error, error, "{events:?}");
+    assert_eq!(result.publication, Publication::None);
+    assert_eq!(result.created_count, 0);
+    assert_eq!(fs::read_dir(s.0.join("output")).unwrap().count(), 0);
+}
+
+#[test]
+fn duplicate_unicode_path_extras_are_rejected_before_writes() {
+    let raw = b"safe.txt";
+    for second in ["회의록.txt", "다른.txt"] {
+        let extra = [unicode_path(raw, "회의록.txt"), unicode_path(raw, second)].concat();
+        let bytes = single_entry_zip(raw, 0, &extra, b"hi\n");
+        assert_rejected_without_output(&bytes, ErrorCode::Integrity);
+    }
+}
+
+#[test]
+fn converted_names_colliding_with_other_paths_are_rejected_before_writes() {
+    let first = b"first.txt";
+    let second = b"second.txt";
+    let original = stored_entries_zip(&[(first, 0, &[], b"first"), (second, 0, &[], b"second")]);
+    assert_eq!(names_agree(&original).unwrap(), ["first.txt", "second.txt"]);
+    for (first_name, second_name) in [
+        ("회의록.txt", "회의록.txt"),
+        ("폴더/Memo.txt", "폴더/memo.txt"),
+        ("폴더", "폴더/메모.txt"),
+    ] {
+        let first_extra = unicode_path(first, first_name);
+        let second_extra = unicode_path(second, second_name);
+        for (raw, extra, name) in [
+            (first.as_slice(), &first_extra, first_name),
+            (second.as_slice(), &second_extra, second_name),
+        ] {
+            let bytes = single_entry_zip(raw, 0, extra, b"hi\n");
+            assert_eq!(names_agree(&bytes).unwrap(), [name]);
+        }
+        let bytes = stored_entries_zip(&[
+            (first, 0, &first_extra, b"first"),
+            (second, 0, &second_extra, b"second"),
+        ]);
+        assert_rejected_without_output(&bytes, ErrorCode::Conflict);
+    }
 }
 
 #[test]
