@@ -1,19 +1,19 @@
 {
-    "recorded_at_utc": "2026-11-12T02:50:54.101340+00:00",
+    "recorded_at_utc": "2026-11-12T03:18:17.524118+00:00",
     "baseline": "b10c7eedddd202f83766aa8f001142cdfdb4097c",
-    "tested_local_commit": "69df9fba2b83a50a673c2259bd33d2b16fc0dbd8",
-    "tested_source_tree": "d6d0f4609874ae973afe4eaaae69549c35ba698e",
-    "equivalent_remote_source_commit": "0c96f094ea9b30e30f3786272c0cee282f87518b",
+    "tested_local_commit": "1fcb4dba724ab526c6b320d0727853e905d9914e",
+    "tested_source_tree": "f72bf5767a811dcb1ca7fcaf5653ffd9f52828df",
+    "equivalent_remote_source_commit": "fb3da210125e850bfa815e78d3c1340e24c4c8b7",
     "command": "python3 tests/ci/run_rust.py local",
     "exit_code": 0,
-    "rust_tests_passed": 1003,
+    "rust_tests_passed": 1004,
     "runner_tests_passed": 34,
-    "ui_suite_tests_passed": 58,
+    "ui_suite_tests_passed": 59,
     "actual_worker_ui_tests_passed": 24,
     "native_x11_row_selection": "passed",
-    "local_log_sha256": "b5c292200cd97a4754aedfd11b206e8cbc44a5ca2edc93b34d600499f7fdd180",
+    "local_log_sha256": "9c1c16daa7493861698dd88fc9e8ccbe574a1e1598731604a8a6e7579367fba0",
     "local_results": {
-        "head": "69df9fba2b83a50a673c2259bd33d2b16fc0dbd8",
+        "head": "1fcb4dba724ab526c6b320d0727853e905d9914e",
         "platform": "linux",
         "windows_cross_target": "x86_64-pc-windows-gnu",
         "windows_runtime_tested": false,
@@ -950,5 +950,16 @@
             "Extract and CreateZip Completed results with Synced, Unconfirmed and Failed durability retain success and folder action; sync warning appears only in expanded details."
         ],
         "windows_runtime_tested": false
+    },
+    "durability_warning_visibility_regression": {
+        "test": "durability_warning_visibility_matches_completed_failed_and_partial_results",
+        "baseline": "Failed + Unconfirmed hid the sync warning before correction.",
+        "result": "passed",
+        "cases": [
+            "Completed + Complete + Unconfirmed",
+            "Failed + None + Unconfirmed",
+            "Failed + Partial + Unconfirmed"
+        ],
+        "coverage": "Completed keeps success and folder action, with sync warning only in details. Failed and partial results show the sync warning immediately and after closing details. Expanded details do not duplicate the warning."
     }
 }
