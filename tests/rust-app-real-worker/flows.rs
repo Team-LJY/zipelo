@@ -58,6 +58,7 @@ fn binary(name: &str) -> PathBuf {
 #[derive(Default)]
 struct Observation {
     jobs: Vec<Vec<&'static str>>,
+    starts: Vec<Start>,
 }
 struct ObservedFactory {
     process: ProcessFactory,
@@ -82,6 +83,9 @@ impl Factory for ObservedFactory {
 }
 impl Connection for ObservedConnection {
     fn send(&mut self, request: Request) -> Result<(), String> {
+        if let Command::Start(start) = &request.command {
+            self.observed.borrow_mut().starts.push(start.clone());
+        }
         self.connection.send(request)
     }
     fn poll(&mut self) -> Option<HostEvent> {
@@ -230,9 +234,17 @@ mod screen {
             let point = self.locate(label);
             self.click_at(point);
         }
-        fn fill(&mut self, label: &str, offset: egui::Vec2, value: &Path) {
-            let point = self.locate(label) + offset;
+        fn set_text(&mut self, id: &str, value: &str) {
+            self.render(vec![]);
+            let point = self
+                .context
+                .read_response(egui::Id::unique(id))
+                .unwrap()
+                .rect
+                .center();
             self.click_at(point);
+            self.context
+                .memory_mut(|memory| memory.request_focus(egui::Id::unique(id)));
             self.render(vec![
                 egui::Event::Key {
                     key: egui::Key::A,
@@ -241,8 +253,17 @@ mod screen {
                     repeat: false,
                     modifiers: egui::Modifiers::COMMAND,
                 },
-                egui::Event::Text(value.to_str().unwrap().to_string()),
+                egui::Event::Text(value.into()),
             ]);
+        }
+        fn escape(&mut self) {
+            self.render(vec![egui::Event::Key {
+                key: egui::Key::Escape,
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers: egui::Modifiers::NONE,
+            }]);
         }
         fn settle(&mut self) {
             let deadline = Instant::now() + Duration::from_secs(10);
@@ -254,14 +275,12 @@ mod screen {
             completed(&self.app.model);
         }
         fn open(&mut self, archive: &Path) {
-            self.click("파일 열기");
-            self.fill("압축파일 절대 경로", egui::vec2(0.0, 22.0), archive);
-            self.click("열기");
+            self.app.open_path(archive.to_path_buf());
             assert!(self.app.model.busy());
             self.settle();
         }
         fn extract(&mut self, destination: &Path) {
-            self.fill("출력 폴더", egui::vec2(100.0, 0.0), destination);
+            self.app.choose_destination(destination.to_path_buf());
             self.click("풀기");
             assert!(self.app.model.busy());
             self.settle();
@@ -272,6 +291,7 @@ mod screen {
         }
     }
     include!("password_flows.rs");
+    include!("selection_flows.rs");
 
     fn archive_flow(name: &str, format: Format) {
         let scratch = Scratch::new();
@@ -336,6 +356,49 @@ mod screen {
     fn targz_open_and_extract_via_actual_widgets_and_worker() {
         archive_flow("sample.tar.gz", Format::TarGzip);
     }
+
+    #[test]
+    fn empty_directory_zip_extracts_successfully_with_existing_directory_reuse() {
+        let scratch = Scratch::new();
+        let source = make_directory(&scratch.path("empty-source"));
+        fs::create_dir(source.join("child")).unwrap();
+        let archive = scratch.path("empty-source.zip");
+        let output = make_directory(&scratch.path("output"));
+        let (factory, observed) = observed_factory();
+        let mut screen = Screen::new(factory);
+        screen.app.add_sources(vec![source]);
+        screen.render(vec![]);
+        screen.click("만들기");
+        screen.settle();
+        assert!(archive.is_file());
+        screen.open(&archive);
+        assert!(
+            screen
+                .app
+                .model
+                .entries
+                .iter()
+                .all(|entry| entry.kind == Kind::Directory)
+        );
+        for expected in [2, 0] {
+            screen.extract(&output);
+            assert!(output.join("empty-source/child").is_dir());
+            assert_eq!(
+                screen.app.model.terminal.as_ref().unwrap().created_count,
+                expected
+            );
+            let shown = screen.render(vec![]);
+            assert!(shown.iter().any(|(text, _)| text == "압축을 풀었습니다"));
+            assert!(
+                !shown
+                    .iter()
+                    .any(|(text, _)| text.contains("저장이 끝났는지"))
+            );
+            screen.click("확인");
+        }
+        assert_reaped(&observed);
+    }
+
     #[test]
     fn create_zip_reopen_and_extract_via_actual_widgets_and_worker() {
         let scratch = Scratch::new();
@@ -345,14 +408,10 @@ mod screen {
         let output = make_directory(&scratch.path("output"));
         let (factory, observed) = observed_factory();
         let mut screen = Screen::new(factory);
-        screen.click("ZIP 만들기");
-        screen.fill(
-            "원본 파일 절대 경로 / 한 줄에 하나",
-            egui::vec2(0.0, 25.0),
-            &source,
-        );
-        screen.fill("저장할 ZIP 절대 경로", egui::vec2(0.0, 22.0), &archive);
-        screen.click("ZIP 만들기");
+        screen.app.add_sources(vec![source.clone()]);
+        screen.render(vec![]);
+        screen.set_text("zip-name", archive.file_name().unwrap().to_str().unwrap());
+        screen.click("만들기");
         assert!(screen.app.model.busy());
         screen.settle();
         assert!(archive.is_file());

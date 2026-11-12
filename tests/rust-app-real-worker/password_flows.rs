@@ -30,7 +30,7 @@ impl Screen {
         self.render(vec![]);
         let input = self
             .context
-            .read_response(egui::Id::new("archive-password-input"))
+            .read_response(egui::Id::unique("archive-password-input"))
             .expect("암호 입력란이 없음")
             .rect
             .center();
@@ -48,10 +48,13 @@ impl Screen {
         if !text.is_empty() {
             assert!(!rendered.iter().any(|(value, _)| value.contains(text)));
         }
-        self.click("암호 전달");
+        if self.app.model.challenge.is_some_and(|(_, _, encrypt)| encrypt) {
+            self.set_text("archive-password-confirm", text);
+        }
+        self.click("확인");
     }
     fn start_password_extract(&mut self, output: &Path) {
-        self.fill("출력 폴더", egui::vec2(100.0, 0.0), output);
+        self.app.choose_destination(output.to_path_buf());
         self.click("풀기");
         assert!(self.app.model.busy());
     }
@@ -67,15 +70,11 @@ impl Screen {
         assert!(self.app.model.challenge.is_none());
     }
     fn start_encrypted_zip(&mut self, source: &Path, archive: &Path) {
-        self.click("ZIP 만들기");
-        self.fill(
-            "원본 파일 절대 경로 / 한 줄에 하나",
-            egui::vec2(0.0, 25.0),
-            source,
-        );
-        self.fill("저장할 ZIP 절대 경로", egui::vec2(0.0, 22.0), archive);
-        self.click("암호로 보호");
-        self.click("ZIP 만들기");
+        self.app.add_sources(vec![source.to_path_buf()]);
+        self.render(vec![]);
+        self.set_text("zip-name", archive.file_name().unwrap().to_str().unwrap());
+        self.click("암호로 보호하기");
+        self.click("만들기");
         assert!(self.app.model.busy(), "{}", self.app.model.status());
     }
 }
@@ -131,17 +130,9 @@ fn wrong_password_retry_clears_input_and_succeeds_without_partial_output() {
             .iter()
             .any(|(value, _)| value == "암호가 맞지 않습니다. 다시 입력하세요")
     );
-    screen.click("암호 전달");
+    screen.click("확인");
     assert_eq!(screen.app.model.challenge, Some((second, 2, false)));
-    assert!(
-        screen
-            .app
-            .model
-            .input_error
-            .as_ref()
-            .unwrap()
-            .contains("1~1024바이트")
-    );
+    assert!(screen.app.model.input_error.is_none());
     screen.render(vec![]);
     screen.password_answer(FIXTURE_PASSWORD);
     screen.finish_password_job(Outcome::Completed);
@@ -181,7 +172,7 @@ fn cancel_password_extraction_waits_for_cleanup_without_writes() {
     screen.open(&archive);
     screen.start_password_extract(&output);
     screen.password_request(1, false);
-    screen.click("작업 취소");
+    screen.escape();
     screen.app.model.request_close();
     screen.app.model.confirm_close();
     assert!(matches!(
@@ -234,7 +225,7 @@ fn cancel_password_creation_does_not_create_an_archive() {
     let mut screen = Screen::new(factory);
     screen.start_encrypted_zip(&source, &archive);
     screen.password_request(1, true);
-    screen.click("작업 취소");
+    screen.escape();
     screen.finish_password_job(Outcome::Cancelled);
     assert!(!archive.exists());
     assert_eq!(fs::read(source).unwrap(), b"preserve");
@@ -254,15 +245,7 @@ fn oversized_utf8_password_stays_in_dialog_then_accepts_valid_input() {
     let id = screen.password_request(1, false);
     screen.password_answer(&"가".repeat(342));
     assert_eq!(screen.app.model.challenge, Some((id, 1, false)));
-    assert!(
-        screen
-            .app
-            .model
-            .input_error
-            .as_ref()
-            .unwrap()
-            .contains("1~1024바이트")
-    );
+    assert!(screen.render(vec![]).iter().any(|(text, _)| text.contains("1~1024바이트")));
     assert_eq!(fs::read_dir(&output).unwrap().count(), 0);
     screen.password_answer(FIXTURE_PASSWORD);
     screen.finish_password_job(Outcome::Completed);
@@ -280,14 +263,18 @@ fn invalid_password_then_cancel(invalid: &str, close: bool) {
     let challenge = screen.password_request(1, true);
     screen.password_answer(invalid);
     assert_eq!(screen.app.model.challenge, Some((challenge, 1, true)));
-    assert!(screen.app.model.status().contains("1~1024바이트"));
+    if invalid.is_empty() {
+        assert!(screen.app.model.input_error.is_none());
+    } else {
+        assert!(screen.render(vec![]).iter().any(|(text, _)| text.contains("1~1024바이트")));
+    }
     if close {
         screen.app.model.request_close();
         screen.app.model.confirm_close();
         assert_eq!(screen.app.model.close, Close::Waiting);
         assert!(!screen.app.model.confirmed);
     } else {
-        screen.click("작업 취소");
+        screen.escape();
     }
     screen.finish_password_job(Outcome::Cancelled);
     assert_eq!(screen.app.model.status(), "작업 취소됨");
