@@ -30,3 +30,11 @@ python3 tests/ui-redesign/capture.py --binary tests/ui-redesign/runs/reproduce/a
 기준 화면 준비 시 같은 촬영 도우미를 기준 커밋 소스에 넣고, 새 화면 전용 메서드 두 곳만 기존 공개 모델 호출로 바꿈. 기준 제품 소스는 바꾸지 않음. --states 옵션으로 일부 상태만 다시 촬영할 수 있으며 다른 상태의 기록은 보존함.
 
 최소 크기에서 ZIP 만들기 본문은 내부 스크롤로 모든 설정에 접근함. 주 버튼과 취소 버튼은 본문 스크롤 밖에 고정함. 폴더 열기는 셸 없이 운영체제 명령에 경로 하나를 인자로 전달하며, 특수 문자가 있는 경로도 시험함. Windows 실제 화면과 운영체제 파일 탐색기 실행 확인은 이 Linux 촬영 기록에 포함하지 않음.
+
+실제 X11 창에서 파일 이름을 눌러 행 선택을 확인하는 별도 검증임.
+
+```sh
+python3 tests/ui-redesign/check_row_selection.py --binary tests/ui-redesign/runs/reproduce/after-capture
+```
+
+validation.json에는 실행한 소스 트리, local 결과와 화면 해시를 기록함. 기록 파일과 이 설명의 추가는 시험 후 문서 변경임. 대용량 작업자 시험은 원본 스냅샷과 임시 공간을 함께 확인하므로 실행 파일 시스템에 최소 12GB 이상의 여유 공간이 필요하며 빌드 캐시 공간은 별도임.
