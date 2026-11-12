@@ -1,17 +1,17 @@
 {
-    "recorded_at_utc": "2026-11-12T06:50:59.515143+00:00",
-    "tested_local_commit": "2228c846a91d10f82051fac5cf80d25fb4ea132f",
-    "tested_source_tree": "140cd3b560846d6ef267b9c22e9af399ca3558c0",
-    "equivalent_remote_source_commit": "8ce724306fa9cadc13967f6db37be304325cb81b",
+    "recorded_at_utc": "2026-11-12T07:24:03.358981+00:00",
+    "tested_local_commit": "b6c645b7509217c0aa44480611e5fc9cf2b22bad",
+    "tested_source_tree": "5f4e0879caeab4d3a92ebb7ba6520e88303a9968",
+    "equivalent_remote_source_commit": "949a1fa5685e70f4ab98aada9b99e5ca5b9cfb10",
     "command": "python3 tests/ci/run_rust.py local",
     "exit_code": 0,
-    "rust_tests_passed": 1015,
+    "rust_tests_passed": 1016,
     "runner_tests_passed": 34,
-    "ui_suite_tests_passed": 68,
+    "ui_suite_tests_passed": 69,
     "actual_worker_ui_tests_passed": 26,
-    "local_log_sha256": "3514f176373ec2ffacaeb033d7877bc8da5623ec768f090a3c4e1abc91c50ee6",
+    "local_log_sha256": "7cf00b3f314939a14be5d6849183c5f78260bd5fe8da7f8ccbe4511fd0f065d0",
     "local_results": {
-        "head": "2228c846a91d10f82051fac5cf80d25fb4ea132f",
+        "head": "b6c645b7509217c0aa44480611e5fc9cf2b22bad",
         "platform": "linux",
         "windows_cross_target": "x86_64-pc-windows-gnu",
         "windows_runtime_tested": false,
@@ -527,6 +527,21 @@
                 "Native title command is shortened to fit and retains the Zipelo suffix; full archive title is available in the Open action tooltip"
             ],
             "scope": "Actual egui layout geometry and tooltip rendering; synthetic listing plus generated local source file and destination directory. Native Windows title-bar rendering is not tested."
+        },
+        "empty_list_notice": {
+            "test": "empty_list_notices_remain_visible_in_the_archive_content_area",
+            "viewport": [
+                760,
+                540
+            ],
+            "cases": [
+                "empty archive",
+                "empty folder",
+                "no matching search results"
+            ],
+            "baseline": "Fails: the notice is outside the visible list content area after the expanding ScrollArea.",
+            "baseline_log_sha256": "53c59d86aceb87ae7db157629779e5c830ef1a1291131d748c2ee83291159db8",
+            "fixed": "Passed: notice stays between list header and status bar, count is zero and no extra worker request starts."
         }
     },
     "licenses": {
@@ -594,8 +609,7 @@
     ],
     "portal_failure_screenshot_scope": "Actual eframe and NativeDialogs Linux backend with an unreachable private D-Bus address and synthetic archive listing. Success-path portal interaction is not covered.",
     "validation_notes": [
-        "Two ad hoc cargo test attempts using default parallelism intermittently failed to start copied worker probes in existing tests. The required local runner uses --test-threads=1 and all 26 real-worker tests passed. No worker or probe implementation was changed.",
-        "This layout task first failed the large worker test with DiskFull. Own obsolete capture binaries and generated ZIP corpus payloads were removed, retaining logs and results.tsv. The unchanged source then passed the complete local command. Shared build caches were not removed."
+        "The empty-list regression failed before the correction and passed afterwards for three states. The complete local command passed on the corrected source. Build caches were removed after verification; source, Git data, test logs and toolchains remain."
     ],
     "long_layout_screenshots_source_local_commit": "2228c846a91d10f82051fac5cf80d25fb4ea132f",
     "long_layout_screenshots": [
@@ -628,17 +642,19 @@
             "sha256": "f88f934379dff0c90961a8f3adf9d46bfe1e6afdd0583b102fdb533d7e1d1049"
         }
     ],
-    "local_retry": {
-        "first_exit_code": 1,
-        "first_log_sha256": "488941866c676358b1b61860266f19b8373109c9075d2c2dd80228ba965275d3",
-        "failed_test": "hardening::linux::gigabyte_seven_zip_and_zip_creation_stay_below_64_mib",
-        "failure": "DiskFull during the large Deflate creation case",
-        "recovery": {
-            "removed_own_generated_bytes": 669517168,
-            "available_bytes_after_cleanup": 13080125440,
-            "scope": "Own obsolete capture binary copies and generated ZIP corpus payloads only; logs and results.tsv retained; shared build cache untouched."
-        },
-        "source_changed_between_attempts": false,
-        "retry_exit_code": 0
+    "build_cache_cleanup": {
+        "incremental_cache_paths": [
+            "tests/rw/tests/ci/target/debug/incremental",
+            "tests/rw/tests/ci/target/x86_64-pc-windows-gnu/debug/incremental"
+        ],
+        "free_before": 14029524992,
+        "free_after": 24867364864,
+        "reclaimed_bytes": 10837839872,
+        "remaining_cache_path": "tests/rw/tests/ci/target",
+        "remaining_cache_reclaimed_bytes": 59119988736,
+        "total_reclaimed_bytes": 69957828608,
+        "available_bytes_after_cleanup": 83569205248,
+        "active_cache_processes": [],
+        "scope": "Only own generated build cache under tests/rw/tests/ci/target; source, Git data, logs and toolchains retained."
     }
 }
