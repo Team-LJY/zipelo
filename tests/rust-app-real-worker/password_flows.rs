@@ -79,13 +79,34 @@ impl Screen {
         assert_eq!(self.app.model.terminal.as_ref().unwrap().outcome, expected);
         assert!(self.app.model.challenge.is_none());
     }
-    fn start_encrypted_zip(&mut self, source: &Path, archive: &Path) {
+    /// ZIP 만들기 창에서 암호로 보호하기를 켜고 두 칸에 암호를 넣은 뒤 압축하기를 누름.
+    /// 작업이 시작됐는지 돌려줌.
+    fn start_encrypted_zip(&mut self, source: &Path, archive: &Path, password: &str) -> bool {
         self.app.add_sources(vec![source.to_path_buf()]);
         self.render(vec![]);
         self.set_text("zip-name", archive.file_name().unwrap().to_str().unwrap());
         self.click("암호로 보호하기");
+        self.set_text("zip-password-input", password);
+        self.set_text("zip-password-confirm", password);
+        if !password.is_empty() {
+            // 입력한 암호는 화면에 그대로 보이지 않음.
+            assert!(!self.render(vec![]).iter().any(|(value, _)| value.contains(password)));
+        }
         self.click("압축하기");
-        assert!(self.app.model.busy(), "{}", self.app.model.status());
+        self.app.model.busy()
+    }
+    /// 별도 암호 입력 창 없이 작업이 끝나는지 확인함.
+    fn finish_without_password_prompt(&mut self, expected: Outcome) {
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while self.app.model.busy() {
+            let shown = self.render(vec![]);
+            assert!(!shown.iter().any(|(value, _)| value == "ZIP 암호 설정"));
+            assert!(Instant::now() < deadline);
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        assert!(self.app.model.confirmed, "{}", self.app.model.status());
+        assert_eq!(self.app.model.terminal.as_ref().unwrap().outcome, expected);
+        assert!(self.app.model.challenge.is_none());
     }
 }
 #[test]
@@ -206,11 +227,9 @@ fn cold_start_creates_aes_zip_then_reopens_and_extracts_with_password() {
     let (factory, observed) = observed_factory();
     let mut screen = Screen::new(factory);
     assert!(!screen.app.model.encryption);
-    screen.start_encrypted_zip(&source, &archive);
-    screen.password_request(1, true);
-    assert!(!archive.exists());
-    screen.password_answer(FIXTURE_PASSWORD);
-    screen.finish_password_job(Outcome::Completed);
+    // 암호는 ZIP 만들기 창에서 받고, 작업자가 요청하면 별도 창 없이 넘김.
+    assert!(screen.start_encrypted_zip(&source, &archive, FIXTURE_PASSWORD));
+    screen.finish_without_password_prompt(Outcome::Completed);
     let bytes = fs::read(&archive).unwrap();
     assert_eq!(&bytes[..4], b"PK\x03\x04");
     assert_eq!(u16::from_le_bytes(bytes[6..8].try_into().unwrap()) & 1, 1);
@@ -226,17 +245,23 @@ fn cold_start_creates_aes_zip_then_reopens_and_extracts_with_password() {
     assert_reaped(&observed);
 }
 #[test]
-fn cancel_password_creation_does_not_create_an_archive() {
+fn cancel_encrypted_creation_window_starts_no_worker_or_archive() {
     let scratch = Scratch::new();
     let source = scratch.path("private.txt");
     fs::write(&source, b"preserve").unwrap();
     let archive = scratch.path("cancelled.zip");
     let (factory, observed) = observed_factory();
     let mut screen = Screen::new(factory);
-    screen.start_encrypted_zip(&source, &archive);
-    screen.password_request(1, true);
-    screen.escape();
-    screen.finish_password_job(Outcome::Cancelled);
+    screen.app.add_sources(vec![source.clone()]);
+    screen.render(vec![]);
+    screen.click("암호로 보호하기");
+    screen.set_text("zip-password-input", FIXTURE_PASSWORD);
+    screen.set_text("zip-password-confirm", FIXTURE_PASSWORD);
+    screen.click("취소");
+    let shown = screen.render(vec![]);
+    assert!(!shown.iter().any(|(value, _)| value == "ZIP 만들기"));
+    assert!(!screen.app.model.busy());
+    assert!(observed.borrow().jobs.is_empty());
     assert!(!archive.exists());
     assert_eq!(fs::read(source).unwrap(), b"preserve");
     assert_eq!(fs::read_dir(&scratch.0).unwrap().count(), 1);
@@ -267,20 +292,17 @@ fn oversized_utf8_password_stays_in_dialog_then_accepts_valid_input() {
     assert_reaped(&observed);
 }
 
-fn invalid_password_then_cancel(invalid: &str, close: bool) {
+fn invalid_zip_password_never_starts_a_worker(invalid: &str, close: bool) {
     let scratch = Scratch::new();
     let source = scratch.path("private.txt");
     fs::write(&source, b"preserve").unwrap();
     let archive = scratch.path("cancelled.zip");
     let (factory, observed) = observed_factory();
     let mut screen = Screen::new(factory);
-    screen.start_encrypted_zip(&source, &archive);
-    let challenge = screen.password_request(1, true);
-    screen.password_answer(invalid);
-    assert_eq!(screen.app.model.challenge, Some((challenge, 1, true)));
-    if invalid.is_empty() {
-        assert!(screen.app.model.input_error.is_none());
-    } else {
+    // 빈 암호나 1024바이트를 넘는 암호로는 압축하기를 누를 수 없음.
+    assert!(!screen.start_encrypted_zip(&source, &archive, invalid));
+    assert!(observed.borrow().jobs.is_empty());
+    if !invalid.is_empty() {
         assert!(
             screen
                 .render(vec![])
@@ -289,52 +311,38 @@ fn invalid_password_then_cancel(invalid: &str, close: bool) {
         );
     }
     if close {
+        // 작업이 없으므로 확인만 거치면 닫을 수 있음.
         screen.app.model.request_close();
-        screen.app.model.confirm_close();
-        assert_eq!(screen.app.model.close, Close::Waiting);
-        assert!(!screen.app.model.confirmed);
-    } else {
-        screen.escape();
-    }
-    screen.finish_password_job(Outcome::Cancelled);
-    assert_eq!(screen.app.model.status(), "작업 취소됨");
-    assert_eq!(
-        screen.app.model.terminal.as_ref().unwrap().publication,
-        Publication::None
-    );
-    assert_eq!(screen.app.model.terminal.as_ref().unwrap().created_count, 0);
-    assert_eq!(
-        screen
-            .app
-            .model
-            .terminal
-            .as_ref()
-            .unwrap()
-            .retained_partial_count,
-        0
-    );
-    assert!(!archive.exists());
-    assert_eq!(fs::read(&source).unwrap(), b"preserve");
-    assert_eq!(fs::read_dir(&scratch.0).unwrap().count(), 1);
-    assert_reaped(&observed);
-    if close {
         assert_eq!(screen.app.model.close, Close::Review);
         screen.app.model.acknowledge_close();
         assert_eq!(screen.app.model.close, Close::Allowed);
     } else {
+        screen.click("취소");
+        assert!(
+            !screen
+                .render(vec![])
+                .iter()
+                .any(|(value, _)| value == "ZIP 만들기")
+        );
+    }
+    assert!(!archive.exists());
+    assert_eq!(fs::read(&source).unwrap(), b"preserve");
+    assert_eq!(fs::read_dir(&scratch.0).unwrap().count(), 1);
+    assert_reaped(&observed);
+    if !close {
         screen.open(&encrypted_fixture(&scratch, "aes2-store.zip"));
         assert_reaped(&observed);
     }
 }
 #[test]
-fn empty_password_then_cancel_confirms_worker_exit() {
-    invalid_password_then_cancel("", false);
+fn empty_zip_password_never_starts_a_worker() {
+    invalid_zip_password_never_starts_a_worker("", false);
 }
 #[test]
-fn oversized_password_then_cancel_confirms_worker_exit() {
-    invalid_password_then_cancel(&"가".repeat(342), false);
+fn oversized_zip_password_never_starts_a_worker() {
+    invalid_zip_password_never_starts_a_worker(&"가".repeat(342), false);
 }
 #[test]
-fn invalid_password_then_close_confirms_worker_exit() {
-    invalid_password_then_cancel("", true);
+fn invalid_zip_password_then_close_allows_closing() {
+    invalid_zip_password_never_starts_a_worker("", true);
 }

@@ -6,6 +6,8 @@ pub struct State {
     pub requests: Vec<(u64, &'static str)>,
     pub starts: Vec<Start>,
     pub password_seen: bool,
+    /// 마지막으로 받은 암호 원문. 화면에서 입력한 암호가 그대로 전달됐는지 확인할 때 씀.
+    pub password: Vec<u8>,
     pub job: u64,
     sequence: u64,
     pub queue: VecDeque<HostEvent>,
@@ -176,6 +178,7 @@ impl Connection for FakeConnection {
                 assert_eq!(challenge_id, 17);
                 assert!(!secret.as_bytes().is_empty());
                 s.password_seen = true;
+                s.password = secret.as_bytes().to_vec();
                 s.requests.push((request.sequence, "password"));
                 if !s.manual {
                     s.complete_action();

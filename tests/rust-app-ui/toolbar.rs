@@ -57,11 +57,10 @@ fn native_dialog_cancellation_never_starts_a_job() {
     policy_click(&ctx, &mut app, "열기");
     policy_click(&ctx, &mut app, "압축해제");
     assert_eq!(factory.state.borrow().starts.len(), 1);
+    // 압축하기는 폴더 선택 창을 먼저 열고, 취소하면 ZIP 만들기 창을 열지 않음.
     policy_click(&ctx, &mut app, "압축하기");
-    policy_click(&ctx, &mut app, "파일 추가");
-    policy_click(&ctx, &mut app, "폴더 추가");
     let shown = policy_render(&ctx, &mut app, vec![]);
-    assert!(shown.iter().any(|(text, _)| text == "ZIP 만들기"));
+    assert!(!shown.iter().any(|(text, _)| text == "ZIP 만들기"));
     assert_eq!(factory.state.borrow().starts.len(), 1);
     let source = scratch.0.join("source.txt");
     fs::write(&source, b"source").unwrap();
@@ -81,7 +80,6 @@ fn native_dialog_cancellation_never_starts_a_job() {
         [
             Purpose::Open,
             Purpose::Destination,
-            Purpose::Files,
             Purpose::Folder,
             Purpose::SaveZip
         ]
@@ -90,7 +88,7 @@ fn native_dialog_cancellation_never_starts_a_job() {
 
 #[test]
 fn toolbar_and_modal_keyboard_do_not_submit_from_secondary_controls() {
-    for label in ["취소", "파일 추가", "폴더 추가"] {
+    for label in ["취소", "암호로 보호하기"] {
         let scratch = Folder::new();
         let factory = FakeFactory::default();
         let mut app = loaded(&scratch, &factory);
@@ -159,14 +157,30 @@ fn toolbar_has_three_actions_and_zip_password_option_remains_available() {
         assert!(shown.iter().any(|(text, _)| text == label), "{label}");
     }
     assert!(!shown.iter().any(|(text, _)| text == "암호화"));
+    // 압축하기 → 폴더 선택 → ZIP 만들기 창. 암호 칸은 체크해야 나타남.
+    let folder = scratch.0.join("protected");
+    fs::create_dir(&folder).unwrap();
+    fs::write(folder.join("note.txt"), b"protected").unwrap();
+    let dialogs = TestDialogs::default();
+    dialogs
+        .0
+        .borrow_mut()
+        .answers
+        .push_back(Some(vec![folder.clone()]));
+    app.set_dialogs(Box::new(dialogs.clone()));
     policy_click(&ctx, &mut app, "압축하기");
     let shown = policy_render(&ctx, &mut app, vec![]);
     assert!(shown.iter().any(|(text, _)| text == "ZIP 만들기"));
     assert!(shown.iter().any(|(text, _)| text == "암호로 보호하기"));
-    let source = scratch.0.join("protected.txt");
-    fs::write(&source, b"protected").unwrap();
-    app.add_sources(vec![source]);
+    assert!(!shown.iter().any(|(text, _)| text == "암호 확인"));
     policy_click(&ctx, &mut app, "암호로 보호하기");
+    let shown = policy_render(&ctx, &mut app, vec![]);
+    assert!(shown.iter().any(|(text, _)| text == "암호 확인"));
+    // 두 암호가 같아야 만들 수 있음.
+    policy_click(&ctx, &mut app, "압축하기");
+    assert_eq!(factory.state.borrow().starts.len(), 1);
+    text(&ctx, &mut app, "zip-password-input", "fixture-secret");
+    text(&ctx, &mut app, "zip-password-confirm", "fixture-secret");
     policy_click(&ctx, &mut app, "압축하기");
     assert!(matches!(
         factory.state.borrow().starts.last(),
@@ -361,7 +375,6 @@ fn dialog_failures_show_alerts_while_cancelled_dialogs_remain_silent() {
     for failed in [false, true] {
         for purpose in [
             Purpose::Open,
-            Purpose::Files,
             Purpose::Folder,
             Purpose::Destination,
             Purpose::SaveZip,
@@ -382,18 +395,14 @@ fn dialog_failures_show_alerts_while_cancelled_dialogs_remain_silent() {
             let ctx = egui::Context::default();
             let label = match purpose {
                 Purpose::Open => "열기",
-                Purpose::Files | Purpose::Folder | Purpose::SaveZip => {
-                    policy_click(&ctx, &mut app, "압축하기");
-                    if purpose == Purpose::SaveZip {
-                        let source = scratch.0.join("source.txt");
-                        fs::write(&source, b"preserve").unwrap();
-                        app.add_sources(vec![source]);
-                    }
-                    match purpose {
-                        Purpose::Files => "파일 추가",
-                        Purpose::Folder => "폴더 추가",
-                        _ => "압축하기",
-                    }
+                // 도구 막대의 압축하기가 폴더 선택 창을 엶.
+                Purpose::Folder => "압축하기",
+                Purpose::SaveZip => {
+                    let source = scratch.0.join("source.txt");
+                    fs::write(&source, b"preserve").unwrap();
+                    app.add_sources(vec![source]);
+                    // ZIP 만들기 창의 압축하기가 저장 위치 선택 창을 엶.
+                    "압축하기"
                 }
                 _ => "압축해제",
             };

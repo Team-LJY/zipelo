@@ -170,7 +170,7 @@ fn narrow_deep_folder_path_is_elided_without_displacing_search() {
 }
 
 #[test]
-fn narrow_create_sources_keep_remove_and_footer_actions_visible() {
+fn narrow_create_sources_keep_names_and_footer_actions_visible() {
     let scratch = Folder::new();
     let factory = FakeFactory::default();
     let mut app = loaded(&scratch, &factory);
@@ -188,7 +188,7 @@ fn narrow_create_sources_keep_remove_and_footer_actions_visible() {
         text.iter()
             .any(|(text, _, elided)| text == &name && *elided)
     );
-    for expected in ["빼기", "취소", "압축하기"] {
+    for expected in ["취소", "압축하기"] {
         assert!(
             text.iter()
                 .any(|(text, rect, _)| text == expected && rect.bottom() <= 540.0)

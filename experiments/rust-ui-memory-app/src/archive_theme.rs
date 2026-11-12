@@ -175,6 +175,28 @@ pub fn field_frame(ui: &egui::Ui, rect: egui::Rect, focused: bool) {
     painter.vline(rect.right() - 0.5, rect.y_range(), stroke);
 }
 
+/// 네 변 테두리가 모두 있는 입력란 모양 (주변에 구분선이 없는 곳에서 씀).
+pub fn boxed_field(ui: &egui::Ui, rect: egui::Rect) {
+    ui.painter().rect(
+        rect,
+        0,
+        PANEL,
+        Stroke::new(1.0, BORDER),
+        egui::StrokeKind::Inside,
+    );
+}
+
+/// 입력란 안에 경로처럼 한 줄 글자를 그림. 넘치면 줄이고 전체 글자는 툴팁으로 보여 줌.
+/// 부모 배치에 영향을 주지 않는 하위 영역을 써서 옆 칸의 위치가 흔들리지 않게 함.
+pub fn field_text(ui: &mut egui::Ui, rect: egui::Rect, text: &str) {
+    let mut child = ui.new_child(
+        egui::UiBuilder::new()
+            .max_rect(rect.shrink2(egui::vec2(10.0, 0.0)))
+            .layout(egui::Layout::left_to_right(egui::Align::Center)),
+    );
+    bounded_text(&mut child, text, (rect.width() - 20.0).max(0.0));
+}
+
 /// 상태 줄 글자를 칸의 세로 가운데에 그림. 넘치면 줄이고 전체 글자는 툴팁으로 보여 줌.
 pub fn status_text(
     ui: &mut egui::Ui,

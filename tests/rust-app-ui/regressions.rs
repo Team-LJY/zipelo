@@ -375,6 +375,16 @@ fn renders_every_flow_with_actual_egui_widgets() {
     let ctx = egui::Context::default();
     let f = FakeFactory::default();
     let mut app = ArchiveApp::new(Box::new(f.clone()), None, true);
+    // 압축하기는 운영체제 폴더 선택 창을 여므로 시험 응답으로 바꿈.
+    let folder = std::env::temp_dir().join(format!("zipelo-ui-create-{}", std::process::id()));
+    std::fs::create_dir_all(&folder).unwrap();
+    let dialogs = dialogs::TestDialogs::default();
+    dialogs
+        .0
+        .borrow_mut()
+        .answers
+        .push_back(Some(vec![folder.clone()]));
+    app.set_dialogs(Box::new(dialogs));
     let render = |app: &mut ArchiveApp, events: Vec<egui::Event>, width: f32| {
         let mut output = ctx.run_ui(
             egui::RawInput {
