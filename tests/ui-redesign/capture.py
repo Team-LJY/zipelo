@@ -37,6 +37,8 @@ def capture(binary, variant, state, output, environment, width, height):
         environment["DBUS_SESSION_BUS_ADDRESS"] = f"unix:path={endpoint}"
         environment.pop("DBUS_STARTER_ADDRESS", None)
     mode = {
+        "explorer-selected": "toolbar-folder",
+        "explorer-marquee": "toolbar-folder",
         "picker": "opened",
         "selected-empty": "opened",
         "dialog-unavailable": "toolbar-root",
@@ -93,12 +95,23 @@ def capture(binary, variant, state, output, environment, width, height):
                 command(["xdotool", "type", "--clearmodifiers", "--delay", "0", "fixture-password"], environment)
                 command(["xdotool", "key", "Tab", "Tab"], environment)
                 command(["xdotool", "type", "--clearmodifiers", "--delay", "0", "different"], environment)
-            command(["xdotool", "mousemove", "--window", window, "2", "2"], environment)
+            if state == "explorer-selected":
+                click(150, 235)
+                command(["xdotool", "keydown", "ctrl"], environment)
+                click(150, 323)
+                command(["xdotool", "keyup", "ctrl"], environment)
+            if state == "explorer-marquee":
+                command(["xdotool", "mousemove", "--window", window, str(width - 20), str(height - 80), "mousedown", "1"], environment)
+                time.sleep(0.2)
+                command(["xdotool", "mousemove", "--window", window, "250", "300"], environment)
+            else:
+                command(["xdotool", "mousemove", "--window", window, "2", "2"], environment)
             time.sleep(0.3)
             destination = output / f"{state}.png"
             command(["import", "-window", window, str(destination)], environment)
             return {"state": state, "path": str(destination.relative_to(ROOT)), "width": width, "height": height}
         finally:
+            subprocess.run(["xdotool", "mouseup", "1"], env=environment, check=False)
             stop(app)
 
 

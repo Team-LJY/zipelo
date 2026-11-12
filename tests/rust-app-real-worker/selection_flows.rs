@@ -228,3 +228,62 @@ fn auto_destination_is_private_under_desktop_umask() {
     );
     assert_reaped(&observed);
 }
+
+#[test]
+fn explorer_folder_click_and_escape_control_actual_extraction_scope() {
+    let scratch = Scratch::new();
+    let folder = make_directory(&scratch.path("docs"));
+    fs::write(folder.join("child.txt"), b"selected subtree").unwrap();
+    let outside = scratch.path("outside.txt");
+    fs::write(&outside, b"outside subtree").unwrap();
+    let archive = scratch.path("picked.zip");
+    let selected_output = make_directory(&scratch.path("selected-output"));
+    let all_output = make_directory(&scratch.path("all-output"));
+    let (factory, observed) = observed_factory();
+    let mut screen = Screen::new(factory);
+    screen.app.add_sources(vec![folder, outside]);
+    screen.render(vec![]);
+    screen.set_text("zip-name", "picked.zip");
+    screen.click("압축하기");
+    screen.settle();
+    screen.open(&archive);
+    screen.click("docs");
+    assert!(!screen.app.model.selected.is_empty());
+    screen.extract(&selected_output);
+    assert_eq!(
+        fs::read(selected_output.join("docs/child.txt")).unwrap(),
+        b"selected subtree"
+    );
+    assert!(!selected_output.join("outside.txt").exists());
+    assert!(matches!(
+        observed.borrow().starts.last(),
+        Some(Start::Extract {
+            selection: Selection::EntryIds(_),
+            ..
+        })
+    ));
+    screen.click("확인");
+    screen
+        .context
+        .memory_mut(|memory| memory.request_focus(egui::Id::unique("archive-list")));
+    screen.render(vec![]);
+    screen.escape();
+    assert!(screen.app.model.selected.is_empty());
+    screen.extract(&all_output);
+    assert_eq!(
+        fs::read(all_output.join("outside.txt")).unwrap(),
+        b"outside subtree"
+    );
+    assert_eq!(
+        fs::read(all_output.join("docs/child.txt")).unwrap(),
+        b"selected subtree"
+    );
+    assert!(matches!(
+        observed.borrow().starts.last(),
+        Some(Start::Extract {
+            selection: Selection::All,
+            ..
+        })
+    ));
+    assert_reaped(&observed);
+}
