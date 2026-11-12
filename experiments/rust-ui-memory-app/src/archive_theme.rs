@@ -27,8 +27,11 @@ pub const DROP_HEIGHT: f32 = 280.0;
 pub const DROP_RADIUS: u8 = 12;
 pub const ROW: f32 = 32.0;
 pub const BUTTON: f32 = 40.0;
-pub const BODY: f32 = 17.0;
-pub const TITLE: f32 = 22.0;
+/// 글자 크기 단계. 앱의 모든 글자는 이 세 값 중 하나를 씀.
+/// 기본 16px을 기준으로 보조 글자는 작게, 제목과 강조 글자는 크게 씀.
+pub const FONT_SMALL: f32 = 14.0;
+pub const FONT_BODY: f32 = 16.0;
+pub const FONT_LARGE: f32 = 20.0;
 /// 경로와 검색 입력란의 높이. 위쪽 경로 줄은 이 높이만큼만 차지함.
 pub const FIELD: f32 = 36.0;
 /// 테두리 없는 버튼에 마우스를 올리거나 누를 때의 배경.
@@ -65,16 +68,16 @@ pub fn apply(ctx: &egui::Context) {
     ctx.style_mut_of(egui::Theme::Light, |style| {
         style
             .text_styles
-            .insert(TextStyle::Body, FontId::proportional(BODY));
+            .insert(TextStyle::Body, FontId::proportional(FONT_BODY));
         style
             .text_styles
-            .insert(TextStyle::Button, FontId::proportional(BODY));
+            .insert(TextStyle::Button, FontId::proportional(FONT_BODY));
         style
             .text_styles
-            .insert(TextStyle::Small, FontId::proportional(BODY));
+            .insert(TextStyle::Small, FontId::proportional(FONT_SMALL));
         style
             .text_styles
-            .insert(TextStyle::Heading, FontId::proportional(TITLE));
+            .insert(TextStyle::Heading, FontId::proportional(FONT_LARGE));
         style.visuals.override_text_color = Some(TEXT);
         style.visuals.panel_fill = BACKGROUND;
         style.visuals.window_fill = PANEL;
@@ -180,8 +183,11 @@ pub fn status_text(
     width: f32,
     align: egui::Align,
 ) {
-    let mut job =
-        egui::text::LayoutJob::simple_singleline(text.into(), FontId::proportional(BODY), TEXT);
+    let mut job = egui::text::LayoutJob::simple_singleline(
+        text.into(),
+        FontId::proportional(FONT_BODY),
+        TEXT,
+    );
     job.wrap = egui::text::TextWrapping {
         max_width: width.max(0.0),
         max_rows: 1,
@@ -309,8 +315,11 @@ pub fn bounded_text_hover(
 }
 
 pub fn window_title(ui: &egui::Ui, text: &str, width: f32) -> String {
-    let mut job =
-        egui::text::LayoutJob::simple_singleline(text.into(), FontId::proportional(BODY), TEXT);
+    let mut job = egui::text::LayoutJob::simple_singleline(
+        text.into(),
+        FontId::proportional(FONT_BODY),
+        TEXT,
+    );
     job.wrap = egui::text::TextWrapping {
         max_width: width.max(0.0),
         max_rows: 1,
@@ -350,7 +359,7 @@ pub fn action_pair(
 ) -> (bool, bool) {
     let text_width = |text: &str| {
         ui.painter()
-            .layout_no_wrap(text.into(), FontId::proportional(BODY), TEXT)
+            .layout_no_wrap(text.into(), FontId::proportional(FONT_BODY), TEXT)
             .size()
             .x
     };
@@ -427,10 +436,10 @@ pub fn svg_icon(painter: &egui::Painter, rect: egui::Rect, asset: &str, color: C
     }
 }
 
-/// 가장 긴 이름(압축해제, 15px에서 약 52px) 양옆에 10px씩 남는 폭.
+/// 가장 긴 이름(압축해제, FONT_SMALL에서 약 48px) 양옆에 12px씩 남는 폭.
 pub const TOOL_SIZE: egui::Vec2 = egui::vec2(72.0, 68.0);
 const TOOL_ICON: f32 = 30.0;
-const TOOL_LABEL: f32 = 15.0;
+const TOOL_LABEL: f32 = FONT_SMALL;
 
 pub fn tool(
     ui: &mut egui::Ui,

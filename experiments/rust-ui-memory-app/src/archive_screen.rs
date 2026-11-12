@@ -618,9 +618,9 @@ impl ArchiveApp {
                         left: 12,
                         right: 12,
                         top: 6,
-                        // 이름 글자 줄 높이 아래에 남는 빈 공간(약 5px)만큼 줄여
-                        // 아이콘 위와 글자 아래의 보이는 여백을 같게 맞춤.
-                        bottom: 1,
+                        // 이름 글자 줄 높이 아래에 남는 빈 공간만큼 줄여 아이콘 위와
+                        // 글자 아래의 보이는 여백을 같게 맞춤 (FONT_SMALL에서 13px씩).
+                        bottom: 3,
                     }),
             )
             .show(root, |ui| {
@@ -749,7 +749,7 @@ impl ArchiveApp {
                             } else {
                                 "압축파일을 여기에 끌어 놓으세요"
                             })
-                            .size(20.0)
+                            .size(theme::FONT_LARGE)
                             .strong(),
                         );
                         ui.label("또는");
@@ -1804,7 +1804,7 @@ impl ArchiveApp {
                                 ui.add_space(16.0);
                                 ui.label(
                                     RichText::new("파일이나 폴더를 여기에 끌어 놓으세요")
-                                        .size(18.0),
+                                        .size(theme::FONT_BODY),
                                 );
                             });
                         })

@@ -95,7 +95,7 @@ pub fn title_bar(root: &mut egui::Ui, id: &str, title: &str, buttons: Buttons) -
             // 버튼 영역을 피해 가운데에 제목을 그림.
             let reserved = rect.right() - right;
             let width = (rect.width() - 2.0 * reserved).max(0.0);
-            let font = FontId::proportional(theme::BODY - 2.0);
+            let font = FontId::proportional(theme::FONT_SMALL);
             let text = fit(ui, title, &font, width);
             ui.painter().text(
                 rect.center(),
