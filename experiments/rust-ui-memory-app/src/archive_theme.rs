@@ -427,7 +427,8 @@ pub fn svg_icon(painter: &egui::Painter, rect: egui::Rect, asset: &str, color: C
     }
 }
 
-pub const TOOL_SIZE: egui::Vec2 = egui::vec2(96.0, 68.0);
+/// 가장 긴 이름(압축해제, 15px에서 약 52px) 양옆에 10px씩 남는 폭.
+pub const TOOL_SIZE: egui::Vec2 = egui::vec2(72.0, 68.0);
 const TOOL_ICON: f32 = 30.0;
 const TOOL_LABEL: f32 = 15.0;
 

@@ -618,12 +618,14 @@ impl ArchiveApp {
                         left: 12,
                         right: 12,
                         top: 6,
-                        bottom: 10,
+                        // 이름 글자 줄 높이 아래에 남는 빈 공간(약 5px)만큼 줄여
+                        // 아이콘 위와 글자 아래의 보이는 여백을 같게 맞춤.
+                        bottom: 1,
                     }),
             )
             .show(root, |ui| {
                 ui.horizontal(|ui| {
-                    ui.spacing_mut().item_spacing.x = 4.0;
+                    ui.spacing_mut().item_spacing.x = 2.0;
                     let idle = !self.model.busy()
                         && self.model.close == Close::Open
                         && self.picker.is_none();
