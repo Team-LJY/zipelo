@@ -1,17 +1,17 @@
 {
-    "recorded_at_utc": "2026-11-12T05:11:58.558008+00:00",
-    "tested_local_commit": "53829027d861c0a152e18f31e551ddea54400b7a",
-    "tested_source_tree": "5437d935fdca9ed035b751a94e29c3835e82b59a",
-    "equivalent_remote_source_commit": "d4d4df7532e6528a4b8a104f21c2c5aa375ab7b3",
+    "recorded_at_utc": "2026-11-12T05:39:34.543131+00:00",
+    "tested_local_commit": "d67235bd171df49426cf053f16c29055e6a907e0",
+    "tested_source_tree": "54a04f8d09096de37a12f2cc2dc329a847a36ac5",
+    "equivalent_remote_source_commit": "0a0eef33e792890407cffca29251ff08f6399421",
     "command": "python3 tests/ci/run_rust.py local",
     "exit_code": 0,
-    "rust_tests_passed": 1003,
+    "rust_tests_passed": 1008,
     "runner_tests_passed": 34,
-    "ui_suite_tests_passed": 58,
-    "actual_worker_ui_tests_passed": 24,
-    "local_log_sha256": "81e5a21c47b8f1f91c59bb1900b3d7dfe2770b18e5b849a6806be0cec2bd0488",
+    "ui_suite_tests_passed": 61,
+    "actual_worker_ui_tests_passed": 26,
+    "local_log_sha256": "8ae8adbfdcea292668d98340b5845e3b881efa41a12b2c53092fb276ee82c530",
     "local_results": {
-        "head": "53829027d861c0a152e18f31e551ddea54400b7a",
+        "head": "d67235bd171df49426cf053f16c29055e6a907e0",
         "platform": "linux",
         "windows_cross_target": "x86_64-pc-windows-gnu",
         "windows_runtime_tested": false,
@@ -420,7 +420,7 @@
             "sha256": "07914ea158c697c02ac5151ca0363cb2dd99e99ef2d14b8c6f684dbe801f12a7"
         }
     ],
-    "screenshot_scope": "Actual eframe rendering with synthetic archive listing and three toolbar actions.",
+    "screenshot_scope": "Actual eframe rendering with synthetic listing and three toolbar actions; existing captures predate the GZ dialog and filter-only correction, which does not alter these three views.",
     "historical_screenshots": "before, after and minimum folders record the previous UI and are not current verification.",
     "coverage": {
         "virtual_folders_and_current_folder_search": "browser_builds_virtual_folders_and_expands_only_the_selected_subtree; keyboard_opens_virtual_folder_and_searches_only_its_children",
@@ -433,7 +433,45 @@
         "private_destination": "auto_destination_is_private_under_desktop_umask",
         "minimum_size": "create_dialog_keeps_title_and_actions_visible_after_resize (760x540)",
         "renderer_and_contract": "Renderer fallback and contract revision 2 remain unchanged and pass local suites.",
-        "zip_password_option": "toolbar_has_three_actions_and_zip_password_option_remains_available; real-worker AES ZIP create/extract tests"
+        "zip_password_option": "toolbar_has_three_actions_and_zip_password_option_remains_available; real-worker AES ZIP create/extract tests",
+        "raw_gzip_save_dialog": {
+            "tests": [
+                "gzip_suggested_names_are_portable_and_preserve_valid_stems",
+                "gzip_save_cancel_and_invalid_output_do_not_start_an_extraction",
+                "raw_gzip_save_dialog_corrects_names_and_preserves_cancel_and_conflict_retry"
+            ],
+            "cases": [
+                ".gz",
+                "report:2026.gz (Unix source name)",
+                "report.GZ",
+                "report.Gz",
+                "report.gz"
+            ],
+            "assertions": [
+                "safe prefilled filename and archive parent",
+                "cancel leaves jobs unchanged",
+                "chosen leaf and parent reach actual worker",
+                "conflict keeps existing bytes",
+                "retry cancellation starts no job",
+                "retry uses newly chosen filename",
+                "source bytes remain unchanged",
+                "actual extracted content and confirmed completion"
+            ]
+        },
+        "archive_open_filters": {
+            "tests": [
+                "archive_filter_contains_every_case_variant_and_all_files_option",
+                "mixed_case_zip_names_open_and_extract_through_native_dialog_responses"
+            ],
+            "case_variants": 30,
+            "all_files": "*",
+            "actual_worker_archive_names": [
+                "sample.ZIP",
+                "sample.Zip",
+                "sample.zIp"
+            ],
+            "scope": "Pure unit test verifies the filter list passed to rfd; actual worker tests inject native dialog answers. Native filter UI interaction is not tested."
+        }
     },
     "licenses": {
         "command": "python3 packaging/licenses.py --manifest experiments/rust-ui-memory-app/Cargo.toml --manifest experiments/rust-archive-worker/Cargo.toml --output tests/ui-redesign/runs/THIRD-PARTY-LICENSES.txt --audit tests/ui-redesign/runs/toolbar-license-audit.json",
