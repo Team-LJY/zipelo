@@ -42,3 +42,7 @@ validation.json에는 실행한 소스 트리, local 결과와 화면 해시를 
 PR85 리뷰 회귀는 presentation.rs의 keyboard_file_pickers_enter_child_before_confirming_file, keyboard_folder_pickers_navigate_before_explicit_folder_confirmation, changed_zip_sources_retry_creation_with_or_without_open_archive에서 확인함. 폴더 행의 Tab 및 Enter 탐색은 6개 선택 모드에서, ZIP 원본 변경 뒤 생성 재시도는 기존 압축파일 유무 두 경우에서 검증함.
 
 ZIP 만들기의 취소 우선 처리는 keyboard_cancel_and_escape_never_start_zip_creation과 zip_creation_enter_only_activates_focused_make_button에서 검증함. Tab으로 취소와 만들기 버튼에 초점을 옮긴 뒤 Enter를 누르며, Esc와 이름 입력칸의 Enter가 생성 요청을 보내지 않는지도 확인함.
+
+Enter는 egui 버튼의 초점 활성화만 사용하며 암호 입력란의 제출만 예외임. secondary_button_enter_matrix_never_starts_creation_or_extraction은 기본 화면, 생성 창, 결과, 진행, 종료 확인과 선택창의 탐색 버튼을 한 번에 검증함. password_secondary_enter_does_not_submit_valid_input은 유효한 암호가 있어도 보기, 숨기기와 취소 버튼이 제출하지 않음을 검증함.
+
+폴더 생성 보고는 추출 시작 시 기록한 파일 대상과 예상 폴더 및 상위 폴더로 구분함. 빈 폴더만 있는 ZIP은 실제 작업자로 만들고 새 폴더 추출과 기존 폴더 재사용 모두 성공 표시를 확인함. 파일 저장 누락, 알 수 없는 생성 보고와 저장 불확실 결과의 경고는 유지함.

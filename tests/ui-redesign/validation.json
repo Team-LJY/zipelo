@@ -1,19 +1,19 @@
 {
-    "recorded_at_utc": "2026-11-12T01:30:06.685815+00:00",
+    "recorded_at_utc": "2026-11-12T01:54:11.911289+00:00",
     "baseline": "b10c7eedddd202f83766aa8f001142cdfdb4097c",
-    "tested_local_commit": "14330638630255141160a38f707930f9b3655632",
-    "tested_source_tree": "6ada7dd1e2e32c20fa9ed38c86744dea83e983df",
-    "equivalent_remote_source_commit": "02eeee6c445d2ff8ada76307c57b5b63b3f45f9b",
+    "tested_local_commit": "3f1b91574f40aa9d778c9170da0b8ec6ebe69497",
+    "tested_source_tree": "ff9dcc04b0bf28e60c37fec1fc82acf196300455",
+    "equivalent_remote_source_commit": "d144f7f2e26d26c49e5afb50fa04c6a6157ec8a9",
     "command": "python3 tests/ci/run_rust.py local",
     "exit_code": 0,
-    "rust_tests_passed": 994,
+    "rust_tests_passed": 1000,
     "runner_tests_passed": 34,
-    "ui_suite_tests_passed": 52,
-    "actual_worker_ui_tests_passed": 21,
+    "ui_suite_tests_passed": 57,
+    "actual_worker_ui_tests_passed": 22,
     "native_x11_row_selection": "passed",
-    "local_log_sha256": "3c840a5870555445876345fc35dfe83d30e60eb85cf9886410128925f5ec837d",
+    "local_log_sha256": "fb422e132882ac7c9c4ed8cbf835bec613f4eedeccbd793346f3db6a45459c58",
     "local_results": {
-        "head": "14330638630255141160a38f707930f9b3655632",
+        "head": "3f1b91574f40aa9d778c9170da0b8ec6ebe69497",
         "platform": "linux",
         "windows_cross_target": "x86_64-pc-windows-gnu",
         "windows_runtime_tested": false,
@@ -768,7 +768,11 @@
                 "missing_terminal_exit_or_contradictory_reports_never_claim_unsaved",
                 "unsafe_path_and_conflict_preserve_result_classification",
                 "every_error_and_stage_has_user_facing_text",
-                "client_protocol_errors_hide_internal_terms_but_preserve_exit_uncertainty"
+                "client_protocol_errors_hide_internal_terms_but_preserve_exit_uncertainty",
+                "directory_reports_allow_empty_and_mixed_archives_without_hiding_unknown_outputs",
+                "directory_targets_include_selected_members_and_implicit_parents",
+                "directory_only_extraction_displays_success",
+                "empty_directory_zip_extracts_successfully_with_existing_directory_reuse"
             ]
         },
         {
@@ -831,7 +835,9 @@
                 "check_row_selection.py",
                 "archive_theme::focus",
                 "widgets::keyboard_cancel_and_escape_never_start_zip_creation",
-                "widgets::zip_creation_enter_only_activates_focused_make_button"
+                "widgets::zip_creation_enter_only_activates_focused_make_button",
+                "secondary_button_enter_matrix_never_starts_creation_or_extraction",
+                "password_secondary_enter_does_not_submit_valid_input"
             ],
             "limit": "전체 보조 기술 접근성 감사는 수행하지 않음"
         },
@@ -888,7 +894,7 @@
             "changed_zip_sources_retry_creation_with_or_without_open_archive"
         ],
         "baseline": "3 tests failed before correction",
-        "fixed": "3 tests passed, UI suite 50 passed",
+        "fixed": "passed",
         "coverage": "파일 선택 2개와 폴더 선택 4개 모드의 Tab 및 Enter 탐색, 기존 압축파일 유무 두 경우의 동일 CreateZip 요청 재전송"
     },
     "native_x11_row_selection_source_commit": "f1e973b2e5c8972936387b10e86cabb499d5c10f",
@@ -899,6 +905,17 @@
         ],
         "baseline": "Cancel focused Enter sent CreateZip before correction",
         "fixed": "Cancel Enter and Escape send no request; filename Enter does not create; focused Make Enter sends one request",
-        "result": "2 tests passed, UI suite 52 passed"
-    }
+        "result": "passed"
+    },
+    "enter_policy": "Enter activates only the focused button; password text inputs may submit",
+    "enter_policy_regressions": [
+        "secondary_button_enter_matrix_never_starts_creation_or_extraction",
+        "password_secondary_enter_does_not_submit_valid_input"
+    ],
+    "directory_result_regressions": [
+        "directory_reports_allow_empty_and_mixed_archives_without_hiding_unknown_outputs",
+        "directory_targets_include_selected_members_and_implicit_parents",
+        "directory_only_extraction_displays_success",
+        "empty_directory_zip_extracts_successfully_with_existing_directory_reuse"
+    ]
 }
