@@ -384,3 +384,30 @@ fn explorer_fast_forward_marquee_uses_the_original_press_position() {
     s.pointer(end, false, egui::Modifiers::NONE);
     s.selected(&[0, 1, 2, 5]);
 }
+
+#[test]
+fn explorer_ctrl_removes_a_large_directory_subtree_without_ancestor_rescans() {
+    let scratch = Folder::new();
+    let mut s = Explorer::new(&scratch);
+    s.app.model.entries = (0..5001)
+        .map(|id| Entry {
+            id,
+            name: if id == 0 {
+                "docs".into()
+            } else {
+                format!("docs/child-{id:05}")
+            },
+            kind: Kind::Directory,
+            bytes: None,
+            packed: None,
+            encrypted: false,
+        })
+        .collect();
+    s.frame(egui::Modifiers::NONE, vec![]);
+    s.click("docs", egui::Modifiers::NONE);
+    assert_eq!(s.app.model.selected.len(), 5001);
+    let started = std::time::Instant::now();
+    s.click("docs", explorer_ctrl());
+    assert!(s.app.model.selected.is_empty());
+    assert!(started.elapsed() < std::time::Duration::from_secs(2));
+}

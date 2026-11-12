@@ -1076,11 +1076,10 @@ impl ArchiveApp {
                 self.model.selected.clear();
             }
             if ctrl && rows[index].ids.is_subset(&self.model.selected) {
-                browser::remove_selection(
-                    &self.model.entries,
-                    &mut self.model.selected,
-                    &rows[index].ids,
-                );
+                // 폴더 이동 시 선택을 지우므로 현재 행의 ID만 제거함.
+                self.model
+                    .selected
+                    .retain(|id| !rows[index].ids.contains(id));
             } else {
                 self.model.selected.extend(&rows[index].ids);
             }
