@@ -9,6 +9,8 @@ pub const UNCERTAIN: &str = "저장이 끝났는지 확인하지 못했습니다
 pub const PARTIAL: &str = "일부 파일만 풀렸습니다. 풀린 파일은 풀 위치 폴더에 남아 있습니다.";
 pub const LEFTOVERS: &str =
     "선택한 파일은 모두 저장했지만 임시 파일을 지우지 못했습니다. 풀 위치 폴더를 확인하세요.";
+pub const SYNC_FAILED: &str =
+    "파일을 디스크에 완전히 저장하지 못했습니다. 풀 위치 폴더를 확인하세요.";
 pub const SYNC_WARNING: &str = "파일을 디스크에 완전히 저장했는지 확인하지 못했습니다.";
 pub const CLEANUP_WARNING: &str =
     "임시 파일을 지우지 못했습니다. 풀 위치 폴더에 남은 임시 파일이 있을 수 있습니다.";
@@ -147,7 +149,32 @@ pub fn target_directories(entries: &[Entry], selection: &Selection) -> BTreeSet<
     directories
 }
 
+pub fn durability_warning(durability: Durability) -> Option<&'static str> {
+    match durability {
+        Durability::Failed => Some(SYNC_FAILED),
+        Durability::Unconfirmed => Some(SYNC_WARNING),
+        _ => None,
+    }
+}
+
 pub fn warnings(
+    terminal: Option<&Terminal>,
+    confirmed: bool,
+    targets: Option<&BTreeSet<String>>,
+    directories: &BTreeSet<String>,
+    outputs: &[(String, Disposition)],
+) -> Vec<&'static str> {
+    let mut result = publication_warnings(terminal, confirmed, targets, directories, outputs);
+    if let Some(warning) = terminal
+        .filter(|_| confirmed)
+        .and_then(|t| durability_warning(t.durability))
+    {
+        result.push(warning);
+    }
+    result
+}
+
+pub fn publication_warnings(
     terminal: Option<&Terminal>,
     confirmed: bool,
     targets: Option<&BTreeSet<String>>,
@@ -206,9 +233,6 @@ pub fn warnings(
         }
     } else {
         result.push(UNCERTAIN);
-    }
-    if matches!(t.durability, Durability::Failed | Durability::Unconfirmed) {
-        result.push(SYNC_WARNING);
     }
     if (retained || t.cleanup != Cleanup::Complete) && !all_saved_with_leftovers {
         result.push(CLEANUP_WARNING);

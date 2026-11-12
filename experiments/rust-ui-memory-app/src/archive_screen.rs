@@ -853,7 +853,7 @@ impl ArchiveApp {
         let warnings = if listing {
             Vec::new()
         } else {
-            present::warnings(
+            present::publication_warnings(
                 t.as_ref(),
                 self.model.confirmed,
                 self.targets.as_ref(),
@@ -864,9 +864,14 @@ impl ArchiveApp {
         let success = self.model.confirmed
             && self.model.error.is_none()
             && t.as_ref().is_some_and(|t| t.outcome == Outcome::Completed)
-            && warnings
-                .iter()
-                .all(|warning| *warning == present::SYNC_WARNING);
+            && warnings.is_empty();
+        let durability_warning = t
+            .as_ref()
+            .filter(|_| self.model.confirmed && !listing)
+            .and_then(|t| present::durability_warning(t.durability));
+        let durability_in_details = success
+            && t.as_ref()
+                .is_some_and(|t| t.durability == Durability::Unconfirmed);
         let cancelled =
             self.model.confirmed && t.as_ref().is_some_and(|t| t.outcome == Outcome::Cancelled);
         let title = if success {
@@ -933,11 +938,12 @@ impl ArchiveApp {
                     }
                     for warning in warnings
                         .iter()
-                        .filter(|warning| !success || **warning != present::SYNC_WARNING)
+                        .copied()
+                        .chain(durability_warning.filter(|_| !durability_in_details))
                     {
                         ui.horizontal_wrapped(|ui| {
                             theme::icon(ui, Icon::Warning, 20.0);
-                            ui.colored_label(theme::WARNING, *warning);
+                            ui.colored_label(theme::WARNING, warning);
                         });
                     }
                     if !success
@@ -952,8 +958,10 @@ impl ArchiveApp {
                     }
                     if self.details {
                         theme::panel(theme::STRIPE).show(ui, |ui| {
-                            if success && warnings.contains(&present::SYNC_WARNING) {
-                                ui.label(present::SYNC_WARNING);
+                            if durability_in_details {
+                                if let Some(warning) = durability_warning {
+                                    ui.label(warning);
+                                }
                             }
                             if let Some(t) = &t {
                                 for line in terminal_lines(t) {
