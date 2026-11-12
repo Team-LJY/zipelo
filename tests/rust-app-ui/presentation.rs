@@ -1146,6 +1146,96 @@ mod widgets {
         }
     }
 
+    #[test]
+    fn durability_warning_visibility_matches_completed_failed_and_partial_results() {
+        for (outcome, publication, saved, expected_files) in [
+            (Outcome::Completed, Publication::Complete, 1, 1),
+            (Outcome::Failed, Publication::None, 0, 1),
+            (Outcome::Failed, Publication::Partial, 1, 2),
+        ] {
+            let scratch = Folder::new();
+            let factory = FakeFactory::default();
+            let mut app = loaded(&scratch, &factory);
+            app.model.entries = (0..expected_files)
+                .map(|id| Entry {
+                    id,
+                    name: format!("{id}.txt"),
+                    kind: Kind::File,
+                    bytes: Some(1),
+                    packed: None,
+                    encrypted: false,
+                })
+                .collect();
+            factory.state.borrow_mut().manual = true;
+            assert!(app.begin_extract());
+            {
+                let mut worker = factory.state.borrow_mut();
+                worker.frame(Event::Accepted { encryption: false });
+                if saved > 0 {
+                    worker.frame(Event::Output {
+                        entry_id: Some(0),
+                        relative_name: "0.txt".into(),
+                        disposition: Disposition::Created,
+                    });
+                }
+                worker.finish(outcome, publication);
+                for event in &mut worker.queue {
+                    if let HostEvent::Frame {
+                        event: Event::Terminal(terminal),
+                        ..
+                    } = event
+                    {
+                        terminal.created_count = saved;
+                        terminal.durability = Durability::Unconfirmed;
+                        terminal.error = (outcome == Outcome::Failed).then_some(ErrorCode::Io);
+                    }
+                }
+            }
+            let ctx = egui::Context::default();
+            for _ in 0..30 {
+                policy_render(&ctx, &mut app, vec![]);
+            }
+            let completed = outcome == Outcome::Completed;
+            let shown = policy_render(&ctx, &mut app, vec![]);
+            assert_eq!(
+                shown.iter().any(|(text, _)| text == SYNC_WARNING),
+                !completed,
+                "{outcome:?}/{publication:?}: {shown:?}"
+            );
+            assert_eq!(shown.iter().any(|(text, _)| text == "폴더 열기"), completed);
+            assert_eq!(
+                shown.iter().any(|(text, _)| text == "압축을 풀었습니다"),
+                completed
+            );
+            assert_eq!(
+                shown
+                    .iter()
+                    .any(|(text, _)| text == "압축을 풀지 못했습니다"),
+                !completed
+            );
+            assert_eq!(
+                shown.iter().any(|(text, _)| text == PARTIAL),
+                publication == Publication::Partial
+            );
+            policy_click(&ctx, &mut app, "자세히 보기");
+            let details = policy_render(&ctx, &mut app, vec![]);
+            assert_eq!(
+                details
+                    .iter()
+                    .filter(|(text, _)| text == SYNC_WARNING)
+                    .count(),
+                1,
+                "{outcome:?}/{publication:?}: {details:?}"
+            );
+            policy_click(&ctx, &mut app, "자세히 닫기");
+            let closed = policy_render(&ctx, &mut app, vec![]);
+            assert_eq!(
+                closed.iter().any(|(text, _)| text == SYNC_WARNING),
+                !completed
+            );
+        }
+    }
+
     fn picker_frame(
         ctx: &egui::Context,
         picker: &mut Picker,

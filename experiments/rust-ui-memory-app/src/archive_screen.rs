@@ -933,7 +933,7 @@ impl ArchiveApp {
                     }
                     for warning in warnings
                         .iter()
-                        .filter(|warning| **warning != present::SYNC_WARNING)
+                        .filter(|warning| !success || **warning != present::SYNC_WARNING)
                     {
                         ui.horizontal_wrapped(|ui| {
                             theme::icon(ui, Icon::Warning, 20.0);
@@ -952,7 +952,7 @@ impl ArchiveApp {
                     }
                     if self.details {
                         theme::panel(theme::STRIPE).show(ui, |ui| {
-                            if warnings.contains(&present::SYNC_WARNING) {
+                            if success && warnings.contains(&present::SYNC_WARNING) {
                                 ui.label(present::SYNC_WARNING);
                             }
                             if let Some(t) = &t {
