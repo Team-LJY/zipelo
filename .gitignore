@@ -12,6 +12,8 @@ packaging/staging/
 
 # Test and Python scratch data
 tests/security/.work/
+# 로컬 시험, 리뷰, 설치 파일 작업 폴더
+tests/work/
 __pycache__/
 *.py[cod]
 .pytest_cache/
