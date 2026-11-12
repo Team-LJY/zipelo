@@ -1,0 +1,457 @@
+{
+    "recorded_at_utc": "2026-11-12T09:07:05.793826+00:00",
+    "tested_local_commit": "9cef490793533f6237fd700d0bd02a45cb20e623",
+    "tested_source_tree": "119e7faa481ccb821ce956f51331bf682d3a657f",
+    "equivalent_remote_source_commit": "2f9903b56fe34f6275dbef7bcd2a8ca9cc52b660",
+    "command": "python3 tests/ci/run_rust.py local",
+    "exit_code": 0,
+    "rust_tests_passed": 1025,
+    "runner_tests_passed": 34,
+    "ui_suite_tests_passed": 77,
+    "actual_worker_ui_tests_passed": 27,
+    "local_log_sha256": "48c5c276f6acb17897352c202d238b81d0ca28ae04375b5c1fffb4dac9984f7e",
+    "local_results": {
+        "head": "9cef490793533f6237fd700d0bd02a45cb20e623",
+        "platform": "linux",
+        "windows_cross_target": "x86_64-pc-windows-gnu",
+        "windows_runtime_tested": false,
+        "results": [
+            {
+                "phase": "build",
+                "manifest": "experiments/rust-app-core-memory/Cargo.toml",
+                "status": "passed",
+                "exit_code": 0
+            },
+            {
+                "phase": "build",
+                "manifest": "experiments/rust-archive-worker/Cargo.toml",
+                "status": "passed",
+                "exit_code": 0
+            },
+            {
+                "phase": "build",
+                "manifest": "experiments/rust-file-publication/Cargo.toml",
+                "status": "passed",
+                "exit_code": 0
+            },
+            {
+                "phase": "build",
+                "manifest": "experiments/rust-file-snapshot/Cargo.toml",
+                "status": "passed",
+                "exit_code": 0
+            },
+            {
+                "phase": "build",
+                "manifest": "experiments/rust-gzip-file-job/Cargo.toml",
+                "status": "passed",
+                "exit_code": 0
+            },
+            {
+                "phase": "build",
+                "manifest": "experiments/rust-memory-gzip-reader/Cargo.toml",
+                "status": "passed",
+                "exit_code": 0
+            },
+            {
+                "phase": "build",
+                "manifest": "experiments/rust-memory-ustar-reader/Cargo.toml",
+                "status": "passed",
+                "exit_code": 0
+            },
+            {
+                "phase": "build",
+                "manifest": "experiments/rust-memory-zip-create/Cargo.toml",
+                "status": "passed",
+                "exit_code": 0
+            },
+            {
+                "phase": "build",
+                "manifest": "experiments/rust-ui-memory-app/Cargo.toml",
+                "status": "passed",
+                "exit_code": 0
+            },
+            {
+                "phase": "build",
+                "manifest": "tests/rust-app-core-memory/Cargo.toml",
+                "status": "passed",
+                "exit_code": 0
+            },
+            {
+                "phase": "build",
+                "manifest": "tests/rust-app-real-worker/Cargo.toml",
+                "status": "passed",
+                "exit_code": 0
+            },
+            {
+                "phase": "build",
+                "manifest": "tests/rust-file-publication/Cargo.toml",
+                "status": "passed",
+                "exit_code": 0
+            },
+            {
+                "phase": "build",
+                "manifest": "tests/rust-file-snapshot/Cargo.toml",
+                "status": "passed",
+                "exit_code": 0
+            },
+            {
+                "phase": "build",
+                "manifest": "tests/rust-gzip-file-job/Cargo.toml",
+                "status": "passed",
+                "exit_code": 0
+            },
+            {
+                "phase": "build",
+                "manifest": "tests/rust-large-archive-fixtures/Cargo.toml",
+                "status": "passed",
+                "exit_code": 0
+            },
+            {
+                "phase": "build",
+                "manifest": "tests/rust-memory-gzip-reader/Cargo.toml",
+                "status": "passed",
+                "exit_code": 0
+            },
+            {
+                "phase": "build",
+                "manifest": "tests/rust-memory-ustar-reader/Cargo.toml",
+                "status": "passed",
+                "exit_code": 0
+            },
+            {
+                "phase": "build",
+                "manifest": "tests/rust-ui-memory-gui-races/Cargo.toml",
+                "status": "passed",
+                "exit_code": 0
+            },
+            {
+                "phase": "build",
+                "manifest": "tests/rust-ui-memory-races/Cargo.toml",
+                "status": "passed",
+                "exit_code": 0
+            },
+            {
+                "phase": "build",
+                "manifest": "tests/rust-ui-system-font-regressions/Cargo.toml",
+                "status": "passed",
+                "exit_code": 0
+            },
+            {
+                "phase": "build",
+                "manifest": "tests/rust-zip64-compat/Cargo.toml",
+                "status": "passed",
+                "exit_code": 0
+            },
+            {
+                "phase": "test",
+                "manifest": "experiments/rust-app-core-memory/Cargo.toml",
+                "status": "passed",
+                "exit_code": 0
+            },
+            {
+                "phase": "test",
+                "manifest": "experiments/rust-archive-worker/Cargo.toml",
+                "status": "passed",
+                "exit_code": 0
+            },
+            {
+                "phase": "test",
+                "manifest": "experiments/rust-file-publication/Cargo.toml",
+                "status": "passed",
+                "exit_code": 0
+            },
+            {
+                "phase": "test",
+                "manifest": "experiments/rust-file-snapshot/Cargo.toml",
+                "status": "passed",
+                "exit_code": 0
+            },
+            {
+                "phase": "test",
+                "manifest": "experiments/rust-gzip-file-job/Cargo.toml",
+                "status": "passed",
+                "exit_code": 0
+            },
+            {
+                "phase": "test",
+                "manifest": "experiments/rust-memory-gzip-reader/Cargo.toml",
+                "status": "passed",
+                "exit_code": 0
+            },
+            {
+                "phase": "test",
+                "manifest": "experiments/rust-memory-ustar-reader/Cargo.toml",
+                "status": "passed",
+                "exit_code": 0
+            },
+            {
+                "phase": "test",
+                "manifest": "experiments/rust-memory-zip-create/Cargo.toml",
+                "status": "passed",
+                "exit_code": 0
+            },
+            {
+                "phase": "test",
+                "manifest": "experiments/rust-ui-memory-app/Cargo.toml",
+                "status": "passed",
+                "exit_code": 0
+            },
+            {
+                "phase": "test",
+                "manifest": "tests/rust-app-core-memory/Cargo.toml",
+                "status": "passed",
+                "exit_code": 0
+            },
+            {
+                "phase": "test",
+                "manifest": "tests/rust-app-real-worker/Cargo.toml",
+                "status": "passed",
+                "exit_code": 0
+            },
+            {
+                "phase": "test",
+                "manifest": "tests/rust-file-publication/Cargo.toml",
+                "status": "passed",
+                "exit_code": 0
+            },
+            {
+                "phase": "test",
+                "manifest": "tests/rust-file-snapshot/Cargo.toml",
+                "status": "passed",
+                "exit_code": 0
+            },
+            {
+                "phase": "test",
+                "manifest": "tests/rust-gzip-file-job/Cargo.toml",
+                "status": "passed",
+                "exit_code": 0
+            },
+            {
+                "phase": "test",
+                "manifest": "tests/rust-large-archive-fixtures/Cargo.toml",
+                "status": "passed",
+                "exit_code": 0
+            },
+            {
+                "phase": "test",
+                "manifest": "tests/rust-memory-gzip-reader/Cargo.toml",
+                "status": "passed",
+                "exit_code": 0
+            },
+            {
+                "phase": "test",
+                "manifest": "tests/rust-memory-ustar-reader/Cargo.toml",
+                "status": "passed",
+                "exit_code": 0
+            },
+            {
+                "phase": "test",
+                "manifest": "tests/rust-ui-memory-gui-races/Cargo.toml",
+                "status": "passed",
+                "exit_code": 0
+            },
+            {
+                "phase": "test",
+                "manifest": "tests/rust-ui-memory-races/Cargo.toml",
+                "status": "passed",
+                "exit_code": 0
+            },
+            {
+                "phase": "test",
+                "manifest": "tests/rust-ui-system-font-regressions/Cargo.toml",
+                "status": "passed",
+                "exit_code": 0
+            },
+            {
+                "phase": "test",
+                "manifest": "tests/rust-zip64-compat/Cargo.toml",
+                "status": "passed",
+                "exit_code": 0
+            },
+            {
+                "phase": "cross-build",
+                "manifest": "experiments/rust-app-core-memory/Cargo.toml",
+                "status": "passed",
+                "exit_code": 0
+            },
+            {
+                "phase": "cross-build",
+                "manifest": "experiments/rust-archive-worker/Cargo.toml",
+                "status": "passed",
+                "exit_code": 0
+            },
+            {
+                "phase": "cross-build",
+                "manifest": "experiments/rust-file-publication/Cargo.toml",
+                "status": "passed",
+                "exit_code": 0
+            },
+            {
+                "phase": "cross-build",
+                "manifest": "experiments/rust-file-snapshot/Cargo.toml",
+                "status": "passed",
+                "exit_code": 0
+            },
+            {
+                "phase": "cross-build",
+                "manifest": "experiments/rust-gzip-file-job/Cargo.toml",
+                "status": "passed",
+                "exit_code": 0
+            },
+            {
+                "phase": "cross-build",
+                "manifest": "experiments/rust-memory-gzip-reader/Cargo.toml",
+                "status": "passed",
+                "exit_code": 0
+            },
+            {
+                "phase": "cross-build",
+                "manifest": "experiments/rust-memory-ustar-reader/Cargo.toml",
+                "status": "passed",
+                "exit_code": 0
+            },
+            {
+                "phase": "cross-build",
+                "manifest": "experiments/rust-memory-zip-create/Cargo.toml",
+                "status": "passed",
+                "exit_code": 0
+            },
+            {
+                "phase": "cross-build",
+                "manifest": "experiments/rust-ui-memory-app/Cargo.toml",
+                "status": "passed",
+                "exit_code": 0
+            },
+            {
+                "phase": "cross-build",
+                "manifest": "tests/rust-app-core-memory/Cargo.toml",
+                "status": "passed",
+                "exit_code": 0
+            },
+            {
+                "phase": "cross-build",
+                "manifest": "tests/rust-app-real-worker/Cargo.toml",
+                "status": "passed",
+                "exit_code": 0
+            },
+            {
+                "phase": "cross-build",
+                "manifest": "tests/rust-file-publication/Cargo.toml",
+                "status": "passed",
+                "exit_code": 0
+            },
+            {
+                "phase": "cross-build",
+                "manifest": "tests/rust-file-snapshot/Cargo.toml",
+                "status": "passed",
+                "exit_code": 0
+            },
+            {
+                "phase": "cross-build",
+                "manifest": "tests/rust-gzip-file-job/Cargo.toml",
+                "status": "passed",
+                "exit_code": 0
+            },
+            {
+                "phase": "cross-build",
+                "manifest": "tests/rust-large-archive-fixtures/Cargo.toml",
+                "status": "passed",
+                "exit_code": 0
+            },
+            {
+                "phase": "cross-build",
+                "manifest": "tests/rust-memory-gzip-reader/Cargo.toml",
+                "status": "passed",
+                "exit_code": 0
+            },
+            {
+                "phase": "cross-build",
+                "manifest": "tests/rust-memory-ustar-reader/Cargo.toml",
+                "status": "passed",
+                "exit_code": 0
+            },
+            {
+                "phase": "cross-build",
+                "manifest": "tests/rust-ui-memory-gui-races/Cargo.toml",
+                "status": "passed",
+                "exit_code": 0
+            },
+            {
+                "phase": "cross-build",
+                "manifest": "tests/rust-ui-memory-races/Cargo.toml",
+                "status": "passed",
+                "exit_code": 0
+            },
+            {
+                "phase": "cross-build",
+                "manifest": "tests/rust-ui-system-font-regressions/Cargo.toml",
+                "status": "passed",
+                "exit_code": 0
+            },
+            {
+                "phase": "cross-build",
+                "manifest": "tests/rust-zip64-compat/Cargo.toml",
+                "status": "passed",
+                "exit_code": 0
+            }
+        ]
+    },
+    "coverage": [
+        "explorer_click_ctrl_shift_and_blank_match_visible_selection_count",
+        "explorer_keyboard_ranges_enter_backspace_and_escape_are_scoped_to_the_list",
+        "explorer_double_click_opens_only_folders_and_resets_selection",
+        "explorer_marquee_selects_intersections_and_ctrl_adds_with_an_opaque_blue_rectangle",
+        "explorer_marquee_autoscrolls_thousands_of_rows_without_rendering_them_all",
+        "explorer_selected_folder_and_empty_selection_reach_the_exact_extraction_request",
+        "explorer_fast_forward_marquee_uses_the_original_press_position",
+        "explorer_ctrl_removes_a_large_directory_subtree_without_ancestor_rescans",
+        "explorer_folder_click_and_escape_control_actual_extraction_scope",
+        "folder_navigation_clears_parent_selection_and_extracts_only_new_selection"
+    ],
+    "selection_rules": {
+        "mouse": "Single click replaces, Ctrl toggles, Shift selects from anchor, Ctrl+Shift adds a range. Blank click clears; Ctrl+blank preserves.",
+        "marquee": "Starts in blank list space, uses the original press position even for batched events, selects row intersections, Ctrl adds. Fill is opaque #2563eb (alpha 255).",
+        "keyboard": "List-scoped arrows, Shift+arrows, Ctrl+A, Enter, Backspace and Esc. Other focused buttons and search retain their own Enter behavior.",
+        "scope": "Folder navigation and search changes clear selection and reset the anchor. Selected folders contribute descendant entry IDs to extraction; no selection requests the full archive.",
+        "count": "Status counts fully selected visible rows, not descendant entry IDs."
+    },
+    "performance_cases": {
+        "flat_entries": 5000,
+        "rendered_name_widgets": "fewer than 30",
+        "drag_scrolling": "both directions and release stops selection changes",
+        "large_directory_entries": 5001,
+        "ctrl_removal": "removes the row ID set without ancestor rescans",
+        "timing_scope": "Debug test budgets on linux-desktop-2; not general device benchmarks."
+    },
+    "screenshot_source_remote_commit": "9a6dc1baa501b1c32cabb42e833f977e596170d0",
+    "screenshots": [
+        {
+            "state": "explorer-selected",
+            "path": "tests/ui-redesign/screenshots/explorer-selection/explorer-selected.png",
+            "width": 1060,
+            "height": 720,
+            "sha256": "f1d01ed47fc3c0635c84278f594eed03398498b451295c85ccf231fb1f5b97e2"
+        },
+        {
+            "state": "explorer-marquee",
+            "path": "tests/ui-redesign/screenshots/explorer-selection/explorer-marquee.png",
+            "width": 1060,
+            "height": 720,
+            "sha256": "822e595d5f2cdaa923891a1df638115c807060c9afd6639f1fe6c721d9873523"
+        }
+    ],
+    "screenshot_scope": "Actual eframe application in isolated Linux Xvfb with xdotool input and synthetic archive listing; images visually inspected.",
+    "worker_contract_revision": 2,
+    "dependencies_changed": false,
+    "related_prs": {
+        "p1_path_fix": 92,
+        "selection_design": 93
+    },
+    "limitations": [
+        "Windows all-target cross-build passed, but native Windows interaction for this feature was not executed.",
+        "Screenshots use synthetic data; extraction scope is separately checked with actual worker output content."
+    ],
+    "notes": [
+        "The final source includes the large-directory Ctrl removal improvement. The complete local command passed on that source; only this evidence file is added afterwards."
+    ]
+}
