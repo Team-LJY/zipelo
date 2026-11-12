@@ -11,6 +11,15 @@ use std::{
     path::{Path, PathBuf},
 };
 
+struct Marquee {
+    // 스크롤 중에도 시작점을 목록 좌표로 유지함.
+    origin: egui::Pos2,
+    base: BTreeSet<u32>,
+    moved: bool,
+}
+
+const LIST_ROW: f32 = 44.0;
+
 pub struct ArchiveApp {
     pub model: Model,
     factory: Box<dyn Factory>,
@@ -32,6 +41,11 @@ pub struct ArchiveApp {
     dialogs: Box<dyn Dialogs>,
     folder: String,
     search: String,
+    list_anchor: Option<usize>,
+    list_cursor: Option<usize>,
+    list_offset: f32,
+    list_focused: bool,
+    marquee: Option<Marquee>,
     last_request: Option<Start>,
     targets: Option<BTreeSet<String>>,
     directories: BTreeSet<String>,
@@ -65,6 +79,11 @@ impl ArchiveApp {
             dialogs: Box::new(NativeDialogs),
             folder: String::new(),
             search: String::new(),
+            list_anchor: None,
+            list_cursor: None,
+            list_offset: 0.0,
+            list_focused: false,
+            marquee: None,
             last_request: None,
             targets: None,
             directories: BTreeSet::new(),
@@ -87,6 +106,7 @@ impl ArchiveApp {
     pub fn browse_folder(&mut self, folder: &str) {
         self.folder = folder.trim_matches('/').to_owned();
         self.search.clear();
+        self.clear_list_selection();
     }
 
     pub fn show_create(&mut self, encrypted: bool) {
@@ -116,6 +136,7 @@ impl ArchiveApp {
         self.selected_only = false;
         self.folder.clear();
         self.search.clear();
+        self.clear_list_selection();
         self.targets = None;
         self.directories.clear();
         self.start(Start::List { archive });
@@ -185,6 +206,7 @@ impl ArchiveApp {
     }
 
     pub fn begin_extract(&mut self) -> bool {
+        self.selected_only = !self.model.selected.is_empty();
         if !self.model.can_extract() || (self.selected_only && self.model.selected.is_empty()) {
             return false;
         }
@@ -549,7 +571,14 @@ impl ArchiveApp {
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                         theme::bounded_text(
                             ui,
-                            &format!("선택 {}개", self.model.selected.len()),
+                            &format!(
+                                "선택 {}개",
+                                browser::rows(&self.model.entries, &self.folder, &self.search)
+                                    .iter()
+                                    .filter(|row| !row.ids.is_empty()
+                                        && row.ids.is_subset(&self.model.selected))
+                                    .count()
+                            ),
                             width,
                         );
                     });
@@ -697,86 +726,187 @@ impl ArchiveApp {
                         .hint_text("파일 찾기"),
                 );
                 theme::focus(&search);
+                if search.changed() {
+                    self.clear_list_selection();
+                }
             });
         });
         let rows = browser::rows(&self.model.entries, &self.folder, &self.search);
-        let visible = rows
-            .iter()
-            .flat_map(|row| row.ids.iter().copied())
-            .collect::<BTreeSet<_>>();
-        let mut all = !visible.is_empty() && visible.is_subset(&self.model.selected);
-        let name_width = (ui.available_width() - 32.0 - 96.0 - 64.0 - 64.0).max(160.0);
+
+        let name_width = (ui.available_width() - 16.0 - 28.0 - 96.0 - 64.0 - 40.0).max(120.0);
         ui.horizontal(|ui| {
-            ui.add_space(16.0);
-            let check = ui
-                .add_enabled(
-                    !self.model.busy() && !visible.is_empty(),
-                    egui::Checkbox::without_text(&mut all),
-                )
-                .on_hover_text("전체 선택");
-            if check.changed() {
-                if all {
-                    self.model.selected.extend(&visible);
-                } else {
-                    browser::remove_selection(
-                        &self.model.entries,
-                        &mut self.model.selected,
-                        &visible,
-                    );
-                }
-            }
-            theme::focus(&check);
+            ui.add_space(16.0 + 28.0);
             theme::column_label(ui, RichText::new("이름").strong(), name_width, Align::Min);
             theme::column_label(ui, "크기", 96.0, Align::Max);
             theme::column_label(ui, "암호", 64.0, Align::Min);
         });
         ui.separator();
-        if rows.is_empty() {
-            ui.centered_and_justified(|ui| {
-                ui.label(if self.search.is_empty() {
-                    "이 폴더는 비어 있습니다"
-                } else {
-                    "일치하는 항목이 없습니다"
-                });
+        let active = !self.model.busy()
+            && !self.create
+            && self.model.challenge.is_none()
+            && self.model.close == Close::Open;
+        let list_id = egui::Id::unique("archive-list");
+        let background = ui.interact(
+            ui.available_rect_before_wrap(),
+            list_id,
+            if active {
+                egui::Sense::click_and_drag()
+            } else {
+                egui::Sense::hover()
+            },
+        );
+        background
+            .widget_info(|| egui::WidgetInfo::labeled(egui::Role::ListBox, active, "파일 목록"));
+        if background.has_focus() {
+            ui.ctx().memory_mut(|memory| {
+                memory.set_focus_lock_filter(
+                    list_id,
+                    egui::EventFilter {
+                        vertical_arrows: true,
+                        escape: true,
+                        ..Default::default()
+                    },
+                )
             });
-            return;
         }
-        egui::ScrollArea::vertical()
+        let mut focused = None;
+        let mut open = None;
+        let mut next_offset = None;
+        let output = egui::ScrollArea::vertical()
             .id_salt("archive-rows")
             .auto_shrink([false, false])
-            .show_rows(ui, 38.0, rows.len(), |ui, range| {
-                for index in range {
-                    let row = &rows[index];
-                    let mut selected =
-                        !row.ids.is_empty() && row.ids.is_subset(&self.model.selected);
-                    let response = ui
-                        .horizontal(|ui| {
-                            ui.set_min_height(36.0);
-                            ui.add_space(16.0);
-                            let check = ui.add_enabled(
-                                !self.model.busy() && !row.ids.is_empty(),
-                                egui::Checkbox::without_text(&mut selected),
-                            );
-                            check.widget_info(|| {
-                                egui::WidgetInfo::selected(
-                                    egui::Role::CheckBox,
-                                    !self.model.busy(),
-                                    selected,
-                                    &row.name,
-                                )
-                            });
-                            theme::focus(&check);
-                            if check.changed() {
-                                if selected {
+            .vertical_scroll_offset(self.list_offset)
+            .show_viewport(ui, |ui, viewport| {
+                let origin = ui.max_rect().min;
+                let clip = ui.clip_rect();
+                let width = (ui.available_width() - 24.0).max(0.0);
+                ui.set_min_height((rows.len() as f32 * LIST_ROW).max(viewport.height()));
+                let point = ui.input(|i| i.pointer.interact_pos());
+                if active && let Some(point) = point {
+                    let press = ui.input(|i| i.pointer.press_origin()).unwrap_or(point);
+                    let relative = press - origin;
+                    let in_row = relative.x >= 0.0
+                        && relative.x <= width
+                        && relative.y >= 0.0
+                        && relative.y < rows.len() as f32 * LIST_ROW;
+                    if clip.contains(press) && !in_row && ui.input(|i| i.pointer.primary_pressed())
+                    {
+                        background.request_focus();
+                        let ctrl = ui.input(|i| i.modifiers.ctrl || i.modifiers.command);
+                        self.marquee = Some(Marquee {
+                            origin: relative.to_pos2(),
+                            base: if ctrl {
+                                self.model.selected.clone()
+                            } else {
+                                BTreeSet::new()
+                            },
+                            moved: false,
+                        });
+                        if !ctrl {
+                            self.model.selected.clear();
+                            self.list_anchor = None;
+                            self.list_cursor = None;
+                        }
+                    }
+                    if let Some(drag) = &mut self.marquee {
+                        let end = (point.clamp(clip.min, clip.max) - origin).to_pos2();
+                        drag.moved |= drag.origin.distance(end) > 3.0;
+                        if drag.moved {
+                            let rect = egui::Rect::from_two_pos(drag.origin, end);
+                            self.model.selected = drag.base.clone();
+                            if rect.left() < width && rect.right() > 0.0 {
+                                let first = (rect.top().max(0.0) / LIST_ROW).floor() as usize;
+                                let last = ((rect.bottom().max(0.0) / LIST_ROW).ceil() as usize)
+                                    .min(rows.len());
+                                for row in rows.iter().take(last).skip(first) {
                                     self.model.selected.extend(&row.ids);
-                                } else {
-                                    browser::remove_selection(
-                                        &self.model.entries,
-                                        &mut self.model.selected,
-                                        &row.ids,
-                                    );
+                                }
+                                if first < last {
+                                    self.list_anchor = Some(first);
+                                    self.list_cursor = Some(last - 1);
                                 }
                             }
+                            let speed = if point.y > clip.bottom() - 24.0 {
+                                ((point.y - clip.bottom() + 24.0) / 24.0).clamp(0.0, 3.0)
+                            } else if point.y < clip.top() + 24.0 {
+                                -((clip.top() + 24.0 - point.y) / 24.0).clamp(0.0, 3.0)
+                            } else {
+                                0.0
+                            };
+                            if ui.input(|i| i.pointer.primary_down()) && speed != 0.0 {
+                                let dt = ui.input(|i| i.stable_dt).clamp(0.001, 0.05);
+                                next_offset = Some((viewport.min.y + speed * 500.0 * dt).clamp(
+                                    0.0,
+                                    (rows.len() as f32 * LIST_ROW - viewport.height()).max(0.0),
+                                ));
+                                ui.ctx().request_repaint();
+                            }
+                        }
+                    }
+                }
+                let first = (viewport.min.y / LIST_ROW).floor() as usize;
+                let last = ((viewport.max.y / LIST_ROW).ceil() as usize + 1).min(rows.len());
+                for index in first.min(rows.len())..last {
+                    let row = &rows[index];
+                    let rect = egui::Rect::from_min_size(
+                        origin + egui::vec2(0.0, index as f32 * LIST_ROW),
+                        egui::vec2(width, LIST_ROW),
+                    );
+                    let selected = !row.ids.is_empty() && row.ids.is_subset(&self.model.selected);
+                    let response = ui
+                        .interact(
+                            rect,
+                            egui::Id::unique(("archive-row", &row.path)),
+                            if active {
+                                egui::Sense::click()
+                            } else {
+                                egui::Sense::hover()
+                            },
+                        )
+                        .on_hover_text(&row.name);
+                    response.widget_info(|| {
+                        egui::WidgetInfo::selected(
+                            egui::Role::ListBoxOption,
+                            active,
+                            selected,
+                            &row.name,
+                        )
+                    });
+                    if response.has_focus() {
+                        focused = Some(index);
+                        ui.ctx().memory_mut(|memory| {
+                            memory.set_focus_lock_filter(
+                                response.id,
+                                egui::EventFilter {
+                                    vertical_arrows: true,
+                                    escape: true,
+                                    ..Default::default()
+                                },
+                            )
+                        });
+                    }
+                    if selected {
+                        ui.painter().rect_filled(rect, 0, theme::SELECTED);
+                    }
+                    if response.clicked() {
+                        let modifiers = ui.input(|i| i.modifiers);
+                        self.select_row(
+                            &rows,
+                            index,
+                            modifiers.ctrl || modifiers.command,
+                            modifiers.shift,
+                        );
+                    }
+                    if row.directory && response.double_clicked() {
+                        open = Some(row.path.clone());
+                    }
+                    ui.scope_builder(
+                        egui::UiBuilder::new()
+                            .max_rect(rect.shrink2(egui::vec2(0.0, 4.0)))
+                            .layout(Layout::left_to_right(Align::Center)),
+                        |ui| {
+                            ui.style_mut().interaction.selectable_labels = false;
+                            ui.add_space(16.0);
                             theme::icon(
                                 ui,
                                 if row.directory {
@@ -786,41 +916,7 @@ impl ArchiveApp {
                                 },
                                 20.0,
                             );
-                            let label = ui
-                                .allocate_ui_with_layout(
-                                    egui::vec2((name_width - 28.0).max(0.0), 34.0),
-                                    Layout::left_to_right(Align::Center),
-                                    |ui| {
-                                        ui.set_min_width((name_width - 28.0).max(0.0));
-                                        ui.set_max_width((name_width - 28.0).max(0.0));
-                                        ui.add_enabled(
-                                            !self.model.busy(),
-                                            egui::Button::new(&row.name)
-                                                .truncate()
-                                                .selected(selected)
-                                                .frame(false)
-                                                .min_size(egui::vec2(0.0, 34.0)),
-                                        )
-                                    },
-                                )
-                                .inner
-                                .on_hover_text(&row.name);
-                            theme::focus(&label);
-                            let enter =
-                                label.has_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-                            if row.directory && (label.double_clicked() || enter) {
-                                self.browse_folder(&row.path);
-                            } else if !row.directory && label.clicked() {
-                                if selected {
-                                    browser::remove_selection(
-                                        &self.model.entries,
-                                        &mut self.model.selected,
-                                        &row.ids,
-                                    );
-                                } else {
-                                    self.model.selected.extend(&row.ids);
-                                }
-                            }
+                            theme::bounded_text(ui, &row.name, name_width);
                             theme::column_label(
                                 ui,
                                 if row.directory {
@@ -836,15 +932,161 @@ impl ArchiveApp {
                             if row.encrypted {
                                 theme::icon(ui, Icon::Lock, 16.0);
                             }
-                        })
-                        .response;
-                    ui.painter().hline(
-                        response.rect.x_range(),
-                        response.rect.bottom(),
-                        egui::Stroke::new(1.0, theme::BORDER),
+                        },
                     );
+                    if active
+                        && self.list_cursor == Some(index)
+                        && (response.has_focus() || background.has_focus())
+                    {
+                        ui.painter().rect_stroke(
+                            rect.shrink(1.0),
+                            0,
+                            egui::Stroke::new(1.0, theme::BLUE),
+                            egui::StrokeKind::Inside,
+                        );
+                    }
+                }
+                if rows.is_empty() {
+                    ui.scope_builder(egui::UiBuilder::new().max_rect(clip), |ui| {
+                        ui.centered_and_justified(|ui| {
+                            ui.label(if self.search.is_empty() {
+                                "이 폴더는 비어 있습니다"
+                            } else {
+                                "일치하는 항목이 없습니다"
+                            })
+                        });
+                    });
+                }
+                if let Some(drag) = &self.marquee
+                    && drag.moved
+                    && let Some(point) = point
+                {
+                    let rect = egui::Rect::from_two_pos(
+                        origin + drag.origin.to_vec2(),
+                        point.clamp(clip.min, clip.max),
+                    );
+                    ui.painter()
+                        .with_clip_rect(clip)
+                        .rect_filled(rect, 0, theme::BLUE);
                 }
             });
+        self.list_offset = next_offset.unwrap_or(output.state.clamped_offset().y);
+        if ui.input(|i| i.pointer.primary_released() || !i.pointer.primary_down()) {
+            self.marquee = None;
+        }
+        let escape_from_list = self.list_focused
+            && ui.ctx().memory(|memory| memory.focused()).is_none()
+            && ui.input(|i| i.key_pressed(egui::Key::Escape));
+        self.list_focused =
+            active && (background.has_focus() || focused.is_some() || escape_from_list);
+        if self.list_focused {
+            if let Some(index) = focused {
+                self.list_cursor = Some(index);
+            }
+            let modifiers = ui.input(|i| i.modifiers);
+            let ctrl = modifiers.ctrl || modifiers.command;
+            if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+                self.model.selected.clear();
+                self.marquee = None;
+                background.request_focus();
+            }
+            if ctrl && ui.input(|i| i.key_pressed(egui::Key::A)) {
+                self.model.selected = rows
+                    .iter()
+                    .flat_map(|row| row.ids.iter().copied())
+                    .collect();
+                self.list_cursor = (!rows.is_empty()).then_some(0);
+                self.list_anchor = self.list_cursor;
+            }
+            if !rows.is_empty() {
+                let direction = if ui.input(|i| i.key_pressed(egui::Key::ArrowDown)) {
+                    Some(1isize)
+                } else if ui.input(|i| i.key_pressed(egui::Key::ArrowUp)) {
+                    Some(-1)
+                } else {
+                    None
+                };
+                if let Some(direction) = direction {
+                    let index = self.list_cursor.map_or(0, |index| {
+                        index.saturating_add_signed(direction).min(rows.len() - 1)
+                    });
+                    if ctrl && !modifiers.shift {
+                        self.list_cursor = Some(index);
+                    } else {
+                        self.select_row(&rows, index, ctrl, modifiers.shift);
+                    }
+                    background.request_focus();
+                    let top = index as f32 * LIST_ROW;
+                    if top < self.list_offset {
+                        self.list_offset = top;
+                    } else if top + LIST_ROW > self.list_offset + output.inner_rect.height() {
+                        self.list_offset = top + LIST_ROW - output.inner_rect.height();
+                    }
+                    ui.ctx().request_repaint();
+                }
+                if ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                    let index = self
+                        .list_cursor
+                        .or(focused)
+                        .unwrap_or(0)
+                        .min(rows.len() - 1);
+                    if rows[index].directory {
+                        open = Some(rows[index].path.clone());
+                    }
+                }
+            }
+            if ui.input(|i| i.key_pressed(egui::Key::Backspace)) && !self.folder.is_empty() {
+                open = Some(
+                    self.folder
+                        .rsplit_once('/')
+                        .map_or("", |(parent, _)| parent)
+                        .to_owned(),
+                );
+            }
+        }
+        if let Some(folder) = open {
+            self.browse_folder(&folder);
+            background.request_focus();
+        }
+    }
+
+    fn clear_list_selection(&mut self) {
+        self.model.selected.clear();
+        self.list_anchor = None;
+        self.list_cursor = None;
+        self.list_offset = 0.0;
+        self.marquee = None;
+    }
+
+    fn select_row(&mut self, rows: &[browser::Row], index: usize, ctrl: bool, shift: bool) {
+        if shift {
+            let anchor = self
+                .list_anchor
+                .unwrap_or(self.list_cursor.unwrap_or(index))
+                .min(rows.len() - 1);
+            if !ctrl {
+                self.model.selected.clear();
+            }
+            for row in &rows[anchor.min(index)..=anchor.max(index)] {
+                self.model.selected.extend(&row.ids);
+            }
+            self.list_anchor = Some(anchor);
+        } else {
+            if !ctrl {
+                self.model.selected.clear();
+            }
+            if ctrl && rows[index].ids.is_subset(&self.model.selected) {
+                browser::remove_selection(
+                    &self.model.entries,
+                    &mut self.model.selected,
+                    &rows[index].ids,
+                );
+            } else {
+                self.model.selected.extend(&rows[index].ids);
+            }
+            self.list_anchor = Some(index);
+        }
+        self.list_cursor = Some(index);
     }
 
     fn result_visible(&self) -> bool {

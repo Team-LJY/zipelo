@@ -1,0 +1,14 @@
+[
+    {
+        "state": "explorer-selected",
+        "path": "tests/ui-redesign/screenshots/explorer-selection/explorer-selected.png",
+        "width": 1060,
+        "height": 720
+    },
+    {
+        "state": "explorer-marquee",
+        "path": "tests/ui-redesign/screenshots/explorer-selection/explorer-marquee.png",
+        "width": 1060,
+        "height": 720
+    }
+]

@@ -295,7 +295,7 @@ fn conflict_native_dialog_cancel_and_retry_preserve_selection_and_existing_files
 }
 
 #[test]
-fn excluding_a_child_after_folder_selection_does_not_restore_it_during_extraction() {
+fn folder_navigation_clears_parent_selection_and_extracts_only_new_selection() {
     let scratch = Folder::new();
     let factory = FakeFactory::default();
     let mut app = loaded(&scratch, &factory);
@@ -315,11 +315,12 @@ fn excluding_a_child_after_folder_selection_does_not_restore_it_during_extractio
     .to_vec();
     app.model.selected = [0, 1, 2].into_iter().collect();
     app.browse_folder("docs");
+    assert!(app.model.selected.is_empty());
     let dialogs = TestDialogs::default();
     dialogs.0.borrow_mut().answers.push_back(Some(vec![scratch.0.clone()]));
     app.set_dialogs(Box::new(dialogs));
     let ctx = egui::Context::default();
-    policy_click(&ctx, &mut app, "excluded.txt");
+    policy_click(&ctx, &mut app, "retained.txt");
     assert_eq!(app.model.selected, [2].into_iter().collect());
     policy_click(&ctx, &mut app, "압축해제");
     assert!(matches!(
