@@ -198,8 +198,16 @@ impl<W: Write> Job<W> {
                 let extract = matches!(start.action, Action::Extract { .. });
                 let path = source.to_path()?;
                 self.progress(Stage::Read, 0, None, 0)?;
-                let mut snapshot =
-                    crate::spool::Snapshot::open(&path, start.limits.input, &mut || self.check())?;
+                let mut snapshot = crate::spool::Snapshot::open_reporting(
+                    &path,
+                    start.limits.input,
+                    &mut |step| match step {
+                        crate::spool::Step::Check => self.check(),
+                        crate::spool::Step::Read { bytes, total } => {
+                            self.progress(Stage::Read, bytes, Some(total), 0)
+                        }
+                    },
+                )?;
                 if let Action::Extract {
                     list_id: Some(expected),
                     ..

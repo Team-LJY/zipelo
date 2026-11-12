@@ -42,13 +42,15 @@ fn show_startup_error(message: &str) {
 }
 
 fn run() -> eframe::Result {
+    let custom_frame = zipelo_ui_memory_app::window_frame::custom_frame_needed();
     let font = system_font::load().map_err(|e| eframe::Error::AppCreation(Box::new(e)))?;
     renderer::run_native(
         "Zipelo",
         eframe::NativeOptions {
             viewport: egui::ViewportBuilder::default()
                 .with_inner_size([1060.0, 720.0])
-                .with_min_inner_size([760.0, 540.0]),
+                .with_min_inner_size([760.0, 540.0])
+                .with_decorations(!custom_frame),
             ..Default::default()
         },
         || {
@@ -86,11 +88,11 @@ fn run() -> eframe::Result {
                             .map_err(std::io::Error::other)?,
                     )
                 };
-                Ok(Box::new(
-                    zipelo_ui_memory_app::archive_screen::ArchiveApp::new(
-                        factory, startup, fixture,
-                    ),
-                ))
+                let mut app = zipelo_ui_memory_app::archive_screen::ArchiveApp::new(
+                    factory, startup, fixture,
+                );
+                app.set_custom_frame(custom_frame);
+                Ok(Box::new(app))
             })
         },
     )

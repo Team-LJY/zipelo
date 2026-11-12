@@ -19,8 +19,20 @@ pub struct DialogRequest {
     pub file_name: String,
 }
 
+pub type DialogAnswer = Result<Option<Vec<PathBuf>>, String>;
+
+pub enum PendingDialog {
+    Ready(DialogAnswer),
+    Waiting(std::sync::mpsc::Receiver<DialogAnswer>),
+}
+
 pub trait Dialogs {
-    fn choose(&mut self, request: DialogRequest) -> Result<Option<Vec<PathBuf>>, String>;
+    fn choose(&mut self, request: DialogRequest) -> DialogAnswer;
+
+    /// 선택 창을 연다. 기본 구현은 응답을 바로 돌려준다.
+    fn start(&mut self, request: DialogRequest) -> PendingDialog {
+        PendingDialog::Ready(self.choose(request))
+    }
 }
 
 pub fn archive_filters() -> Vec<(&'static str, Vec<String>)> {
@@ -61,6 +73,20 @@ impl Dialogs for NativeDialogs {
             }
         }))
         .unwrap_or_else(|_| Err(DIALOG_UNAVAILABLE.into()))
+    }
+
+    // 포털 응답을 화면 스레드에서 기다리면 창이 이벤트를 처리하지 못해 "응답 없음"으로 표시됨.
+    #[cfg(target_os = "linux")]
+    fn start(&mut self, request: DialogRequest) -> PendingDialog {
+        let (sender, receiver) = std::sync::mpsc::channel();
+        match std::thread::Builder::new()
+            .name("zipelo-file-dialog".into())
+            .spawn(move || {
+                let _ = sender.send(NativeDialogs.choose(request));
+            }) {
+            Ok(_) => PendingDialog::Waiting(receiver),
+            Err(_) => PendingDialog::Ready(Err(DIALOG_UNAVAILABLE.into())),
+        }
     }
 }
 

@@ -1,15 +1,50 @@
 use crate::{
     archive_browser as browser,
-    archive_dialog::{DialogRequest, Dialogs, NativeDialogs, Purpose},
+    archive_dialog::{
+        DIALOG_UNAVAILABLE, DialogAnswer, DialogRequest, Dialogs, NativeDialogs, PendingDialog,
+        Purpose,
+    },
     archive_present as present,
     archive_theme::{self as theme, Icon},
     archive_ui::*,
+    window_frame,
 };
 use eframe::egui::{self, Align, Layout, RichText};
 use std::{
     collections::BTreeSet,
     path::{Path, PathBuf},
 };
+
+const WORK_WIDTH: f32 = 480.0;
+const WORK_MIN_HEIGHT: f32 = 96.0;
+const WORK_MAX_HEIGHT: f32 = 520.0;
+const WORK_RESULT_MAX_HEIGHT: f32 = 220.0;
+
+/// 작업 진행·결과를 보여주는 자식 창의 위치 상태.
+/// 부모 창 기준 상대 위치를 기억해 두고, 부모 창이 움직이면 같은 상대 위치로 따라감.
+struct WorkWindow {
+    open: bool,
+    initial: Option<egui::Pos2>,
+    offset: Option<egui::Vec2>,
+    parent: Option<egui::Pos2>,
+    expected: Option<egui::Pos2>,
+    settle_until: f64,
+    height: f32,
+}
+
+impl Default for WorkWindow {
+    fn default() -> Self {
+        Self {
+            open: false,
+            initial: None,
+            offset: None,
+            parent: None,
+            expected: None,
+            settle_until: 0.0,
+            height: 168.0,
+        }
+    }
+}
 
 struct Marquee {
     // 스크롤 중에도 시작점을 목록 좌표로 유지함.
@@ -39,6 +74,10 @@ pub struct ArchiveApp {
     selected_only: bool,
     method: Method,
     dialogs: Box<dyn Dialogs>,
+    picker: Option<(Purpose, std::sync::mpsc::Receiver<DialogAnswer>)>,
+    work: WorkWindow,
+    custom_frame: bool,
+    release_after_move: bool,
     folder: String,
     search: String,
     list_anchor: Option<usize>,
@@ -77,6 +116,10 @@ impl ArchiveApp {
             selected_only: false,
             method: Method::Deflate,
             dialogs: Box::new(NativeDialogs),
+            picker: None,
+            work: WorkWindow::default(),
+            custom_frame: false,
+            release_after_move: false,
             folder: String::new(),
             search: String::new(),
             list_anchor: None,
@@ -101,6 +144,11 @@ impl ArchiveApp {
 
     pub fn set_dialogs(&mut self, dialogs: Box<dyn Dialogs>) {
         self.dialogs = dialogs;
+    }
+
+    /// 운영체제가 창 테두리를 그려 주지 않을 때(GNOME Wayland) 제목 표시줄을 직접 그림.
+    pub fn set_custom_frame(&mut self, custom: bool) {
+        self.custom_frame = custom;
     }
 
     pub fn browse_folder(&mut self, folder: &str) {
@@ -143,6 +191,10 @@ impl ArchiveApp {
     }
 
     fn start(&mut self, request: Start) -> bool {
+        // 파일 선택 창이 응답을 기다리는 동안에는 어느 창에서도 새 작업을 시작하지 않음.
+        if self.picker.is_some() {
+            return false;
+        }
         self.last_request = Some(request.clone());
         self.dismissed = false;
         self.details = false;
@@ -306,7 +358,7 @@ impl ArchiveApp {
     }
 
     fn open_picker(&mut self, purpose: Purpose) {
-        if self.model.busy() {
+        if self.model.busy() || self.picker.is_some() {
             return;
         }
         let gzip = self
@@ -345,10 +397,28 @@ impl ArchiveApp {
                 self.zip_name.clone()
             },
         };
-        let answer = self.dialogs.choose(request);
-        if answer.is_ok()
-            && self.ui_error.as_deref() == Some(crate::archive_dialog::DIALOG_UNAVAILABLE)
-        {
+        match self.dialogs.start(request) {
+            PendingDialog::Ready(answer) => self.apply_picker(purpose, answer),
+            PendingDialog::Waiting(receiver) => self.picker = Some((purpose, receiver)),
+        }
+    }
+
+    fn poll_picker(&mut self) {
+        let Some((purpose, receiver)) = &self.picker else {
+            return;
+        };
+        let purpose = *purpose;
+        let answer = match receiver.try_recv() {
+            Ok(answer) => answer,
+            Err(std::sync::mpsc::TryRecvError::Empty) => return,
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => Err(DIALOG_UNAVAILABLE.into()),
+        };
+        self.picker = None;
+        self.apply_picker(purpose, answer);
+    }
+
+    fn apply_picker(&mut self, purpose: Purpose, answer: DialogAnswer) {
+        if answer.is_ok() && self.ui_error.as_deref() == Some(DIALOG_UNAVAILABLE) {
             self.ui_error = None;
         }
         match answer {
@@ -479,19 +549,23 @@ impl ArchiveApp {
             self.initialized = true;
         }
         self.poll();
+        self.poll_picker();
         let challenge = self.model.challenge.map(|(id, _, _)| id);
         let new_challenge = challenge != self.password_challenge;
         if new_challenge || challenge.is_none() {
             self.clear_password();
         }
         self.password_challenge = challenge;
-        self.on_drop(ctx.input(|i| {
+        let dropped = ctx.input(|i| {
             i.raw
                 .dropped_files
                 .iter()
                 .map(|file| file.path().to_path_buf())
                 .collect()
-        }));
+        });
+        if self.picker.is_none() {
+            self.on_drop(dropped);
+        }
         if ctx.input(|i| i.viewport().close_requested()) {
             self.model.request_close();
             if self.model.close != Close::Allowed {
@@ -523,6 +597,19 @@ impl ArchiveApp {
             title.clone()
         };
         ctx.send_viewport_cmd(egui::ViewportCommand::Title(short_title));
+        if self.custom_frame
+            && window_frame::title_bar(
+                root,
+                "main",
+                &title,
+                window_frame::Buttons {
+                    minimize: true,
+                    maximize: true,
+                },
+            )
+        {
+            self.release_after_move = true;
+        }
         egui::Panel::top("archive-actions")
             .frame(
                 theme::panel(theme::PANEL)
@@ -531,7 +618,9 @@ impl ArchiveApp {
             )
             .show(root, |ui| {
                 ui.horizontal(|ui| {
-                    let idle = !self.model.busy() && self.model.close == Close::Open;
+                    let idle = !self.model.busy()
+                        && self.model.close == Close::Open
+                        && self.picker.is_none();
                     if theme::tool(ui, "열기", theme::OPEN, idle, false)
                         .on_hover_text(&title)
                         .clicked()
@@ -587,7 +676,8 @@ impl ArchiveApp {
                     });
                 });
             });
-        if self.model.busy() || self.result_visible() || (self.ui_error.is_some() && !self.create) {
+        if ctx.embed_viewports() && self.work_visible() {
+            // 별도 창을 만들 수 없을 때만 쓰는 대체 배치. 목록을 가리지 않도록 하단에 둠.
             egui::Panel::bottom("archive-work")
                 .frame(theme::panel(theme::PANEL).corner_radius(0))
                 .show(root, |ui| self.work_area(ui));
@@ -605,6 +695,7 @@ impl ArchiveApp {
                     self.empty(ui);
                 }
             });
+        self.work_window(&ctx);
         if self.create && !self.model.busy() {
             self.create_dialog(&ctx);
         }
@@ -612,9 +703,25 @@ impl ArchiveApp {
             self.password_dialog(&ctx, new_challenge);
         }
         self.close_dialog(&ctx);
+        self.picker_notice(&ctx);
+        if self.custom_frame {
+            window_frame::edges(&ctx, true);
+        }
         if self.model.busy() {
             ctx.request_repaint_after(std::time::Duration::from_millis(30));
         }
+    }
+
+    // 선택 창이 열려 있는 동안 다른 조작을 막고, 응답을 받도록 화면을 계속 갱신함.
+    fn picker_notice(&mut self, ctx: &egui::Context) {
+        if self.picker.is_none() {
+            return;
+        }
+        egui::Modal::new(egui::Id::unique("archive-picker")).show(ctx, |ui| {
+            ui.set_width(360.0);
+            ui.label("파일 선택 창에서 선택을 마쳐 주세요");
+        });
+        ctx.request_repaint_after(std::time::Duration::from_millis(100));
     }
 
     fn empty(&mut self, ui: &mut egui::Ui) {
@@ -1122,7 +1229,169 @@ impl ArchiveApp {
         response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Alert, true, error));
     }
 
+    fn work_visible(&self) -> bool {
+        self.model.busy() || self.result_visible() || (self.ui_error.is_some() && !self.create)
+    }
+
+    /// 메인 창 가운데에 모달(ZIP 만들기, 암호 입력, 종료 확인, 파일 선택 안내)이 떠 있는지.
+    /// 모달이 늘어도 진행·결과 창 숨김 규칙은 이 한 곳만 보면 되도록 모음.
+    fn main_modal_open(&self) -> bool {
+        (self.create && !self.model.busy())
+            || self.picker.is_some()
+            || self.model.challenge.is_some()
+            || self.model.close != Close::Open
+    }
+
+    fn work_window(&mut self, ctx: &egui::Context) {
+        if !self.work_visible() {
+            self.work = WorkWindow::default();
+            return;
+        }
+        if ctx.embed_viewports() {
+            // 별도 창을 만들 수 없는 환경(시험 등)은 show()에서 하단에 그림.
+            return;
+        }
+        if self.main_modal_open() {
+            // 메인 창 가운데에 뜨는 모달을 항상 위에 뜨는 진행·결과 창이 가리지 않게
+            // 그동안 창을 닫음. 부모 기준 위치는 기억해 두고 다시 엶.
+            self.work.open = false;
+            return;
+        }
+        let id = egui::ViewportId::from_hash_of("archive-work");
+        let (parent, parent_focused, now) = ctx.input(|i| {
+            (
+                i.viewport().outer_rect,
+                i.viewport().focused.unwrap_or(false),
+                i.time,
+            )
+        });
+        let (child, child_focused) = ctx.input(|i| {
+            i.raw.viewports.get(&id).map_or((None, false), |v| {
+                (v.outer_rect, v.focused.unwrap_or(false))
+            })
+        });
+        let size = egui::vec2(WORK_WIDTH, self.work.height);
+        if !self.work.open {
+            // 처음 열 때 부모 창 가운데에 둠. 암호 입력 뒤 다시 열 때는 기억한 위치에 둠.
+            // Wayland처럼 위치를 알 수 없으면 창 관리자에 맡김.
+            self.work.open = true;
+            self.work.initial = parent.map(|p| match self.work.offset {
+                Some(offset) => (p.min + offset).round(),
+                None => (p.center() - size / 2.0).round(),
+            });
+            self.work.offset = self.work.initial.zip(parent).map(|(c, p)| c - p.min);
+            self.work.parent = parent.map(|p| p.min);
+            self.work.expected = self.work.initial;
+            self.work.settle_until = now + 0.5;
+        }
+        if let (Some(parent), Some(child)) = (parent, child) {
+            let parent_moved = self
+                .work
+                .parent
+                .is_some_and(|p| (p - parent.min).length() > 0.5);
+            let settled = self
+                .work
+                .expected
+                .is_some_and(|e| (child.min - e).length() <= 2.0);
+            if settled || now >= self.work.settle_until {
+                self.work.settle_until = 0.0;
+            }
+            if parent_moved {
+                if let Some(offset) = self.work.offset {
+                    let target = (parent.min + offset).round();
+                    ctx.send_viewport_cmd_to(id, egui::ViewportCommand::OuterPosition(target));
+                    self.work.expected = Some(target);
+                    self.work.settle_until = now + 0.5;
+                }
+            } else if self.work.settle_until == 0.0 && !settled {
+                // 사용자가 자식 창을 옮긴 위치를 부모 기준으로 기억함.
+                self.work.offset = Some(child.min - parent.min);
+                self.work.expected = Some(child.min);
+            }
+            self.work.parent = Some(parent.min);
+        }
+        let title = if self.model.busy() {
+            present::activity_text(
+                &self.model,
+                matches!(self.last_request, Some(Start::CreateZip { .. })),
+            )
+            .to_owned()
+        } else {
+            "작업 결과".to_owned()
+        };
+        let window_title = format!("{title} — Zipelo");
+        let custom_frame = self.custom_frame;
+        let mut builder = egui::ViewportBuilder::default()
+            .with_title(window_title.clone())
+            .with_decorations(!custom_frame)
+            .with_inner_size(size)
+            .with_resizable(false)
+            .with_minimize_button(false)
+            .with_maximize_button(false)
+            .with_taskbar(false)
+            // 앱을 쓰는 동안에만 부모 창 위에 유지함.
+            .with_window_level(if parent_focused || child_focused {
+                egui::WindowLevel::AlwaysOnTop
+            } else {
+                egui::WindowLevel::Normal
+            });
+        if let Some(position) = self.work.initial {
+            builder = builder.with_position(position);
+        }
+        let height = ctx.show_viewport_immediate(id, builder, |ui, class| {
+            if ui.ctx().input(|i| i.viewport().close_requested()) {
+                if self.model.busy() {
+                    ui.ctx()
+                        .send_viewport_cmd(egui::ViewportCommand::CancelClose);
+                } else {
+                    self.dismissed = true;
+                    self.ui_error = None;
+                    self.model.input_error = None;
+                }
+            }
+            if class == egui::ViewportClass::EmbeddedWindow {
+                ui.set_width(WORK_WIDTH);
+                self.work_area(ui);
+                return None;
+            }
+            let mut chrome = 0.0;
+            if custom_frame {
+                window_frame::title_bar(
+                    ui,
+                    "work",
+                    &window_title,
+                    window_frame::Buttons {
+                        minimize: false,
+                        maximize: false,
+                    },
+                );
+                window_frame::edges(ui.ctx(), false);
+                chrome = window_frame::TITLE_HEIGHT;
+            }
+            let margin = theme::PAD as f32;
+            egui::CentralPanel::default()
+                .frame(theme::panel(theme::PANEL).corner_radius(0))
+                .show(ui, |ui| {
+                    let content = ui.vertical(|ui| self.work_area(ui)).response.rect;
+                    Some(content.height() + 2.0 * margin + chrome)
+                })
+                .inner
+        });
+        if let Some(height) = height {
+            let height = height.clamp(WORK_MIN_HEIGHT, WORK_MAX_HEIGHT).ceil();
+            if (height - self.work.height).abs() > 1.0 {
+                self.work.height = height;
+            }
+        }
+    }
+
     fn work_area(&mut self, ui: &mut egui::Ui) {
+        // 선택 창 안내 모달은 메인 창만 막으므로, 별도 진행 창의 버튼은 여기서 막음.
+        let enabled = self.picker.is_none();
+        ui.add_enabled_ui(enabled, |ui| self.work_contents(ui));
+    }
+
+    fn work_contents(&mut self, ui: &mut egui::Ui) {
         if self.model.busy() {
             self.progress(ui);
         } else if self.result_visible() {
@@ -1159,7 +1428,13 @@ impl ArchiveApp {
         let cancelling = self.model.cancellation_requested() || self.model.cancel.is_some();
         let title = present::activity_text(&self.model, creating);
         ui.strong(title);
-        if let Some((_, done, total, count)) = self.model.progress {
+        if let Some((stage, done, total, count)) = self.model.progress {
+            // 원본을 읽는 단계에서는 아직 처리한 항목이 없으므로 개수를 표시하지 않음.
+            let processed = if stage == Stage::Read {
+                String::new()
+            } else {
+                format!("{count}개 처리함, ")
+            };
             if let Some(total) = total.filter(|n| *n > 0) {
                 ui.scope(|ui| {
                     ui.visuals_mut().extreme_bg_color = theme::BORDER;
@@ -1171,7 +1446,7 @@ impl ArchiveApp {
                 });
                 ui.horizontal(|ui| {
                     ui.label(format!(
-                        "{:.0}% / {count}개 처리함, {} / {}",
+                        "{:.0}% / {processed}{} / {}",
                         (done as f64 / total as f64).clamp(0.0, 1.0) * 100.0,
                         present::bytes_text(done),
                         present::bytes_text(total)
@@ -1181,7 +1456,7 @@ impl ArchiveApp {
             } else {
                 theme::indeterminate(ui);
                 ui.horizontal(|ui| {
-                    ui.label(format!("{count}개 처리함, {}", present::bytes_text(done)));
+                    ui.label(format!("{processed}{}", present::bytes_text(done)));
                     self.cancel_action(ui, cancelling);
                 });
             }
@@ -1272,7 +1547,7 @@ impl ArchiveApp {
                 );
                 ui.strong(title);
             });
-            let max_height = (ui.ctx().content_rect().height() * 0.24).max(80.0);
+            let max_height = WORK_RESULT_MAX_HEIGHT;
             egui::ScrollArea::vertical()
                 .id_salt("result-message")
                 .max_height(max_height)
@@ -1759,6 +2034,22 @@ impl ArchiveApp {
 impl eframe::App for ArchiveApp {
     fn ui(&mut self, root: &mut egui::Ui, _: &mut eframe::Frame) {
         self.show(root);
+    }
+
+    fn raw_input_hook(&mut self, ctx: &egui::Context, raw_input: &mut egui::RawInput) {
+        // 운영체제가 창 이동을 맡으면 버튼 놓기가 오지 않으므로 대신 넣어 눌림 상태를 풀어 줌.
+        if std::mem::take(&mut self.release_after_move) {
+            let pos = ctx.input(|i| i.pointer.latest_pos()).unwrap_or_default();
+            raw_input.events.insert(
+                0,
+                egui::Event::PointerButton {
+                    pos,
+                    button: egui::PointerButton::Primary,
+                    pressed: false,
+                    modifiers: ctx.input(|i| i.modifiers),
+                },
+            );
+        }
     }
 }
 impl Drop for ArchiveApp {
