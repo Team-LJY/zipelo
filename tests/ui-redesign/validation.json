@@ -1,19 +1,19 @@
 {
-    "recorded_at_utc": "2026-11-12T01:14:23.845196+00:00",
+    "recorded_at_utc": "2026-11-12T01:30:06.685815+00:00",
     "baseline": "b10c7eedddd202f83766aa8f001142cdfdb4097c",
-    "tested_local_commit": "bc2598b532cefaf1aae994e16c7c40846415c9c7",
-    "tested_source_tree": "a83287036b4328c107951034e8d5c47b4a45b329",
-    "equivalent_remote_source_commit": "f1e973b2e5c8972936387b10e86cabb499d5c10f",
+    "tested_local_commit": "14330638630255141160a38f707930f9b3655632",
+    "tested_source_tree": "6ada7dd1e2e32c20fa9ed38c86744dea83e983df",
+    "equivalent_remote_source_commit": "02eeee6c445d2ff8ada76307c57b5b63b3f45f9b",
     "command": "python3 tests/ci/run_rust.py local",
     "exit_code": 0,
-    "rust_tests_passed": 992,
+    "rust_tests_passed": 994,
     "runner_tests_passed": 34,
-    "ui_suite_tests_passed": 50,
+    "ui_suite_tests_passed": 52,
     "actual_worker_ui_tests_passed": 21,
     "native_x11_row_selection": "passed",
-    "local_log_sha256": "a00bf53003208606870d306d8c25ef2e0f6c1ceed4ee7e29a76543a69920954a",
+    "local_log_sha256": "3c840a5870555445876345fc35dfe83d30e60eb85cf9886410128925f5ec837d",
     "local_results": {
-        "head": "bc2598b532cefaf1aae994e16c7c40846415c9c7",
+        "head": "14330638630255141160a38f707930f9b3655632",
         "platform": "linux",
         "windows_cross_target": "x86_64-pc-windows-gnu",
         "windows_runtime_tested": false,
@@ -829,7 +829,9 @@
                 "widgets::empty_view_has_no_internal_status_and_keyboard_focus_is_reachable",
                 "widgets::picker_fits_minimum_window_and_opens_selected_file_with_enter",
                 "check_row_selection.py",
-                "archive_theme::focus"
+                "archive_theme::focus",
+                "widgets::keyboard_cancel_and_escape_never_start_zip_creation",
+                "widgets::zip_creation_enter_only_activates_focused_make_button"
             ],
             "limit": "전체 보조 기술 접근성 감사는 수행하지 않음"
         },
@@ -888,5 +890,15 @@
         "baseline": "3 tests failed before correction",
         "fixed": "3 tests passed, UI suite 50 passed",
         "coverage": "파일 선택 2개와 폴더 선택 4개 모드의 Tab 및 Enter 탐색, 기존 압축파일 유무 두 경우의 동일 CreateZip 요청 재전송"
+    },
+    "native_x11_row_selection_source_commit": "f1e973b2e5c8972936387b10e86cabb499d5c10f",
+    "cancel_regressions": {
+        "tests": [
+            "keyboard_cancel_and_escape_never_start_zip_creation",
+            "zip_creation_enter_only_activates_focused_make_button"
+        ],
+        "baseline": "Cancel focused Enter sent CreateZip before correction",
+        "fixed": "Cancel Enter and Escape send no request; filename Enter does not create; focused Make Enter sends one request",
+        "result": "2 tests passed, UI suite 52 passed"
     }
 }
