@@ -140,6 +140,10 @@ fn start_move(ctx: &egui::Context, id: &str, bar: Rect, buttons_left: f32) -> bo
         origin = None;
         // 운영체제가 이동을 맡으므로 egui 쪽 끌기는 끝낸 것으로 처리함.
         ctx.stop_dragging();
+        // 이동이 끝나도 버튼 놓기가 오지 않아 egui가 버튼이 눌린 채로 알고 있으면
+        // 다른 버튼에 마우스를 올려도 반응하지 않음. 이 창의 마우스 상태를 비움.
+        // 메인 창뿐 아니라 입력 훅을 쓸 수 없는 자식 창에도 적용됨.
+        ctx.input_mut(|input| input.pointer = Default::default());
     }
     ctx.data_mut(|d| d.insert_temp(key, origin));
     start

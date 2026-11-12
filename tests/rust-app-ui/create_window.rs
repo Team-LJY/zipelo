@@ -281,6 +281,20 @@ fn main_list_hover_uses_lighter_blue_and_selected_row_gets_stronger() {
     frame_output(&ctx, &mut app, vec![egui::Event::PointerGone]);
     let output = frame_output(&ctx, &mut app, vec![]);
     assert_eq!(row_fill_at(&output, y), Some(ROW_SELECTED));
+    // 선택 배경은 오른쪽 여백 없이 목록 너비(창 1060px)를 꽉 채움.
+    let right = output
+        .shapes
+        .iter()
+        .filter_map(|shape| match &shape.shape {
+            egui::epaint::Shape::Rect(rect)
+                if rect.fill == ROW_SELECTED && rect.rect.top() <= y && y <= rect.rect.bottom() =>
+            {
+                Some(rect.rect.right())
+            }
+            _ => None,
+        })
+        .fold(0.0f32, f32::max);
+    assert!(right >= 1059.0, "선택 배경 오른쪽 끝: {right}");
 }
 
 fn cursor_over(ctx: &egui::Context, app: &mut ArchiveApp, point: egui::Pos2) -> egui::CursorIcon {

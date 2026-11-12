@@ -5,6 +5,9 @@ struct WorkChild {
     events: Vec<egui::Event>,
     labels: Vec<(String, egui::Pos2)>,
     rendered: usize,
+    cursor: Option<egui::CursorIcon>,
+    rects: Vec<(egui::Rect, egui::Color32)>,
+    commands: Vec<egui::ViewportCommand>,
 }
 
 std::thread_local! {
@@ -43,6 +46,21 @@ fn install_work_child_renderer() {
             let mut child = child.borrow_mut();
             child.labels = labels(&output.shapes);
             child.rendered += 1;
+            child.cursor = Some(output.platform_output.cursor_icon);
+            child.rects.clear();
+            fn walk(shape: &egui::epaint::Shape, out: &mut Vec<(egui::Rect, egui::Color32)>) {
+                match shape {
+                    egui::epaint::Shape::Rect(rect) => out.push((rect.rect, rect.fill)),
+                    egui::epaint::Shape::Vec(shapes) => shapes.iter().for_each(|s| walk(s, out)),
+                    _ => {}
+                }
+            }
+            for shape in &output.shapes {
+                walk(&shape.shape, &mut child.rects);
+            }
+            for viewport in output.viewport_output.values() {
+                child.commands.extend(viewport.commands.iter().cloned());
+            }
         });
     });
 }
@@ -218,4 +236,76 @@ fn password_prompt_is_not_covered_by_separate_work_window() {
         WORK_CHILD.with(|child| child.borrow().rendered) > 0,
         "암호 입력 뒤 진행 창이 다시 나타나야 함"
     );
+}
+
+#[test]
+fn child_window_buttons_hover_again_after_title_bar_drag() {
+    let scratch = Folder::new();
+    let factory = FakeFactory::default();
+    let mut app = loaded(&scratch, &factory);
+    factory.state.borrow_mut().manual = true;
+    assert!(app.begin_extract());
+    {
+        let mut worker = factory.state.borrow_mut();
+        worker.frame(Event::Accepted { encryption: false });
+        worker.finish(Outcome::Failed, Publication::None);
+    }
+    app.set_custom_frame(true);
+    let ctx = egui::Context::default();
+    ctx.set_embed_viewports(false);
+    install_work_child_renderer();
+    for _ in 0..10 {
+        policy_render(&ctx, &mut app, vec![]);
+    }
+    let mut commands = Vec::new();
+    fn child_frame(
+        ctx: &egui::Context,
+        app: &mut ArchiveApp,
+        events: Vec<egui::Event>,
+        commands: &mut Vec<egui::ViewportCommand>,
+    ) {
+        WORK_CHILD.with(|child| child.borrow_mut().events = events);
+        // 자식 창 명령은 부모 출력에 실려 올 수도 있어 둘 다 모음.
+        let output = frame_output(ctx, app, vec![]);
+        for viewport in output.viewport_output.values() {
+            commands.extend(viewport.commands.iter().cloned());
+        }
+    }
+    // 자식 창 제목 표시줄을 누른 채 끌어 창 이동을 운영체제에 넘김.
+    let start = egui::pos2(120.0, 19.0);
+    child_frame(&ctx, &mut app, vec![egui::Event::PointerMoved(start)], &mut commands);
+    child_frame(&ctx, &mut app, vec![egui::Event::PointerButton {
+            pos: start,
+            button: egui::PointerButton::Primary,
+            pressed: true,
+            modifiers: egui::Modifiers::NONE,
+        }], &mut commands);
+    for step in 1..=3 {
+        child_frame(&ctx, &mut app, vec![egui::Event::PointerMoved(start + egui::vec2(6.0 * step as f32, 0.0))], &mut commands);
+    }
+    let started = commands.contains(&egui::ViewportCommand::StartDrag)
+        || WORK_CHILD.with(|child| {
+            child
+                .borrow()
+                .commands
+                .contains(&egui::ViewportCommand::StartDrag)
+        });
+    assert!(started, "자식 창 이동이 시작돼야 함");
+    // GNOME은 이동이 끝나도 버튼 놓기를 보내지 않음. 그대로 닫기 버튼에 마우스를 올림.
+    let close = egui::pos2(480.0 - 6.0 - 17.0, 19.0);
+    for _ in 0..3 {
+        child_frame(&ctx, &mut app, vec![egui::Event::PointerMoved(close)], &mut commands);
+    }
+    let (cursor, hovered_red) = WORK_CHILD.with(|child| {
+        let child = child.borrow();
+        (
+            child.cursor,
+            child
+                .rects
+                .iter()
+                .any(|(rect, fill)| rect.contains(close) && *fill == egui::Color32::from_rgb(232, 17, 35)),
+        )
+    });
+    assert!(hovered_red, "닫기 버튼에 마우스를 올린 배경이 없음");
+    assert_eq!(cursor, Some(egui::CursorIcon::PointingHand));
 }

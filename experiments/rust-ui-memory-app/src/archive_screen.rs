@@ -1167,7 +1167,10 @@ impl ArchiveApp {
             .show_viewport(ui, |ui, viewport| {
                 let origin = ui.max_rect().min;
                 let clip = ui.clip_rect();
-                let width = (ui.available_width() - 24.0).max(0.0);
+                // 행을 누르는 영역은 오른쪽 24px을 비워 둠. 목록이 길어도 그 빈 곳에서
+                // 끌어서 선택을 시작할 수 있음. 행 배경(선택, 마우스 올림)은 너비를 꽉 채움.
+                let full_width = ui.available_width();
+                let width = (full_width - 24.0).max(0.0);
                 ui.set_min_height((rows.len() as f32 * LIST_ROW).max(viewport.height()));
                 let point = ui.input(|i| i.pointer.interact_pos());
                 if active && let Some(point) = point {
@@ -1274,7 +1277,12 @@ impl ArchiveApp {
                             )
                         });
                     }
-                    theme::row_background(ui, rect, selected, response.hovered());
+                    theme::row_background(
+                        ui,
+                        egui::Rect::from_min_size(rect.min, egui::vec2(full_width, LIST_ROW)),
+                        selected,
+                        response.hovered(),
+                    );
                     if response.clicked() {
                         background.request_focus();
                         let modifiers = ui.input(|i| i.modifiers);
@@ -1314,7 +1322,8 @@ impl ArchiveApp {
                         && (response.has_focus() || background.has_focus())
                     {
                         ui.painter().rect_stroke(
-                            rect.shrink(1.0),
+                            egui::Rect::from_min_size(rect.min, egui::vec2(full_width, LIST_ROW))
+                                .shrink(1.0),
                             0,
                             egui::Stroke::new(1.0, theme::BLUE),
                             egui::StrokeKind::Inside,
