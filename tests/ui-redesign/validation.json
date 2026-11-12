@@ -1,9 +1,9 @@
 {
-    "recorded_at_utc": "2026-11-12T03:18:17.524118+00:00",
+    "recorded_at_utc": "2026-11-12T03:45:10.544496+00:00",
     "baseline": "b10c7eedddd202f83766aa8f001142cdfdb4097c",
-    "tested_local_commit": "1fcb4dba724ab526c6b320d0727853e905d9914e",
-    "tested_source_tree": "f72bf5767a811dcb1ca7fcaf5653ffd9f52828df",
-    "equivalent_remote_source_commit": "fb3da210125e850bfa815e78d3c1340e24c4c8b7",
+    "tested_local_commit": "ce59f4c3b40ed90279adc51c9af7b7643a440cc6",
+    "tested_source_tree": "64e6912da7bdcb29548a5aff3fda0dd8a7c955da",
+    "equivalent_remote_source_commit": "c33df7202a170e0ed46dd21525cac0af060a4e18",
     "command": "python3 tests/ci/run_rust.py local",
     "exit_code": 0,
     "rust_tests_passed": 1004,
@@ -11,9 +11,9 @@
     "ui_suite_tests_passed": 59,
     "actual_worker_ui_tests_passed": 24,
     "native_x11_row_selection": "passed",
-    "local_log_sha256": "9c1c16daa7493861698dd88fc9e8ccbe574a1e1598731604a8a6e7579367fba0",
+    "local_log_sha256": "d7a4a3c5d49beb00ad227ff9dc59b623fead99b5693ccae3be78f3bd49af3b6e",
     "local_results": {
-        "head": "1fcb4dba724ab526c6b320d0727853e905d9914e",
+        "head": "ce59f4c3b40ed90279adc51c9af7b7643a440cc6",
         "platform": "linux",
         "windows_cross_target": "x86_64-pc-windows-gnu",
         "windows_runtime_tested": false,
@@ -941,25 +941,31 @@
     "platform_result_regressions": {
         "tests": [
             "auto_destination_is_private_under_desktop_umask",
-            "completed_results_keep_folder_action_and_show_durability_only_in_details"
+            "completed_results_keep_folder_action_and_distinguish_durability"
         ],
         "baseline": "Both tests failed before correction: worker UnsafePath under umask 0002; Completed + Unconfirmed displayed extraction failure and retry.",
         "result": "passed",
         "coverage": [
             "Isolated child process with umask 0002; auto-created destination mode 0700; actual worker extraction and file content; confirmed success.",
-            "Extract and CreateZip Completed results with Synced, Unconfirmed and Failed durability retain success and folder action; sync warning appears only in expanded details."
+            "Extract and CreateZip Completed results with Synced, Unconfirmed and Failed durability retain success and folder action. Unconfirmed is shown in details; Failed is immediately visible with a distinct warning."
         ],
         "windows_runtime_tested": false
     },
     "durability_warning_visibility_regression": {
         "test": "durability_warning_visibility_matches_completed_failed_and_partial_results",
-        "baseline": "Failed + Unconfirmed hid the sync warning before correction.",
+        "baseline": "Both durability UI tests failed on Completed + Failed before correction.",
         "result": "passed",
         "cases": [
+            "Completed + Complete + Synced",
             "Completed + Complete + Unconfirmed",
+            "Completed + Complete + Failed",
+            "Failed + None + Synced",
             "Failed + None + Unconfirmed",
-            "Failed + Partial + Unconfirmed"
+            "Failed + None + Failed",
+            "Failed + Partial + Synced",
+            "Failed + Partial + Unconfirmed",
+            "Failed + Partial + Failed"
         ],
-        "coverage": "Completed keeps success and folder action, with sync warning only in details. Failed and partial results show the sync warning immediately and after closing details. Expanded details do not duplicate the warning."
+        "coverage": "Publication warnings and durability notices are separate. Only successful Completed + Unconfirmed defers its notice to details. Failed durability always displays its distinct warning immediately. Failed and partial Unconfirmed warnings are immediate; expanded details never duplicate warnings."
     }
 }
