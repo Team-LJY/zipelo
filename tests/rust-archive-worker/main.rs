@@ -40,6 +40,15 @@ impl Scratch {
     fn path(&self, name: &str) -> NativePath {
         NativePath::from_path(&self.0.join(name))
     }
+    fn worker(&self) -> Command {
+        let mut command = Command::new(env!("CARGO_BIN_EXE_zipelo-archive-worker"));
+        // 공유 임시 폴더의 할당량과 다른 시험의 사용량에 의존하지 않음.
+        command
+            .env("TMPDIR", &self.0)
+            .env("TMP", &self.0)
+            .env("TEMP", &self.0);
+        command
+    }
 }
 impl Drop for Scratch {
     fn drop(&mut self) {
@@ -51,7 +60,8 @@ fn execute(start: Start) -> Vec<Message> {
     Writer::new(&mut data, 17)
         .send(&Message::Start(start))
         .unwrap();
-    let mut command = Command::new(env!("CARGO_BIN_EXE_zipelo-archive-worker"));
+    let temporary = Scratch::new();
+    let mut command = temporary.worker();
     command
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -810,7 +820,9 @@ fn interactive(
     mut respond: impl FnMut(u64, u32, PasswordPurpose) -> Vec<Message>,
 ) -> Vec<Message> {
     use std::{io::Read, sync::mpsc, time::Duration};
-    let mut child = Command::new(env!("CARGO_BIN_EXE_zipelo-archive-worker"))
+    let temporary = Scratch::new();
+    let mut child = temporary
+        .worker()
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
