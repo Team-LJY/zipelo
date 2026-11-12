@@ -420,3 +420,99 @@ fn explorer_ctrl_removes_a_large_directory_subtree_without_ancestor_rescans() {
     assert!(s.app.model.selected.is_empty());
     assert!(started.elapsed() < std::time::Duration::from_secs(2));
 }
+
+#[test]
+fn explorer_mouse_click_gives_list_focus_for_keyboard_selection_and_navigation() {
+    let scratch = Folder::new();
+    let mut s = Explorer::new(&scratch);
+    assert!(s.ctx.memory(|memory| memory.focused()).is_none());
+    s.click("alpha.txt", egui::Modifiers::NONE);
+    assert!(s.ctx.memory(|memory| memory.focused()).is_some());
+    s.key(egui::Key::ArrowDown, egui::Modifiers::NONE);
+    s.selected(&[2]);
+    s.key(egui::Key::ArrowDown, explorer_shift());
+    s.selected(&[2, 3]);
+    s.key(egui::Key::A, explorer_ctrl());
+    s.selected(&[0, 1, 2, 3, 4, 5]);
+    s.click("docs", egui::Modifiers::NONE);
+    s.key(egui::Key::Enter, egui::Modifiers::NONE);
+    assert!(
+        layout_text(&s.frame(egui::Modifiers::NONE, vec![]))
+            .iter()
+            .any(|(text, _, _)| text == "child.txt")
+    );
+    s.key(egui::Key::Backspace, egui::Modifiers::NONE);
+    assert!(
+        layout_text(&s.frame(egui::Modifiers::NONE, vec![]))
+            .iter()
+            .any(|(text, _, _)| text == "alpha.txt")
+    );
+    s.click("alpha.txt", egui::Modifiers::NONE);
+    s.key(egui::Key::Escape, egui::Modifiers::NONE);
+    s.selected(&[]);
+}
+
+#[test]
+fn explorer_retry_preserves_original_scope_after_selection_changes_and_conflicts() {
+    for selected in [false, true] {
+        for conflict in [false, true] {
+            let scratch = Folder::new();
+            let mut s = Explorer::new(&scratch);
+            s.factory.state.borrow_mut().manual = true;
+            if selected {
+                s.click("docs", egui::Modifiers::NONE);
+            }
+            assert!(s.app.begin_extract());
+            let original = match s.factory.state.borrow().starts.last().unwrap() {
+                Start::Extract { selection, .. } => selection.clone(),
+                _ => panic!("추출 요청이 필요함"),
+            };
+            {
+                let mut worker = s.factory.state.borrow_mut();
+                worker.frame(Event::Accepted { encryption: false });
+                worker.finish(Outcome::Failed, Publication::None);
+                for event in &mut worker.queue {
+                    if let HostEvent::Frame {
+                        event: Event::Terminal(t),
+                        ..
+                    } = event
+                    {
+                        t.error = Some(if conflict {
+                            ErrorCode::Conflict
+                        } else {
+                            ErrorCode::Io
+                        });
+                    }
+                }
+            }
+            for _ in 0..30 {
+                s.frame(egui::Modifiers::NONE, vec![]);
+            }
+            s.click("alpha.txt", egui::Modifiers::NONE);
+            s.selected(&[1]);
+            let chosen = scratch.0.join("retry-output");
+            if conflict {
+                fs::create_dir(&chosen).unwrap();
+                let dialogs = TestDialogs::default();
+                dialogs
+                    .0
+                    .borrow_mut()
+                    .answers
+                    .push_back(Some(vec![chosen.clone()]));
+                s.app.set_dialogs(Box::new(dialogs));
+            }
+            policy_click(
+                &s.ctx,
+                &mut s.app,
+                if conflict {
+                    "다른 폴더에 풀기"
+                } else {
+                    "다시 시도"
+                },
+            );
+            assert!(matches!(s.factory.state.borrow().starts.last(),
+                Some(Start::Extract { selection, destination, .. })
+                    if selection == &original && (!conflict || destination == &chosen)));
+        }
+    }
+}

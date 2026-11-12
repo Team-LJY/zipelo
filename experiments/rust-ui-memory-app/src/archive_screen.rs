@@ -207,9 +207,25 @@ impl ArchiveApp {
 
     pub fn begin_extract(&mut self) -> bool {
         self.selected_only = !self.model.selected.is_empty();
-        if !self.model.can_extract() || (self.selected_only && self.model.selected.is_empty()) {
+        let selection = if self.selected_only {
+            Selection::EntryIds(
+                browser::expand_selection(&self.model.entries, &self.model.selected)
+                    .into_iter()
+                    .collect(),
+            )
+        } else {
+            Selection::All
+        };
+        self.extract_selection(selection)
+    }
+
+    fn extract_selection(&mut self, selection: Selection) -> bool {
+        if !self.model.can_extract()
+            || matches!(&selection, Selection::EntryIds(ids) if ids.is_empty())
+        {
             return false;
         }
+        self.selected_only = matches!(&selection, Selection::EntryIds(_));
         match present::prepare_destination(&self.destination, self.automatic_destination) {
             Ok(true) => self.owned_destination = Some(self.destination.clone()),
             Ok(false) => self.owned_destination = None,
@@ -223,15 +239,6 @@ impl ArchiveApp {
             .list_id
             .as_ref()
             .is_some_and(|id| id.format == Format::Gzip);
-        let selection = if self.selected_only {
-            Selection::EntryIds(
-                browser::expand_selection(&self.model.entries, &self.model.selected)
-                    .into_iter()
-                    .collect(),
-            )
-        } else {
-            Selection::All
-        };
         self.targets = present::target_files(
             &self.model.entries,
             &selection,
@@ -417,14 +424,10 @@ impl ArchiveApp {
                     gzip_output_name,
                     ..
                 } => {
-                    self.selected_only = matches!(selection, Selection::EntryIds(_));
-                    if let Selection::EntryIds(ids) = selection {
-                        self.model.selected = ids.into_iter().collect();
-                    }
                     if let Some(name) = gzip_output_name {
                         self.gzip_name = name;
                     }
-                    self.begin_extract();
+                    self.extract_selection(selection);
                 }
                 Start::CreateZip { .. } => {
                     self.create = true;
@@ -889,6 +892,7 @@ impl ArchiveApp {
                         ui.painter().rect_filled(rect, 0, theme::SELECTED);
                     }
                     if response.clicked() {
+                        background.request_focus();
                         let modifiers = ui.input(|i| i.modifiers);
                         self.select_row(
                             &rows,
@@ -965,15 +969,13 @@ impl ArchiveApp {
                         origin + drag.origin.to_vec2(),
                         point.clamp(clip.min, clip.max),
                     );
-                    ui.painter()
-                        .with_clip_rect(clip)
-                        .rect(
-                            rect,
-                            0,
-                            theme::BLUE.gamma_multiply(0.16),
-                            egui::Stroke::new(1.0, theme::BLUE),
-                            egui::StrokeKind::Inside,
-                        );
+                    ui.painter().with_clip_rect(clip).rect(
+                        rect,
+                        0,
+                        theme::BLUE.gamma_multiply(0.16),
+                        egui::Stroke::new(1.0, theme::BLUE),
+                        egui::StrokeKind::Inside,
+                    );
                 }
             });
         self.list_offset = next_offset.unwrap_or(output.state.clamped_offset().y);
