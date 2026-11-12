@@ -48,3 +48,5 @@ Enter는 egui 버튼의 초점 활성화만 사용하며 암호 입력란의 제
 폴더 생성 보고는 추출 시작 시 기록한 파일 대상과 예상 폴더 및 상위 폴더로 구분함. 빈 폴더만 있는 ZIP은 실제 작업자로 만들고 새 폴더 추출과 기존 폴더 재사용 모두 성공 표시를 확인함. 파일 저장 누락, 알 수 없는 생성 보고와 저장 불확실 결과의 경고는 유지함.
 
 선택 추출의 완료 대상은 실제 요청에 보낸 Selection에서 계산함. 폴더 선택이 하위 파일을 자동 포함하지 않으며, 선택한 항목의 상위 폴더 생성은 허용함. selection_flows.rs의 extraction_completion_matches_actual_worker_selection_matrix는 전체, 파일만, 폴더만, 혼합, 빈 폴더와 중첩 폴더 선택 6가지를 실제 작업자로 검증함. 요청 ID, 생성 보고와 개수, 실제 경로와 파일 내용, 정상 완료 표시가 모두 일치하는지 확인함.
+
+자동 풀 위치는 Unix DirBuilder mode 0700으로 생성함. auto_destination_is_private_under_desktop_umask는 별도 자식 프로세스의 umask 0002에서 실제 작업자 추출, 폴더 권한과 파일 내용을 확인함. 시험 프로세스 전체의 umask는 변경하지 않음. completed_results_keep_folder_action_and_show_durability_only_in_details는 추출과 ZIP 생성의 정상 완료에서 Synced, Unconfirmed와 Failed 내구성 조합을 확인함. 완료 제목과 폴더 열기를 유지하며 저장 확인 경고는 자세히 보기 안에서만 표시함. 두 시험 모두 수정 전 실패와 수정 후 통과를 확인함. Windows 실제 실행을 대신하는 시험은 아님.

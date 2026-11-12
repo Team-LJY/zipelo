@@ -1,19 +1,19 @@
 {
-    "recorded_at_utc": "2026-11-12T02:22:52.709205+00:00",
+    "recorded_at_utc": "2026-11-12T02:50:54.101340+00:00",
     "baseline": "b10c7eedddd202f83766aa8f001142cdfdb4097c",
-    "tested_local_commit": "7918093aa4130b65b526c89b2ffa7de4f513e5c5",
-    "tested_source_tree": "a4027f96f885cd11373779fcd2d20fa8f41adc5f",
-    "equivalent_remote_source_commit": "ea7f5213871c65aab62b1c73ce5e0b90badb53d5",
+    "tested_local_commit": "69df9fba2b83a50a673c2259bd33d2b16fc0dbd8",
+    "tested_source_tree": "d6d0f4609874ae973afe4eaaae69549c35ba698e",
+    "equivalent_remote_source_commit": "0c96f094ea9b30e30f3786272c0cee282f87518b",
     "command": "python3 tests/ci/run_rust.py local",
     "exit_code": 0,
-    "rust_tests_passed": 1001,
+    "rust_tests_passed": 1003,
     "runner_tests_passed": 34,
-    "ui_suite_tests_passed": 57,
-    "actual_worker_ui_tests_passed": 23,
+    "ui_suite_tests_passed": 58,
+    "actual_worker_ui_tests_passed": 24,
     "native_x11_row_selection": "passed",
-    "local_log_sha256": "c67cee441d3dea019ab7c3eeaa853223826446045454c65c831bb55ad31bbf85",
+    "local_log_sha256": "b5c292200cd97a4754aedfd11b206e8cbc44a5ca2edc93b34d600499f7fdd180",
     "local_results": {
-        "head": "7918093aa4130b65b526c89b2ffa7de4f513e5c5",
+        "head": "69df9fba2b83a50a673c2259bd33d2b16fc0dbd8",
         "platform": "linux",
         "windows_cross_target": "x86_64-pc-windows-gnu",
         "windows_runtime_tested": false,
@@ -937,5 +937,18 @@
             "success text without missing-file or uncertain-save warning"
         ],
         "scope": "Completion uses the same Selection as the request; selected directories do not imply descendants; required ancestors are included."
+    },
+    "platform_result_regressions": {
+        "tests": [
+            "auto_destination_is_private_under_desktop_umask",
+            "completed_results_keep_folder_action_and_show_durability_only_in_details"
+        ],
+        "baseline": "Both tests failed before correction: worker UnsafePath under umask 0002; Completed + Unconfirmed displayed extraction failure and retry.",
+        "result": "passed",
+        "coverage": [
+            "Isolated child process with umask 0002; auto-created destination mode 0700; actual worker extraction and file content; confirmed success.",
+            "Extract and CreateZip Completed results with Synced, Unconfirmed and Failed durability retain success and folder action; sync warning appears only in expanded details."
+        ],
+        "windows_runtime_tested": false
     }
 }
