@@ -1,17 +1,17 @@
 {
-    "recorded_at_utc": "2026-11-12T06:10:29.553068+00:00",
-    "tested_local_commit": "ac9d4c5adcc33ba315d67642f26f0573002b6b05",
-    "tested_source_tree": "58444c30df553b552c901de8c5c9455fe203df18",
-    "equivalent_remote_source_commit": "8e66fe78e4f9132e38f994a67b3176ccbcdd534b",
+    "recorded_at_utc": "2026-11-12T06:50:59.515143+00:00",
+    "tested_local_commit": "2228c846a91d10f82051fac5cf80d25fb4ea132f",
+    "tested_source_tree": "140cd3b560846d6ef267b9c22e9af399ca3558c0",
+    "equivalent_remote_source_commit": "8ce724306fa9cadc13967f6db37be304325cb81b",
     "command": "python3 tests/ci/run_rust.py local",
     "exit_code": 0,
-    "rust_tests_passed": 1011,
+    "rust_tests_passed": 1015,
     "runner_tests_passed": 34,
-    "ui_suite_tests_passed": 64,
+    "ui_suite_tests_passed": 68,
     "actual_worker_ui_tests_passed": 26,
-    "local_log_sha256": "fdfb73c327102444fd639f5d0e414400381c62bddd77d376caca52b05394f019",
+    "local_log_sha256": "3514f176373ec2ffacaeb033d7877bc8da5623ec768f090a3c4e1abc91c50ee6",
     "local_results": {
-        "head": "ac9d4c5adcc33ba315d67642f26f0573002b6b05",
+        "head": "2228c846a91d10f82051fac5cf80d25fb4ea132f",
         "platform": "linux",
         "windows_cross_target": "x86_64-pc-windows-gnu",
         "windows_runtime_tested": false,
@@ -420,7 +420,7 @@
             "sha256": "07914ea158c697c02ac5151ca0363cb2dd99e99ef2d14b8c6f684dbe801f12a7"
         }
     ],
-    "screenshot_scope": "The three toolbar images use actual eframe with synthetic listing and predate the GZ and portal-error corrections. Separate portal-failure images verify the new visible error states.",
+    "screenshot_scope": "The earlier 1060x720 toolbar and portal-failure images are retained evidence. The current 760x540 long-layout captures exercise the updated name, path, source-list, status and result layout with actual eframe rendering and synthetic data.",
     "historical_screenshots": "before, after and minimum folders record the previous UI and are not current verification.",
     "coverage": {
         "virtual_folders_and_current_folder_search": "browser_builds_virtual_folders_and_expands_only_the_selected_subtree; keyboard_opens_virtual_folder_and_searches_only_its_children",
@@ -504,6 +504,29 @@
             ],
             "isolation": "Actual NativeDialogs runs in a child process with a nonexistent private D-Bus endpoint; the parent session environment is unchanged. UI failure responses are additionally injected for six action paths.",
             "dependency_reuse": "Linux directly uses the ashpd 0.11.1 and pollster 0.4.0 already present through rfd. No new package nodes or versions were added. Windows retains rfd."
+        },
+        "long_text_layout": {
+            "viewport": [
+                760,
+                540
+            ],
+            "name_characters": 220,
+            "entries": 5000,
+            "tests": [
+                "narrow_archive_keeps_columns_and_virtualizes_thousands_of_long_names",
+                "narrow_deep_folder_path_is_elided_without_displacing_search",
+                "narrow_create_sources_keep_remove_and_footer_actions_visible",
+                "narrow_result_path_is_elided_and_full_path_remains_in_tooltip"
+            ],
+            "assertions": [
+                "Rendered text stays within viewport width",
+                "File names and deep paths are elided by the text layout engine",
+                "Size and encryption columns, search, status counters and create/remove/footer actions remain visible",
+                "Only visible rows are rendered for 5,000 entries",
+                "Full file name, current folder path and result path remain available in hover tooltips",
+                "Native title command is shortened to fit and retains the Zipelo suffix; full archive title is available in the Open action tooltip"
+            ],
+            "scope": "Actual egui layout geometry and tooltip rendering; synthetic listing plus generated local source file and destination directory. Native Windows title-bar rendering is not tested."
         }
     },
     "licenses": {
@@ -571,6 +594,51 @@
     ],
     "portal_failure_screenshot_scope": "Actual eframe and NativeDialogs Linux backend with an unreachable private D-Bus address and synthetic archive listing. Success-path portal interaction is not covered.",
     "validation_notes": [
-        "Two ad hoc cargo test attempts using default parallelism intermittently failed to start copied worker probes in existing tests. The required local runner uses --test-threads=1 and all 26 real-worker tests passed. No worker or probe implementation was changed."
-    ]
+        "Two ad hoc cargo test attempts using default parallelism intermittently failed to start copied worker probes in existing tests. The required local runner uses --test-threads=1 and all 26 real-worker tests passed. No worker or probe implementation was changed.",
+        "This layout task first failed the large worker test with DiskFull. Own obsolete capture binaries and generated ZIP corpus payloads were removed, retaining logs and results.tsv. The unchanged source then passed the complete local command. Shared build caches were not removed."
+    ],
+    "long_layout_screenshots_source_local_commit": "2228c846a91d10f82051fac5cf80d25fb4ea132f",
+    "long_layout_screenshots": [
+        {
+            "state": "long-list",
+            "path": "tests/ui-redesign/screenshots/long-layout/long-list.png",
+            "width": 760,
+            "height": 540,
+            "sha256": "96deeb47d35f2fabc062c2c37ae133b02693f63926d0d10135244adaa25093cd"
+        },
+        {
+            "state": "long-folder",
+            "path": "tests/ui-redesign/screenshots/long-layout/long-folder.png",
+            "width": 760,
+            "height": 540,
+            "sha256": "ff12d0e071977e13f1315ad0febbaa7ca98158c26e77e19871627b387ca70628"
+        },
+        {
+            "state": "long-create",
+            "path": "tests/ui-redesign/screenshots/long-layout/long-create.png",
+            "width": 760,
+            "height": 540,
+            "sha256": "957a8d544bea1dd166134acadddd1e0c15b94f0fab6502cfa86a5cff81ee1a1a"
+        },
+        {
+            "state": "long-result",
+            "path": "tests/ui-redesign/screenshots/long-layout/long-result.png",
+            "width": 760,
+            "height": 540,
+            "sha256": "f88f934379dff0c90961a8f3adf9d46bfe1e6afdd0583b102fdb533d7e1d1049"
+        }
+    ],
+    "local_retry": {
+        "first_exit_code": 1,
+        "first_log_sha256": "488941866c676358b1b61860266f19b8373109c9075d2c2dd80228ba965275d3",
+        "failed_test": "hardening::linux::gigabyte_seven_zip_and_zip_creation_stay_below_64_mib",
+        "failure": "DiskFull during the large Deflate creation case",
+        "recovery": {
+            "removed_own_generated_bytes": 669517168,
+            "available_bytes_after_cleanup": 13080125440,
+            "scope": "Own obsolete capture binary copies and generated ZIP corpus payloads only; logs and results.tsv retained; shared build cache untouched."
+        },
+        "source_changed_between_attempts": false,
+        "retry_exit_code": 0
+    }
 }
