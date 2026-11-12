@@ -1233,6 +1233,15 @@ impl ArchiveApp {
         self.model.busy() || self.result_visible() || (self.ui_error.is_some() && !self.create)
     }
 
+    /// 메인 창 가운데에 모달(ZIP 만들기, 암호 입력, 종료 확인, 파일 선택 안내)이 떠 있는지.
+    /// 모달이 늘어도 진행·결과 창 숨김 규칙은 이 한 곳만 보면 되도록 모음.
+    fn main_modal_open(&self) -> bool {
+        (self.create && !self.model.busy())
+            || self.picker.is_some()
+            || self.model.challenge.is_some()
+            || self.model.close != Close::Open
+    }
+
     fn work_window(&mut self, ctx: &egui::Context) {
         if !self.work_visible() {
             self.work = WorkWindow::default();
@@ -1242,15 +1251,9 @@ impl ArchiveApp {
             // 별도 창을 만들 수 없는 환경(시험 등)은 show()에서 하단에 그림.
             return;
         }
-        if self.model.challenge.is_some()
-            || matches!(
-                self.model.close,
-                Close::Confirm | Close::Waiting | Close::Review
-            )
-        {
-            // 암호 입력 창과 종료 확인 창은 메인 창 가운데에 뜨므로, 위에 떠 있는 진행 창이
-            // 입력란이나 버튼을 가리지 않게 그동안 진행 창을 닫음.
-            // 부모 기준 위치는 기억해 두고 다시 엶.
+        if self.main_modal_open() {
+            // 메인 창 가운데에 뜨는 모달을 항상 위에 뜨는 진행·결과 창이 가리지 않게
+            // 그동안 창을 닫음. 부모 기준 위치는 기억해 두고 다시 엶.
             self.work.open = false;
             return;
         }

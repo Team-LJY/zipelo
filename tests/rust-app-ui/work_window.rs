@@ -34,15 +34,15 @@ fn install_work_child_renderer() {
                 ..Default::default()
             },
         );
-        let mut output = ctx.run_ui(
-            raw,
-            |ui| (viewport.viewport_ui_cb)(ui),
-        );
+        let mut output = ctx.run_ui(raw, |ui| (viewport.viewport_ui_cb)(ui));
         output.textures_delta.clear();
         WORK_CHILD.with(|child| {
             let mut child = child.borrow_mut();
             child.labels = labels(&output.shapes);
-            child.rendered += 1;
+            // 진행·결과 창이 그려진 횟수만 셈(다른 별도 창은 세지 않음).
+            if viewport.ids.this == egui::ViewportId::from_hash_of("archive-work") {
+                child.rendered += 1;
+            }
         });
     });
 }
@@ -140,7 +140,11 @@ fn picker_wait_blocks_retry_in_separate_work_window() {
     let dialogs = HeldDialogs::default();
     app.set_dialogs(Box::new(dialogs.clone()));
     policy_click(&ctx, &mut app, "열기");
-    assert_eq!(dialogs.0.borrow().len(), 1, "열기 선택 창이 응답을 기다려야 함");
+    assert_eq!(
+        dialogs.0.borrow().len(),
+        1,
+        "열기 선택 창이 응답을 기다려야 함"
+    );
     let before = factory.state.borrow().starts.len();
     work_child_click(&ctx, &mut app, retry);
     assert_eq!(
@@ -303,5 +307,106 @@ fn close_confirmation_is_not_covered_by_separate_work_window() {
         WORK_CHILD.with(|child| child.borrow().rendered),
         0,
         "결과 확인 후 닫기에 별도 결과 창이 떠 있음"
+    );
+}
+
+/// 추출이 실패해 별도 결과 창이 남아 있는 상태를 만듦.
+fn failed_result(scratch: &Folder, factory: &FakeFactory) -> ArchiveApp {
+    let mut app = loaded(scratch, factory);
+    factory.state.borrow_mut().manual = true;
+    assert!(app.begin_extract());
+    let mut worker = factory.state.borrow_mut();
+    worker.frame(Event::Accepted { encryption: false });
+    worker.finish(Outcome::Failed, Publication::None);
+    for event in &mut worker.queue {
+        if let HostEvent::Frame {
+            event: Event::Terminal(t),
+            ..
+        } = event
+        {
+            t.error = Some(ErrorCode::Io);
+        }
+    }
+    drop(worker);
+    app
+}
+
+fn work_rendered() -> usize {
+    WORK_CHILD.with(|child| child.borrow().rendered)
+}
+
+#[test]
+fn main_modals_are_not_covered_by_separate_result_window() {
+    // 암호 입력과 종료 확인은 작업 중에만 뜨므로 위 시험들이 진행 창과의 조합을 봄.
+    // 작업이 끝난 뒤 결과 창과 함께 뜰 수 있는 모달(ZIP 만들기, 파일 선택 안내)을 여기서 봄.
+    let scratch = Folder::new();
+    let factory = FakeFactory::default();
+    let mut app = failed_result(&scratch, &factory);
+    let ctx = egui::Context::default();
+    ctx.set_embed_viewports(false);
+    install_work_child_renderer();
+    for _ in 0..10 {
+        policy_render(&ctx, &mut app, vec![]);
+    }
+    assert!(!app.model.busy());
+    assert!(work_rendered() > 0, "결과가 별도 viewport에 그려져야 함");
+
+    // 결과 창을 둔 채 ZIP 만들기를 열면 그동안 결과 창을 그리지 않음.
+    app.show_create(false);
+    policy_render(&ctx, &mut app, vec![]);
+    WORK_CHILD.with(|child| child.borrow_mut().rendered = 0);
+    let mut shown = Vec::new();
+    for _ in 0..5 {
+        shown = policy_render(&ctx, &mut app, vec![]);
+    }
+    assert!(shown.iter().any(|(text, _)| text == "ZIP 만들기"));
+    assert_eq!(
+        work_rendered(),
+        0,
+        "ZIP 만들기 창 위에 별도 결과 창이 떠 있음"
+    );
+
+    // ZIP 만들기를 닫으면 결과 창이 다시 나타남.
+    policy_click(&ctx, &mut app, "취소");
+    for _ in 0..3 {
+        policy_render(&ctx, &mut app, vec![]);
+    }
+    assert!(
+        work_rendered() > 0,
+        "ZIP 만들기를 닫으면 결과 창이 다시 나타나야 함"
+    );
+
+    // 파일 선택 창을 기다리는 안내가 뜬 동안에도 결과 창을 그리지 않음.
+    let dialogs = HeldDialogs::default();
+    app.set_dialogs(Box::new(dialogs.clone()));
+    policy_click(&ctx, &mut app, "열기");
+    assert_eq!(
+        dialogs.0.borrow().len(),
+        1,
+        "열기 선택 창이 응답을 기다려야 함"
+    );
+    policy_render(&ctx, &mut app, vec![]);
+    WORK_CHILD.with(|child| child.borrow_mut().rendered = 0);
+    for _ in 0..5 {
+        shown = policy_render(&ctx, &mut app, vec![]);
+    }
+    assert!(
+        shown
+            .iter()
+            .any(|(text, _)| text == "파일 선택 창에서 선택을 마쳐 주세요")
+    );
+    assert_eq!(
+        work_rendered(),
+        0,
+        "파일 선택 안내 위에 별도 결과 창이 떠 있음"
+    );
+
+    dialogs.0.borrow()[0].send(Ok(None)).unwrap();
+    for _ in 0..3 {
+        policy_render(&ctx, &mut app, vec![]);
+    }
+    assert!(
+        work_rendered() > 0,
+        "선택 창을 닫으면 결과 창이 다시 나타나야 함"
     );
 }
