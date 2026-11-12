@@ -207,6 +207,8 @@ pub struct ArchiveApp {
     create_listing: Option<(PathBuf, Option<std::rc::Rc<Vec<SourceRow>>>)>,
     /// 마지막으로 누른 폴더 행 (이름, 프레임 번호, 시각). 두 번 누름을 직접 판단할 때 씀.
     create_last_click: Option<(String, u64, f64)>,
+    /// ZIP 만들기 목록에서 한 번 눌러 선택한 항목 이름. 보고 있는 폴더가 바뀌면 지움.
+    create_selected: Option<String>,
     zip_password: String,
     zip_password_confirm: String,
     zip_password_visible: bool,
@@ -258,6 +260,7 @@ impl ArchiveApp {
             create_folder: String::new(),
             create_listing: None,
             create_last_click: None,
+            create_selected: None,
             zip_password: String::new(),
             zip_password_confirm: String::new(),
             zip_password_visible: false,
@@ -466,6 +469,7 @@ impl ArchiveApp {
         }
         self.create_folder.clear();
         self.create_listing = None;
+        self.create_selected = None;
         self.create = true;
     }
 
@@ -1269,9 +1273,7 @@ impl ArchiveApp {
                             )
                         });
                     }
-                    if selected {
-                        ui.painter().rect_filled(rect, 0, theme::SELECTED);
-                    }
+                    theme::row_background(ui, rect, selected, response.hovered());
                     if response.clicked() {
                         background.request_focus();
                         let modifiers = ui.input(|i| i.modifiers);
@@ -2077,6 +2079,7 @@ impl ArchiveApp {
                     .rsplit_once('/')
                     .map_or("", |(parent, _)| parent)
                     .to_owned();
+                self.create_selected = None;
             }
             ui.add_space(6.0);
             let path = match &root {
@@ -2135,6 +2138,15 @@ impl ArchiveApp {
                                     &row.name,
                                 )
                             });
+                            if response.clicked() {
+                                self.create_selected = Some(row.name.clone());
+                            }
+                            theme::row_background(
+                                ui,
+                                rect,
+                                self.create_selected.as_deref() == Some(row.name.as_str()),
+                                response.hovered(),
+                            );
                             if row.directory && root.is_some() && response.clicked() {
                                 // egui가 한 프레임을 다시 그리면 두 번 누름 정보가 사라질 수 있어
                                 // 같은 폴더를 다른 프레임에서 0.4초 안에 다시 누르면 두 번 누름으로 봄.
@@ -2175,6 +2187,7 @@ impl ArchiveApp {
             } else {
                 format!("{}/{name}", self.create_folder)
             };
+            self.create_selected = None;
         }
         ui.add_space(theme::SPACE);
 

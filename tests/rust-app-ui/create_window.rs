@@ -190,3 +190,88 @@ fn retry_of_encrypted_creation_reopens_create_window_for_password() {
     assert!(!shown.iter().any(|(text, _)| text == "ZIP 암호 설정"));
     assert_eq!(factory.state.borrow().starts.len(), starts);
 }
+
+/// 주어진 세로 위치를 덮는 목록 행 배경색(선택/마우스 올림 색 중)을 찾음.
+fn row_fill_at(output: &egui::FullOutput, y: f32) -> Option<egui::Color32> {
+    use zipelo_ui_memory_app::archive_theme::{ROW_HOVER, ROW_SELECTED};
+    fn walk(shape: &egui::epaint::Shape, y: f32, found: &mut Option<egui::Color32>) {
+        match shape {
+            egui::epaint::Shape::Rect(rect)
+                if (rect.fill == ROW_SELECTED || rect.fill == ROW_HOVER)
+                    && rect.rect.top() <= y
+                    && y <= rect.rect.bottom() =>
+            {
+                *found = Some(rect.fill);
+            }
+            egui::epaint::Shape::Vec(shapes) => {
+                for shape in shapes {
+                    walk(shape, y, found);
+                }
+            }
+            _ => {}
+        }
+    }
+    let mut found = None;
+    for shape in &output.shapes {
+        walk(&shape.shape, y, &mut found);
+    }
+    found
+}
+
+fn label_y(ctx: &egui::Context, app: &mut ArchiveApp, label: &str) -> f32 {
+    policy_render(ctx, app, vec![])
+        .iter()
+        .rev()
+        .find(|(text, _)| text == label)
+        .unwrap_or_else(|| panic!("항목 없음: {label}"))
+        .1
+        .y
+}
+
+fn hover(ctx: &egui::Context, app: &mut ArchiveApp, label: &str) -> egui::FullOutput {
+    let point = policy_render(ctx, app, vec![])
+        .iter()
+        .rev()
+        .find(|(text, _)| text == label)
+        .unwrap()
+        .1;
+    frame_output(ctx, app, vec![egui::Event::PointerMoved(point)]);
+    frame_output(ctx, app, vec![egui::Event::PointerMoved(point)])
+}
+
+#[test]
+fn create_list_click_selects_and_hover_uses_lighter_blue() {
+    use zipelo_ui_memory_app::archive_theme::{ROW_HOVER, ROW_SELECTED};
+    let scratch = Folder::new();
+    let factory = FakeFactory::default();
+    let (mut app, ctx) = create_from_folder(&scratch, &factory);
+    let a = label_y(&ctx, &mut app, "a.txt");
+    let trip = label_y(&ctx, &mut app, "trip");
+    // 한 번 누르면 반투명 파란 배경으로 선택함.
+    policy_click(&ctx, &mut app, "a.txt");
+    // 다른 행에 마우스를 올리면 선택 색보다 옅은 파란색.
+    let output = hover(&ctx, &mut app, "trip");
+    assert_eq!(row_fill_at(&output, a), Some(ROW_SELECTED));
+    assert_eq!(row_fill_at(&output, trip), Some(ROW_HOVER));
+    // 선택한 행에 마우스를 올려도 더 옅어지지 않음.
+    let output = hover(&ctx, &mut app, "a.txt");
+    assert_eq!(row_fill_at(&output, a), Some(ROW_SELECTED));
+    assert_eq!(row_fill_at(&output, trip), None);
+    assert!(ROW_HOVER.a() < ROW_SELECTED.a());
+}
+
+#[test]
+fn main_list_hover_uses_lighter_blue_and_selected_row_keeps_its_color() {
+    use zipelo_ui_memory_app::archive_theme::{ROW_HOVER, ROW_SELECTED};
+    let scratch = Folder::new();
+    let factory = FakeFactory::default();
+    let mut app = loaded(&scratch, &factory);
+    let ctx = egui::Context::default();
+    let name = "읽어주세요.txt";
+    let y = label_y(&ctx, &mut app, name);
+    let output = hover(&ctx, &mut app, name);
+    assert_eq!(row_fill_at(&output, y), Some(ROW_HOVER));
+    policy_click(&ctx, &mut app, name);
+    let output = hover(&ctx, &mut app, name);
+    assert_eq!(row_fill_at(&output, y), Some(ROW_SELECTED));
+}

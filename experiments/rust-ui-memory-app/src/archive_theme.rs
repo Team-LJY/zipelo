@@ -10,6 +10,10 @@ pub const BLUE: Color32 = Color32::from_rgb(37, 99, 235);
 pub const BLUE_HOVER: Color32 = Color32::from_rgb(29, 78, 216);
 pub const BLUE_ACTIVE: Color32 = Color32::from_rgb(30, 64, 175);
 pub const SELECTED: Color32 = Color32::from_rgb(232, 240, 254);
+/// 파일 목록에서 선택한 행의 반투명 파란 배경 (BLUE 12%).
+pub const ROW_SELECTED: Color32 = Color32::from_rgba_unmultiplied_const(37, 99, 235, 31);
+/// 파일 목록에서 마우스를 올린 행의 배경. 선택한 행보다 조금 더 투명함 (BLUE 6%).
+pub const ROW_HOVER: Color32 = Color32::from_rgba_unmultiplied_const(37, 99, 235, 15);
 pub const DROP: Color32 = Color32::from_rgb(238, 244, 255);
 pub const DASH: Color32 = Color32::from_rgb(170, 180, 192);
 pub const SUCCESS: Color32 = Color32::from_rgb(21, 128, 61);
@@ -171,6 +175,19 @@ pub fn action_sized(
 }
 
 pub const STATUS_HEIGHT: f32 = 34.0;
+
+/// 파일 목록 행 배경. 선택한 행은 마우스를 올려도 선택 색을 유지하고,
+/// 선택하지 않은 행에 마우스를 올리면 더 옅은 파란색을 칠함.
+pub fn row_background(ui: &egui::Ui, rect: egui::Rect, selected: bool, hovered: bool) {
+    let fill = if selected {
+        ROW_SELECTED
+    } else if hovered {
+        ROW_HOVER
+    } else {
+        return;
+    };
+    ui.painter().rect_filled(rect, 0, fill);
+}
 
 /// 경로 줄 높이를 꽉 채우는 입력란을 그림. 모서리는 각지게 하고,
 /// 위 테두리는 상단 메뉴의 구분선이, 아래 테두리는 경로 줄의 아래 선이 대신해
