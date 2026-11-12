@@ -967,7 +967,13 @@ impl ArchiveApp {
                     );
                     ui.painter()
                         .with_clip_rect(clip)
-                        .rect_filled(rect, 0, theme::BLUE);
+                        .rect(
+                            rect,
+                            0,
+                            theme::BLUE.gamma_multiply(0.16),
+                            egui::Stroke::new(1.0, theme::BLUE),
+                            egui::StrokeKind::Inside,
+                        );
                 }
             });
         self.list_offset = next_offset.unwrap_or(output.state.clamped_offset().y);

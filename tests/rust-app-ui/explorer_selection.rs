@@ -247,7 +247,7 @@ fn explorer_double_click_opens_only_folders_and_resets_selection() {
 }
 
 #[test]
-fn explorer_marquee_selects_intersections_and_ctrl_adds_with_an_opaque_blue_rectangle() {
+fn explorer_marquee_selects_intersections_and_ctrl_adds_with_a_translucent_blue_rectangle() {
     let scratch = Folder::new();
     let mut s = Explorer::new(&scratch);
     s.click("docs", egui::Modifiers::NONE);
@@ -257,7 +257,16 @@ fn explorer_marquee_selects_intersections_and_ctrl_adds_with_an_opaque_blue_rect
     s.pointer(start, true, explorer_ctrl());
     let output = s.frame(explorer_ctrl(), vec![egui::Event::PointerMoved(end)]);
     s.selected(&[0, 1, 2, 3, 4, 5]);
-    assert!(output.shapes.iter().any(|shape| matches!(&shape.shape, Shape::Rect(rect) if rect.fill == zipelo_ui_memory_app::archive_theme::BLUE && rect.rect.height() > 100.0 && rect.fill.a() == 255)));
+    assert!(output.shapes.iter().any(|shape| matches!(
+        &shape.shape,
+        Shape::Rect(rect)
+            if rect.fill == zipelo_ui_memory_app::archive_theme::BLUE.gamma_multiply(0.16)
+                && rect.rect.height() > 100.0
+                && rect.fill.a() > 0
+                && rect.fill.a() < 255
+                && rect.stroke == egui::Stroke::new(1.0, zipelo_ui_memory_app::archive_theme::BLUE)
+                && rect.stroke_kind == egui::StrokeKind::Inside
+    )));
     s.pointer(end, false, explorer_ctrl());
     s.selected(&[0, 1, 2, 3, 4, 5]);
     let start = egui::pos2(row.right() + 8.0, s.body().bottom() - 5.0);
