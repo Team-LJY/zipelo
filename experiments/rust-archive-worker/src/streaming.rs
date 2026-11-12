@@ -485,11 +485,10 @@ fn zip(
             return Err(ErrorCode::UnsafePath);
         }
         let raw = bytes(source, cursor + 46, nn as usize)?;
-        if flags & 0x0800 == 0 && !raw.is_ascii() {
-            return Err(ErrorCode::UnsupportedFeature);
-        }
-        let name = std::str::from_utf8(&raw).map_err(|_| ErrorCode::Integrity)?;
-        let (aes, large) = extra(&bytes(source, cursor + 46 + nn, ne as usize)?)?;
+        let central_extra = bytes(source, cursor + 46 + nn, ne as usize)?;
+        let (aes, large) = extra(&central_extra)?;
+        let name = archive::zip_name(&raw, flags, &central_extra)?;
+        let name = name.as_str();
         let mut large = large.as_deref().unwrap_or(&[]);
         let size = large_value(u32at(&h, 24), &mut large)?;
         let compressed = large_value(u32at(&h, 20), &mut large)?;
