@@ -14,6 +14,8 @@ pub const SELECTED: Color32 = Color32::from_rgb(232, 240, 254);
 pub const ROW_SELECTED: Color32 = Color32::from_rgba_unmultiplied_const(37, 99, 235, 31);
 /// 파일 목록에서 마우스를 올린 행의 배경. 선택한 행보다 조금 더 투명함 (BLUE 6%).
 pub const ROW_HOVER: Color32 = Color32::from_rgba_unmultiplied_const(37, 99, 235, 15);
+/// 선택한 행에 마우스를 올렸을 때의 배경. 선택 색보다 덜 투명함 (BLUE 18%).
+pub const ROW_SELECTED_HOVER: Color32 = Color32::from_rgba_unmultiplied_const(37, 99, 235, 46);
 pub const DROP: Color32 = Color32::from_rgb(238, 244, 255);
 pub const DASH: Color32 = Color32::from_rgb(170, 180, 192);
 pub const SUCCESS: Color32 = Color32::from_rgb(21, 128, 61);
@@ -111,11 +113,21 @@ pub fn apply(ctx: &egui::Context) {
         style.spacing.interact_size.y = ROW;
         style.spacing.window_margin = egui::Margin::same(PAD);
         style.visuals.disabled_alpha = 0.4;
+        // egui 기본 버튼에도 손 모양 커서를 씀.
+        style.visuals.interact_cursor = Some(egui::CursorIcon::PointingHand);
         // 클릭과 표시가 즉시 바뀌도록 서서히 나타남, 부드러운 스크롤, 커서 깜빡임을 모두 끔.
         style.animation_time = 0.0;
         style.scroll_animation = egui::style::ScrollAnimation::none();
         style.visuals.text_cursor.blink = false;
     });
+}
+
+/// 누를 수 있는 버튼이나 항목에 마우스를 올리면 손 모양 커서를 보여 줌.
+/// 사용할 수 없거나 누를 수 없는 영역(끌기 전용 등)은 그대로 둠.
+pub fn pointer(response: &egui::Response) {
+    if response.enabled() && response.sense.senses_click() && response.hovered() {
+        response.ctx.set_cursor_icon(egui::CursorIcon::PointingHand);
+    }
 }
 
 pub fn focus(response: &egui::Response) {
@@ -170,16 +182,19 @@ pub fn action_sized(
             )
         })
         .inner;
+    pointer(&response);
     focus(&response);
     response
 }
 
 pub const STATUS_HEIGHT: f32 = 34.0;
 
-/// 파일 목록 행 배경. 선택한 행은 마우스를 올려도 선택 색을 유지하고,
-/// 선택하지 않은 행에 마우스를 올리면 더 옅은 파란색을 칠함.
+/// 파일 목록 행 배경. 선택한 행에 마우스를 올리면 선택 색보다 진하게,
+/// 선택하지 않은 행에 마우스를 올리면 선택 색보다 옅게 칠함.
 pub fn row_background(ui: &egui::Ui, rect: egui::Rect, selected: bool, hovered: bool) {
-    let fill = if selected {
+    let fill = if selected && hovered {
+        ROW_SELECTED_HOVER
+    } else if selected {
         ROW_SELECTED
     } else if hovered {
         ROW_HOVER
@@ -599,6 +614,7 @@ pub fn tool(
         galley,
         color,
     );
+    pointer(&response);
     focus(&response);
     response
 }
@@ -635,6 +651,7 @@ pub fn flat_icon_button(
         asset,
         if enabled { TEXT } else { MUTED },
     );
+    pointer(&response);
     focus(&response);
     response
 }
@@ -655,6 +672,7 @@ pub fn icon_button(ui: &mut egui::Ui, name: &str, asset: &str, enabled: bool) ->
         asset,
         if enabled { TEXT } else { MUTED },
     );
+    pointer(&response);
     focus(&response);
     response
 }

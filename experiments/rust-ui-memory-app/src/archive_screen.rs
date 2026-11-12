@@ -1252,6 +1252,7 @@ impl ArchiveApp {
                             },
                         )
                         .on_hover_text(&row.name);
+                    theme::pointer(&response);
                     response.widget_info(|| {
                         egui::WidgetInfo::selected(
                             egui::Role::ListBoxOption,
@@ -1823,6 +1824,7 @@ impl ArchiveApp {
                     &mut self.checked_destination,
                     "기존 풀 위치 폴더를 확인했습니다",
                 );
+                theme::pointer(&response);
                 theme::focus(&response);
             }
             ui.horizontal(|ui| {
@@ -2131,6 +2133,7 @@ impl ArchiveApp {
                                 egui::Sense::click(),
                             );
                             let response = response.on_hover_text(&row.name);
+                            theme::pointer(&response);
                             response.widget_info(|| {
                                 egui::WidgetInfo::labeled(
                                     egui::Role::ListBoxOption,
@@ -2197,6 +2200,7 @@ impl ArchiveApp {
 
         // 암호: 체크하면 바로 아래에 암호와 암호 확인 칸을 보여 줌.
         let check = ui.checkbox(&mut self.aes256, "암호로 보호하기");
+        theme::pointer(&check);
         theme::focus(&check);
         if self.aes256 {
             let label_width = 72.0;

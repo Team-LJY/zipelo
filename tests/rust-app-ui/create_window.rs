@@ -193,11 +193,13 @@ fn retry_of_encrypted_creation_reopens_create_window_for_password() {
 
 /// 주어진 세로 위치를 덮는 목록 행 배경색(선택/마우스 올림 색 중)을 찾음.
 fn row_fill_at(output: &egui::FullOutput, y: f32) -> Option<egui::Color32> {
-    use zipelo_ui_memory_app::archive_theme::{ROW_HOVER, ROW_SELECTED};
+    use zipelo_ui_memory_app::archive_theme::{ROW_HOVER, ROW_SELECTED, ROW_SELECTED_HOVER};
     fn walk(shape: &egui::epaint::Shape, y: f32, found: &mut Option<egui::Color32>) {
         match shape {
             egui::epaint::Shape::Rect(rect)
-                if (rect.fill == ROW_SELECTED || rect.fill == ROW_HOVER)
+                if (rect.fill == ROW_SELECTED
+                    || rect.fill == ROW_HOVER
+                    || rect.fill == ROW_SELECTED_HOVER)
                     && rect.rect.top() <= y
                     && y <= rect.rect.bottom() =>
             {
@@ -241,7 +243,7 @@ fn hover(ctx: &egui::Context, app: &mut ArchiveApp, label: &str) -> egui::FullOu
 
 #[test]
 fn create_list_click_selects_and_hover_uses_lighter_blue() {
-    use zipelo_ui_memory_app::archive_theme::{ROW_HOVER, ROW_SELECTED};
+    use zipelo_ui_memory_app::archive_theme::{ROW_HOVER, ROW_SELECTED, ROW_SELECTED_HOVER};
     let scratch = Folder::new();
     let factory = FakeFactory::default();
     let (mut app, ctx) = create_from_folder(&scratch, &factory);
@@ -253,16 +255,17 @@ fn create_list_click_selects_and_hover_uses_lighter_blue() {
     let output = hover(&ctx, &mut app, "trip");
     assert_eq!(row_fill_at(&output, a), Some(ROW_SELECTED));
     assert_eq!(row_fill_at(&output, trip), Some(ROW_HOVER));
-    // 선택한 행에 마우스를 올려도 더 옅어지지 않음.
+    // 선택한 행에 마우스를 올리면 선택 색보다 진해짐 (덜 투명함).
     let output = hover(&ctx, &mut app, "a.txt");
-    assert_eq!(row_fill_at(&output, a), Some(ROW_SELECTED));
+    assert_eq!(row_fill_at(&output, a), Some(ROW_SELECTED_HOVER));
     assert_eq!(row_fill_at(&output, trip), None);
     assert!(ROW_HOVER.a() < ROW_SELECTED.a());
+    assert!(ROW_SELECTED.a() < ROW_SELECTED_HOVER.a());
 }
 
 #[test]
-fn main_list_hover_uses_lighter_blue_and_selected_row_keeps_its_color() {
-    use zipelo_ui_memory_app::archive_theme::{ROW_HOVER, ROW_SELECTED};
+fn main_list_hover_uses_lighter_blue_and_selected_row_gets_stronger() {
+    use zipelo_ui_memory_app::archive_theme::{ROW_HOVER, ROW_SELECTED, ROW_SELECTED_HOVER};
     let scratch = Folder::new();
     let factory = FakeFactory::default();
     let mut app = loaded(&scratch, &factory);
@@ -273,5 +276,58 @@ fn main_list_hover_uses_lighter_blue_and_selected_row_keeps_its_color() {
     assert_eq!(row_fill_at(&output, y), Some(ROW_HOVER));
     policy_click(&ctx, &mut app, name);
     let output = hover(&ctx, &mut app, name);
+    assert_eq!(row_fill_at(&output, y), Some(ROW_SELECTED_HOVER));
+    // 마우스를 치우면 선택 색만 남음 (마우스 상태는 다음 프레임에 반영됨).
+    frame_output(&ctx, &mut app, vec![egui::Event::PointerGone]);
+    let output = frame_output(&ctx, &mut app, vec![]);
     assert_eq!(row_fill_at(&output, y), Some(ROW_SELECTED));
+}
+
+fn cursor_over(ctx: &egui::Context, app: &mut ArchiveApp, point: egui::Pos2) -> egui::CursorIcon {
+    frame_output(ctx, app, vec![egui::Event::PointerMoved(point)]);
+    frame_output(ctx, app, vec![egui::Event::PointerMoved(point)])
+        .platform_output
+        .cursor_icon
+}
+
+#[test]
+fn clickable_buttons_and_rows_show_pointing_hand_cursor() {
+    let scratch = Folder::new();
+    let factory = FakeFactory::default();
+    let mut app = loaded(&scratch, &factory);
+    let ctx = egui::Context::default();
+    let at = |ctx: &egui::Context, app: &mut ArchiveApp, label: &str| {
+        policy_render(ctx, app, vec![])
+            .iter()
+            .rev()
+            .find(|(text, _)| text == label)
+            .unwrap_or_else(|| panic!("항목 없음: {label}"))
+            .1
+    };
+    for label in ["열기", "압축하기", "읽어주세요.txt"] {
+        let point = at(&ctx, &mut app, label);
+        assert_eq!(
+            cursor_over(&ctx, &mut app, point),
+            egui::CursorIcon::PointingHand,
+            "{label}"
+        );
+    }
+    // 목록의 빈 곳(끌어서 선택하는 영역)과 검색 입력란은 손 모양이 아님.
+    let row = at(&ctx, &mut app, "읽어주세요.txt");
+    let empty = row + egui::vec2(0.0, 200.0);
+    assert_eq!(cursor_over(&ctx, &mut app, empty), egui::CursorIcon::Default);
+    let search = at(&ctx, &mut app, "파일 검색");
+    assert_ne!(cursor_over(&ctx, &mut app, search), egui::CursorIcon::PointingHand);
+
+    // ZIP 만들기 창의 체크박스와 항목도 손 모양.
+    let create_scratch = Folder::new();
+    let (mut app, ctx) = create_from_folder(&create_scratch, &FakeFactory::default());
+    for label in ["암호로 보호하기", "a.txt", "취소"] {
+        let point = at(&ctx, &mut app, label);
+        assert_eq!(
+            cursor_over(&ctx, &mut app, point),
+            egui::CursorIcon::PointingHand,
+            "{label}"
+        );
+    }
 }

@@ -160,6 +160,7 @@ fn window_button(ui: &mut egui::Ui, id: &str, rect: Rect, glyph: Glyph) -> egui:
         )
         .on_hover_text(label);
     response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, label));
+    theme::pointer(&response);
     let painter = ui.painter();
     if response.hovered() || response.is_pointer_button_down_on() {
         let fill = if glyph == Glyph::Close {
