@@ -362,3 +362,23 @@ pub fn activity_text(model: &Model, creating: bool) -> &'static str {
             })
     }
 }
+
+pub fn valid_output_leaf(name: &str) -> bool {
+    valid_leaf(name) && worker_protocol::archive::valid_name(name, false).is_ok()
+}
+
+pub fn gzip_output_name(archive: &Path) -> String {
+    let file_name = archive
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("");
+    let candidate = file_name
+        .rsplit_once('.')
+        .filter(|(_, suffix)| suffix.eq_ignore_ascii_case("gz"))
+        .map_or(file_name, |(stem, _)| stem);
+    if valid_output_leaf(candidate) {
+        candidate.to_owned()
+    } else {
+        "압축 해제 파일".into()
+    }
+}

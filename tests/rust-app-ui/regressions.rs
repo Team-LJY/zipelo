@@ -1,6 +1,8 @@
 #[cfg(feature = "ui")]
 mod dialogs;
 mod fake;
+#[cfg(feature = "ui")]
+mod native_dialogs;
 use fake::*;
 use std::path::PathBuf;
 use zipelo_ui_memory_app::archive_ui::*;
@@ -663,7 +665,11 @@ fn extract_button_sends_gzip_name_only_for_raw_gzip() {
             .0
             .borrow_mut()
             .answers
-            .push_back(Some(vec![scratch.0.clone()]));
+            .push_back(Some(vec![if format == Format::Gzip {
+                scratch.0.join("압축 해제 파일")
+            } else {
+                scratch.0.clone()
+            }]));
         app.set_dialogs(Box::new(dialogs));
         let texts = render(&mut app, vec![]);
         let button = texts

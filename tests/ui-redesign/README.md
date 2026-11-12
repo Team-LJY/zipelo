@@ -16,6 +16,8 @@ tests/rust-app-real-worker/selection_flows.rs는 전체, 파일, 폴더, 혼합,
 
 Enter는 초점이 있는 버튼만 활성화하며 암호 입력란 제출만 예외임. 완료 + Unconfirmed 안내는 자세히 보기에, Failed 내구성 경고와 실패 및 부분 추출의 Unconfirmed 안내는 본문에 표시함. 자동 풀 위치의 Unix 0700 생성, 렌더러 폴백과 계약 revision 2도 기존 회귀 시험을 유지함.
 
+단일 파일 GZ는 운영체제 저장 창에서 출력 이름과 위치를 선택하며 TAR.GZ는 폴더 선택을 유지함. 빈 이름, 금지 문자와 예약 이름은 안전한 기본 이름으로 제안하고 반환된 이름도 검증함. native_dialog_flows.rs는 GZ의 취소, 충돌 뒤 이름 변경, 원본 보존과 대소문자 ZIP 열기를 실제 작업자로 확인함. native_dialogs.rs는 확장자 대소문자 조합 30개와 모든 파일 선택지 및 GZ 기본 이름을 검증함.
+
 ## 화면 재현
 
 Xvfb, xdotool, ImageMagick import와 시스템 CJK 글꼴이 필요함. 촬영 실행 파일은 실제 eframe 컴포넌트에 합성 목록을 전달하며 압축파일을 읽거나 결과물을 저장하지 않음.

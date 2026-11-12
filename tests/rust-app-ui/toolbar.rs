@@ -327,3 +327,21 @@ fn excluding_a_child_after_folder_selection_does_not_restore_it_during_extractio
         Some(Start::Extract { selection: Selection::EntryIds(ids), .. }) if ids == &vec![2]
     ));
 }
+
+#[test]
+fn gzip_save_cancel_and_invalid_output_do_not_start_an_extraction() {
+    let scratch = Folder::new();
+    let factory = FakeFactory::default();
+    factory.state.borrow_mut().list_format = Some(Format::Gzip);
+    let mut app = loaded(&scratch, &factory);
+    let dialogs = TestDialogs::default();
+    app.set_dialogs(Box::new(dialogs.clone()));
+    let ctx = egui::Context::default();
+    policy_click(&ctx, &mut app, "압축해제");
+    assert_eq!(factory.state.borrow().starts.len(), 1);
+    assert_eq!(dialogs.0.borrow().requests[0].purpose, Purpose::SaveGzip);
+    dialogs.0.borrow_mut().answers.push_back(Some(vec![scratch.0.join("invalid:name")]));
+    policy_click(&ctx, &mut app, "압축해제");
+    assert_eq!(factory.state.borrow().starts.len(), 1);
+    assert!(!app.model.busy());
+}

@@ -112,13 +112,7 @@ impl ArchiveApp {
         self.clear_password();
         self.destination = present::default_destination(&archive);
         self.automatic_destination = true;
-        self.gzip_name = archive
-            .file_name()
-            .unwrap_or_default()
-            .to_string_lossy()
-            .strip_suffix(".gz")
-            .unwrap_or("압축 해제 파일")
-            .into();
+        self.gzip_name = present::gzip_output_name(&archive);
         self.selected_only = false;
         self.folder.clear();
         self.search.clear();
@@ -286,16 +280,26 @@ impl ArchiveApp {
         if self.model.busy() {
             return;
         }
+        let gzip = self
+            .model
+            .list_id
+            .as_ref()
+            .is_some_and(|id| id.format == Format::Gzip);
+        let purpose = match (purpose, gzip) {
+            (Purpose::Destination, true) => Purpose::SaveGzip,
+            (Purpose::Retry, true) => Purpose::RetryGzip,
+            _ => purpose,
+        };
         let directory = match purpose {
             Purpose::SaveZip => self.zip_folder.clone(),
-            Purpose::Destination => self
+            Purpose::Destination | Purpose::SaveGzip => self
                 .model
                 .archive
                 .as_ref()
                 .and_then(|path| path.parent())
                 .map(Path::to_path_buf)
                 .unwrap_or_else(present::home_directory),
-            Purpose::Retry => self.destination.clone(),
+            Purpose::Retry | Purpose::RetryGzip => self.destination.clone(),
             _ => self
                 .sources
                 .last()
@@ -306,7 +310,11 @@ impl ArchiveApp {
         let request = DialogRequest {
             purpose,
             directory,
-            file_name: self.zip_name.clone(),
+            file_name: if matches!(purpose, Purpose::SaveGzip | Purpose::RetryGzip) {
+                self.gzip_name.clone()
+            } else {
+                self.zip_name.clone()
+            },
         };
         match self.dialogs.choose(request) {
             Ok(Some(paths)) if !paths.is_empty() => {
@@ -326,6 +334,33 @@ impl ArchiveApp {
                         self.choose_destination(path);
                         self.selected_only = !self.model.selected.is_empty();
                         if purpose == Purpose::Retry {
+                            self.retry();
+                        } else {
+                            self.begin_extract();
+                        }
+                    }
+                    Purpose::SaveGzip | Purpose::RetryGzip => {
+                        let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+                            self.ui_error = Some("저장할 파일 이름을 확인하세요".into());
+                            return;
+                        };
+                        if !present::valid_output_leaf(name) {
+                            self.ui_error = Some("저장할 파일 이름을 확인하세요".into());
+                            return;
+                        }
+                        let name = name.to_owned();
+                        self.choose_destination(
+                            path.parent().unwrap_or(Path::new("/")).to_path_buf(),
+                        );
+                        self.gzip_name = name.clone();
+                        self.selected_only = !self.model.selected.is_empty();
+                        if purpose == Purpose::RetryGzip {
+                            if let Some(Start::Extract {
+                                gzip_output_name, ..
+                            }) = &mut self.last_request
+                            {
+                                *gzip_output_name = Some(name);
+                            }
                             self.retry();
                         } else {
                             self.begin_extract();
@@ -1027,7 +1062,19 @@ impl ArchiveApp {
                 let action = if success {
                     Some(("폴더 열기", true))
                 } else if conflict {
-                    Some(("다른 폴더에 풀기", !uncertain || self.checked_destination))
+                    Some((
+                        if self
+                            .model
+                            .list_id
+                            .as_ref()
+                            .is_some_and(|id| id.format == Format::Gzip)
+                        {
+                            "다른 이름으로 저장"
+                        } else {
+                            "다른 폴더에 풀기"
+                        },
+                        !uncertain || self.checked_destination,
+                    ))
                 } else if t
                     .as_ref()
                     .is_some_and(|t| t.error == Some(ErrorCode::SourceChanged))
@@ -1054,7 +1101,9 @@ impl ArchiveApp {
                 if primary {
                     match action.map(|(label, _)| label) {
                         Some("폴더 열기") => folder = true,
-                        Some("다른 폴더에 풀기") => choose = true,
+                        Some("다른 폴더에 풀기" | "다른 이름으로 저장") => {
+                            choose = true
+                        }
                         Some("압축파일 다시 열기") => reopen = true,
                         Some("다시 시도" | "다시 만들기") => retry = true,
                         _ => {}
