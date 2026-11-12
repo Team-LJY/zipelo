@@ -1,19 +1,19 @@
 {
-    "recorded_at_utc": "2026-11-12T01:00:18.950205+00:00",
+    "recorded_at_utc": "2026-11-12T01:14:23.845196+00:00",
     "baseline": "b10c7eedddd202f83766aa8f001142cdfdb4097c",
-    "tested_local_commit": "a72f2bfa52c28f41176abf73fa5dc9503e1306ee",
-    "tested_source_tree": "8944fa2e712312adf7a00f41f7187134f38d8fd0",
-    "equivalent_remote_source_commit": "fe20354c9b07f68150459c0163c36b77d7158c27",
+    "tested_local_commit": "bc2598b532cefaf1aae994e16c7c40846415c9c7",
+    "tested_source_tree": "a83287036b4328c107951034e8d5c47b4a45b329",
+    "equivalent_remote_source_commit": "f1e973b2e5c8972936387b10e86cabb499d5c10f",
     "command": "python3 tests/ci/run_rust.py local",
     "exit_code": 0,
-    "rust_tests_passed": 989,
+    "rust_tests_passed": 992,
     "runner_tests_passed": 34,
-    "ui_suite_tests_passed": 47,
+    "ui_suite_tests_passed": 50,
     "actual_worker_ui_tests_passed": 21,
     "native_x11_row_selection": "passed",
-    "local_log_sha256": "68ed459af997f65b027ab69a0377b76f74cffdacc8f32b40ffb42b1e94158590",
+    "local_log_sha256": "a00bf53003208606870d306d8c25ef2e0f6c1ceed4ee7e29a76543a69920954a",
     "local_results": {
-        "head": "a72f2bfa52c28f41176abf73fa5dc9503e1306ee",
+        "head": "bc2598b532cefaf1aae994e16c7c40846415c9c7",
         "platform": "linux",
         "windows_cross_target": "x86_64-pc-windows-gnu",
         "windows_runtime_tested": false,
@@ -750,7 +750,9 @@
             "evidence": [
                 "widgets::picker_fits_minimum_window_and_opens_selected_file_with_enter",
                 "widgets::empty_selection_and_empty_zip_sources_do_not_start_work",
-                "Xvfb picker, selected-empty"
+                "Xvfb picker, selected-empty",
+                "widgets::keyboard_file_pickers_enter_child_before_confirming_file",
+                "widgets::keyboard_folder_pickers_navigate_before_explicit_folder_confirmation"
             ]
         },
         {
@@ -812,7 +814,8 @@
             "evidence": [
                 "actual worker flows.rs",
                 "widgets::empty_selection_and_empty_zip_sources_do_not_start_work",
-                "Xvfb create, create-filled"
+                "Xvfb create, create-filled",
+                "widgets::changed_zip_sources_retry_creation_with_or_without_open_archive"
             ]
         },
         {
@@ -873,5 +876,17 @@
         "Windows는 교차 빌드만 확인했으며 실제 UI 실행과 설치를 시험하지 않음",
         "운영체제 파일 탐색기 실행과 전체 보조 기술 접근성 감사는 수행하지 않음"
     ],
-    "storage_note": "초기 실행은 디스크 공간 부족으로 실패했으나 본인 소유의 이전 빌드 캐시 정리 후 변경 없는 작업자 대용량 시험까지 통과함"
+    "storage_note": "초기 실행은 디스크 공간 부족으로 실패했으나 본인 소유의 이전 빌드 캐시 정리 후 변경 없는 작업자 대용량 시험까지 통과함",
+    "screenshots_source_commit": "fe20354c9b07f68150459c0163c36b77d7158c27",
+    "review_regressions": {
+        "review": "https://github.com/Team-LJY/zipelo/pull/85#pullrequestreview-5867462969",
+        "tests": [
+            "keyboard_file_pickers_enter_child_before_confirming_file",
+            "keyboard_folder_pickers_navigate_before_explicit_folder_confirmation",
+            "changed_zip_sources_retry_creation_with_or_without_open_archive"
+        ],
+        "baseline": "3 tests failed before correction",
+        "fixed": "3 tests passed, UI suite 50 passed",
+        "coverage": "파일 선택 2개와 폴더 선택 4개 모드의 Tab 및 Enter 탐색, 기존 압축파일 유무 두 경우의 동일 CreateZip 요청 재전송"
+    }
 }

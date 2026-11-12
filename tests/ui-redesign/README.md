@@ -38,3 +38,5 @@ python3 tests/ui-redesign/check_row_selection.py --binary tests/ui-redesign/runs
 ```
 
 validation.json에는 실행한 소스 트리, local 결과와 화면 해시를 기록함. 기록 파일과 이 설명의 추가는 시험 후 문서 변경임. 대용량 작업자 시험은 원본 스냅샷과 임시 공간을 함께 확인하므로 실행 파일 시스템에 최소 12GB 이상의 여유 공간이 필요하며 빌드 캐시 공간은 별도임.
+
+PR85 리뷰 회귀는 presentation.rs의 keyboard_file_pickers_enter_child_before_confirming_file, keyboard_folder_pickers_navigate_before_explicit_folder_confirmation, changed_zip_sources_retry_creation_with_or_without_open_archive에서 확인함. 폴더 행의 Tab 및 Enter 탐색은 6개 선택 모드에서, ZIP 원본 변경 뒤 생성 재시도는 기존 압축파일 유무 두 경우에서 검증함.
