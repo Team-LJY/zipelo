@@ -1966,6 +1966,8 @@ impl ArchiveApp {
                     });
                 });
                 close |= self.create_area(ui);
+                ui.add_space(theme::SPACE);
+                close |= self.create_actions(ui);
             });
             if close || modal.should_close() {
                 self.close_create();
@@ -1988,6 +1990,7 @@ impl ArchiveApp {
             if class == egui::ViewportClass::EmbeddedWindow {
                 ui.set_width(CREATE_WIDTH);
                 close |= self.create_area(ui);
+                close |= self.create_actions(ui);
                 return None;
             }
             let mut chrome = 0.0;
@@ -2004,6 +2007,24 @@ impl ArchiveApp {
                 window_frame::edges(ui.ctx(), false);
                 chrome = window_frame::TITLE_HEIGHT;
             }
+            // 버튼은 창 오른쪽 아래에 여백을 두고 고정함. 위 내용이 바뀌어도 자리가 같음.
+            let actions = egui::Panel::bottom(egui::Id::unique("create-actions"))
+                .resizable(false)
+                .show_separator_line(false)
+                .frame(
+                    egui::Frame::new()
+                        .fill(theme::PANEL)
+                        .inner_margin(egui::Margin {
+                            left: theme::PAD,
+                            right: theme::PAD,
+                            top: 0,
+                            bottom: theme::PAD,
+                        }),
+                )
+                .show(ui, |ui| close |= self.create_actions(ui))
+                .response
+                .rect
+                .height();
             let margin = theme::PAD as f32;
             egui::CentralPanel::default()
                 .frame(theme::panel(theme::PANEL).corner_radius(0))
@@ -2012,7 +2033,7 @@ impl ArchiveApp {
                         .vertical(|ui| close |= self.create_area(ui))
                         .response
                         .rect;
-                    Some(content.height() + 2.0 * margin + chrome)
+                    Some(content.height() + 2.0 * margin + chrome + actions)
                 })
                 .inner
         });
@@ -2219,10 +2240,18 @@ impl ArchiveApp {
             wipe(&mut self.zip_password_confirm);
             self.zip_password_visible = false;
         }
-        ui.add_space(theme::SPACE);
+        false
+    }
 
+    /// 취소와 압축하기 버튼. 취소를 눌렀으면 true.
+    fn create_actions(&mut self, ui: &mut egui::Ui) -> bool {
         let ready = !self.sources.is_empty() && self.zip_password_ready();
-        let (cancel, compress) = theme::action_pair(ui, "취소", Some(("압축하기", ready)));
+        let enabled = self.picker.is_none();
+        let (cancel, compress) = ui
+            .add_enabled_ui(enabled, |ui| {
+                theme::action_pair(ui, "취소", Some(("압축하기", ready)))
+            })
+            .inner;
         if compress {
             self.open_picker(Purpose::SaveZip);
         }

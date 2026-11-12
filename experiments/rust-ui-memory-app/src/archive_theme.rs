@@ -126,6 +126,21 @@ pub fn focus(response: &egui::Response) {
 }
 
 pub fn action(ui: &mut egui::Ui, text: &str, primary: bool, enabled: bool) -> egui::Response {
+    let size = egui::vec2(
+        if primary { 112.0 } else { 0.0 },
+        if primary { BUTTON } else { 36.0 },
+    );
+    action_sized(ui, text, primary, enabled, size)
+}
+
+/// 정한 최소 크기로 버튼을 그림. 함께 놓이는 버튼끼리 크기를 맞출 때 씀.
+pub fn action_sized(
+    ui: &mut egui::Ui,
+    text: &str,
+    primary: bool,
+    enabled: bool,
+    size: egui::Vec2,
+) -> egui::Response {
     let response = ui
         .scope(|ui| {
             if primary {
@@ -146,10 +161,7 @@ pub fn action(ui: &mut egui::Ui, text: &str, primary: bool, enabled: bool) -> eg
                 } else {
                     TEXT
                 }))
-                .min_size(egui::vec2(
-                    if primary { 112.0 } else { 0.0 },
-                    if primary { BUTTON } else { 36.0 },
-                ))
+                .min_size(size)
                 .stroke(Stroke::new(1.0, if primary { BLUE } else { BORDER })),
             )
         })
@@ -385,17 +397,23 @@ pub fn action_pair(
             .size()
             .x
     };
-    let width = text_width(secondary)
-        + 32.0
-        + primary.map_or(0.0, |(label, _)| {
-            SPACE + (text_width(label) + 32.0).max(112.0)
-        });
+    // 두 버튼은 긴 쪽 글자에 맞춘 같은 크기로 그림.
+    let button = egui::vec2(
+        primary
+            .map_or(0.0, |(label, _)| text_width(label))
+            .max(text_width(secondary))
+            + 32.0,
+        BUTTON,
+    )
+    .max(egui::vec2(112.0, BUTTON));
+    let count = if primary.is_some() { 2.0 } else { 1.0 };
+    let width = button.x * count + SPACE * (count - 1.0);
     ui.horizontal(|ui| {
         ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
             ui.add_space((ui.available_width() - width).max(0.0));
-            let secondary = action(ui, secondary, false, true).clicked();
+            let secondary = action_sized(ui, secondary, false, true, button).clicked();
             let primary = primary.is_some_and(|(label, enabled)| {
-                action(ui, label, true, enabled)
+                action_sized(ui, label, true, enabled, button)
                     .on_disabled_hover_text(match label {
                         "만들기" => "묶을 파일이나 폴더를 추가하세요",
                         "다른 폴더에 풀기" => "기존 풀 위치 폴더를 먼저 확인하세요",
