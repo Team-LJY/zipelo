@@ -219,3 +219,89 @@ fn password_prompt_is_not_covered_by_separate_work_window() {
         "암호 입력 뒤 진행 창이 다시 나타나야 함"
     );
 }
+
+#[test]
+fn close_confirmation_is_not_covered_by_separate_work_window() {
+    let scratch = Folder::new();
+    let factory = FakeFactory::default();
+    let mut app = loaded(&scratch, &factory);
+    factory.state.borrow_mut().manual = true;
+    assert!(app.begin_extract());
+    factory
+        .state
+        .borrow_mut()
+        .frame(Event::Accepted { encryption: false });
+    let ctx = egui::Context::default();
+    ctx.set_embed_viewports(false);
+    install_work_child_renderer();
+    for _ in 0..6 {
+        policy_render(&ctx, &mut app, vec![]);
+    }
+    assert!(app.model.busy());
+    assert!(
+        WORK_CHILD.with(|child| child.borrow().rendered) > 0,
+        "작업 중에는 진행 창이 떠 있어야 함"
+    );
+
+    // 작업 중 메인 창을 닫으면 메인 창 가운데에 종료 확인 창이 뜸.
+    app.model.request_close();
+    assert_eq!(app.model.close, Close::Confirm);
+    policy_render(&ctx, &mut app, vec![]);
+    WORK_CHILD.with(|child| child.borrow_mut().rendered = 0);
+    let mut shown = Vec::new();
+    for _ in 0..5 {
+        shown = policy_render(&ctx, &mut app, vec![]);
+    }
+    for label in ["작업 중 닫기", "계속 작업", "취소하고 닫기"] {
+        assert!(shown.iter().any(|(text, _)| text == label), "{label}");
+    }
+    // 항상 위에 뜨는 진행 창이 확인 창을 가리지 않도록 그동안 진행 창을 그리지 않음.
+    assert_eq!(
+        WORK_CHILD.with(|child| child.borrow().rendered),
+        0,
+        "종료 확인 중에 별도 진행 창이 떠 있음"
+    );
+
+    // 계속 작업을 고르면 진행 창이 다시 나타남.
+    app.model.keep_open();
+    for _ in 0..3 {
+        policy_render(&ctx, &mut app, vec![]);
+    }
+    assert!(app.model.busy());
+    assert!(
+        WORK_CHILD.with(|child| child.borrow().rendered) > 0,
+        "계속 작업을 고르면 진행 창이 다시 나타나야 함"
+    );
+
+    // 취소하고 닫기 뒤 정리를 기다리는 동안("종료 확인 중")도 가리지 않음.
+    app.model.request_close();
+    app.model.confirm_close();
+    assert_eq!(app.model.close, Close::Waiting);
+    policy_render(&ctx, &mut app, vec![]);
+    WORK_CHILD.with(|child| child.borrow_mut().rendered = 0);
+    for _ in 0..5 {
+        shown = policy_render(&ctx, &mut app, vec![]);
+    }
+    assert!(shown.iter().any(|(text, _)| text == "종료 확인 중"));
+    assert_eq!(
+        WORK_CHILD.with(|child| child.borrow().rendered),
+        0,
+        "종료 확인 중에 별도 진행 창이 떠 있음"
+    );
+
+    // 정리가 끝나 결과 확인 후 닫기가 뜰 때도 결과 창이 가리지 않음.
+    factory
+        .state
+        .borrow_mut()
+        .finish(Outcome::Cancelled, Publication::None);
+    for _ in 0..12 {
+        shown = policy_render(&ctx, &mut app, vec![]);
+    }
+    assert_eq!(app.model.close, Close::Review);
+    assert!(shown.iter().any(|(text, _)| text == "결과 확인 후 닫기"));
+    assert_eq!(
+        WORK_CHILD.with(|child| child.borrow().rendered),
+        0,
+        "결과 확인 후 닫기에 별도 결과 창이 떠 있음"
+    );
+}

@@ -1242,9 +1242,15 @@ impl ArchiveApp {
             // 별도 창을 만들 수 없는 환경(시험 등)은 show()에서 하단에 그림.
             return;
         }
-        if self.model.challenge.is_some() {
-            // 암호 입력 창은 메인 창 가운데에 뜨므로, 위에 떠 있는 진행 창이 입력란을
-            // 가리지 않게 그동안 진행 창을 닫음. 부모 기준 위치는 기억해 두고 다시 엶.
+        if self.model.challenge.is_some()
+            || matches!(
+                self.model.close,
+                Close::Confirm | Close::Waiting | Close::Review
+            )
+        {
+            // 암호 입력 창과 종료 확인 창은 메인 창 가운데에 뜨므로, 위에 떠 있는 진행 창이
+            // 입력란이나 버튼을 가리지 않게 그동안 진행 창을 닫음.
+            // 부모 기준 위치는 기억해 두고 다시 엶.
             self.work.open = false;
             return;
         }
