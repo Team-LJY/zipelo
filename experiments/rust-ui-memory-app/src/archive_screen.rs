@@ -1242,6 +1242,12 @@ impl ArchiveApp {
             // 별도 창을 만들 수 없는 환경(시험 등)은 show()에서 하단에 그림.
             return;
         }
+        if self.model.challenge.is_some() {
+            // 암호 입력 창은 메인 창 가운데에 뜨므로, 위에 떠 있는 진행 창이 입력란을
+            // 가리지 않게 그동안 진행 창을 닫음. 부모 기준 위치는 기억해 두고 다시 엶.
+            self.work.open = false;
+            return;
+        }
         let id = egui::ViewportId::from_hash_of("archive-work");
         let (parent, parent_focused, now) = ctx.input(|i| {
             (
@@ -1257,9 +1263,13 @@ impl ArchiveApp {
         });
         let size = egui::vec2(WORK_WIDTH, self.work.height);
         if !self.work.open {
-            // 처음 열 때 부모 창 가운데에 둠. Wayland처럼 위치를 알 수 없으면 창 관리자에 맡김.
+            // 처음 열 때 부모 창 가운데에 둠. 암호 입력 뒤 다시 열 때는 기억한 위치에 둠.
+            // Wayland처럼 위치를 알 수 없으면 창 관리자에 맡김.
             self.work.open = true;
-            self.work.initial = parent.map(|p| (p.center() - size / 2.0).round());
+            self.work.initial = parent.map(|p| match self.work.offset {
+                Some(offset) => (p.min + offset).round(),
+                None => (p.center() - size / 2.0).round(),
+            });
             self.work.offset = self.work.initial.zip(parent).map(|(c, p)| c - p.min);
             self.work.parent = parent.map(|p| p.min);
             self.work.expected = self.work.initial;

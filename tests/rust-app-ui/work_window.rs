@@ -13,6 +13,8 @@ std::thread_local! {
 
 /// eframe처럼 별도 viewport 콜백을 같은 Context에서 실행하고, 그 viewport에만 입력을 넣음.
 fn install_work_child_renderer() {
+    // 같은 스레드에서 이어 도는 시험끼리 기록이 섞이지 않게 비움.
+    WORK_CHILD.with(|child| *child.borrow_mut() = WorkChild::default());
     egui::Context::set_immediate_viewport_renderer(|ctx, mut viewport| {
         let events = WORK_CHILD.with(|child| std::mem::take(&mut child.borrow_mut().events));
         let mut raw = egui::RawInput {
@@ -155,4 +157,65 @@ fn picker_wait_blocks_retry_in_separate_work_window() {
     let retry = work_child_label("다시 시도").expect("선택 창을 닫은 뒤에도 결과가 남아야 함");
     work_child_click(&ctx, &mut app, retry);
     assert_eq!(factory.state.borrow().starts.len(), before + 1);
+}
+
+#[test]
+fn password_prompt_is_not_covered_by_separate_work_window() {
+    let scratch = Folder::new();
+    let factory = FakeFactory::manual();
+    let mut app = ArchiveApp::new(Box::new(factory.clone()), None, false);
+    assert!(app.model.begin(
+        Start::CreateZip {
+            sources: vec![(scratch.0.join("source"), "source".into())],
+            output_file: scratch.0.join("output.zip"),
+            method: Method::Deflate,
+            aes256: true
+        },
+        &mut factory.clone()
+    ));
+    {
+        let mut worker = factory.state.borrow_mut();
+        worker.frame(Event::Accepted { encryption: true });
+        worker.frame(Event::PasswordRequired {
+            challenge_id: 17,
+            attempt: 1,
+            encrypt: true,
+        });
+    }
+    let ctx = egui::Context::default();
+    ctx.set_embed_viewports(false);
+    install_work_child_renderer();
+    for _ in 0..12 {
+        policy_render(&ctx, &mut app, vec![]);
+    }
+    assert!(app.model.challenge.is_some(), "암호 입력을 기다려야 함");
+    // 작업자 사건을 처리하기 전 몇 프레임은 진행 창이 정상으로 그려짐.
+    // 암호 입력 창이 뜬 뒤부터 진행 창이 그려지는지만 셈.
+    WORK_CHILD.with(|child| child.borrow_mut().rendered = 0);
+    for _ in 0..5 {
+        policy_render(&ctx, &mut app, vec![]);
+    }
+    assert!(
+        ctx.read_response(egui::Id::unique("archive-password-input"))
+            .is_some(),
+        "메인 창에 암호 입력란이 있어야 함"
+    );
+    // 항상 위에 뜨는 진행 창이 메인 창 가운데의 암호 입력란을 가리지 않도록
+    // 암호를 기다리는 동안에는 진행 창을 그리지 않음.
+    assert_eq!(
+        WORK_CHILD.with(|child| child.borrow().rendered),
+        0,
+        "암호 입력 중에 별도 진행 창이 떠 있음"
+    );
+
+    // 암호 입력이 끝나 작업이 이어지면 진행 창이 다시 나타남.
+    app.model.challenge = None;
+    for _ in 0..3 {
+        policy_render(&ctx, &mut app, vec![]);
+    }
+    assert!(app.model.busy());
+    assert!(
+        WORK_CHILD.with(|child| child.borrow().rendered) > 0,
+        "암호 입력 뒤 진행 창이 다시 나타나야 함"
+    );
 }
