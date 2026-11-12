@@ -189,13 +189,47 @@ def inventory(manifests, project_root=None, supplement_path=ROOT / "packaging/li
     return [records[key] for key in sorted(records)]
 
 
+# 앱에 그대로 포함하는 Rust crate 밖의 자산. 원문 고지가 없으면 배포를 중단함.
+BUNDLED = [
+    {
+        "kind": "Font",
+        "name": "Pretendard",
+        "version": "1.3.9",
+        "license": "OFL-1.1",
+        "source": "https://github.com/orioncactus/pretendard/releases/tag/v1.3.9",
+        "asset": "experiments/rust-ui-memory-app/src/assets/fonts/Pretendard-Regular.ttf",
+        "license_file": "experiments/rust-ui-memory-app/src/assets/fonts/OFL.txt",
+    },
+]
+
+
+def bundled_records(root=ROOT):
+    records = []
+    for item in BUNDLED:
+        asset = root / item["asset"]
+        license_file = root / item["license_file"]
+        if not asset.is_file() or not license_file.is_file():
+            raise ValueError(f"포함 자산 또는 원문 누락: {item['name']}")
+        content = license_file.read_bytes()
+        records.append({
+            "kind": item["kind"], "name": item["name"], "version": item["version"],
+            "source": item["source"], "license": item["license"],
+            "files": [{
+                "path": item["license_file"], "sha256": hashlib.sha256(content).hexdigest(),
+                "note": f"Asset: {item['asset']} (SHA-256 {hashlib.sha256(asset.read_bytes()).hexdigest()})",
+                "text": content.decode("utf-8"),
+            }],
+        })
+    return records
+
+
 def render(records):
     missing = [f'{record["name"]}@{record["version"]}' for record in records if not record["files"]]
     if missing:
         raise ValueError(f"라이선스 원문 누락 {len(missing)}개: " + ", ".join(missing))
-    lines = ["Zipelo third-party licenses", "Cargo.lock 전체 의존성의 원문 고지 (로컬 registry 및 고정 upstream 보충)", ""]
+    lines = ["Zipelo third-party licenses", "Cargo.lock 전체 의존성과 앱에 포함한 자산의 원문 고지 (로컬 registry 및 고정 upstream 보충)", ""]
     for record in records:
-        lines.extend(["=" * 72, f'Crate: {record["name"]} {record["version"]}',
+        lines.extend(["=" * 72, f'{record.get("kind", "Crate")}: {record["name"]} {record["version"]}',
                       f'Source: {record["source"]}', f'License: {record["license"]}', f'Version: {record["version"]}', ""])
         for file in record["files"]:
             lines.extend([f'File: {file["path"]}', f'SHA-256: {file["sha256"]}'])
@@ -206,7 +240,7 @@ def render(records):
 
 
 def generate(manifests, output, audit=None):
-    records = inventory(manifests)
+    records = inventory(manifests) + bundled_records()
     if audit:
         Path(audit).write_text(json.dumps(records, ensure_ascii=False, indent=4) + "\n", encoding="utf-8")
     text = render(records)

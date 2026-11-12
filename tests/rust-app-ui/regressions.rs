@@ -375,6 +375,16 @@ fn renders_every_flow_with_actual_egui_widgets() {
     let ctx = egui::Context::default();
     let f = FakeFactory::default();
     let mut app = ArchiveApp::new(Box::new(f.clone()), None, true);
+    // 압축하기는 운영체제 폴더 선택 창을 여므로 시험 응답으로 바꿈.
+    let folder = std::env::temp_dir().join(format!("zipelo-ui-create-{}", std::process::id()));
+    std::fs::create_dir_all(&folder).unwrap();
+    let dialogs = dialogs::TestDialogs::default();
+    dialogs
+        .0
+        .borrow_mut()
+        .answers
+        .push_back(Some(vec![folder.clone()]));
+    app.set_dialogs(Box::new(dialogs));
     let render = |app: &mut ArchiveApp, events: Vec<egui::Event>, width: f32| {
         let mut output = ctx.run_ui(
             egui::RawInput {
@@ -450,7 +460,9 @@ fn renders_every_flow_with_actual_egui_widgets() {
     pump(&mut app.model);
     render(&mut app, vec![], 1060.0);
     let result = render(&mut app, vec![], 1060.0);
-    assert!(result.iter().any(|(t, _)| t == "결과 확인 후 닫기"));
+    // 작업 정리가 끝나면 결과 확인 안내 없이 바로 닫힘.
+    assert!(!result.iter().any(|(t, _)| t == "결과 확인 후 닫기"));
+    assert_eq!(app.model.close, Close::Allowed);
 }
 
 #[test]

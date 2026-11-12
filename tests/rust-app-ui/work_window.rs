@@ -5,6 +5,11 @@ struct WorkChild {
     events: Vec<egui::Event>,
     labels: Vec<(String, egui::Pos2)>,
     rendered: usize,
+    cursor: Option<egui::CursorIcon>,
+    rects: Vec<(egui::Rect, egui::Color32)>,
+    commands: Vec<egui::ViewportCommand>,
+    /// 다음에 그리는 별도 창에 운영체제의 닫기(X) 요청을 보냄.
+    close: bool,
 }
 
 std::thread_local! {
@@ -16,12 +21,22 @@ fn install_work_child_renderer() {
     // 같은 스레드에서 이어 도는 시험끼리 기록이 섞이지 않게 비움.
     WORK_CHILD.with(|child| *child.borrow_mut() = WorkChild::default());
     egui::Context::set_immediate_viewport_renderer(|ctx, mut viewport| {
-        let events = WORK_CHILD.with(|child| std::mem::take(&mut child.borrow_mut().events));
+        let (events, close) = WORK_CHILD.with(|child| {
+            let mut child = child.borrow_mut();
+            (
+                std::mem::take(&mut child.events),
+                std::mem::take(&mut child.close),
+            )
+        });
         let mut raw = egui::RawInput {
             viewport_id: viewport.ids.this,
+            // 창이 요청한 크기로 그림(ZIP 만들기 창은 진행 창보다 큼).
             screen_rect: Some(egui::Rect::from_min_size(
                 egui::Pos2::ZERO,
-                egui::vec2(480.0, 240.0),
+                viewport
+                    .builder
+                    .inner_size
+                    .unwrap_or(egui::vec2(480.0, 240.0)),
             )),
             events,
             ..Default::default()
@@ -31,6 +46,11 @@ fn install_work_child_renderer() {
             egui::ViewportInfo {
                 parent: Some(viewport.ids.parent),
                 focused: Some(true),
+                events: if close {
+                    vec![egui::ViewportEvent::Close]
+                } else {
+                    vec![]
+                },
                 ..Default::default()
             },
         );
@@ -42,6 +62,21 @@ fn install_work_child_renderer() {
             // 진행·결과 창이 그려진 횟수만 셈(다른 별도 창은 세지 않음).
             if viewport.ids.this == egui::ViewportId::from_hash_of("archive-work") {
                 child.rendered += 1;
+            }
+            child.cursor = Some(output.platform_output.cursor_icon);
+            child.rects.clear();
+            fn walk(shape: &egui::epaint::Shape, out: &mut Vec<(egui::Rect, egui::Color32)>) {
+                match shape {
+                    egui::epaint::Shape::Rect(rect) => out.push((rect.rect, rect.fill)),
+                    egui::epaint::Shape::Vec(shapes) => shapes.iter().for_each(|s| walk(s, out)),
+                    _ => {}
+                }
+            }
+            for shape in &output.shapes {
+                walk(&shape.shape, &mut child.rects);
+            }
+            for viewport in output.viewport_output.values() {
+                child.commands.extend(viewport.commands.iter().cloned());
             }
         });
     });
@@ -225,6 +260,99 @@ fn password_prompt_is_not_covered_by_separate_work_window() {
 }
 
 #[test]
+fn child_window_buttons_hover_again_after_title_bar_drag() {
+    let scratch = Folder::new();
+    let factory = FakeFactory::default();
+    let mut app = loaded(&scratch, &factory);
+    factory.state.borrow_mut().manual = true;
+    assert!(app.begin_extract());
+    {
+        let mut worker = factory.state.borrow_mut();
+        worker.frame(Event::Accepted { encryption: false });
+        worker.finish(Outcome::Failed, Publication::None);
+    }
+    app.set_custom_frame(true);
+    let ctx = egui::Context::default();
+    ctx.set_embed_viewports(false);
+    install_work_child_renderer();
+    for _ in 0..10 {
+        policy_render(&ctx, &mut app, vec![]);
+    }
+    let mut commands = Vec::new();
+    fn child_frame(
+        ctx: &egui::Context,
+        app: &mut ArchiveApp,
+        events: Vec<egui::Event>,
+        commands: &mut Vec<egui::ViewportCommand>,
+    ) {
+        WORK_CHILD.with(|child| child.borrow_mut().events = events);
+        // 자식 창 명령은 부모 출력에 실려 올 수도 있어 둘 다 모음.
+        let output = frame_output(ctx, app, vec![]);
+        for viewport in output.viewport_output.values() {
+            commands.extend(viewport.commands.iter().cloned());
+        }
+    }
+    // 자식 창 제목 표시줄을 누른 채 끌어 창 이동을 운영체제에 넘김.
+    let start = egui::pos2(120.0, 19.0);
+    child_frame(
+        &ctx,
+        &mut app,
+        vec![egui::Event::PointerMoved(start)],
+        &mut commands,
+    );
+    child_frame(
+        &ctx,
+        &mut app,
+        vec![egui::Event::PointerButton {
+            pos: start,
+            button: egui::PointerButton::Primary,
+            pressed: true,
+            modifiers: egui::Modifiers::NONE,
+        }],
+        &mut commands,
+    );
+    for step in 1..=3 {
+        child_frame(
+            &ctx,
+            &mut app,
+            vec![egui::Event::PointerMoved(
+                start + egui::vec2(6.0 * step as f32, 0.0),
+            )],
+            &mut commands,
+        );
+    }
+    let started = commands.contains(&egui::ViewportCommand::StartDrag)
+        || WORK_CHILD.with(|child| {
+            child
+                .borrow()
+                .commands
+                .contains(&egui::ViewportCommand::StartDrag)
+        });
+    assert!(started, "자식 창 이동이 시작돼야 함");
+    // GNOME은 이동이 끝나도 버튼 놓기를 보내지 않음. 그대로 닫기 버튼에 마우스를 올림.
+    let close = egui::pos2(480.0 - 6.0 - 17.0, 19.0);
+    for _ in 0..3 {
+        child_frame(
+            &ctx,
+            &mut app,
+            vec![egui::Event::PointerMoved(close)],
+            &mut commands,
+        );
+    }
+    let (cursor, hovered_red) = WORK_CHILD.with(|child| {
+        let child = child.borrow();
+        (
+            child.cursor,
+            child.rects.iter().any(|(rect, fill)| {
+                rect.contains(close) && *fill == egui::Color32::from_rgb(232, 17, 35)
+            }),
+        )
+    });
+    assert!(hovered_red, "닫기 버튼에 마우스를 올린 배경이 없음");
+    assert_eq!(cursor, Some(egui::CursorIcon::PointingHand));
+}
+
+#[test]
 fn close_confirmation_is_not_covered_by_separate_work_window() {
     let scratch = Folder::new();
     let factory = FakeFactory::default();
@@ -293,7 +421,7 @@ fn close_confirmation_is_not_covered_by_separate_work_window() {
         "종료 확인 중에 별도 진행 창이 떠 있음"
     );
 
-    // 정리가 끝나 결과 확인 후 닫기가 뜰 때도 결과 창이 가리지 않음.
+    // 정리가 끝나면 결과 확인 안내 없이 바로 닫히고, 그사이 결과 창도 뜨지 않음.
     factory
         .state
         .borrow_mut()
@@ -301,12 +429,12 @@ fn close_confirmation_is_not_covered_by_separate_work_window() {
     for _ in 0..12 {
         shown = policy_render(&ctx, &mut app, vec![]);
     }
-    assert_eq!(app.model.close, Close::Review);
-    assert!(shown.iter().any(|(text, _)| text == "결과 확인 후 닫기"));
+    assert_eq!(app.model.close, Close::Allowed);
+    assert!(!shown.iter().any(|(text, _)| text == "결과 확인 후 닫기"));
     assert_eq!(
         WORK_CHILD.with(|child| child.borrow().rendered),
         0,
-        "결과 확인 후 닫기에 별도 결과 창이 떠 있음"
+        "닫히는 동안 별도 결과 창이 떠 있음"
     );
 }
 
@@ -351,15 +479,18 @@ fn main_modals_are_not_covered_by_separate_result_window() {
     assert!(!app.model.busy());
     assert!(work_rendered() > 0, "결과가 별도 viewport에 그려져야 함");
 
-    // 결과 창을 둔 채 ZIP 만들기를 열면 그동안 결과 창을 그리지 않음.
+    // 결과 창을 둔 채 ZIP 만들기 창(같은 자리에 뜨는 별도 창)을 열면 그동안 결과 창을 그리지 않음.
     app.show_create(false);
     policy_render(&ctx, &mut app, vec![]);
-    WORK_CHILD.with(|child| child.borrow_mut().rendered = 0);
-    let mut shown = Vec::new();
+    WORK_CHILD.with(|child| {
+        let mut child = child.borrow_mut();
+        child.rendered = 0;
+        child.labels.clear();
+    });
     for _ in 0..5 {
-        shown = policy_render(&ctx, &mut app, vec![]);
+        policy_render(&ctx, &mut app, vec![]);
     }
-    assert!(shown.iter().any(|(text, _)| text == "ZIP 만들기"));
+    let cancel = work_child_label("취소").expect("ZIP 만들기 창이 떠 있어야 함");
     assert_eq!(
         work_rendered(),
         0,
@@ -367,7 +498,7 @@ fn main_modals_are_not_covered_by_separate_result_window() {
     );
 
     // ZIP 만들기를 닫으면 결과 창이 다시 나타남.
-    policy_click(&ctx, &mut app, "취소");
+    work_child_click(&ctx, &mut app, cancel);
     for _ in 0..3 {
         policy_render(&ctx, &mut app, vec![]);
     }
@@ -387,6 +518,7 @@ fn main_modals_are_not_covered_by_separate_result_window() {
     );
     policy_render(&ctx, &mut app, vec![]);
     WORK_CHILD.with(|child| child.borrow_mut().rendered = 0);
+    let mut shown = Vec::new();
     for _ in 0..5 {
         shown = policy_render(&ctx, &mut app, vec![]);
     }
@@ -409,4 +541,50 @@ fn main_modals_are_not_covered_by_separate_result_window() {
         work_rendered() > 0,
         "선택 창을 닫으면 결과 창이 다시 나타나야 함"
     );
+}
+
+#[test]
+fn unanswered_close_confirmation_does_not_close_when_work_finishes() {
+    let scratch = Folder::new();
+    let factory = FakeFactory::default();
+    let mut app = loaded(&scratch, &factory);
+    factory.state.borrow_mut().manual = true;
+    assert!(app.begin_extract());
+    factory
+        .state
+        .borrow_mut()
+        .frame(Event::Accepted { encryption: false });
+    let ctx = egui::Context::default();
+    for _ in 0..4 {
+        policy_render(&ctx, &mut app, vec![]);
+    }
+    app.model.request_close();
+    assert_eq!(app.model.close, Close::Confirm);
+
+    // 종료 확인 창에 답하지 않은 채 작업이 끝남.
+    factory
+        .state
+        .borrow_mut()
+        .finish(Outcome::Completed, Publication::None);
+    let mut shown = Vec::new();
+    for _ in 0..12 {
+        shown = policy_render(&ctx, &mut app, vec![]);
+    }
+    assert!(!app.model.busy());
+    assert_eq!(
+        app.model.close,
+        Close::Confirm,
+        "닫기를 승인하지 않았는데 앱이 닫힘"
+    );
+    assert!(
+        shown
+            .iter()
+            .any(|(text, _)| text == "작업이 끝났습니다. 창을 닫을까요?"),
+        "{shown:?}"
+    );
+
+    // 그 뒤에 닫기를 고르면 바로 닫힘.
+    policy_click(&ctx, &mut app, "닫기");
+    policy_render(&ctx, &mut app, vec![]);
+    assert_eq!(app.model.close, Close::Allowed);
 }

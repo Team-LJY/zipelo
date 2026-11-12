@@ -16,6 +16,52 @@ use std::{
 };
 
 const WORK_WIDTH: f32 = 480.0;
+const CREATE_WIDTH: f32 = 560.0;
+/// 처음 열 때의 높이. 그다음부터는 내용 높이에 맞춤.
+const CREATE_MIN_HEIGHT: f32 = 300.0;
+const CREATE_LIST_HEIGHT: f32 = 288.0;
+
+/// ZIP 만들기 창 목록의 한 행. 디스크에서 읽은 파일이나 폴더임.
+#[derive(Clone)]
+struct SourceRow {
+    name: String,
+    directory: bool,
+    bytes: Option<u64>,
+}
+
+fn source_row(path: &Path) -> SourceRow {
+    let metadata = std::fs::symlink_metadata(path).ok();
+    SourceRow {
+        name: path
+            .file_name()
+            .map(|name| name.to_string_lossy().into_owned())
+            .unwrap_or_default(),
+        // 심볼릭 링크는 따라가지 않으므로 폴더로 보이지 않음.
+        directory: metadata.as_ref().is_some_and(|m| m.is_dir()),
+        bytes: metadata.filter(|m| m.is_file()).map(|m| m.len()),
+    }
+}
+
+/// 폴더 안 항목을 메인 목록과 같은 순서(폴더 먼저, 이름순)로 읽음. 읽지 못하면 None.
+fn read_source_dir(dir: &Path) -> Option<std::rc::Rc<Vec<SourceRow>>> {
+    let mut rows = std::fs::read_dir(dir)
+        .ok()?
+        .filter_map(Result::ok)
+        .map(|entry| source_row(&entry.path()))
+        .collect::<Vec<_>>();
+    rows.sort_by(|a, b| {
+        b.directory
+            .cmp(&a.directory)
+            .then_with(|| a.name.cmp(&b.name))
+    });
+    Some(std::rc::Rc::new(rows))
+}
+
+/// 덮어쓴 뒤 버려 메모리에 암호가 남지 않게 함.
+fn wipe(value: &mut String) {
+    let mut bytes = std::mem::take(value).into_bytes();
+    bytes.fill(0);
+}
 const WORK_MIN_HEIGHT: f32 = 96.0;
 const WORK_MAX_HEIGHT: f32 = 520.0;
 const WORK_RESULT_MAX_HEIGHT: f32 = 220.0;
@@ -46,6 +92,84 @@ impl Default for WorkWindow {
     }
 }
 
+impl WorkWindow {
+    /// 부모 창 가운데에 열고, 사용자가 옮긴 상대 위치를 유지한 채 부모 창을 따라가게 함.
+    /// 앱을 쓰는 동안에만 부모 위에 두고, 처음 위치를 담은 ViewportBuilder를 돌려줌.
+    /// Wayland처럼 창 위치를 알 수 없으면 위치는 창 관리자에 맡김.
+    fn builder(
+        &mut self,
+        ctx: &egui::Context,
+        id: egui::ViewportId,
+        size: egui::Vec2,
+        title: &str,
+        decorations: bool,
+    ) -> egui::ViewportBuilder {
+        let (parent, parent_focused, now) = ctx.input(|i| {
+            (
+                i.viewport().outer_rect,
+                i.viewport().focused.unwrap_or(false),
+                i.time,
+            )
+        });
+        let (child, child_focused) = ctx.input(|i| {
+            i.raw.viewports.get(&id).map_or((None, false), |v| {
+                (v.outer_rect, v.focused.unwrap_or(false))
+            })
+        });
+        if !self.open {
+            // 처음 열 때 부모 창 가운데에 둠. 닫혔다 다시 열 때는 기억한 위치에 둠.
+            self.open = true;
+            self.initial = parent.map(|p| match self.offset {
+                Some(offset) => (p.min + offset).round(),
+                None => (p.center() - size / 2.0).round(),
+            });
+            self.offset = self.initial.zip(parent).map(|(c, p)| c - p.min);
+            self.parent = parent.map(|p| p.min);
+            self.expected = self.initial;
+            self.settle_until = now + 0.5;
+        }
+        if let (Some(parent), Some(child)) = (parent, child) {
+            let parent_moved = self.parent.is_some_and(|p| (p - parent.min).length() > 0.5);
+            let settled = self
+                .expected
+                .is_some_and(|e| (child.min - e).length() <= 2.0);
+            if settled || now >= self.settle_until {
+                self.settle_until = 0.0;
+            }
+            if parent_moved {
+                if let Some(offset) = self.offset {
+                    let target = (parent.min + offset).round();
+                    ctx.send_viewport_cmd_to(id, egui::ViewportCommand::OuterPosition(target));
+                    self.expected = Some(target);
+                    self.settle_until = now + 0.5;
+                }
+            } else if self.settle_until == 0.0 && !settled {
+                // 사용자가 자식 창을 옮긴 위치를 부모 기준으로 기억함.
+                self.offset = Some(child.min - parent.min);
+                self.expected = Some(child.min);
+            }
+            self.parent = Some(parent.min);
+        }
+        let mut builder = egui::ViewportBuilder::default()
+            .with_title(title)
+            .with_decorations(decorations)
+            .with_inner_size(size)
+            .with_resizable(false)
+            .with_minimize_button(false)
+            .with_maximize_button(false)
+            .with_taskbar(false)
+            .with_window_level(if parent_focused || child_focused {
+                egui::WindowLevel::AlwaysOnTop
+            } else {
+                egui::WindowLevel::Normal
+            });
+        if let Some(position) = self.initial {
+            builder = builder.with_position(position);
+        }
+        builder
+    }
+}
+
 struct Marquee {
     // 스크롤 중에도 시작점을 목록 좌표로 유지함.
     origin: egui::Pos2,
@@ -53,7 +177,8 @@ struct Marquee {
     moved: bool,
 }
 
-const LIST_ROW: f32 = 44.0;
+/// 파일 목록 한 행의 높이. 행 안의 크기 칸(theme::ROW)이 위아래 2px 여백으로 들어감.
+const LIST_ROW: f32 = 36.0;
 
 pub struct ArchiveApp {
     pub model: Model,
@@ -76,6 +201,21 @@ pub struct ArchiveApp {
     dialogs: Box<dyn Dialogs>,
     picker: Option<(Purpose, std::sync::mpsc::Receiver<DialogAnswer>)>,
     work: WorkWindow,
+    create_win: WorkWindow,
+    /// ZIP 만들기 창에서 보고 있는 폴더 (고른 폴더 기준 상대 경로, 비어 있으면 최상위).
+    create_folder: String,
+    create_listing: Option<(PathBuf, Option<std::rc::Rc<Vec<SourceRow>>>)>,
+    /// 마지막으로 누른 폴더 행 (이름, 프레임 번호, 시각). 두 번 누름을 직접 판단할 때 씀.
+    create_last_click: Option<(String, u64, f64)>,
+    /// ZIP 만들기 목록에서 한 번 눌러 선택한 항목 이름. 보고 있는 폴더가 바뀌면 지움.
+    create_selected: Option<String>,
+    zip_password: String,
+    zip_password_confirm: String,
+    zip_password_visible: bool,
+    /// 암호를 지웠으면 입력창의 실행 취소 기록도 다음 그리기 전에 지움.
+    forget_password_history: Vec<&'static str>,
+    /// 작업을 시작한 뒤 작업자가 암호를 요청하면 넘길 암호. 넘기거나 작업이 끝나면 지움.
+    pending_zip_password: Option<String>,
     custom_frame: bool,
     release_after_move: bool,
     folder: String,
@@ -118,6 +258,16 @@ impl ArchiveApp {
             dialogs: Box::new(NativeDialogs),
             picker: None,
             work: WorkWindow::default(),
+            create_win: WorkWindow::default(),
+            create_folder: String::new(),
+            create_listing: None,
+            create_last_click: None,
+            create_selected: None,
+            zip_password: String::new(),
+            zip_password_confirm: String::new(),
+            zip_password_visible: false,
+            forget_password_history: Vec::new(),
+            pending_zip_password: None,
             custom_frame: false,
             release_after_move: false,
             folder: String::new(),
@@ -171,6 +321,91 @@ impl ArchiveApp {
             bytes.fill(0);
         }
         self.password_visible = false;
+        // 이 함수는 암호 요청이 없는 동안 매 프레임 불리므로, 암호 창을 쓴 뒤에만 기록을 지움.
+        if self.password_challenge.is_some() {
+            self.forget_password_history
+                .extend(["archive-password-input", "archive-password-confirm"]);
+        }
+    }
+
+    /// 지운 암호가 입력창의 실행 취소(Ctrl+Z)로 되살아나지 않게 egui가 보관하는
+    /// 입력창 상태(실행 취소 기록 포함)를 지움.
+    fn forget_password_history(&mut self, ctx: &egui::Context) {
+        if self.forget_password_history.is_empty() {
+            return;
+        }
+        let names = std::mem::take(&mut self.forget_password_history);
+        ctx.data_mut(|data| {
+            for name in names {
+                data.remove::<egui::text_edit::TextEditState>(egui::Id::unique(name));
+            }
+        });
+    }
+
+    fn clear_zip_password(&mut self) {
+        wipe(&mut self.zip_password);
+        wipe(&mut self.zip_password_confirm);
+        if let Some(mut pending) = self.pending_zip_password.take() {
+            wipe(&mut pending);
+        }
+        self.zip_password_visible = false;
+        self.forget_password_history
+            .extend(["zip-password-input", "zip-password-confirm"]);
+    }
+
+    /// 암호로 보호하지 않거나, 두 암호가 같고 1~1024바이트이면 만들 수 있음.
+    fn zip_password_ready(&self) -> bool {
+        !self.aes256
+            || (!self.zip_password.is_empty()
+                && self.zip_password.len() <= 1024
+                && self.zip_password == self.zip_password_confirm)
+    }
+
+    fn close_create(&mut self) {
+        self.create = false;
+        self.ui_error = None;
+        self.clear_zip_password();
+        self.create_win = WorkWindow::default();
+    }
+
+    /// 압축하기: 묶을 폴더를 운영체제 폴더 선택 창에서 고른 뒤 ZIP 만들기 창을 엶.
+    fn choose_zip_folder(&mut self) {
+        if self.model.busy() || self.picker.is_some() {
+            return;
+        }
+        // 이미 열린 ZIP 만들기 창의 목록과 암호 설정은 새 폴더를 실제로 고른 뒤에만 바꿈.
+        // 선택을 취소하면 그대로 남음(apply_picker의 Purpose::Folder).
+        self.open_picker(Purpose::Folder);
+    }
+
+    /// 폴더 하나를 골랐으면 그 폴더 안을 목록으로 보여 줌. 여러 항목이면 그 항목들을 보여 줌.
+    fn create_root(&self) -> Option<PathBuf> {
+        (self.sources.len() == 1 && self.sources[0].is_dir()).then(|| self.sources[0].clone())
+    }
+
+    fn create_rows(&mut self) -> Option<std::rc::Rc<Vec<SourceRow>>> {
+        let Some(root) = self.create_root() else {
+            return Some(std::rc::Rc::new(
+                self.sources.iter().map(|path| source_row(path)).collect(),
+            ));
+        };
+        let dir = if self.create_folder.is_empty() {
+            root
+        } else {
+            root.join(&self.create_folder)
+        };
+        // 프레임마다 디스크를 읽지 않도록 보고 있는 폴더가 바뀔 때만 다시 읽음.
+        if self
+            .create_listing
+            .as_ref()
+            .is_none_or(|(path, _)| path != &dir)
+        {
+            let rows = read_source_dir(&dir);
+            self.create_listing = Some((dir, rows));
+        }
+        self.create_listing
+            .as_ref()
+            .and_then(|(_, rows)| rows.clone())
     }
 
     pub fn open_path(&mut self, archive: PathBuf) {
@@ -254,6 +489,9 @@ impl ArchiveApp {
                 self.sources.push(path);
             }
         }
+        self.create_folder.clear();
+        self.create_listing = None;
+        self.create_selected = None;
         self.create = true;
     }
 
@@ -345,8 +583,14 @@ impl ArchiveApp {
             };
             sources.push((path.clone(), name.to_owned()));
         }
+        if !self.zip_password_ready() {
+            self.ui_error = Some("두 암호가 같은지 확인하세요".into());
+            return;
+        }
         self.targets = Some([self.zip_name.clone()].into_iter().collect());
         self.directories.clear();
+        // 암호는 ZIP 만들기 창에서 받아 두었다가 작업자가 요청하면 넘김.
+        let password = self.aes256.then(|| std::mem::take(&mut self.zip_password));
         if self.start(Start::CreateZip {
             sources,
             output_file,
@@ -354,6 +598,11 @@ impl ArchiveApp {
             aes256: self.aes256,
         }) {
             self.create = false;
+            self.create_win = WorkWindow::default();
+            self.clear_zip_password();
+            self.pending_zip_password = password;
+        } else if let Some(password) = password {
+            self.zip_password = password;
         }
     }
 
@@ -434,7 +683,19 @@ impl ArchiveApp {
                             self.ui_error = Some("일반 압축파일을 선택하세요".into());
                         }
                     }
-                    Purpose::Files | Purpose::Folder => self.add_sources(paths),
+                    Purpose::Files => self.add_sources(paths),
+                    Purpose::Folder => {
+                        // 새 폴더로 처음부터 시작함. 고른 폴더가 쓸 수 없으면 기존 내용을 되돌림.
+                        let previous = std::mem::take(&mut self.sources);
+                        self.add_sources(paths);
+                        if self.sources.is_empty() {
+                            self.sources = previous;
+                        } else {
+                            self.aes256 = false;
+                            self.clear_zip_password();
+                            self.ui_error = None;
+                        }
+                    }
                     Purpose::Destination | Purpose::Retry => {
                         self.choose_destination(path);
                         self.selected_only = !self.model.selected.is_empty();
@@ -471,6 +732,8 @@ impl ArchiveApp {
                             self.begin_extract();
                         }
                     }
+                    // 저장 위치를 고르는 사이 ZIP 만들기 창을 닫았으면 아무 작업도 시작하지 않음.
+                    Purpose::SaveZip if !self.create => {}
                     Purpose::SaveZip => {
                         if let Some(name) = path.file_name().and_then(|name| name.to_str()) {
                             self.zip_name = name.to_owned();
@@ -499,9 +762,14 @@ impl ArchiveApp {
                     }
                     self.extract_selection(selection);
                 }
-                Start::CreateZip { .. } => {
+                Start::CreateZip { aes256, .. } => {
                     self.create = true;
-                    self.begin_zip();
+                    if aes256 {
+                        // 암호는 보관하지 않으므로 ZIP 만들기 창에서 다시 받음.
+                        self.aes256 = true;
+                    } else {
+                        self.begin_zip();
+                    }
                 }
             }
         }
@@ -526,7 +794,13 @@ impl ArchiveApp {
 
     fn poll(&mut self) {
         let busy = self.model.busy();
+        let close_before = self.model.close;
         self.model.poll();
+        if close_before == Close::Confirm && self.model.close == Close::Review {
+            // 종료 확인 창에 답하기 전에 작업이 끝났음. 사용자가 닫기를 승인하지 않았으므로
+            // 바로 닫지 않고 계속 물음(close_dialog가 작업이 끝난 문구로 바꿔 보여 줌).
+            self.model.close = Close::Confirm;
+        }
         if busy && !self.model.busy() {
             if let Some(path) = self.owned_destination.take() {
                 if !self.model.confirmed
@@ -544,12 +818,24 @@ impl ArchiveApp {
 
     pub fn show(&mut self, root: &mut egui::Ui) {
         let ctx = root.ctx().clone();
+        self.forget_password_history(&ctx);
         if !self.initialized {
             theme::apply(&ctx);
             self.initialized = true;
         }
         self.poll();
         self.poll_picker();
+        if self.model.challenge.is_some_and(|(_, _, encrypt)| encrypt)
+            && let Some(password) = self.pending_zip_password.take()
+        {
+            // ZIP 만들기 창에서 받은 암호를 작업자의 암호 요청에 바로 넘김.
+            self.model.password(password);
+        }
+        if !self.model.busy()
+            && let Some(mut pending) = self.pending_zip_password.take()
+        {
+            wipe(&mut pending);
+        }
         let challenge = self.model.challenge.map(|(id, _, _)| id);
         let new_challenge = challenge != self.password_challenge;
         if new_challenge || challenge.is_none() {
@@ -568,9 +854,15 @@ impl ArchiveApp {
         }
         if ctx.input(|i| i.viewport().close_requested()) {
             self.model.request_close();
+            // 실행 중인 작업이 없으면 결과 확인 안내 없이 바로 닫음.
+            self.model.acknowledge_close();
             if self.model.close != Close::Allowed {
                 ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
             }
+        }
+        if self.model.close == Close::Review {
+            // 작업을 취소하고 닫기로 한 뒤 정리가 끝난 경우도 안내 없이 닫음.
+            self.model.acknowledge_close();
         }
         if self.model.close == Close::Allowed {
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
@@ -614,10 +906,17 @@ impl ArchiveApp {
             .frame(
                 theme::panel(theme::PANEL)
                     .corner_radius(0)
-                    .inner_margin(egui::Margin::symmetric(16, 4)),
+                    .inner_margin(egui::Margin {
+                        left: 12,
+                        right: 12,
+                        // 버튼 안 내용은 보이는 모양 기준으로 가운데에 두므로 위아래를 같게 둠.
+                        top: 4,
+                        bottom: 4,
+                    }),
             )
             .show(root, |ui| {
                 ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing.x = 2.0;
                     let idle = !self.model.busy()
                         && self.model.close == Close::Open
                         && self.picker.is_none();
@@ -628,7 +927,7 @@ impl ArchiveApp {
                         self.open_picker(Purpose::Open);
                     }
                     if theme::tool(ui, "압축하기", theme::CREATE, idle, false).clicked() {
-                        self.show_create(false);
+                        self.choose_zip_folder();
                     }
                     if theme::tool(
                         ui,
@@ -644,37 +943,29 @@ impl ArchiveApp {
                 });
             });
         egui::Panel::bottom("archive-status")
+            .exact_size(theme::STATUS_HEIGHT)
+            .resizable(false)
             .frame(
-                theme::panel(theme::STRIPE)
-                    .corner_radius(0)
-                    .inner_margin(egui::Margin::symmetric(16, 8)),
+                egui::Frame::new()
+                    .fill(theme::STRIPE)
+                    .inner_margin(egui::Margin::symmetric(16, 0)),
             )
             .show(root, |ui| {
-                ui.horizontal(|ui| {
-                    let width = (ui.available_width() - ui.spacing().item_spacing.x) / 2.0;
-                    theme::bounded_text(
-                        ui,
-                        &format!(
-                            "{}개 항목",
-                            browser::rows(&self.model.entries, &self.folder, &self.search).len()
-                        ),
-                        width,
-                    );
-                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                        theme::bounded_text(
-                            ui,
-                            &format!(
-                                "선택 {}개",
-                                browser::rows(&self.model.entries, &self.folder, &self.search)
-                                    .iter()
-                                    .filter(|row| !row.ids.is_empty()
-                                        && row.ids.is_subset(&self.model.selected))
-                                    .count()
-                            ),
-                            width,
-                        );
-                    });
-                });
+                let rows = browser::rows(&self.model.entries, &self.folder, &self.search);
+                let selected = rows
+                    .iter()
+                    .filter(|row| !row.ids.is_empty() && row.ids.is_subset(&self.model.selected))
+                    .count();
+                let rect = ui.max_rect();
+                let half = (rect.width() - theme::SPACE) / 2.0;
+                theme::status_text(
+                    ui,
+                    rect,
+                    &format!("{}개 항목", rows.len()),
+                    half,
+                    Align::Min,
+                );
+                theme::status_text(ui, rect, &format!("선택 {selected}개"), half, Align::Max);
             });
         if ctx.embed_viewports() && self.work_visible() {
             // 별도 창을 만들 수 없을 때만 쓰는 대체 배치. 목록을 가리지 않도록 하단에 둠.
@@ -695,10 +986,9 @@ impl ArchiveApp {
                     self.empty(ui);
                 }
             });
+        self.forget_password_history(&ctx);
         self.work_window(&ctx);
-        if self.create && !self.model.busy() {
-            self.create_dialog(&ctx);
-        }
+        self.create_window(&ctx);
         if self.model.challenge.is_some() {
             self.password_dialog(&ctx, new_challenge);
         }
@@ -749,7 +1039,7 @@ impl ArchiveApp {
                             } else {
                                 "압축파일을 여기에 끌어 놓으세요"
                             })
-                            .size(20.0)
+                            .size(theme::FONT_LARGE)
                             .strong(),
                         );
                         ui.label("또는");
@@ -799,58 +1089,96 @@ impl ArchiveApp {
     }
 
     fn archive_list(&mut self, ui: &mut egui::Ui) {
-        theme::panel(theme::STRIPE).corner_radius(0).show(ui, |ui| {
-            ui.horizontal(|ui| {
-                let up = theme::icon_button(
-                    ui,
-                    "위로",
-                    theme::UP,
-                    !self.folder.is_empty() && !self.model.busy(),
-                );
-                if up.clicked() {
-                    let parent = self
-                        .folder
-                        .rsplit_once('/')
-                        .map_or("", |(parent, _)| parent)
-                        .to_owned();
-                    self.browse_folder(&parent);
-                }
-                ui.label("현재 경로");
-                let path = format!("/{}", self.folder);
-                let width = (ui.available_width() - 270.0).max(0.0);
-                egui::Frame::new()
-                    .fill(theme::PANEL)
-                    .stroke(egui::Stroke::new(1.0, theme::BORDER))
-                    .corner_radius(6)
-                    .inner_margin(egui::Margin::symmetric(8, 7))
-                    .show(ui, |ui| {
-                        theme::bounded_text(ui, &path, (width - 18.0).max(0.0));
-                    });
-                let (rect, _) =
-                    ui.allocate_exact_size(egui::vec2(20.0, 20.0), egui::Sense::hover());
-                theme::svg_icon(ui.painter(), rect, theme::SEARCH, theme::MUTED);
-                let search = ui.add_sized(
-                    [220.0, 36.0],
-                    egui::TextEdit::singleline(&mut self.search)
-                        .id(egui::Id::unique("archive-search"))
-                        .hint_text("파일 찾기"),
-                );
-                theme::focus(&search);
-                if search.changed() {
-                    self.clear_list_selection();
-                }
-            });
-        });
+        // 경로 줄은 입력란 높이만 차지하고 창 너비 전체를 회색으로 채움.
+        let path_row = egui::Frame::new()
+            .fill(theme::STRIPE)
+            .inner_margin(egui::Margin {
+                left: 8,
+                right: 12,
+                top: 0,
+                bottom: 0,
+            })
+            .show(ui, |ui| {
+                ui.set_min_width(ui.available_width());
+                ui.horizontal(|ui| {
+                    ui.set_height(theme::FIELD);
+                    // 간격은 아래에서 직접 넣어 위치가 흔들리지 않게 함.
+                    ui.spacing_mut().item_spacing.x = 0.0;
+                    let up = theme::flat_icon_button(
+                        ui,
+                        "위로",
+                        theme::UP,
+                        !self.folder.is_empty() && !self.model.busy(),
+                        egui::vec2(theme::FIELD, theme::FIELD),
+                    );
+                    if up.clicked() {
+                        let parent = self
+                            .folder
+                            .rsplit_once('/')
+                            .map_or("", |(parent, _)| parent)
+                            .to_owned();
+                        self.browse_folder(&parent);
+                    }
+                    ui.add_space(6.0);
+                    let path = format!("/{}", self.folder);
+                    let search_width = 240.0;
+                    let gap = 8.0;
+                    let path_width = (ui.available_width() - search_width - gap).max(0.0);
+                    // 두 입력란은 같은 높이의 칸을 받아 같은 세로 위치에 그림.
+                    let (path_rect, _) = ui.allocate_exact_size(
+                        egui::vec2(path_width, theme::FIELD),
+                        egui::Sense::hover(),
+                    );
+                    theme::field_frame(ui, path_rect, false);
+                    // 부모 배치에 영향을 주지 않는 하위 영역에 경로 글자를 그림.
+                    let mut text_ui = ui.new_child(
+                        egui::UiBuilder::new()
+                            .max_rect(path_rect.shrink2(egui::vec2(10.0, 0.0)))
+                            .layout(Layout::left_to_right(Align::Center)),
+                    );
+                    theme::bounded_text(&mut text_ui, &path, (path_width - 20.0).max(0.0));
+                    ui.add_space(gap);
+                    let (search_rect, _) = ui.allocate_exact_size(
+                        egui::vec2(search_width, theme::FIELD),
+                        egui::Sense::hover(),
+                    );
+                    let search_id = egui::Id::unique("archive-search");
+                    let focused = ui.memory(|m| m.has_focus(search_id));
+                    theme::field_frame(ui, search_rect, focused);
+                    let icon = egui::Rect::from_center_size(
+                        egui::pos2(search_rect.left() + 20.0, search_rect.center().y),
+                        egui::vec2(16.0, 16.0),
+                    );
+                    theme::svg_icon(ui.painter(), icon, theme::SEARCH, theme::MUTED);
+                    let search = ui.put(
+                        egui::Rect::from_min_max(
+                            egui::pos2(icon.right() + 8.0, search_rect.top() + 1.0),
+                            egui::pos2(search_rect.right() - 8.0, search_rect.bottom() - 1.0),
+                        ),
+                        egui::TextEdit::singleline(&mut self.search)
+                            .id(search_id)
+                            .frame(egui::Frame::NONE)
+                            .margin(egui::Margin::ZERO)
+                            .align(egui::Align2::LEFT_CENTER)
+                            .hint_text("파일 검색"),
+                    );
+                    if search.changed() {
+                        self.clear_list_selection();
+                    }
+                });
+            })
+            .response
+            .rect;
+        // 경로 줄 아래 한 줄이 목록과의 경계이자 입력란의 아래 테두리 역할을 함.
+        ui.painter().hline(
+            path_row.x_range(),
+            path_row.bottom() - 0.5,
+            egui::Stroke::new(1.0, theme::BORDER),
+        );
         let rows = browser::rows(&self.model.entries, &self.folder, &self.search);
 
-        let name_width = (ui.available_width() - 16.0 - 28.0 - 96.0 - 64.0 - 40.0).max(120.0);
-        ui.horizontal(|ui| {
-            ui.add_space(16.0 + 28.0);
-            theme::column_label(ui, RichText::new("이름").strong(), name_width, Align::Min);
-            theme::column_label(ui, "크기", 96.0, Align::Max);
-            theme::column_label(ui, "암호", 64.0, Align::Min);
-        });
-        ui.separator();
+        // 열 제목 줄 없이 바로 목록을 보여 줌. 이름과 크기는 내용으로 구분됨.
+        let name_width = (ui.available_width() - 16.0 - 28.0 - 96.0 - 40.0).max(120.0);
         let active = !self.model.busy()
             && !self.create
             && self.model.challenge.is_none()
@@ -889,7 +1217,10 @@ impl ArchiveApp {
             .show_viewport(ui, |ui, viewport| {
                 let origin = ui.max_rect().min;
                 let clip = ui.clip_rect();
-                let width = (ui.available_width() - 24.0).max(0.0);
+                // 행을 누르는 영역은 오른쪽 24px을 비워 둠. 목록이 길어도 그 빈 곳에서
+                // 끌어서 선택을 시작할 수 있음. 행 배경(선택, 마우스 올림)은 너비를 꽉 채움.
+                let full_width = ui.available_width();
+                let width = (full_width - 24.0).max(0.0);
                 ui.set_min_height((rows.len() as f32 * LIST_ROW).max(viewport.height()));
                 let point = ui.input(|i| i.pointer.interact_pos());
                 if active && let Some(point) = point {
@@ -974,6 +1305,7 @@ impl ArchiveApp {
                             },
                         )
                         .on_hover_text(&row.name);
+                    theme::pointer(&response);
                     response.widget_info(|| {
                         egui::WidgetInfo::selected(
                             egui::Role::ListBoxOption,
@@ -995,9 +1327,12 @@ impl ArchiveApp {
                             )
                         });
                     }
-                    if selected {
-                        ui.painter().rect_filled(rect, 0, theme::SELECTED);
-                    }
+                    theme::row_background(
+                        ui,
+                        egui::Rect::from_min_size(rect.min, egui::vec2(full_width, LIST_ROW)),
+                        selected,
+                        response.hovered(),
+                    );
                     if response.clicked() {
                         background.request_focus();
                         let modifiers = ui.input(|i| i.modifiers);
@@ -1011,46 +1346,34 @@ impl ArchiveApp {
                     if row.directory && response.double_clicked() {
                         open = Some(row.path.clone());
                     }
-                    ui.scope_builder(
-                        egui::UiBuilder::new()
-                            .max_rect(rect.shrink2(egui::vec2(0.0, 4.0)))
-                            .layout(Layout::left_to_right(Align::Center)),
-                        |ui| {
-                            ui.style_mut().interaction.selectable_labels = false;
-                            ui.add_space(16.0);
-                            theme::icon(
-                                ui,
-                                if row.directory {
-                                    Icon::Folder
-                                } else {
-                                    Icon::File
-                                },
-                                20.0,
-                            );
-                            theme::bounded_text(ui, &row.name, name_width);
-                            theme::column_label(
-                                ui,
-                                if row.directory {
-                                    "0 B".into()
-                                } else {
-                                    row.bytes
-                                        .map(present::bytes_text)
-                                        .unwrap_or_else(|| "—".into())
-                                },
-                                96.0,
-                                Align::Max,
-                            );
-                            if row.encrypted {
-                                theme::icon(ui, Icon::Lock, 16.0);
-                            }
+                    // 암호가 걸린 항목은 이름 앞에 *를 붙이고, 툴팁은 실제 이름을 보여 줌.
+                    let name = if row.encrypted {
+                        format!("*{}", row.name)
+                    } else {
+                        row.name.clone()
+                    };
+                    Self::entry_cells(
+                        ui,
+                        rect,
+                        row.directory,
+                        &name,
+                        &row.name,
+                        if row.directory {
+                            "0 B".into()
+                        } else {
+                            row.bytes
+                                .map(present::bytes_text)
+                                .unwrap_or_else(|| "—".into())
                         },
+                        name_width,
                     );
                     if active
                         && self.list_cursor == Some(index)
                         && (response.has_focus() || background.has_focus())
                     {
                         ui.painter().rect_stroke(
-                            rect.shrink(1.0),
+                            egui::Rect::from_min_size(rect.min, egui::vec2(full_width, LIST_ROW))
+                                .shrink(1.0),
                             0,
                             egui::Stroke::new(1.0, theme::BLUE),
                             egui::StrokeKind::Inside,
@@ -1233,7 +1556,8 @@ impl ArchiveApp {
         self.model.busy() || self.result_visible() || (self.ui_error.is_some() && !self.create)
     }
 
-    /// 메인 창 가운데에 모달(ZIP 만들기, 암호 입력, 종료 확인, 파일 선택 안내)이 떠 있는지.
+    /// 메인 창 가운데에 모달(암호 입력, 종료 확인, 파일 선택 안내)이나 같은 자리에 뜨는
+    /// ZIP 만들기 창이 떠 있는지. 닫기가 정해진 뒤(Allowed)에도 결과 창을 다시 띄우지 않음.
     /// 모달이 늘어도 진행·결과 창 숨김 규칙은 이 한 곳만 보면 되도록 모음.
     fn main_modal_open(&self) -> bool {
         (self.create && !self.model.busy())
@@ -1258,58 +1582,6 @@ impl ArchiveApp {
             return;
         }
         let id = egui::ViewportId::from_hash_of("archive-work");
-        let (parent, parent_focused, now) = ctx.input(|i| {
-            (
-                i.viewport().outer_rect,
-                i.viewport().focused.unwrap_or(false),
-                i.time,
-            )
-        });
-        let (child, child_focused) = ctx.input(|i| {
-            i.raw.viewports.get(&id).map_or((None, false), |v| {
-                (v.outer_rect, v.focused.unwrap_or(false))
-            })
-        });
-        let size = egui::vec2(WORK_WIDTH, self.work.height);
-        if !self.work.open {
-            // 처음 열 때 부모 창 가운데에 둠. 암호 입력 뒤 다시 열 때는 기억한 위치에 둠.
-            // Wayland처럼 위치를 알 수 없으면 창 관리자에 맡김.
-            self.work.open = true;
-            self.work.initial = parent.map(|p| match self.work.offset {
-                Some(offset) => (p.min + offset).round(),
-                None => (p.center() - size / 2.0).round(),
-            });
-            self.work.offset = self.work.initial.zip(parent).map(|(c, p)| c - p.min);
-            self.work.parent = parent.map(|p| p.min);
-            self.work.expected = self.work.initial;
-            self.work.settle_until = now + 0.5;
-        }
-        if let (Some(parent), Some(child)) = (parent, child) {
-            let parent_moved = self
-                .work
-                .parent
-                .is_some_and(|p| (p - parent.min).length() > 0.5);
-            let settled = self
-                .work
-                .expected
-                .is_some_and(|e| (child.min - e).length() <= 2.0);
-            if settled || now >= self.work.settle_until {
-                self.work.settle_until = 0.0;
-            }
-            if parent_moved {
-                if let Some(offset) = self.work.offset {
-                    let target = (parent.min + offset).round();
-                    ctx.send_viewport_cmd_to(id, egui::ViewportCommand::OuterPosition(target));
-                    self.work.expected = Some(target);
-                    self.work.settle_until = now + 0.5;
-                }
-            } else if self.work.settle_until == 0.0 && !settled {
-                // 사용자가 자식 창을 옮긴 위치를 부모 기준으로 기억함.
-                self.work.offset = Some(child.min - parent.min);
-                self.work.expected = Some(child.min);
-            }
-            self.work.parent = Some(parent.min);
-        }
         let title = if self.model.busy() {
             present::activity_text(
                 &self.model,
@@ -1321,23 +1593,10 @@ impl ArchiveApp {
         };
         let window_title = format!("{title} — Zipelo");
         let custom_frame = self.custom_frame;
-        let mut builder = egui::ViewportBuilder::default()
-            .with_title(window_title.clone())
-            .with_decorations(!custom_frame)
-            .with_inner_size(size)
-            .with_resizable(false)
-            .with_minimize_button(false)
-            .with_maximize_button(false)
-            .with_taskbar(false)
-            // 앱을 쓰는 동안에만 부모 창 위에 유지함.
-            .with_window_level(if parent_focused || child_focused {
-                egui::WindowLevel::AlwaysOnTop
-            } else {
-                egui::WindowLevel::Normal
-            });
-        if let Some(position) = self.work.initial {
-            builder = builder.with_position(position);
-        }
+        let size = egui::vec2(WORK_WIDTH, self.work.height);
+        let builder = self
+            .work
+            .builder(ctx, id, size, &window_title, !custom_frame);
         let height = ctx.show_viewport_immediate(id, builder, |ui, class| {
             if ui.ctx().input(|i| i.viewport().close_requested()) {
                 if self.model.busy() {
@@ -1634,6 +1893,7 @@ impl ArchiveApp {
                     &mut self.checked_destination,
                     "기존 풀 위치 폴더를 확인했습니다",
                 );
+                theme::pointer(&response);
                 theme::focus(&response);
             }
             ui.horizontal(|ui| {
@@ -1736,127 +1996,354 @@ impl ArchiveApp {
         }
     }
 
-    fn create_dialog(&mut self, ctx: &egui::Context) {
-        let mut compress = false;
-        let mut pick = None;
-        let mut cancel = false;
-        let modal = egui::Modal::new(egui::Id::unique("create-zip")).show(ctx, |ui| {
-            ui.set_width((ctx.content_rect().width() - 64.0).min(600.0));
-            ui.horizontal(|ui| {
-                ui.heading("ZIP 만들기");
-                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    let close = theme::icon_button(ui, "닫기", theme::CLOSE, true);
-                    theme::focus(&close);
-                    cancel = close.clicked();
-                });
-            });
-            if let Some(error) = &self.ui_error {
-                Self::error_notice(ui, error);
-            }
-            egui::ScrollArea::vertical()
-                .id_salt("create-fields")
-                .max_height(
-                    (ctx.content_rect().height()
-                        - 180.0
-                        - if self.ui_error.is_some() { 96.0 } else { 0.0 })
-                    .max(120.0),
-                )
-                .show(ui, |ui| {
-                    ui.add_space(16.0);
-                    let frame = theme::panel(theme::STRIPE)
-                        .stroke(egui::Stroke::new(1.0, theme::DASH))
-                        .inner_margin(egui::Margin::same(24));
-                    let area = frame
-                        .show(ui, |ui| {
-                            ui.set_min_size(egui::vec2(ui.available_width(), 144.0));
-                            ui.vertical_centered(|ui| {
-                                theme::icon(ui, Icon::File, 44.0);
-                                ui.add_space(16.0);
-                                ui.label(
-                                    RichText::new("파일이나 폴더를 여기에 끌어 놓으세요")
-                                        .size(18.0),
-                                );
-                            });
-                        })
-                        .response;
-                    let drop = ui.interact(
-                        area.rect,
-                        egui::Id::unique("zip-source-drop"),
-                        egui::Sense::click(),
-                    );
-                    theme::focus(&drop);
-                    drop.widget_info(|| {
-                        egui::WidgetInfo::labeled(egui::Role::Button, true, "파일 추가")
-                    });
-                    if drop.clicked() {
-                        pick = Some(Purpose::Files);
-                    }
-                    egui::ScrollArea::vertical()
-                        .id_salt("zip-sources")
-                        .max_height(86.0)
-                        .show(ui, |ui| {
-                            let mut remove = None;
-                            for (index, path) in self.sources.iter().enumerate() {
-                                ui.horizontal(|ui| {
-                                    theme::icon(
-                                        ui,
-                                        if path.is_dir() {
-                                            Icon::Folder
-                                        } else {
-                                            Icon::File
-                                        },
-                                        20.0,
-                                    );
-                                    let name =
-                                        path.file_name().unwrap_or_default().to_string_lossy();
-                                    theme::bounded_text(
-                                        ui,
-                                        &name,
-                                        (ui.available_width() - 72.0).max(0.0),
-                                    )
-                                    .on_hover_text(path.display().to_string());
-                                    if ui.button("빼기").clicked() {
-                                        remove = Some(index);
-                                    }
-                                });
-                            }
-                            if let Some(index) = remove {
-                                self.sources.remove(index);
-                            }
-                        });
-                    ui.horizontal(|ui| {
-                        if theme::action(ui, "파일 추가", false, true).clicked() {
-                            pick = Some(Purpose::Files);
-                        }
-                        if theme::action(ui, "폴더 추가", false, true).clicked() {
-                            pick = Some(Purpose::Folder);
-                        }
-                    });
-                    ui.add_space(16.0);
-                    ui.horizontal(|ui| {
-                        theme::icon(ui, Icon::Lock, 24.0);
-                        ui.strong("암호화");
-                    });
-                    let check = ui.checkbox(&mut self.aes256, "암호로 보호하기");
-                    theme::focus(&check);
-                    ui.add_space(16.0);
-                });
-            let (dismiss, confirm) =
-                theme::action_pair(ui, "취소", Some(("압축하기", !self.sources.is_empty())));
-            cancel |= dismiss;
-            compress = confirm;
-        });
-        if cancel || modal.should_close() {
-            self.create = false;
-            self.ui_error = None;
+    /// 파일 목록 한 행의 아이콘, 이름, 크기 칸. 메인 목록과 ZIP 만들기 창이 같이 씀.
+    fn entry_cells(
+        ui: &mut egui::Ui,
+        rect: egui::Rect,
+        directory: bool,
+        name: &str,
+        hover: &str,
+        size: String,
+        name_width: f32,
+    ) {
+        ui.scope_builder(
+            egui::UiBuilder::new()
+                .max_rect(rect.shrink2(egui::vec2(0.0, 2.0)))
+                .layout(Layout::left_to_right(Align::Center)),
+            |ui| {
+                ui.style_mut().interaction.selectable_labels = false;
+                ui.add_space(16.0);
+                theme::icon(ui, if directory { Icon::Folder } else { Icon::File }, 20.0);
+                theme::bounded_text_hover(ui, name, hover, name_width);
+                theme::column_label(ui, size, 96.0, Align::Max);
+            },
+        );
+    }
+
+    /// ZIP 만들기를 진행 창처럼 부모 창을 따라가는 별도 창으로 띄움.
+    /// 별도 창을 만들 수 없는 환경(시험 등)에서는 메인 창 안의 모달로 띄움.
+    fn create_window(&mut self, ctx: &egui::Context) {
+        if !self.create || self.model.busy() {
+            self.create_win = WorkWindow::default();
             return;
         }
-        if let Some(purpose) = pick {
-            self.open_picker(purpose);
+        if ctx.embed_viewports() {
+            let mut close = false;
+            let modal = egui::Modal::new(egui::Id::unique("create-zip")).show(ctx, |ui| {
+                ui.set_width((ctx.content_rect().width() - 64.0).min(CREATE_WIDTH));
+                ui.horizontal(|ui| {
+                    ui.heading("ZIP 만들기");
+                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                        let button = theme::icon_button(ui, "닫기", theme::CLOSE, true);
+                        close = button.clicked();
+                    });
+                });
+                close |= self.create_area(ui);
+                ui.add_space(theme::SPACE);
+                close |= self.create_actions(ui);
+            });
+            if close || modal.should_close() {
+                self.close_create();
+            }
+            return;
         }
+        let id = egui::ViewportId::from_hash_of("archive-create");
+        let title = "ZIP 만들기 — Zipelo";
+        let custom_frame = self.custom_frame;
+        if !self.create_win.open {
+            self.create_win.height = self.create_win.height.max(CREATE_MIN_HEIGHT);
+        }
+        let size = egui::vec2(CREATE_WIDTH, self.create_win.height);
+        let builder = self.create_win.builder(ctx, id, size, title, !custom_frame);
+        let mut close = false;
+        let height = ctx.show_viewport_immediate(id, builder, |ui, class| {
+            if ui.ctx().input(|i| i.viewport().close_requested()) {
+                close = true;
+            }
+            if class == egui::ViewportClass::EmbeddedWindow {
+                ui.set_width(CREATE_WIDTH);
+                close |= self.create_area(ui);
+                close |= self.create_actions(ui);
+                return None;
+            }
+            let mut chrome = 0.0;
+            if custom_frame {
+                window_frame::title_bar(
+                    ui,
+                    "create",
+                    title,
+                    window_frame::Buttons {
+                        minimize: false,
+                        maximize: false,
+                    },
+                );
+                window_frame::edges(ui.ctx(), false);
+                chrome = window_frame::TITLE_HEIGHT;
+            }
+            // 버튼은 창 오른쪽 아래에 여백을 두고 고정함. 위 내용이 바뀌어도 자리가 같음.
+            let actions = egui::Panel::bottom(egui::Id::unique("create-actions"))
+                .resizable(false)
+                .show_separator_line(false)
+                .frame(
+                    egui::Frame::new()
+                        .fill(theme::PANEL)
+                        .inner_margin(egui::Margin {
+                            left: theme::PAD,
+                            right: theme::PAD,
+                            top: 0,
+                            bottom: theme::PAD,
+                        }),
+                )
+                .show(ui, |ui| close |= self.create_actions(ui))
+                .response
+                .rect
+                .height();
+            let margin = theme::PAD as f32;
+            egui::CentralPanel::default()
+                .frame(theme::panel(theme::PANEL).corner_radius(0))
+                .show(ui, |ui| {
+                    let content = ui
+                        .vertical(|ui| close |= self.create_area(ui))
+                        .response
+                        .rect;
+                    Some(content.height() + 2.0 * margin + chrome + actions)
+                })
+                .inner
+        });
+        if let Some(height) = height {
+            let height = height.clamp(CREATE_MIN_HEIGHT, 900.0).ceil();
+            if (height - self.create_win.height).abs() > 1.0 {
+                self.create_win.height = height;
+            }
+        }
+        if close {
+            self.close_create();
+        }
+    }
+
+    /// ZIP 만들기 내용. 닫기를 눌렀으면 true를 돌려줌.
+    fn create_area(&mut self, ui: &mut egui::Ui) -> bool {
+        // 저장 위치 선택 창이 응답을 기다리는 동안에는 버튼을 막음.
+        let enabled = self.picker.is_none();
+        ui.add_enabled_ui(enabled, |ui| self.create_contents(ui))
+            .inner
+    }
+
+    fn create_contents(&mut self, ui: &mut egui::Ui) -> bool {
+        let rows = self.create_rows();
+        let root = self.create_root();
+
+        // 경로 줄: 메인 화면처럼 위로 버튼과 현재 폴더 경로.
+        ui.horizontal(|ui| {
+            ui.set_height(theme::FIELD);
+            ui.spacing_mut().item_spacing.x = 0.0;
+            let up = theme::flat_icon_button(
+                ui,
+                "위로",
+                theme::UP,
+                !self.create_folder.is_empty(),
+                egui::vec2(theme::FIELD, theme::FIELD),
+            );
+            if up.clicked() {
+                self.create_folder = self
+                    .create_folder
+                    .rsplit_once('/')
+                    .map_or("", |(parent, _)| parent)
+                    .to_owned();
+                self.create_selected = None;
+            }
+            ui.add_space(6.0);
+            let path = match &root {
+                Some(root) => {
+                    let name = root.file_name().unwrap_or_default().to_string_lossy();
+                    if self.create_folder.is_empty() {
+                        format!("/{name}")
+                    } else {
+                        format!("/{name}/{}", self.create_folder)
+                    }
+                }
+                None => "/".to_owned(),
+            };
+            let (rect, _) = ui.allocate_exact_size(
+                egui::vec2(ui.available_width(), theme::FIELD),
+                egui::Sense::hover(),
+            );
+            theme::boxed_field(ui, rect);
+            theme::field_text(ui, rect, &path);
+        });
+        ui.add_space(theme::SPACE);
+
+        // 파일 목록: 메인 화면 목록과 같은 행 모양. 폴더를 두 번 누르면 들어감.
+        let mut enter = None;
+        egui::Frame::new()
+            .stroke(egui::Stroke::new(1.0, theme::BORDER))
+            .show(ui, |ui| {
+                ui.set_min_size(egui::vec2(ui.available_width(), CREATE_LIST_HEIGHT));
+                ui.set_max_height(CREATE_LIST_HEIGHT);
+                let message = match &rows {
+                    None => Some("폴더를 읽지 못했습니다"),
+                    Some(rows) if rows.is_empty() => Some("이 폴더는 비어 있습니다"),
+                    Some(_) => None,
+                };
+                if let Some(message) = message {
+                    ui.centered_and_justified(|ui| ui.label(message));
+                    return;
+                }
+                let rows = rows.unwrap();
+                let name_width = (ui.available_width() - 16.0 - 28.0 - 96.0 - 24.0).max(80.0);
+                egui::ScrollArea::vertical()
+                    .id_salt("create-rows")
+                    .auto_shrink([false, false])
+                    .max_height(CREATE_LIST_HEIGHT)
+                    .show_rows(ui, LIST_ROW, rows.len(), |ui, range| {
+                        for row in &rows[range] {
+                            let (rect, response) = ui.allocate_exact_size(
+                                egui::vec2(ui.available_width(), LIST_ROW),
+                                egui::Sense::click(),
+                            );
+                            let response = response.on_hover_text(&row.name);
+                            theme::pointer(&response);
+                            response.widget_info(|| {
+                                egui::WidgetInfo::labeled(
+                                    egui::Role::ListBoxOption,
+                                    true,
+                                    &row.name,
+                                )
+                            });
+                            if response.clicked() {
+                                self.create_selected = Some(row.name.clone());
+                            }
+                            theme::row_background(
+                                ui,
+                                rect,
+                                self.create_selected.as_deref() == Some(row.name.as_str()),
+                                response.hovered(),
+                            );
+                            if row.directory && root.is_some() && response.clicked() {
+                                // egui가 한 프레임을 다시 그리면 두 번 누름 정보가 사라질 수 있어
+                                // 같은 폴더를 다른 프레임에서 0.4초 안에 다시 누르면 두 번 누름으로 봄.
+                                let frame = ui.ctx().cumulative_frame_nr();
+                                let time = ui.input(|i| i.time);
+                                match &self.create_last_click {
+                                    Some((name, last_frame, last_time))
+                                        if name == &row.name
+                                            && *last_frame != frame
+                                            && time - last_time < 0.4 =>
+                                    {
+                                        enter = Some(row.name.clone());
+                                        self.create_last_click = None;
+                                    }
+                                    Some((name, last_frame, _))
+                                        if name == &row.name && *last_frame == frame => {}
+                                    _ => {
+                                        self.create_last_click =
+                                            Some((row.name.clone(), frame, time));
+                                    }
+                                }
+                            }
+                            Self::entry_cells(
+                                ui,
+                                rect,
+                                row.directory,
+                                &row.name,
+                                &row.name,
+                                row.bytes.map(present::bytes_text).unwrap_or_default(),
+                                name_width,
+                            );
+                        }
+                    });
+            });
+        if let Some(name) = enter {
+            self.create_folder = if self.create_folder.is_empty() {
+                name
+            } else {
+                format!("{}/{name}", self.create_folder)
+            };
+            self.create_selected = None;
+        }
+        ui.add_space(theme::SPACE);
+
+        if let Some(error) = &self.ui_error {
+            Self::error_notice(ui, error);
+        }
+
+        // 암호: 체크하면 바로 아래에 암호와 암호 확인 칸을 보여 줌.
+        let check = ui.checkbox(&mut self.aes256, "암호로 보호하기");
+        theme::pointer(&check);
+        theme::focus(&check);
+        if self.aes256 {
+            let label_width = 72.0;
+            ui.horizontal(|ui| {
+                ui.add_sized([label_width, theme::FIELD], egui::Label::new("암호"));
+                let toggle = if self.zip_password_visible {
+                    "숨기기"
+                } else {
+                    "보기"
+                };
+                let toggle_width = 72.0;
+                let edit = ui.add_sized(
+                    [
+                        (ui.available_width() - toggle_width - theme::SPACE).max(80.0),
+                        theme::FIELD,
+                    ],
+                    egui::TextEdit::singleline(&mut self.zip_password)
+                        .password(!self.zip_password_visible)
+                        .id(egui::Id::unique("zip-password-input"))
+                        .char_limit(1024)
+                        .align(egui::Align2::LEFT_CENTER),
+                );
+                theme::focus(&edit);
+                if theme::action(ui, toggle, false, true).clicked() {
+                    self.zip_password_visible = !self.zip_password_visible;
+                }
+            });
+            ui.horizontal(|ui| {
+                ui.add_sized([label_width, theme::FIELD], egui::Label::new("암호 확인"));
+                let edit = ui.add_sized(
+                    [
+                        (ui.available_width() - 72.0 - theme::SPACE).max(80.0),
+                        theme::FIELD,
+                    ],
+                    egui::TextEdit::singleline(&mut self.zip_password_confirm)
+                        .password(!self.zip_password_visible)
+                        .id(egui::Id::unique("zip-password-confirm"))
+                        .char_limit(1024)
+                        .align(egui::Align2::LEFT_CENTER),
+                );
+                theme::focus(&edit);
+            });
+            if self.zip_password.len() > 1024 {
+                ui.colored_label(theme::ERROR, "암호는 UTF-8 1~1024바이트로 입력하세요");
+            } else if !self.zip_password_confirm.is_empty()
+                && self.zip_password != self.zip_password_confirm
+            {
+                ui.colored_label(theme::ERROR, "두 암호가 같지 않습니다");
+            }
+            ui.label(RichText::new("암호를 잊으면 파일을 열 수 없습니다.").color(theme::MUTED));
+        } else if check.changed()
+            || !self.zip_password.is_empty()
+            || !self.zip_password_confirm.is_empty()
+        {
+            // 체크를 해제하면 입력한 암호와 그 실행 취소 기록을 남겨 두지 않음.
+            // 입력했다가 모두 지운 경우도 기록에는 남아 있으므로 해제한 순간 함께 지움.
+            self.clear_zip_password();
+        }
+        false
+    }
+
+    /// 취소와 압축하기 버튼. 취소를 눌렀으면 true.
+    fn create_actions(&mut self, ui: &mut egui::Ui) -> bool {
+        let ready = !self.sources.is_empty() && self.zip_password_ready();
+        let enabled = self.picker.is_none();
+        let (cancel, compress) = ui
+            .add_enabled_ui(enabled, |ui| {
+                theme::action_pair(ui, "취소", Some(("압축하기", ready)))
+            })
+            .inner;
         if compress {
             self.open_picker(Purpose::SaveZip);
         }
+        cancel
     }
 
     fn password_dialog(&mut self, ctx: &egui::Context, new_challenge: bool) {
@@ -1952,20 +2439,41 @@ impl ArchiveApp {
     }
 
     fn close_dialog(&mut self, ctx: &egui::Context) {
-        if self.model.close == Close::Open || self.model.close == Close::Allowed {
+        // Review(결과 확인 후 닫기)는 show()에서 바로 확인 처리하므로 그리지 않음.
+        if matches!(
+            self.model.close,
+            Close::Open | Close::Allowed | Close::Review
+        ) {
             return;
         }
         egui::Modal::new(egui::Id::unique("archive-close")).show(ctx, |ui| {
             ui.set_width(420.0);
             match self.model.close {
                 Close::Confirm => {
-                    ui.heading("작업 중 닫기");
-                    ui.label("작업을 취소하고 닫을까요?");
+                    // 답하기 전에 작업이 끝났으면 취소할 작업이 없으므로 닫을지만 물음.
+                    let busy = self.model.busy();
+                    let (heading, text, keep, close) = if busy {
+                        (
+                            "작업 중 닫기",
+                            "작업을 취소하고 닫을까요?",
+                            "계속 작업",
+                            "취소하고 닫기",
+                        )
+                    } else {
+                        (
+                            "닫기",
+                            "작업이 끝났습니다. 창을 닫을까요?",
+                            "열어 두기",
+                            "닫기",
+                        )
+                    };
+                    ui.heading(heading);
+                    ui.label(text);
                     ui.horizontal(|ui| {
-                        if theme::action(ui, "계속 작업", false, true).clicked() {
+                        if theme::action(ui, keep, false, true).clicked() {
                             self.model.keep_open();
                         }
-                        if theme::action(ui, "취소하고 닫기", true, true).clicked() {
+                        if theme::action(ui, close, true, true).clicked() {
                             self.clear_password();
                             self.model.confirm_close();
                         }
@@ -1977,53 +2485,6 @@ impl ArchiveApp {
                     if theme::action(ui, "닫기 취소", false, true).clicked() {
                         self.model.keep_open();
                     }
-                }
-                Close::Review => {
-                    let creating = matches!(self.last_request, Some(Start::CreateZip { .. }));
-                    ui.heading("결과 확인 후 닫기");
-                    let wrote = self
-                        .last_request
-                        .as_ref()
-                        .is_some_and(|request| !matches!(request, Start::List { .. }));
-                    ui.label(if !wrote {
-                        "프로그램을 닫을까요?".to_owned()
-                    } else if self.model.confirmed {
-                        "작업 결과를 확인한 뒤 닫으세요".to_owned()
-                    } else {
-                        present::operation_text(present::UNCERTAIN, creating)
-                    });
-                    egui::ScrollArea::vertical()
-                        .max_height(160.0)
-                        .show(ui, |ui| {
-                            if let Some(code) = self.model.terminal.as_ref().and_then(|t| t.error) {
-                                ui.colored_label(
-                                    theme::ERROR,
-                                    present::operation_text(present::error_text(code), creating),
-                                );
-                            }
-                            if wrote {
-                                for warning in present::warnings(
-                                    self.model.terminal.as_ref(),
-                                    self.model.confirmed,
-                                    self.targets.as_ref(),
-                                    &self.directories,
-                                    &self.model.outputs,
-                                ) {
-                                    ui.colored_label(
-                                        theme::WARNING,
-                                        present::operation_text(warning, creating),
-                                    );
-                                }
-                            }
-                        });
-                    ui.horizontal(|ui| {
-                        if theme::action(ui, "계속 작업", false, true).clicked() {
-                            self.model.keep_open();
-                        }
-                        if theme::action(ui, "닫기", true, true).clicked() {
-                            self.model.acknowledge_close();
-                        }
-                    });
                 }
                 _ => {}
             }

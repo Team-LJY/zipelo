@@ -911,6 +911,7 @@ mod widgets {
     include!("explorer_selection.rs");
     include!("window_frame.rs");
     include!("work_window.rs");
+    include!("create_window.rs");
 }
 
 #[cfg(feature = "ui")]

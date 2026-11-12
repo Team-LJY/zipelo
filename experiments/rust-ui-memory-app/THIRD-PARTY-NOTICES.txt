@@ -5,3 +5,4 @@ Zipelo 의존성 고지 생성 안내
 로컬 registry의 원문과 잠금 체크섬을 확인하며 누락 시 패키지 생성을 중단함.
 이 안내 파일과 과거 시험용 보충 원문은 최종 배포 고지를 대신하지 않음.
 운영체제 기본 파일 창의 rfd 0.16.0(MIT)과 Linux xdg-portal 전이 의존성도 잠금 파일에서 수집함.
+앱에 포함한 Pretendard 1.3.9 글꼴(SIL OFL 1.1)의 원문도 같은 고지에 넣음. 출처는 src/assets/fonts/README.md임.

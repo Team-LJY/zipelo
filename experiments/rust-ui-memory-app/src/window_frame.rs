@@ -95,7 +95,7 @@ pub fn title_bar(root: &mut egui::Ui, id: &str, title: &str, buttons: Buttons) -
             // 버튼 영역을 피해 가운데에 제목을 그림.
             let reserved = rect.right() - right;
             let width = (rect.width() - 2.0 * reserved).max(0.0);
-            let font = FontId::proportional(theme::BODY - 2.0);
+            let font = FontId::proportional(theme::FONT_SMALL);
             let text = fit(ui, title, &font, width);
             ui.painter().text(
                 rect.center(),
@@ -140,6 +140,10 @@ fn start_move(ctx: &egui::Context, id: &str, bar: Rect, buttons_left: f32) -> bo
         origin = None;
         // 운영체제가 이동을 맡으므로 egui 쪽 끌기는 끝낸 것으로 처리함.
         ctx.stop_dragging();
+        // 이동이 끝나도 버튼 놓기가 오지 않아 egui가 버튼이 눌린 채로 알고 있으면
+        // 다른 버튼에 마우스를 올려도 반응하지 않음. 이 창의 마우스 상태를 비움.
+        // 메인 창뿐 아니라 입력 훅을 쓸 수 없는 자식 창에도 적용됨.
+        ctx.input_mut(|input| input.pointer = Default::default());
     }
     ctx.data_mut(|d| d.insert_temp(key, origin));
     start
@@ -160,6 +164,7 @@ fn window_button(ui: &mut egui::Ui, id: &str, rect: Rect, glyph: Glyph) -> egui:
         )
         .on_hover_text(label);
     response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, label));
+    theme::pointer(&response);
     let painter = ui.painter();
     if response.hovered() || response.is_pointer_button_down_on() {
         let fill = if glyph == Glyph::Close {

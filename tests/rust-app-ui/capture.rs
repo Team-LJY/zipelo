@@ -1,4 +1,4 @@
-use eframe::egui::{self, FontData, FontDefinitions, FontFamily, FontId, TextStyle};
+use eframe::egui::{self, FontId, TextStyle};
 use std::{collections::VecDeque, path::PathBuf};
 use zipelo_ui_memory_app::{archive_screen::ArchiveApp, archive_ui::*};
 #[path = "../../experiments/rust-ui-memory-app/src/renderer.rs"]
@@ -388,7 +388,9 @@ fn main() -> eframe::Result {
     std::fs::create_dir_all(&base).unwrap();
     std::fs::write(base.join("읽어주세요.txt"), "화면 검증 입력").unwrap();
     std::fs::create_dir_all(base.join("사진")).unwrap();
-    let font = system_font::load().map_err(|e| eframe::Error::AppCreation(Box::new(e)))?;
+    let fallback = system_font::load()
+        .ok()
+        .map(|font| (font.bytes, font.face_index));
     let title = format!("Zipelo UI capture {mode}");
     renderer::run_native(
         &title,
@@ -401,17 +403,10 @@ fn main() -> eframe::Result {
         || {
             let mode = mode.clone();
             let base = base.clone();
-            let bytes = font.bytes.clone();
-            let face_index = font.face_index;
+            let fallback = fallback.clone();
             Box::new(move |cc| {
-                let mut fonts = FontDefinitions::empty();
-                let mut data = FontData::from_owned(bytes.clone());
-                data.index = face_index;
-                fonts.font_data.insert("noto-kr".into(), data.into());
-                fonts
-                    .families
-                    .insert(FontFamily::Proportional, vec!["noto-kr".into()]);
-                cc.egui_ctx.set_fonts(fonts);
+                cc.egui_ctx
+                    .set_fonts(zipelo_ui_memory_app::archive_theme::fonts(fallback.clone()));
                 cc.egui_ctx.set_visuals(egui::Visuals::light());
                 cc.egui_ctx.style_mut_of(egui::Theme::Light, |style| {
                     style
