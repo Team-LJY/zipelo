@@ -679,7 +679,7 @@ impl ArchiveApp {
                                     ),
                                     row.id.with("content"),
                                     if enabled {
-                                        egui::Sense::click()
+                                        egui::Sense::CLICK
                                     } else {
                                         egui::Sense::hover()
                                     },
