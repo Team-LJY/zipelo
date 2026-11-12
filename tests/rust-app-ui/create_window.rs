@@ -49,7 +49,14 @@ fn create_window_lists_chosen_folder_and_browses_into_subfolders() {
     let factory = FakeFactory::default();
     let (mut app, ctx) = create_from_folder(&scratch, &factory);
     let shown = policy_render(&ctx, &mut app, vec![]);
-    for expected in ["ZIP 만들기", "/photos", "trip", "a.txt", "암호로 보호하기", "취소"] {
+    for expected in [
+        "ZIP 만들기",
+        "/photos",
+        "trip",
+        "a.txt",
+        "암호로 보호하기",
+        "취소",
+    ] {
         assert!(
             shown.iter().any(|(text, _)| text == expected),
             "{expected}: {shown:?}"
@@ -115,7 +122,11 @@ fn create_password_rows_follow_checkbox_and_answer_worker_without_prompt() {
     text(&ctx, &mut app, "zip-password-input", "first-secret");
     text(&ctx, &mut app, "zip-password-confirm", "other-secret");
     let shown = policy_render(&ctx, &mut app, vec![]);
-    assert!(shown.iter().any(|(text, _)| text == "두 암호가 같지 않습니다"));
+    assert!(
+        shown
+            .iter()
+            .any(|(text, _)| text == "두 암호가 같지 않습니다")
+    );
     policy_click(&ctx, &mut app, "압축하기");
     assert_eq!(factory.state.borrow().starts.len(), 1);
 
@@ -329,9 +340,15 @@ fn clickable_buttons_and_rows_show_pointing_hand_cursor() {
     // 목록의 빈 곳(끌어서 선택하는 영역)과 검색 입력란은 손 모양이 아님.
     let row = at(&ctx, &mut app, "읽어주세요.txt");
     let empty = row + egui::vec2(0.0, 200.0);
-    assert_eq!(cursor_over(&ctx, &mut app, empty), egui::CursorIcon::Default);
+    assert_eq!(
+        cursor_over(&ctx, &mut app, empty),
+        egui::CursorIcon::Default
+    );
     let search = at(&ctx, &mut app, "파일 검색");
-    assert_ne!(cursor_over(&ctx, &mut app, search), egui::CursorIcon::PointingHand);
+    assert_ne!(
+        cursor_over(&ctx, &mut app, search),
+        egui::CursorIcon::PointingHand
+    );
 
     // ZIP 만들기 창의 체크박스와 항목도 손 모양.
     let create_scratch = Folder::new();
@@ -344,4 +361,122 @@ fn clickable_buttons_and_rows_show_pointing_hand_cursor() {
             "{label}"
         );
     }
+}
+
+/// 별도 창으로 뜨는 ZIP 만들기 창을 photos 폴더로 엶.
+fn create_window_from_folder(
+    scratch: &Folder,
+    factory: &FakeFactory,
+) -> (ArchiveApp, egui::Context) {
+    let folder = scratch.0.join("photos");
+    fs::create_dir_all(folder.join("trip")).unwrap();
+    fs::write(folder.join("a.txt"), b"abc").unwrap();
+    let mut app = loaded(scratch, factory);
+    let dialogs = TestDialogs::default();
+    dialogs.0.borrow_mut().answers.push_back(Some(vec![folder]));
+    app.set_dialogs(Box::new(dialogs));
+    let ctx = egui::Context::default();
+    ctx.set_embed_viewports(false);
+    install_work_child_renderer();
+    policy_click(&ctx, &mut app, "압축하기");
+    for _ in 0..3 {
+        policy_render(&ctx, &mut app, vec![]);
+    }
+    assert!(
+        work_child_label("암호로 보호하기").is_some(),
+        "ZIP 만들기 창이 별도 창으로 떠야 함"
+    );
+    (app, ctx)
+}
+
+fn create_child_render(ctx: &egui::Context, app: &mut ArchiveApp) {
+    WORK_CHILD.with(|child| child.borrow_mut().labels.clear());
+    for _ in 0..3 {
+        policy_render(ctx, app, vec![]);
+    }
+}
+
+#[test]
+fn closing_create_window_drops_pending_save_answer() {
+    let scratch = Folder::new();
+    let factory = FakeFactory::default();
+    let (mut app, ctx) = create_window_from_folder(&scratch, &factory);
+    let before = factory.state.borrow().starts.len();
+
+    // ZIP 만들기 창의 압축하기로 저장 위치 선택 창을 띄워 둠.
+    let dialogs = HeldDialogs::default();
+    app.set_dialogs(Box::new(dialogs.clone()));
+    let compress = work_child_label("압축하기").expect("ZIP 만들기 창의 압축하기");
+    work_child_click(&ctx, &mut app, compress);
+    assert_eq!(
+        dialogs.0.borrow().len(),
+        1,
+        "저장 위치 선택 창이 응답을 기다려야 함"
+    );
+
+    // 저장 위치 창을 둔 채 ZIP 만들기 창을 X로 닫음.
+    WORK_CHILD.with(|child| child.borrow_mut().close = true);
+    // 닫기 요청을 받은 프레임은 내용을 그린 뒤 닫으므로 그다음 프레임부터 봄.
+    policy_render(&ctx, &mut app, vec![]);
+    create_child_render(&ctx, &mut app);
+    assert!(
+        work_child_label("암호로 보호하기").is_none(),
+        "ZIP 만들기 창이 닫혀야 함"
+    );
+
+    // 나중에 저장 위치 창에서 저장을 눌러도 닫힌 창의 압축을 시작하지 않음.
+    dialogs.0.borrow()[0]
+        .send(Ok(Some(vec![scratch.0.join("photos.zip")])))
+        .unwrap();
+    for _ in 0..5 {
+        policy_render(&ctx, &mut app, vec![]);
+    }
+    assert_eq!(
+        factory.state.borrow().starts.len(),
+        before,
+        "닫은 ZIP 만들기 창의 저장 응답으로 압축이 시작됨"
+    );
+}
+
+#[test]
+fn cancelling_second_folder_choice_keeps_create_window_contents() {
+    let scratch = Folder::new();
+    let factory = FakeFactory::default();
+    let (mut app, ctx) = create_window_from_folder(&scratch, &factory);
+    let check = work_child_label("암호로 보호하기").unwrap();
+    work_child_click(&ctx, &mut app, check);
+    create_child_render(&ctx, &mut app);
+    assert!(
+        work_child_label("암호 확인").is_some(),
+        "암호 칸이 나와야 함"
+    );
+
+    // ZIP 만들기 창을 둔 채 툴바의 압축하기를 다시 누르고 폴더 선택을 취소함.
+    let dialogs = TestDialogs::default();
+    app.set_dialogs(Box::new(dialogs.clone()));
+    policy_click(&ctx, &mut app, "압축하기");
+    assert_eq!(
+        dialogs.0.borrow().requests.len(),
+        1,
+        "폴더 선택 창이 열려야 함"
+    );
+    create_child_render(&ctx, &mut app);
+    for label in ["/photos", "a.txt", "암호 확인"] {
+        assert!(
+            work_child_label(label).is_some(),
+            "폴더 선택을 취소했는데 {label}이(가) 사라짐"
+        );
+    }
+
+    // 대조: 다른 폴더를 실제로 고르면 그 폴더로 새로 시작하고 암호 설정도 비움.
+    let other = scratch.0.join("music");
+    fs::create_dir_all(&other).unwrap();
+    fs::write(other.join("song.mp3"), b"la").unwrap();
+    dialogs.0.borrow_mut().answers.push_back(Some(vec![other]));
+    policy_click(&ctx, &mut app, "압축하기");
+    create_child_render(&ctx, &mut app);
+    assert!(work_child_label("/music").is_some());
+    assert!(work_child_label("song.mp3").is_some());
+    assert!(work_child_label("a.txt").is_none());
+    assert!(work_child_label("암호 확인").is_none());
 }

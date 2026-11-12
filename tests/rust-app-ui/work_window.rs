@@ -8,6 +8,8 @@ struct WorkChild {
     cursor: Option<egui::CursorIcon>,
     rects: Vec<(egui::Rect, egui::Color32)>,
     commands: Vec<egui::ViewportCommand>,
+    /// 다음에 그리는 별도 창에 운영체제의 닫기(X) 요청을 보냄.
+    close: bool,
 }
 
 std::thread_local! {
@@ -19,12 +21,22 @@ fn install_work_child_renderer() {
     // 같은 스레드에서 이어 도는 시험끼리 기록이 섞이지 않게 비움.
     WORK_CHILD.with(|child| *child.borrow_mut() = WorkChild::default());
     egui::Context::set_immediate_viewport_renderer(|ctx, mut viewport| {
-        let events = WORK_CHILD.with(|child| std::mem::take(&mut child.borrow_mut().events));
+        let (events, close) = WORK_CHILD.with(|child| {
+            let mut child = child.borrow_mut();
+            (
+                std::mem::take(&mut child.events),
+                std::mem::take(&mut child.close),
+            )
+        });
         let mut raw = egui::RawInput {
             viewport_id: viewport.ids.this,
+            // 창이 요청한 크기로 그림(ZIP 만들기 창은 진행 창보다 큼).
             screen_rect: Some(egui::Rect::from_min_size(
                 egui::Pos2::ZERO,
-                egui::vec2(480.0, 240.0),
+                viewport
+                    .builder
+                    .inner_size
+                    .unwrap_or(egui::vec2(480.0, 240.0)),
             )),
             events,
             ..Default::default()
@@ -34,6 +46,11 @@ fn install_work_child_renderer() {
             egui::ViewportInfo {
                 parent: Some(viewport.ids.parent),
                 focused: Some(true),
+                events: if close {
+                    vec![egui::ViewportEvent::Close]
+                } else {
+                    vec![]
+                },
                 ..Default::default()
             },
         );

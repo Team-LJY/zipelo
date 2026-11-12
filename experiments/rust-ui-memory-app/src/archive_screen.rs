@@ -349,10 +349,8 @@ impl ArchiveApp {
         if self.model.busy() || self.picker.is_some() {
             return;
         }
-        self.sources.clear();
-        self.aes256 = false;
-        self.clear_zip_password();
-        self.ui_error = None;
+        // 이미 열린 ZIP 만들기 창의 목록과 암호 설정은 새 폴더를 실제로 고른 뒤에만 바꿈.
+        // 선택을 취소하면 그대로 남음(apply_picker의 Purpose::Folder).
         self.open_picker(Purpose::Folder);
     }
 
@@ -661,7 +659,19 @@ impl ArchiveApp {
                             self.ui_error = Some("일반 압축파일을 선택하세요".into());
                         }
                     }
-                    Purpose::Files | Purpose::Folder => self.add_sources(paths),
+                    Purpose::Files => self.add_sources(paths),
+                    Purpose::Folder => {
+                        // 새 폴더로 처음부터 시작함. 고른 폴더가 쓸 수 없으면 기존 내용을 되돌림.
+                        let previous = std::mem::take(&mut self.sources);
+                        self.add_sources(paths);
+                        if self.sources.is_empty() {
+                            self.sources = previous;
+                        } else {
+                            self.aes256 = false;
+                            self.clear_zip_password();
+                            self.ui_error = None;
+                        }
+                    }
                     Purpose::Destination | Purpose::Retry => {
                         self.choose_destination(path);
                         self.selected_only = !self.model.selected.is_empty();
@@ -698,6 +708,8 @@ impl ArchiveApp {
                             self.begin_extract();
                         }
                     }
+                    // 저장 위치를 고르는 사이 ZIP 만들기 창을 닫았으면 아무 작업도 시작하지 않음.
+                    Purpose::SaveZip if !self.create => {}
                     Purpose::SaveZip => {
                         if let Some(name) = path.file_name().and_then(|name| name.to_str()) {
                             self.zip_name = name.to_owned();
