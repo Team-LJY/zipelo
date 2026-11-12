@@ -37,15 +37,15 @@ fn install_work_child_renderer() {
                 ..Default::default()
             },
         );
-        let mut output = ctx.run_ui(
-            raw,
-            |ui| (viewport.viewport_ui_cb)(ui),
-        );
+        let mut output = ctx.run_ui(raw, |ui| (viewport.viewport_ui_cb)(ui));
         output.textures_delta.clear();
         WORK_CHILD.with(|child| {
             let mut child = child.borrow_mut();
             child.labels = labels(&output.shapes);
-            child.rendered += 1;
+            // 진행·결과 창이 그려진 횟수만 셈(다른 별도 창은 세지 않음).
+            if viewport.ids.this == egui::ViewportId::from_hash_of("archive-work") {
+                child.rendered += 1;
+            }
             child.cursor = Some(output.platform_output.cursor_icon);
             child.rects.clear();
             fn walk(shape: &egui::epaint::Shape, out: &mut Vec<(egui::Rect, egui::Color32)>) {
@@ -158,7 +158,11 @@ fn picker_wait_blocks_retry_in_separate_work_window() {
     let dialogs = HeldDialogs::default();
     app.set_dialogs(Box::new(dialogs.clone()));
     policy_click(&ctx, &mut app, "열기");
-    assert_eq!(dialogs.0.borrow().len(), 1, "열기 선택 창이 응답을 기다려야 함");
+    assert_eq!(
+        dialogs.0.borrow().len(),
+        1,
+        "열기 선택 창이 응답을 기다려야 함"
+    );
     let before = factory.state.borrow().starts.len();
     work_child_click(&ctx, &mut app, retry);
     assert_eq!(
@@ -273,15 +277,32 @@ fn child_window_buttons_hover_again_after_title_bar_drag() {
     }
     // 자식 창 제목 표시줄을 누른 채 끌어 창 이동을 운영체제에 넘김.
     let start = egui::pos2(120.0, 19.0);
-    child_frame(&ctx, &mut app, vec![egui::Event::PointerMoved(start)], &mut commands);
-    child_frame(&ctx, &mut app, vec![egui::Event::PointerButton {
+    child_frame(
+        &ctx,
+        &mut app,
+        vec![egui::Event::PointerMoved(start)],
+        &mut commands,
+    );
+    child_frame(
+        &ctx,
+        &mut app,
+        vec![egui::Event::PointerButton {
             pos: start,
             button: egui::PointerButton::Primary,
             pressed: true,
             modifiers: egui::Modifiers::NONE,
-        }], &mut commands);
+        }],
+        &mut commands,
+    );
     for step in 1..=3 {
-        child_frame(&ctx, &mut app, vec![egui::Event::PointerMoved(start + egui::vec2(6.0 * step as f32, 0.0))], &mut commands);
+        child_frame(
+            &ctx,
+            &mut app,
+            vec![egui::Event::PointerMoved(
+                start + egui::vec2(6.0 * step as f32, 0.0),
+            )],
+            &mut commands,
+        );
     }
     let started = commands.contains(&egui::ViewportCommand::StartDrag)
         || WORK_CHILD.with(|child| {
@@ -294,16 +315,20 @@ fn child_window_buttons_hover_again_after_title_bar_drag() {
     // GNOME은 이동이 끝나도 버튼 놓기를 보내지 않음. 그대로 닫기 버튼에 마우스를 올림.
     let close = egui::pos2(480.0 - 6.0 - 17.0, 19.0);
     for _ in 0..3 {
-        child_frame(&ctx, &mut app, vec![egui::Event::PointerMoved(close)], &mut commands);
+        child_frame(
+            &ctx,
+            &mut app,
+            vec![egui::Event::PointerMoved(close)],
+            &mut commands,
+        );
     }
     let (cursor, hovered_red) = WORK_CHILD.with(|child| {
         let child = child.borrow();
         (
             child.cursor,
-            child
-                .rects
-                .iter()
-                .any(|(rect, fill)| rect.contains(close) && *fill == egui::Color32::from_rgb(232, 17, 35)),
+            child.rects.iter().any(|(rect, fill)| {
+                rect.contains(close) && *fill == egui::Color32::from_rgb(232, 17, 35)
+            }),
         )
     });
     assert!(hovered_red, "닫기 버튼에 마우스를 올린 배경이 없음");
@@ -393,5 +418,110 @@ fn close_confirmation_is_not_covered_by_separate_work_window() {
         WORK_CHILD.with(|child| child.borrow().rendered),
         0,
         "닫히는 동안 별도 결과 창이 떠 있음"
+    );
+}
+
+/// 추출이 실패해 별도 결과 창이 남아 있는 상태를 만듦.
+fn failed_result(scratch: &Folder, factory: &FakeFactory) -> ArchiveApp {
+    let mut app = loaded(scratch, factory);
+    factory.state.borrow_mut().manual = true;
+    assert!(app.begin_extract());
+    let mut worker = factory.state.borrow_mut();
+    worker.frame(Event::Accepted { encryption: false });
+    worker.finish(Outcome::Failed, Publication::None);
+    for event in &mut worker.queue {
+        if let HostEvent::Frame {
+            event: Event::Terminal(t),
+            ..
+        } = event
+        {
+            t.error = Some(ErrorCode::Io);
+        }
+    }
+    drop(worker);
+    app
+}
+
+fn work_rendered() -> usize {
+    WORK_CHILD.with(|child| child.borrow().rendered)
+}
+
+#[test]
+fn main_modals_are_not_covered_by_separate_result_window() {
+    // 암호 입력과 종료 확인은 작업 중에만 뜨므로 위 시험들이 진행 창과의 조합을 봄.
+    // 작업이 끝난 뒤 결과 창과 함께 뜰 수 있는 모달(ZIP 만들기, 파일 선택 안내)을 여기서 봄.
+    let scratch = Folder::new();
+    let factory = FakeFactory::default();
+    let mut app = failed_result(&scratch, &factory);
+    let ctx = egui::Context::default();
+    ctx.set_embed_viewports(false);
+    install_work_child_renderer();
+    for _ in 0..10 {
+        policy_render(&ctx, &mut app, vec![]);
+    }
+    assert!(!app.model.busy());
+    assert!(work_rendered() > 0, "결과가 별도 viewport에 그려져야 함");
+
+    // 결과 창을 둔 채 ZIP 만들기 창(같은 자리에 뜨는 별도 창)을 열면 그동안 결과 창을 그리지 않음.
+    app.show_create(false);
+    policy_render(&ctx, &mut app, vec![]);
+    WORK_CHILD.with(|child| {
+        let mut child = child.borrow_mut();
+        child.rendered = 0;
+        child.labels.clear();
+    });
+    for _ in 0..5 {
+        policy_render(&ctx, &mut app, vec![]);
+    }
+    let cancel = work_child_label("취소").expect("ZIP 만들기 창이 떠 있어야 함");
+    assert_eq!(
+        work_rendered(),
+        0,
+        "ZIP 만들기 창 위에 별도 결과 창이 떠 있음"
+    );
+
+    // ZIP 만들기를 닫으면 결과 창이 다시 나타남.
+    work_child_click(&ctx, &mut app, cancel);
+    for _ in 0..3 {
+        policy_render(&ctx, &mut app, vec![]);
+    }
+    assert!(
+        work_rendered() > 0,
+        "ZIP 만들기를 닫으면 결과 창이 다시 나타나야 함"
+    );
+
+    // 파일 선택 창을 기다리는 안내가 뜬 동안에도 결과 창을 그리지 않음.
+    let dialogs = HeldDialogs::default();
+    app.set_dialogs(Box::new(dialogs.clone()));
+    policy_click(&ctx, &mut app, "열기");
+    assert_eq!(
+        dialogs.0.borrow().len(),
+        1,
+        "열기 선택 창이 응답을 기다려야 함"
+    );
+    policy_render(&ctx, &mut app, vec![]);
+    WORK_CHILD.with(|child| child.borrow_mut().rendered = 0);
+    let mut shown = Vec::new();
+    for _ in 0..5 {
+        shown = policy_render(&ctx, &mut app, vec![]);
+    }
+    assert!(
+        shown
+            .iter()
+            .any(|(text, _)| text == "파일 선택 창에서 선택을 마쳐 주세요")
+    );
+    assert_eq!(
+        work_rendered(),
+        0,
+        "파일 선택 안내 위에 별도 결과 창이 떠 있음"
+    );
+
+    dialogs.0.borrow()[0].send(Ok(None)).unwrap();
+    for _ in 0..3 {
+        policy_render(&ctx, &mut app, vec![]);
+    }
+    assert!(
+        work_rendered() > 0,
+        "선택 창을 닫으면 결과 창이 다시 나타나야 함"
     );
 }
