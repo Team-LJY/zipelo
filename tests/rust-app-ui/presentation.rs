@@ -909,6 +909,7 @@ mod widgets {
     include!("toolbar.rs");
     include!("long_layout.rs");
     include!("explorer_selection.rs");
+    include!("window_frame.rs");
 }
 
 #[cfg(feature = "ui")]

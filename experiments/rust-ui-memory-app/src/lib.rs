@@ -19,5 +19,7 @@ pub mod archive_browser;
 pub mod archive_dialog;
 #[cfg(feature = "ui")]
 pub mod archive_theme;
+#[cfg(feature = "ui")]
+pub mod window_frame;
 
 pub mod archive_path;
