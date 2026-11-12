@@ -283,7 +283,6 @@ pub fn indeterminate(ui: &mut egui::Ui) {
 pub const OPEN: &str = include_str!("assets/icons/open-archive.svg");
 pub const CREATE: &str = include_str!("assets/icons/create-zip.svg");
 pub const EXTRACT: &str = include_str!("assets/icons/extract-archive.svg");
-pub const PROTECT: &str = include_str!("assets/icons/protect-zip.svg");
 pub const UP: &str = include_str!("assets/icons/navigate-up.svg");
 pub const CLOSE: &str = include_str!("assets/icons/close-dialog.svg");
 

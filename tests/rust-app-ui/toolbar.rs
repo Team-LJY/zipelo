@@ -148,17 +148,30 @@ fn native_destination_expands_directory_ids_and_uses_archive_parent_default() {
 }
 
 #[test]
-fn encryption_tool_opens_protected_zip_modal_without_starting_work() {
+fn toolbar_has_three_actions_and_zip_password_option_remains_available() {
     let scratch = Folder::new();
     let factory = FakeFactory::default();
     let mut app = loaded(&scratch, &factory);
     let ctx = egui::Context::default();
-    policy_click(&ctx, &mut app, "암호화");
+    policy_render(&ctx, &mut app, vec![]);
+    let shown = policy_render(&ctx, &mut app, vec![]);
+    for label in ["열기", "압축하기", "압축해제"] {
+        assert!(shown.iter().any(|(text, _)| text == label), "{label}");
+    }
+    assert!(!shown.iter().any(|(text, _)| text == "암호화"));
+    policy_click(&ctx, &mut app, "압축하기");
     let shown = policy_render(&ctx, &mut app, vec![]);
     assert!(shown.iter().any(|(text, _)| text == "ZIP 만들기"));
     assert!(shown.iter().any(|(text, _)| text == "암호로 보호하기"));
-    policy_click(&ctx, &mut app, "취소");
-    assert_eq!(factory.state.borrow().starts.len(), 1);
+    let source = scratch.0.join("protected.txt");
+    fs::write(&source, b"protected").unwrap();
+    app.add_sources(vec![source]);
+    policy_click(&ctx, &mut app, "암호로 보호하기");
+    policy_click(&ctx, &mut app, "압축하기");
+    assert!(matches!(
+        factory.state.borrow().starts.last(),
+        Some(Start::CreateZip { aes256: true, .. })
+    ));
 }
 
 #[test]

@@ -475,9 +475,6 @@ impl ArchiveApp {
                     {
                         self.open_picker(Purpose::Destination);
                     }
-                    if theme::tool(ui, "암호화", theme::PROTECT, idle, false).clicked() {
-                        self.show_create(true);
-                    }
                 });
             });
         egui::Panel::bottom("archive-status")
