@@ -542,3 +542,49 @@ fn main_modals_are_not_covered_by_separate_result_window() {
         "선택 창을 닫으면 결과 창이 다시 나타나야 함"
     );
 }
+
+#[test]
+fn unanswered_close_confirmation_does_not_close_when_work_finishes() {
+    let scratch = Folder::new();
+    let factory = FakeFactory::default();
+    let mut app = loaded(&scratch, &factory);
+    factory.state.borrow_mut().manual = true;
+    assert!(app.begin_extract());
+    factory
+        .state
+        .borrow_mut()
+        .frame(Event::Accepted { encryption: false });
+    let ctx = egui::Context::default();
+    for _ in 0..4 {
+        policy_render(&ctx, &mut app, vec![]);
+    }
+    app.model.request_close();
+    assert_eq!(app.model.close, Close::Confirm);
+
+    // 종료 확인 창에 답하지 않은 채 작업이 끝남.
+    factory
+        .state
+        .borrow_mut()
+        .finish(Outcome::Completed, Publication::None);
+    let mut shown = Vec::new();
+    for _ in 0..12 {
+        shown = policy_render(&ctx, &mut app, vec![]);
+    }
+    assert!(!app.model.busy());
+    assert_eq!(
+        app.model.close,
+        Close::Confirm,
+        "닫기를 승인하지 않았는데 앱이 닫힘"
+    );
+    assert!(
+        shown
+            .iter()
+            .any(|(text, _)| text == "작업이 끝났습니다. 창을 닫을까요?"),
+        "{shown:?}"
+    );
+
+    // 그 뒤에 닫기를 고르면 바로 닫힘.
+    policy_click(&ctx, &mut app, "닫기");
+    policy_render(&ctx, &mut app, vec![]);
+    assert_eq!(app.model.close, Close::Allowed);
+}

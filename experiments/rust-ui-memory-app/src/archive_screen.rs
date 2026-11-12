@@ -212,6 +212,8 @@ pub struct ArchiveApp {
     zip_password: String,
     zip_password_confirm: String,
     zip_password_visible: bool,
+    /// 암호를 지웠으면 입력창의 실행 취소 기록도 다음 그리기 전에 지움.
+    forget_password_history: Vec<&'static str>,
     /// 작업을 시작한 뒤 작업자가 암호를 요청하면 넘길 암호. 넘기거나 작업이 끝나면 지움.
     pending_zip_password: Option<String>,
     custom_frame: bool,
@@ -264,6 +266,7 @@ impl ArchiveApp {
             zip_password: String::new(),
             zip_password_confirm: String::new(),
             zip_password_visible: false,
+            forget_password_history: Vec::new(),
             pending_zip_password: None,
             custom_frame: false,
             release_after_move: false,
@@ -318,6 +321,25 @@ impl ArchiveApp {
             bytes.fill(0);
         }
         self.password_visible = false;
+        // 이 함수는 암호 요청이 없는 동안 매 프레임 불리므로, 암호 창을 쓴 뒤에만 기록을 지움.
+        if self.password_challenge.is_some() {
+            self.forget_password_history
+                .extend(["archive-password-input", "archive-password-confirm"]);
+        }
+    }
+
+    /// 지운 암호가 입력창의 실행 취소(Ctrl+Z)로 되살아나지 않게 egui가 보관하는
+    /// 입력창 상태(실행 취소 기록 포함)를 지움.
+    fn forget_password_history(&mut self, ctx: &egui::Context) {
+        if self.forget_password_history.is_empty() {
+            return;
+        }
+        let names = std::mem::take(&mut self.forget_password_history);
+        ctx.data_mut(|data| {
+            for name in names {
+                data.remove::<egui::text_edit::TextEditState>(egui::Id::unique(name));
+            }
+        });
     }
 
     fn clear_zip_password(&mut self) {
@@ -327,6 +349,8 @@ impl ArchiveApp {
             wipe(&mut pending);
         }
         self.zip_password_visible = false;
+        self.forget_password_history
+            .extend(["zip-password-input", "zip-password-confirm"]);
     }
 
     /// 암호로 보호하지 않거나, 두 암호가 같고 1~1024바이트이면 만들 수 있음.
@@ -770,7 +794,13 @@ impl ArchiveApp {
 
     fn poll(&mut self) {
         let busy = self.model.busy();
+        let close_before = self.model.close;
         self.model.poll();
+        if close_before == Close::Confirm && self.model.close == Close::Review {
+            // 종료 확인 창에 답하기 전에 작업이 끝났음. 사용자가 닫기를 승인하지 않았으므로
+            // 바로 닫지 않고 계속 물음(close_dialog가 작업이 끝난 문구로 바꿔 보여 줌).
+            self.model.close = Close::Confirm;
+        }
         if busy && !self.model.busy() {
             if let Some(path) = self.owned_destination.take() {
                 if !self.model.confirmed
@@ -788,6 +818,7 @@ impl ArchiveApp {
 
     pub fn show(&mut self, root: &mut egui::Ui) {
         let ctx = root.ctx().clone();
+        self.forget_password_history(&ctx);
         if !self.initialized {
             theme::apply(&ctx);
             self.initialized = true;
@@ -955,6 +986,7 @@ impl ArchiveApp {
                     self.empty(ui);
                 }
             });
+        self.forget_password_history(&ctx);
         self.work_window(&ctx);
         self.create_window(&ctx);
         if self.model.challenge.is_some() {
@@ -2288,11 +2320,13 @@ impl ArchiveApp {
                 ui.colored_label(theme::ERROR, "두 암호가 같지 않습니다");
             }
             ui.label(RichText::new("암호를 잊으면 파일을 열 수 없습니다.").color(theme::MUTED));
-        } else if !self.zip_password.is_empty() || !self.zip_password_confirm.is_empty() {
-            // 체크를 해제하면 입력한 암호를 남겨 두지 않음.
-            wipe(&mut self.zip_password);
-            wipe(&mut self.zip_password_confirm);
-            self.zip_password_visible = false;
+        } else if check.changed()
+            || !self.zip_password.is_empty()
+            || !self.zip_password_confirm.is_empty()
+        {
+            // 체크를 해제하면 입력한 암호와 그 실행 취소 기록을 남겨 두지 않음.
+            // 입력했다가 모두 지운 경우도 기록에는 남아 있으므로 해제한 순간 함께 지움.
+            self.clear_zip_password();
         }
         false
     }
@@ -2416,13 +2450,30 @@ impl ArchiveApp {
             ui.set_width(420.0);
             match self.model.close {
                 Close::Confirm => {
-                    ui.heading("작업 중 닫기");
-                    ui.label("작업을 취소하고 닫을까요?");
+                    // 답하기 전에 작업이 끝났으면 취소할 작업이 없으므로 닫을지만 물음.
+                    let busy = self.model.busy();
+                    let (heading, text, keep, close) = if busy {
+                        (
+                            "작업 중 닫기",
+                            "작업을 취소하고 닫을까요?",
+                            "계속 작업",
+                            "취소하고 닫기",
+                        )
+                    } else {
+                        (
+                            "닫기",
+                            "작업이 끝났습니다. 창을 닫을까요?",
+                            "열어 두기",
+                            "닫기",
+                        )
+                    };
+                    ui.heading(heading);
+                    ui.label(text);
                     ui.horizontal(|ui| {
-                        if theme::action(ui, "계속 작업", false, true).clicked() {
+                        if theme::action(ui, keep, false, true).clicked() {
                             self.model.keep_open();
                         }
-                        if theme::action(ui, "취소하고 닫기", true, true).clicked() {
+                        if theme::action(ui, close, true, true).clicked() {
                             self.clear_password();
                             self.model.confirm_close();
                         }

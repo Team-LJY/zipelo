@@ -480,3 +480,48 @@ fn cancelling_second_folder_choice_keeps_create_window_contents() {
     assert!(work_child_label("a.txt").is_none());
     assert!(work_child_label("암호 확인").is_none());
 }
+
+#[test]
+fn unchecking_password_also_forgets_undo_history() {
+    let scratch = Folder::new();
+    let factory = FakeFactory::default();
+    let (mut app, ctx) = create_from_folder(&scratch, &factory);
+    policy_click(&ctx, &mut app, "암호로 보호하기");
+    text(&ctx, &mut app, "zip-password-input", "undo-secret");
+    // egui는 입력이 1초쯤 멈춰야 실행 취소 지점을 남기므로 그만큼 프레임을 진행함.
+    for _ in 0..90 {
+        policy_render(&ctx, &mut app, vec![]);
+    }
+
+    // 체크를 풀었다가 다시 켜면 암호 칸은 비어 있음.
+    policy_click(&ctx, &mut app, "암호로 보호하기");
+    policy_click(&ctx, &mut app, "암호로 보호하기");
+
+    // 실행 취소(Ctrl+Z)를 눌러도 지운 암호가 되살아나지 않아야 함.
+    // 한 번만 누름(두 번째 실행 취소는 다시 처음 상태로 돌아감).
+    ctx.memory_mut(|memory| memory.request_focus(egui::Id::unique("zip-password-input")));
+    policy_render(&ctx, &mut app, vec![]);
+    {
+        policy_render(
+            &ctx,
+            &mut app,
+            vec![egui::Event::Key {
+                key: egui::Key::Z,
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers: egui::Modifiers::COMMAND,
+            }],
+        );
+    }
+    policy_click(&ctx, &mut app, "보기");
+    let shown = policy_render(&ctx, &mut app, vec![]);
+    assert!(
+        shown.iter().any(|(text, _)| text == "숨기기"),
+        "암호가 보여야 함"
+    );
+    assert!(
+        !shown.iter().any(|(text, _)| text.contains("undo-secret")),
+        "지운 암호가 실행 취소로 되살아남"
+    );
+}
