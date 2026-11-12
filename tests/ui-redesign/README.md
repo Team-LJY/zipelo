@@ -46,3 +46,5 @@ ZIP 만들기의 취소 우선 처리는 keyboard_cancel_and_escape_never_start_
 Enter는 egui 버튼의 초점 활성화만 사용하며 암호 입력란의 제출만 예외임. secondary_button_enter_matrix_never_starts_creation_or_extraction은 기본 화면, 생성 창, 결과, 진행, 종료 확인과 선택창의 탐색 버튼을 한 번에 검증함. password_secondary_enter_does_not_submit_valid_input은 유효한 암호가 있어도 보기, 숨기기와 취소 버튼이 제출하지 않음을 검증함.
 
 폴더 생성 보고는 추출 시작 시 기록한 파일 대상과 예상 폴더 및 상위 폴더로 구분함. 빈 폴더만 있는 ZIP은 실제 작업자로 만들고 새 폴더 추출과 기존 폴더 재사용 모두 성공 표시를 확인함. 파일 저장 누락, 알 수 없는 생성 보고와 저장 불확실 결과의 경고는 유지함.
+
+선택 추출의 완료 대상은 실제 요청에 보낸 Selection에서 계산함. 폴더 선택이 하위 파일을 자동 포함하지 않으며, 선택한 항목의 상위 폴더 생성은 허용함. selection_flows.rs의 extraction_completion_matches_actual_worker_selection_matrix는 전체, 파일만, 폴더만, 혼합, 빈 폴더와 중첩 폴더 선택 6가지를 실제 작업자로 검증함. 요청 ID, 생성 보고와 개수, 실제 경로와 파일 내용, 정상 완료 표시가 모두 일치하는지 확인함.

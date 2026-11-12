@@ -1,19 +1,19 @@
 {
-    "recorded_at_utc": "2026-11-12T01:54:11.911289+00:00",
+    "recorded_at_utc": "2026-11-12T02:22:52.709205+00:00",
     "baseline": "b10c7eedddd202f83766aa8f001142cdfdb4097c",
-    "tested_local_commit": "3f1b91574f40aa9d778c9170da0b8ec6ebe69497",
-    "tested_source_tree": "ff9dcc04b0bf28e60c37fec1fc82acf196300455",
-    "equivalent_remote_source_commit": "d144f7f2e26d26c49e5afb50fa04c6a6157ec8a9",
+    "tested_local_commit": "7918093aa4130b65b526c89b2ffa7de4f513e5c5",
+    "tested_source_tree": "a4027f96f885cd11373779fcd2d20fa8f41adc5f",
+    "equivalent_remote_source_commit": "ea7f5213871c65aab62b1c73ce5e0b90badb53d5",
     "command": "python3 tests/ci/run_rust.py local",
     "exit_code": 0,
-    "rust_tests_passed": 1000,
+    "rust_tests_passed": 1001,
     "runner_tests_passed": 34,
     "ui_suite_tests_passed": 57,
-    "actual_worker_ui_tests_passed": 22,
+    "actual_worker_ui_tests_passed": 23,
     "native_x11_row_selection": "passed",
-    "local_log_sha256": "fb422e132882ac7c9c4ed8cbf835bec613f4eedeccbd793346f3db6a45459c58",
+    "local_log_sha256": "c67cee441d3dea019ab7c3eeaa853223826446045454c65c831bb55ad31bbf85",
     "local_results": {
-        "head": "3f1b91574f40aa9d778c9170da0b8ec6ebe69497",
+        "head": "7918093aa4130b65b526c89b2ffa7de4f513e5c5",
         "platform": "linux",
         "windows_cross_target": "x86_64-pc-windows-gnu",
         "windows_runtime_tested": false,
@@ -917,5 +917,25 @@
         "directory_targets_include_selected_members_and_implicit_parents",
         "directory_only_extraction_displays_success",
         "empty_directory_zip_extracts_successfully_with_existing_directory_reuse"
-    ]
+    ],
+    "selection_completion_regressions": {
+        "test": "extraction_completion_matches_actual_worker_selection_matrix",
+        "result": "passed",
+        "cases": [
+            "all",
+            "files",
+            "directory",
+            "mixed",
+            "empty",
+            "nested-directory"
+        ],
+        "assertions": [
+            "actual request IDs",
+            "exact output reports and created_count",
+            "exact filesystem paths and file content",
+            "Completed and Complete terminal with confirmed exit",
+            "success text without missing-file or uncertain-save warning"
+        ],
+        "scope": "Completion uses the same Selection as the request; selected directories do not imply descendants; required ancestors are included."
+    }
 }
