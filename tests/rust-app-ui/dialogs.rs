@@ -7,6 +7,7 @@ pub struct DialogState {
     pub answers: VecDeque<Option<Vec<PathBuf>>>,
     pub save_name: Option<String>,
     pub cancel_save: bool,
+    pub error: Option<String>,
 }
 
 #[derive(Clone, Default)]
@@ -16,6 +17,9 @@ impl Dialogs for TestDialogs {
     fn choose(&mut self, request: DialogRequest) -> Result<Option<Vec<PathBuf>>, String> {
         let mut state = self.0.borrow_mut();
         state.requests.push(request.clone());
+        if let Some(error) = &state.error {
+            return Err(error.clone());
+        }
         if let Some(answer) = state.answers.pop_front() {
             return Ok(answer);
         }

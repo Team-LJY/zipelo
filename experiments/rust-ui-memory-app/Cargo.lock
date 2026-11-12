@@ -4599,7 +4599,9 @@ dependencies = [
 name = "zipelo-ui-memory-app"
 version = "0.1.0"
 dependencies = [
+ "ashpd",
  "eframe",
+ "pollster 0.4.0",
  "rfd",
  "wgpu",
  "zipelo-app-core-memory",

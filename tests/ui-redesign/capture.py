@@ -29,7 +29,19 @@ def capture(binary, variant, state, output, environment, width, height):
         automatic.rmdir()
     except OSError:
         pass
-    mode = "opened" if state in {"picker", "selected-empty"} else state
+    environment = dict(environment)
+    if state in {"dialog-unavailable", "create-dialog-unavailable"}:
+        endpoint = ROOT / "tests/ui-redesign/runs/no-portal-bus"
+        if endpoint.exists():
+            raise RuntimeError("실패 시험용 bus 경로가 이미 존재함")
+        environment["DBUS_SESSION_BUS_ADDRESS"] = f"unix:path={endpoint}"
+        environment.pop("DBUS_STARTER_ADDRESS", None)
+    mode = {
+        "picker": "opened",
+        "selected-empty": "opened",
+        "dialog-unavailable": "toolbar-root",
+        "create-dialog-unavailable": "toolbar-create",
+    }.get(state, state)
     log = ROOT / "tests/ui-redesign/runs" / f"{variant}-{state}.log"
     with log.open("w") as stream:
         app = subprocess.Popen([str(binary), mode], cwd=ROOT, env=environment, stdout=stream, stderr=stream)
@@ -55,6 +67,10 @@ def capture(binary, variant, state, output, environment, width, height):
                 command(["xdotool", "mousemove", "--window", window, str(x), str(y), "click", "1"], environment)
                 time.sleep(0.4)
 
+            if state == "dialog-unavailable":
+                click(70, 45)
+            elif state == "create-dialog-unavailable":
+                click(width // 2 - 250, height // 2 + 54)
             if state == "create" or (state == "create-filled" and variant == "before"):
                 click(180 if variant == "before" else width - 90, 18 if variant == "before" else 40)
             if state == "create-filled" and variant == "before":

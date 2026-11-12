@@ -1,0 +1,14 @@
+[
+    {
+        "state": "dialog-unavailable",
+        "path": "tests/ui-redesign/screenshots/portal-failure/dialog-unavailable.png",
+        "width": 1060,
+        "height": 720
+    },
+    {
+        "state": "create-dialog-unavailable",
+        "path": "tests/ui-redesign/screenshots/portal-failure/create-dialog-unavailable.png",
+        "width": 1060,
+        "height": 720
+    }
+]

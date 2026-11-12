@@ -345,3 +345,73 @@ fn gzip_save_cancel_and_invalid_output_do_not_start_an_extraction() {
     assert_eq!(factory.state.borrow().starts.len(), 1);
     assert!(!app.model.busy());
 }
+
+#[test]
+fn dialog_failures_show_alerts_while_cancelled_dialogs_remain_silent() {
+    use zipelo_ui_memory_app::archive_dialog::DIALOG_UNAVAILABLE;
+    for failed in [false, true] {
+        for purpose in [
+            Purpose::Open,
+            Purpose::Files,
+            Purpose::Folder,
+            Purpose::Destination,
+            Purpose::SaveZip,
+            Purpose::SaveGzip,
+        ] {
+            let scratch = Folder::new();
+            let factory = FakeFactory::default();
+            if purpose == Purpose::SaveGzip {
+                factory.state.borrow_mut().list_format = Some(Format::Gzip);
+            }
+            let mut app = loaded(&scratch, &factory);
+            let dialogs = TestDialogs::default();
+            dialogs.0.borrow_mut().cancel_save = true;
+            if failed {
+                dialogs.0.borrow_mut().error = Some(DIALOG_UNAVAILABLE.into());
+            }
+            app.set_dialogs(Box::new(dialogs.clone()));
+            let ctx = egui::Context::default();
+            let label = match purpose {
+                Purpose::Open => "열기",
+                Purpose::Files | Purpose::Folder | Purpose::SaveZip => {
+                    policy_click(&ctx, &mut app, "압축하기");
+                    if purpose == Purpose::SaveZip {
+                        let source = scratch.0.join("source.txt");
+                        fs::write(&source, b"preserve").unwrap();
+                        app.add_sources(vec![source]);
+                    }
+                    match purpose {
+                        Purpose::Files => "파일 추가",
+                        Purpose::Folder => "폴더 추가",
+                        _ => "압축하기",
+                    }
+                }
+                _ => "압축해제",
+            };
+            policy_click(&ctx, &mut app, label);
+            let shown = policy_render(&ctx, &mut app, vec![]);
+            assert_eq!(
+                shown.iter().any(|(text, _)| text == DIALOG_UNAVAILABLE),
+                failed,
+                "{purpose:?}"
+            );
+            assert_eq!(factory.state.borrow().starts.len(), 1, "{purpose:?}");
+            assert!(!app.model.busy());
+            assert_eq!(dialogs.0.borrow().requests.last().unwrap().purpose, purpose);
+            assert_eq!(
+                shown
+                    .iter()
+                    .filter(|(text, _)| text == DIALOG_UNAVAILABLE)
+                    .count(),
+                usize::from(failed)
+            );
+            if failed {
+                dialogs.0.borrow_mut().error = None;
+                policy_click(&ctx, &mut app, label);
+                let recovered = policy_render(&ctx, &mut app, vec![]);
+                assert!(!recovered.iter().any(|(text, _)| text == DIALOG_UNAVAILABLE));
+                assert_eq!(factory.state.borrow().starts.len(), 1);
+            }
+        }
+    }
+}

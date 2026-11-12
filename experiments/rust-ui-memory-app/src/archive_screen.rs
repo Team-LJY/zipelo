@@ -316,7 +316,13 @@ impl ArchiveApp {
                 self.zip_name.clone()
             },
         };
-        match self.dialogs.choose(request) {
+        let answer = self.dialogs.choose(request);
+        if answer.is_ok()
+            && self.ui_error.as_deref() == Some(crate::archive_dialog::DIALOG_UNAVAILABLE)
+        {
+            self.ui_error = None;
+        }
+        match answer {
             Ok(Some(paths)) if !paths.is_empty() => {
                 let path = paths[0].clone();
                 match purpose {
@@ -529,7 +535,7 @@ impl ArchiveApp {
                     });
                 });
             });
-        if self.model.busy() || self.result_visible() || self.ui_error.is_some() {
+        if self.model.busy() || self.result_visible() || (self.ui_error.is_some() && !self.create) {
             egui::Panel::bottom("archive-work")
                 .frame(theme::panel(theme::PANEL).corner_radius(0))
                 .show(root, |ui| self.work_area(ui));
@@ -826,14 +832,28 @@ impl ArchiveApp {
             })
     }
 
+    fn error_notice(ui: &mut egui::Ui, error: &str) {
+        let response = theme::panel(theme::ERROR_BG)
+            .show(ui, |ui| {
+                ui.horizontal_wrapped(|ui| {
+                    theme::icon(ui, Icon::Error, 24.0);
+                    ui.colored_label(theme::ERROR, error);
+                });
+            })
+            .response;
+        response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Alert, true, error));
+    }
+
     fn work_area(&mut self, ui: &mut egui::Ui) {
         if self.model.busy() {
             self.progress(ui);
         } else if self.result_visible() {
             self.result(ui);
         }
-        if let Some(error) = &self.ui_error {
-            ui.colored_label(theme::ERROR, error);
+        if !self.create
+            && let Some(error) = &self.ui_error
+        {
+            Self::error_notice(ui, error);
             if error == present::FOLDER_ERROR
                 && theme::action(ui, "폴더 바꾸기", false, true).clicked()
             {
@@ -1158,9 +1178,17 @@ impl ArchiveApp {
                     cancel = close.clicked();
                 });
             });
+            if let Some(error) = &self.ui_error {
+                Self::error_notice(ui, error);
+            }
             egui::ScrollArea::vertical()
                 .id_salt("create-fields")
-                .max_height((ctx.content_rect().height() - 180.0).max(180.0))
+                .max_height(
+                    (ctx.content_rect().height()
+                        - 180.0
+                        - if self.ui_error.is_some() { 96.0 } else { 0.0 })
+                    .max(120.0),
+                )
                 .show(ui, |ui| {
                     ui.add_space(16.0);
                     let frame = theme::panel(theme::STRIPE)
@@ -1236,9 +1264,6 @@ impl ArchiveApp {
                     });
                     let check = ui.checkbox(&mut self.aes256, "암호로 보호하기");
                     theme::focus(&check);
-                    if let Some(error) = &self.ui_error {
-                        ui.colored_label(theme::ERROR, error);
-                    }
                     ui.add_space(16.0);
                 });
             let (dismiss, confirm) =
