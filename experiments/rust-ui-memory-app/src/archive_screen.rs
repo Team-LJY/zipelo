@@ -191,6 +191,10 @@ impl ArchiveApp {
     }
 
     fn start(&mut self, request: Start) -> bool {
+        // 파일 선택 창이 응답을 기다리는 동안에는 어느 창에서도 새 작업을 시작하지 않음.
+        if self.picker.is_some() {
+            return false;
+        }
         self.last_request = Some(request.clone());
         self.dismissed = false;
         self.details = false;
@@ -1363,6 +1367,12 @@ impl ArchiveApp {
     }
 
     fn work_area(&mut self, ui: &mut egui::Ui) {
+        // 선택 창 안내 모달은 메인 창만 막으므로, 별도 진행 창의 버튼은 여기서 막음.
+        let enabled = self.picker.is_none();
+        ui.add_enabled_ui(enabled, |ui| self.work_contents(ui));
+    }
+
+    fn work_contents(&mut self, ui: &mut egui::Ui) {
         if self.model.busy() {
             self.progress(ui);
         } else if self.result_visible() {
