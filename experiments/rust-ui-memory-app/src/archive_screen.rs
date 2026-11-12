@@ -413,20 +413,20 @@ impl ArchiveApp {
         let width = (ui.available_width() * 0.60)
             .max(480.0)
             .min(ui.available_width());
-        let y = ((ui.available_height() - 344.0) / 2.0).max(0.0);
+        let y = ((ui.available_height() - theme::DROP_HEIGHT - theme::SPACE * 8.0) / 2.0).max(0.0);
         ui.add_space(y);
         ui.vertical_centered(|ui| {
             let drop_frame = egui::Frame::new()
                 .fill(if hovered { theme::DROP } else { theme::PANEL })
-                .corner_radius(12)
-                .inner_margin(egui::Margin::same(24))
+                .corner_radius(theme::DROP_RADIUS)
+                .inner_margin(egui::Margin::same(theme::DROP_PAD))
                 .show(ui, |ui| {
-                    ui.set_width(width - 48.0);
-                    ui.set_min_height(232.0);
+                    ui.set_width(width - 2.0 * theme::DROP_PAD as f32);
+                    ui.set_min_height(theme::DROP_HEIGHT - 2.0 * theme::DROP_PAD as f32);
                     ui.vertical_centered(|ui| {
-                        ui.add_space(16.0);
+                        ui.add_space(theme::PAD as f32);
                         theme::icon(ui, Icon::Archive, 48.0);
-                        ui.add_space(16.0);
+                        ui.add_space(theme::PAD as f32);
                         ui.label(
                             RichText::new(if hovered {
                                 "놓으면 엽니다"
@@ -459,20 +459,22 @@ impl ArchiveApp {
                     (rect.left_bottom(), rect.left_top()),
                 ] {
                     let direction = (b - a).normalized();
-                    let mut distance = 12.0;
-                    while distance < a.distance(b) - 12.0 {
+                    let mut distance = theme::DROP_RADIUS as f32;
+                    while distance < a.distance(b) - theme::DROP_RADIUS as f32 {
                         ui.painter().line_segment(
                             [
                                 a + direction * distance,
-                                a + direction * (distance + 8.0).min(a.distance(b) - 12.0),
+                                a + direction
+                                    * (distance + theme::SPACE)
+                                        .min(a.distance(b) - theme::DROP_RADIUS as f32),
                             ],
                             stroke,
                         );
-                        distance += 16.0;
+                        distance += theme::PAD as f32;
                     }
                 }
             }
-            ui.add_space(16.0);
+            ui.add_space(theme::PAD as f32);
             ui.colored_label(
                 theme::MUTED,
                 "ZIP, 7z, TAR, GZ, TAR.GZ 파일을 열 수 있습니다",
@@ -520,7 +522,7 @@ impl ArchiveApp {
         let widths =
             (ui.available_width() - 32.0 - 96.0 - 64.0 - theme::SPACE * 4.0 - 32.0).max(160.0);
         theme::panel(theme::PANEL)
-            .inner_margin(egui::Margin::symmetric(8, 0))
+            .inner_margin(egui::Margin::symmetric(theme::SPACE as i8, 0))
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
                     let response = ui
@@ -552,7 +554,7 @@ impl ArchiveApp {
                 ui.separator();
                 if self.model.entries.is_empty() {
                     ui.vertical_centered(|ui| {
-                        ui.add_space(64.0);
+                        ui.add_space(theme::SPACE * 8.0);
                         ui.label(if self.model.list_id.is_some() {
                             "이 압축파일은 비어 있습니다"
                         } else {
@@ -670,7 +672,19 @@ impl ArchiveApp {
                                 });
                                 row.clone().on_hover_text(&entry.name);
                                 theme::focus(&row);
-                                if enabled && !changed && row.clicked() {
+                                let content = ui.interact(
+                                    egui::Rect::from_min_max(
+                                        rect.min + egui::vec2(32.0, 0.0),
+                                        rect.max,
+                                    ),
+                                    row.id.with("content"),
+                                    if enabled {
+                                        egui::Sense::click()
+                                    } else {
+                                        egui::Sense::hover()
+                                    },
+                                );
+                                if enabled && !changed && (row.clicked() || content.clicked()) {
                                     selected = !selected;
                                     changed = true;
                                 }
