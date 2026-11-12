@@ -489,7 +489,15 @@ impl ArchiveApp {
                 format!("{} — Zipelo", full.display())
             })
             .unwrap_or_else(|| "Zipelo".into());
-        ctx.send_viewport_cmd(egui::ViewportCommand::Title(title));
+        let short_title = if let Some(path) = title.strip_suffix(" — Zipelo") {
+            format!(
+                "{} — Zipelo",
+                theme::window_title(root, path, ctx.content_rect().width() - 300.0)
+            )
+        } else {
+            title.clone()
+        };
+        ctx.send_viewport_cmd(egui::ViewportCommand::Title(short_title));
         egui::Panel::top("archive-actions")
             .frame(
                 theme::panel(theme::PANEL)
@@ -499,7 +507,10 @@ impl ArchiveApp {
             .show(root, |ui| {
                 ui.horizontal(|ui| {
                     let idle = !self.model.busy() && self.model.close == Close::Open;
-                    if theme::tool(ui, "열기", theme::OPEN, idle, false).clicked() {
+                    if theme::tool(ui, "열기", theme::OPEN, idle, false)
+                        .on_hover_text(&title)
+                        .clicked()
+                    {
                         self.open_picker(Purpose::Open);
                     }
                     if theme::tool(ui, "압축하기", theme::CREATE, idle, false).clicked() {
@@ -526,12 +537,21 @@ impl ArchiveApp {
             )
             .show(root, |ui| {
                 ui.horizontal(|ui| {
-                    ui.label(format!(
-                        "{}개 항목",
-                        browser::rows(&self.model.entries, &self.folder, &self.search).len()
-                    ));
+                    let width = (ui.available_width() - ui.spacing().item_spacing.x) / 2.0;
+                    theme::bounded_text(
+                        ui,
+                        &format!(
+                            "{}개 항목",
+                            browser::rows(&self.model.entries, &self.folder, &self.search).len()
+                        ),
+                        width,
+                    );
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                        ui.label(format!("선택 {}개", self.model.selected.len()));
+                        theme::bounded_text(
+                            ui,
+                            &format!("선택 {}개", self.model.selected.len()),
+                            width,
+                        );
                     });
                 });
             });
@@ -657,11 +677,16 @@ impl ArchiveApp {
                     self.browse_folder(&parent);
                 }
                 ui.label("현재 경로");
-                let mut path = format!("/{}", self.folder);
-                ui.add_sized(
-                    [ui.available_width() - 270.0, 36.0],
-                    egui::TextEdit::singleline(&mut path).interactive(false),
-                );
+                let path = format!("/{}", self.folder);
+                let width = (ui.available_width() - 270.0).max(0.0);
+                egui::Frame::new()
+                    .fill(theme::PANEL)
+                    .stroke(egui::Stroke::new(1.0, theme::BORDER))
+                    .corner_radius(6)
+                    .inner_margin(egui::Margin::symmetric(8, 7))
+                    .show(ui, |ui| {
+                        theme::bounded_text(ui, &path, (width - 18.0).max(0.0));
+                    });
                 let (rect, _) =
                     ui.allocate_exact_size(egui::vec2(20.0, 20.0), egui::Sense::hover());
                 theme::svg_icon(ui.painter(), rect, theme::SEARCH, theme::MUTED);
@@ -753,20 +778,23 @@ impl ArchiveApp {
                             );
                             let label = ui
                                 .allocate_ui_with_layout(
-                                    egui::vec2(name_width - 28.0, 34.0),
+                                    egui::vec2((name_width - 28.0).max(0.0), 34.0),
                                     Layout::left_to_right(Align::Center),
                                     |ui| {
-                                        ui.set_min_width(name_width - 28.0);
+                                        ui.set_min_width((name_width - 28.0).max(0.0));
+                                        ui.set_max_width((name_width - 28.0).max(0.0));
                                         ui.add_enabled(
                                             !self.model.busy(),
                                             egui::Button::new(&row.name)
+                                                .truncate()
                                                 .selected(selected)
                                                 .frame(false)
                                                 .min_size(egui::vec2(0.0, 34.0)),
                                         )
                                     },
                                 )
-                                .inner;
+                                .inner
+                                .on_hover_text(&row.name);
                             theme::focus(&label);
                             let enter =
                                 label.has_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
@@ -996,12 +1024,13 @@ impl ArchiveApp {
                 .max_height(max_height)
                 .show(ui, |ui| {
                     if success {
-                        ui.label(match self.last_request.as_ref() {
+                        let path = match self.last_request.as_ref() {
                             Some(Start::CreateZip { output_file, .. }) => {
                                 output_file.display().to_string()
                             }
                             _ => format!("{} 폴더에 저장했습니다.", self.destination.display()),
-                        });
+                        };
+                        theme::bounded_text(ui, &path, ui.available_width());
                     } else if let Some(code) = t.as_ref().and_then(|t| t.error) {
                         ui.label(if creating && code == ErrorCode::SourceChanged {
                             "묶을 파일이 바뀌었습니다. 파일을 확인한 뒤 다시 만드세요"
@@ -1047,7 +1076,11 @@ impl ArchiveApp {
                                 ui.label(error);
                             }
                             for (name, state) in &self.model.outputs {
-                                ui.label(format!("{name}: {}", disposition_label(*state)));
+                                theme::bounded_text(
+                                    ui,
+                                    &format!("{name}: {}", disposition_label(*state)),
+                                    ui.available_width(),
+                                );
                             }
                         });
                     }
@@ -1235,10 +1268,13 @@ impl ArchiveApp {
                                         },
                                         20.0,
                                     );
-                                    ui.label(present::middle_text(
-                                        &path.file_name().unwrap_or_default().to_string_lossy(),
-                                        36,
-                                    ))
+                                    let name =
+                                        path.file_name().unwrap_or_default().to_string_lossy();
+                                    theme::bounded_text(
+                                        ui,
+                                        &name,
+                                        (ui.available_width() - 72.0).max(0.0),
+                                    )
                                     .on_hover_text(path.display().to_string());
                                     if ui.button("빼기").clicked() {
                                         remove = Some(index);

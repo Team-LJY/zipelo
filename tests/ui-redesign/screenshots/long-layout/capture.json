@@ -1,0 +1,26 @@
+[
+    {
+        "state": "long-list",
+        "path": "tests/ui-redesign/screenshots/long-layout/long-list.png",
+        "width": 760,
+        "height": 540
+    },
+    {
+        "state": "long-folder",
+        "path": "tests/ui-redesign/screenshots/long-layout/long-folder.png",
+        "width": 760,
+        "height": 540
+    },
+    {
+        "state": "long-create",
+        "path": "tests/ui-redesign/screenshots/long-layout/long-create.png",
+        "width": 760,
+        "height": 540
+    },
+    {
+        "state": "long-result",
+        "path": "tests/ui-redesign/screenshots/long-layout/long-result.png",
+        "width": 760,
+        "height": 540
+    }
+]

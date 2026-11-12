@@ -20,6 +20,8 @@ Enter는 초점이 있는 버튼만 활성화하며 암호 입력란 제출만 �
 
 Linux는 rfd가 사용하는 기존 ashpd backend의 오류 응답을 직접 받아 사용자 취소와 구분함. portal_response_distinguishes_cancellation_from_backend_failure는 취소 코드, backend 실패와 잘못된 성공 응답을 구분함. missing_portal_returns_errors_for_every_dialog는 별도 자식 프로세스의 연결 불가 bus로 실제 native backend 8개 경로를 확인하며 부모의 세션 환경은 바꾸지 않음. dialog_failures_show_alerts_while_cancelled_dialogs_remain_silent는 열기, 파일 추가, 폴더 추가, 풀 위치, ZIP 저장과 GZ 저장에서 실패 안내와 취소 무작업을 대조함.
 
+760px 화면의 긴 텍스트는 long_layout.rs에서 확인함. 220자 이름과 깊은 경로, 5,000개 항목에서도 크기와 암호 열, 검색, 상태 줄과 모달 버튼이 화면 안에 유지되는지 실제 글자 배치로 검증함. 이름과 현재 경로 및 결과 경로는 말줄임과 전체 텍스트 툴팁을 확인함. 창 제목은 폭에 맞춰 줄이고 전체 압축파일 경로는 열기 버튼의 툴팁에서 확인함. screenshots/long-layout에 목록, 깊은 폴더, ZIP 만들기와 결과 화면을 기록함.
+
 ## 화면 재현
 
 Xvfb, xdotool, ImageMagick import와 시스템 CJK 글꼴이 필요함. 촬영 실행 파일은 실제 eframe 컴포넌트에 합성 목록을 전달하며 압축파일을 읽거나 결과물을 저장하지 않음.

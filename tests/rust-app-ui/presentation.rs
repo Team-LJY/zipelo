@@ -902,6 +902,7 @@ mod widgets {
         }
     }
     include!("toolbar.rs");
+    include!("long_layout.rs");
 }
 
 #[cfg(feature = "ui")]

@@ -289,6 +289,48 @@ impl eframe::App for Capture {
         }
         if !self.triggered && self.app.model.list_id.is_some() {
             self.triggered = true;
+            if self.mode.starts_with("long-") {
+                let name = format!("{}.txt", "W".repeat(220));
+                let folder = "deep-folder/".repeat(30);
+                let base = std::env::current_dir()
+                    .unwrap()
+                    .join("tests/ui-redesign/runs/fixtures");
+                self.app.model.archive = Some(base.join(&folder).join(format!("{name}.zip")));
+                if self.mode == "long-list" || self.mode == "long-folder" {
+                    self.app.model.entries = (0..5000)
+                        .map(|id| Entry {
+                            id,
+                            name: format!(
+                                "{}{id:04}-{name}",
+                                if self.mode == "long-folder" {
+                                    folder.as_str()
+                                } else {
+                                    ""
+                                }
+                            ),
+                            kind: Kind::File,
+                            bytes: Some(31),
+                            packed: None,
+                            encrypted: true,
+                        })
+                        .collect();
+                    if self.mode == "long-folder" {
+                        self.app.browse_folder(folder.trim_end_matches('/'));
+                    }
+                }
+                if self.mode == "long-create" {
+                    let source = base.join(&name);
+                    std::fs::write(&source, b"capture source").unwrap();
+                    self.app.add_sources(vec![source]);
+                    self.app.show_create(false);
+                }
+                if self.mode == "long-result" {
+                    let destination = base.join(&folder);
+                    std::fs::create_dir_all(&destination).unwrap();
+                    self.app.choose_destination(destination);
+                    self.app.begin_extract();
+                }
+            }
             if self.mode == "toolbar-folder" {
                 self.app.browse_folder("Install");
             }

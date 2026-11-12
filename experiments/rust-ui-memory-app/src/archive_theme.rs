@@ -199,6 +199,37 @@ pub fn icon(ui: &mut egui::Ui, kind: Icon, size: f32) {
     }
 }
 
+pub fn bounded_text(ui: &mut egui::Ui, text: &str, width: f32) -> egui::Response {
+    let width = width.max(0.0);
+    ui.allocate_ui_with_layout(
+        egui::vec2(width, ui.text_style_height(&TextStyle::Body)),
+        ui.layout().clone(),
+        |ui| {
+            ui.set_min_width(width);
+            ui.set_max_width(width);
+            ui.add(egui::Label::new(text).truncate())
+        },
+    )
+    .inner
+    .on_hover_text(text)
+}
+
+pub fn window_title(ui: &egui::Ui, text: &str, width: f32) -> String {
+    let mut job =
+        egui::text::LayoutJob::simple_singleline(text.into(), FontId::proportional(BODY), TEXT);
+    job.wrap = egui::text::TextWrapping {
+        max_width: width.max(0.0),
+        max_rows: 1,
+        break_anywhere: true,
+        ..Default::default()
+    };
+    ui.fonts_mut(|fonts| fonts.layout_job(job))
+        .rows
+        .iter()
+        .flat_map(|row| row.glyphs.iter().map(|glyph| glyph.chr))
+        .collect()
+}
+
 pub fn column_label(
     ui: &mut egui::Ui,
     text: impl Into<egui::WidgetText>,
