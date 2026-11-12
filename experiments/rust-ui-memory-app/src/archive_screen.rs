@@ -915,7 +915,11 @@ impl ArchiveApp {
                             _ => format!("{} 폴더에 저장했습니다.", self.destination.display()),
                         });
                     } else if let Some(code) = t.as_ref().and_then(|t| t.error) {
-                        ui.label(present::error_text(code));
+                        ui.label(if creating && code == ErrorCode::SourceChanged {
+                            "묶을 파일이 바뀌었습니다. 파일을 확인한 뒤 다시 만드세요"
+                        } else {
+                            present::error_text(code)
+                        });
                     } else if let Some(error) = &self.model.error {
                         ui.label(present::client_error_text(error));
                     }
@@ -986,7 +990,14 @@ impl ArchiveApp {
                     .as_ref()
                     .is_some_and(|t| t.error == Some(ErrorCode::SourceChanged))
                 {
-                    Some(("압축파일 다시 열기", true))
+                    Some((
+                        if creating {
+                            "다시 만들기"
+                        } else {
+                            "압축파일 다시 열기"
+                        },
+                        true,
+                    ))
                 } else if !cancelled && (!uncertain || listing) {
                     Some(("다시 시도", true))
                 } else {
@@ -1003,7 +1014,7 @@ impl ArchiveApp {
                         Some("폴더 열기") => folder = true,
                         Some("다른 폴더에 풀기") => choose = true,
                         Some("압축파일 다시 열기") => reopen = true,
-                        Some("다시 시도") => retry = true,
+                        Some("다시 시도" | "다시 만들기") => retry = true,
                         _ => {}
                     }
                 }

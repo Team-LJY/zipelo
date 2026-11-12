@@ -542,6 +542,167 @@ mod widgets {
         draw(vec![key(egui::Key::Enter)]);
         assert!(matches!(result, Some(Choice::Paths(ref paths)) if paths == &vec![file]));
     }
+
+    fn picker_frame(
+        ctx: &egui::Context,
+        picker: &mut Picker,
+        events: Vec<egui::Event>,
+    ) -> (Vec<(String, egui::Pos2)>, Option<Choice>) {
+        let mut choice = None;
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(760.0, 540.0),
+                )),
+                events,
+                ..Default::default()
+            },
+            |_ui| choice = picker.show(ctx),
+        );
+        output.textures_delta.clear();
+        (labels(&output.shapes), choice)
+    }
+
+    fn keyboard_activate_picker(
+        ctx: &egui::Context,
+        picker: &mut Picker,
+        label: &str,
+    ) -> Option<Choice> {
+        picker_frame(ctx, picker, vec![]);
+        let shown = picker_frame(ctx, picker, vec![]).0;
+        let point = shown.iter().find(|(text, _)| text == label).unwrap().1;
+        for _ in 0..80 {
+            let focused = ctx.memory(|memory| memory.focused());
+            if focused
+                .and_then(|id| ctx.read_response(id))
+                .is_some_and(|response| response.rect.contains(point))
+            {
+                let choice = picker_frame(ctx, picker, vec![key(egui::Key::Enter)]).1;
+                let mut released = key(egui::Key::Enter);
+                if let egui::Event::Key { pressed, .. } = &mut released {
+                    *pressed = false;
+                }
+                picker_frame(ctx, picker, vec![released]);
+                return choice;
+            }
+            picker_frame(ctx, picker, vec![key(egui::Key::Tab)]);
+            let mut released = key(egui::Key::Tab);
+            if let egui::Event::Key { pressed, .. } = &mut released {
+                *pressed = false;
+            }
+            picker_frame(ctx, picker, vec![released]);
+        }
+        panic!("키보드 초점 없음: {label}");
+    }
+
+    #[test]
+    fn keyboard_file_pickers_enter_child_before_confirming_file() {
+        for purpose in [Purpose::Open, Purpose::Files] {
+            let scratch = Folder::new();
+            let child = scratch.0.join("child");
+            fs::create_dir(&child).unwrap();
+            let file = child.join("inside.zip");
+            fs::write(&file, "fixture").unwrap();
+            let ctx = egui::Context::default();
+            let mut picker = Picker::new(purpose, &scratch.0);
+            assert!(keyboard_activate_picker(&ctx, &mut picker, "child").is_none());
+            assert!(
+                picker_frame(&ctx, &mut picker, vec![])
+                    .0
+                    .iter()
+                    .any(|(text, _)| text == "inside.zip")
+            );
+            let choice = keyboard_activate_picker(&ctx, &mut picker, "inside.zip");
+            assert!(matches!(choice, Some(Choice::Paths(paths)) if paths == vec![file]));
+        }
+    }
+
+    #[test]
+    fn keyboard_folder_pickers_navigate_before_explicit_folder_confirmation() {
+        for purpose in [
+            Purpose::Destination,
+            Purpose::Retry,
+            Purpose::Folder,
+            Purpose::ZipFolder,
+        ] {
+            let scratch = Folder::new();
+            let child = scratch.0.join("child");
+            fs::create_dir(&child).unwrap();
+            fs::write(child.join("inside.zip"), "fixture").unwrap();
+            let ctx = egui::Context::default();
+            let mut picker = Picker::new(purpose, &scratch.0);
+            assert!(keyboard_activate_picker(&ctx, &mut picker, "child").is_none());
+            assert!(
+                picker_frame(&ctx, &mut picker, vec![])
+                    .0
+                    .iter()
+                    .any(|(text, _)| text == "inside.zip")
+            );
+            let choice = keyboard_activate_picker(&ctx, &mut picker, "이 폴더 선택");
+            assert!(matches!(choice, Some(Choice::Paths(paths)) if paths == vec![child]));
+        }
+    }
+
+    #[test]
+    fn changed_zip_sources_retry_creation_with_or_without_open_archive() {
+        for opened in [false, true] {
+            let scratch = Folder::new();
+            let factory = FakeFactory::default();
+            let mut app = ArchiveApp::new(
+                Box::new(factory.clone()),
+                opened.then(|| scratch.0.join("unrelated.zip")),
+                false,
+            );
+            if opened {
+                pump(&mut app.model);
+            }
+            factory.state.borrow_mut().manual = true;
+            let source = scratch.0.join("source.txt");
+            fs::write(&source, "fixture").unwrap();
+            app.add_sources(vec![source]);
+            let ctx = egui::Context::default();
+            click(&ctx, &mut app, "만들기");
+            assert!(app.model.busy());
+            let request = factory.state.borrow().starts.last().unwrap().clone();
+            assert!(matches!(request, Start::CreateZip { .. }));
+            {
+                let mut state = factory.state.borrow_mut();
+                state.frame(Event::Accepted { encryption: false });
+                state.frame(Event::Terminal(Terminal {
+                    outcome: Outcome::Failed,
+                    error: Some(ErrorCode::SourceChanged),
+                    publication: Publication::None,
+                    created_count: 0,
+                    retained_partial_count: 0,
+                    durability: Durability::NotApplicable,
+                    cleanup: Cleanup::Complete,
+                }));
+                state.queue.extend([
+                    HostEvent::StdoutEof,
+                    HostEvent::StderrEof,
+                    HostEvent::Exited { success: true },
+                ]);
+            }
+            for _ in 0..30 {
+                render(&ctx, &mut app, vec![]);
+            }
+            assert!(!app.model.busy());
+            let shown = render(&ctx, &mut app, vec![]);
+            assert!(
+                shown
+                    .iter()
+                    .any(|(text, _)| text.contains("묶을 파일이 바뀌었습니다"))
+            );
+            assert!(!shown.iter().any(|(text, _)| text == "압축파일 다시 열기"));
+            let count = factory.state.borrow().starts.len();
+            click(&ctx, &mut app, "다시 만들기");
+            assert!(app.model.busy());
+            let state = factory.state.borrow();
+            assert_eq!(state.starts.len(), count + 1);
+            assert_eq!(state.starts.last(), Some(&request));
+        }
+    }
 }
 
 #[cfg(feature = "ui")]

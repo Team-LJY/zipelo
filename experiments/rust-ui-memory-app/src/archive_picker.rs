@@ -188,7 +188,12 @@ impl Picker {
                                             self.selected = vec![entry.path.clone()];
                                         }
                                     }
-                                    if response.double_clicked() {
+                                    let keyboard_activation = response.has_focus()
+                                        && ui.input(|i| {
+                                            i.key_pressed(egui::Key::Enter)
+                                                || i.key_pressed(egui::Key::Space)
+                                        });
+                                    if response.double_clicked() || keyboard_activation {
                                         if entry.directory && !entry.link {
                                             navigate = Some(entry.path.clone());
                                         } else if !self.directory_mode() {
@@ -237,7 +242,9 @@ impl Picker {
                     };
                     let enabled = !paths.is_empty() && !self.error;
                     let (cancel, confirm) = theme::action_pair(ui, "취소", Some((label, enabled)));
-                    if confirm || (enabled && ui.input(|i| i.key_pressed(egui::Key::Enter))) {
+                    if navigate.is_none()
+                        && (confirm || (enabled && ui.input(|i| i.key_pressed(egui::Key::Enter))))
+                    {
                         choice = Some(Choice::Paths(paths));
                     }
                     if cancel {
