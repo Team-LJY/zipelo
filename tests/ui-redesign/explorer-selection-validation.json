@@ -1,17 +1,17 @@
 {
-    "recorded_at_utc": "2026-11-12T09:07:05.793826+00:00",
-    "tested_local_commit": "9cef490793533f6237fd700d0bd02a45cb20e623",
-    "tested_source_tree": "119e7faa481ccb821ce956f51331bf682d3a657f",
-    "equivalent_remote_source_commit": "2f9903b56fe34f6275dbef7bcd2a8ca9cc52b660",
+    "recorded_at_utc": "2026-11-12T09:34:34.373979+00:00",
+    "tested_local_commit": "52cb47a3075086b4d700ce84dd8bacd51ea4c6b6",
+    "tested_source_tree": "390d1fe3399eab1fe7b1089a455297c08acff9ae",
+    "equivalent_remote_source_commit": "2df993b19cff18b5d988232abf0ca7e22967022c",
     "command": "python3 tests/ci/run_rust.py local",
     "exit_code": 0,
     "rust_tests_passed": 1025,
     "runner_tests_passed": 34,
     "ui_suite_tests_passed": 77,
     "actual_worker_ui_tests_passed": 27,
-    "local_log_sha256": "48c5c276f6acb17897352c202d238b81d0ca28ae04375b5c1fffb4dac9984f7e",
+    "local_log_sha256": "e4ff9cc248071b4cdeb566c3c2c6cb9a2c695e37c1cbe80496797bae2f03999f",
     "local_results": {
-        "head": "9cef490793533f6237fd700d0bd02a45cb20e623",
+        "head": "52cb47a3075086b4d700ce84dd8bacd51ea4c6b6",
         "platform": "linux",
         "windows_cross_target": "x86_64-pc-windows-gnu",
         "windows_runtime_tested": false,
@@ -400,7 +400,7 @@
         "explorer_click_ctrl_shift_and_blank_match_visible_selection_count",
         "explorer_keyboard_ranges_enter_backspace_and_escape_are_scoped_to_the_list",
         "explorer_double_click_opens_only_folders_and_resets_selection",
-        "explorer_marquee_selects_intersections_and_ctrl_adds_with_an_opaque_blue_rectangle",
+        "explorer_marquee_selects_intersections_and_ctrl_adds_with_a_translucent_blue_rectangle",
         "explorer_marquee_autoscrolls_thousands_of_rows_without_rendering_them_all",
         "explorer_selected_folder_and_empty_selection_reach_the_exact_extraction_request",
         "explorer_fast_forward_marquee_uses_the_original_press_position",
@@ -410,7 +410,7 @@
     ],
     "selection_rules": {
         "mouse": "Single click replaces, Ctrl toggles, Shift selects from anchor, Ctrl+Shift adds a range. Blank click clears; Ctrl+blank preserves.",
-        "marquee": "Starts in blank list space, uses the original press position even for batched events, selects row intersections, Ctrl adds. Fill is opaque #2563eb (alpha 255).",
+        "marquee": "Starts in blank list space, uses the original press position even for batched events, selects row intersections, Ctrl adds. Fill is #2563eb at 16% opacity with an opaque #2563eb 1px inside border; underlying file names and sizes remain readable.",
         "keyboard": "List-scoped arrows, Shift+arrows, Ctrl+A, Enter, Backspace and Esc. Other focused buttons and search retain their own Enter behavior.",
         "scope": "Folder navigation and search changes clear selection and reset the anchor. Selected folders contribute descendant entry IDs to extraction; no selection requests the full archive.",
         "count": "Status counts fully selected visible rows, not descendant entry IDs."
@@ -423,7 +423,7 @@
         "ctrl_removal": "removes the row ID set without ancestor rescans",
         "timing_scope": "Debug test budgets on linux-desktop-2; not general device benchmarks."
     },
-    "screenshot_source_remote_commit": "9a6dc1baa501b1c32cabb42e833f977e596170d0",
+    "screenshot_source_remote_commit": "4e086b435ff1a64cf73088c18832266601dc17a0",
     "screenshots": [
         {
             "state": "explorer-selected",
@@ -437,7 +437,7 @@
             "path": "tests/ui-redesign/screenshots/explorer-selection/explorer-marquee.png",
             "width": 1060,
             "height": 720,
-            "sha256": "822e595d5f2cdaa923891a1df638115c807060c9afd6639f1fe6c721d9873523"
+            "sha256": "3909ee09be2207f00a5a58286544d7ab03951b8c164241d330aa303a7bcdd204"
         }
     ],
     "screenshot_scope": "Actual eframe application in isolated Linux Xvfb with xdotool input and synthetic archive listing; images visually inspected.",
@@ -452,6 +452,6 @@
         "Screenshots use synthetic data; extraction scope is separately checked with actual worker output content."
     ],
     "notes": [
-        "The final source includes the large-directory Ctrl removal improvement. The complete local command passed on that source; only this evidence file is added afterwards."
+        "The complete local command passed after the translucent fill and 1px border change. Only the recaptured marquee image and this evidence record changed afterwards."
     ]
 }
