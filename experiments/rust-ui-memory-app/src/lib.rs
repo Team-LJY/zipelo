@@ -19,3 +19,5 @@ pub mod archive_browser;
 pub mod archive_dialog;
 #[cfg(feature = "ui")]
 pub mod archive_theme;
+
+pub mod archive_path;

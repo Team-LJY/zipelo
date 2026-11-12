@@ -382,3 +382,16 @@ pub fn gzip_output_name(archive: &Path) -> String {
         "압축 해제 파일".into()
     }
 }
+
+pub fn operation_text(text: &str, creating: bool) -> String {
+    if creating {
+        text.replace("풀 위치", "저장 위치")
+            .replace("선택한 항목", "추가한 항목")
+            .replace(
+                "일부 파일만 풀렸습니다. 풀린 파일은",
+                "ZIP 파일이 일부만 저장됐습니다. 저장된 파일은",
+            )
+    } else {
+        text.to_owned()
+    }
+}
