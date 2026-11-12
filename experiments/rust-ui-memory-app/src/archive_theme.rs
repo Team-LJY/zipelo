@@ -161,7 +161,8 @@ pub fn action(ui: &mut egui::Ui, text: &str, primary: bool, enabled: bool) -> eg
 pub const STATUS_HEIGHT: f32 = 34.0;
 
 /// 경로 줄 높이를 꽉 채우는 입력란을 그림. 모서리는 각지게 하고,
-/// 위 테두리는 상단 메뉴의 구분선이 대신해 선이 겹쳐 보이지 않게 함. 초점이 있으면 파란 테두리.
+/// 위 테두리는 상단 메뉴의 구분선이, 아래 테두리는 경로 줄의 아래 선이 대신해
+/// 선이 겹쳐 보이지 않게 함. 초점이 있으면 파란 테두리.
 pub fn field_frame(ui: &egui::Ui, rect: egui::Rect, focused: bool) {
     let painter = ui.painter();
     painter.rect_filled(rect, 0, PANEL);
@@ -172,7 +173,6 @@ pub fn field_frame(ui: &egui::Ui, rect: egui::Rect, focused: bool) {
     let stroke = Stroke::new(1.0, BORDER);
     painter.vline(rect.left() + 0.5, rect.y_range(), stroke);
     painter.vline(rect.right() - 0.5, rect.y_range(), stroke);
-    painter.hline(rect.x_range(), rect.bottom() - 0.5, stroke);
 }
 
 /// 상태 줄 글자를 칸의 세로 가운데에 그림. 넘치면 줄이고 전체 글자는 툴팁으로 보여 줌.

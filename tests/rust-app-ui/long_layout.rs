@@ -111,11 +111,13 @@ fn narrow_archive_keeps_columns_and_virtualizes_thousands_of_long_names() {
         text.iter()
             .any(|(text, rect, _)| text == "31 B" && rect.right() <= 736.0)
     );
-    for expected in ["크기", "5000개 항목", "선택 5000개"] {
+    for expected in ["5000개 항목", "선택 5000개"] {
         assert!(text.iter().any(|(text, _, _)| text == expected));
     }
-    // 암호 열은 없고 이름 앞의 *로만 표시함.
-    assert!(!text.iter().any(|(text, _, _)| text == "암호"));
+    // 열 제목 줄(이름, 크기, 암호)은 없고 암호는 이름 앞의 *로만 표시함.
+    for removed in ["이름", "크기", "암호"] {
+        assert!(!text.iter().any(|(text, _, _)| text == removed));
+    }
     let title = output
         .viewport_output
         .values()

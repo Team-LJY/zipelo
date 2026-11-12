@@ -53,7 +53,8 @@ struct Marquee {
     moved: bool,
 }
 
-const LIST_ROW: f32 = 44.0;
+/// 파일 목록 한 행의 높이. 행 안의 크기 칸(theme::ROW)이 위아래 2px 여백으로 들어감.
+const LIST_ROW: f32 = 36.0;
 
 pub struct ArchiveApp {
     pub model: Model,
@@ -799,7 +800,7 @@ impl ArchiveApp {
 
     fn archive_list(&mut self, ui: &mut egui::Ui) {
         // 경로 줄은 입력란 높이만 차지하고 창 너비 전체를 회색으로 채움.
-        egui::Frame::new()
+        let path_row = egui::Frame::new()
             .fill(theme::STRIPE)
             .inner_margin(egui::Margin {
                 left: 8,
@@ -875,16 +876,19 @@ impl ArchiveApp {
                         self.clear_list_selection();
                     }
                 });
-            });
+            })
+            .response
+            .rect;
+        // 경로 줄 아래 한 줄이 목록과의 경계이자 입력란의 아래 테두리 역할을 함.
+        ui.painter().hline(
+            path_row.x_range(),
+            path_row.bottom() - 0.5,
+            egui::Stroke::new(1.0, theme::BORDER),
+        );
         let rows = browser::rows(&self.model.entries, &self.folder, &self.search);
 
+        // 열 제목 줄 없이 바로 목록을 보여 줌. 이름과 크기는 내용으로 구분됨.
         let name_width = (ui.available_width() - 16.0 - 28.0 - 96.0 - 40.0).max(120.0);
-        ui.horizontal(|ui| {
-            ui.add_space(16.0 + 28.0);
-            theme::column_label(ui, RichText::new("이름").strong(), name_width, Align::Min);
-            theme::column_label(ui, "크기", 96.0, Align::Max);
-        });
-        ui.separator();
         let active = !self.model.busy()
             && !self.create
             && self.model.challenge.is_none()
@@ -1047,7 +1051,7 @@ impl ArchiveApp {
                     }
                     ui.scope_builder(
                         egui::UiBuilder::new()
-                            .max_rect(rect.shrink2(egui::vec2(0.0, 4.0)))
+                            .max_rect(rect.shrink2(egui::vec2(0.0, 2.0)))
                             .layout(Layout::left_to_right(Align::Center)),
                         |ui| {
                             ui.style_mut().interaction.selectable_labels = false;
