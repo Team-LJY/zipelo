@@ -70,6 +70,12 @@ pub(crate) fn temporary() -> Result<File> {
     }
 }
 
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum Step {
+    Check,
+    Read { bytes: u64, total: u64 },
+}
+
 pub(crate) struct Snapshot {
     pub file: File,
     pub len: u64,
@@ -77,7 +83,12 @@ pub(crate) struct Snapshot {
     pub hash: [u8; 32],
 }
 impl Snapshot {
-    pub fn open(path: &Path, limit: u64, check: &mut impl FnMut() -> Result<()>) -> Result<Self> {
+    /// 원본을 임시 파일로 복사하는 동안 읽은 바이트와 전체 크기를 함께 알림.
+    pub fn open_reporting(
+        path: &Path,
+        limit: u64,
+        step: &mut impl FnMut(Step) -> Result<()>,
+    ) -> Result<Self> {
         let mut options = OpenOptions::new();
         options.read(true);
         #[cfg(unix)]
@@ -91,7 +102,7 @@ impl Snapshot {
             options.share_mode(1);
         }
         let mut source = options.open(path).map_err(|_| ErrorCode::Io)?;
-        let snapshot = Self::capture(&mut source, limit, check)?;
+        let snapshot = Self::capture_reporting(&mut source, limit, step)?;
         let named = options.open(path).map_err(|_| ErrorCode::SourceChanged)?;
         if filesystem::object(&named)? != snapshot.object
             || !named.metadata().map_err(|_| ErrorCode::Io)?.is_file()
@@ -104,6 +115,16 @@ impl Snapshot {
         source: &mut File,
         limit: u64,
         check: &mut impl FnMut() -> Result<()>,
+    ) -> Result<Self> {
+        Self::capture_reporting(source, limit, &mut |step| match step {
+            Step::Check => check(),
+            Step::Read { .. } => Ok(()),
+        })
+    }
+    fn capture_reporting(
+        source: &mut File,
+        limit: u64,
+        step: &mut impl FnMut(Step) -> Result<()>,
     ) -> Result<Self> {
         let before = source.metadata().map_err(|_| ErrorCode::Io)?;
         if !before.is_file() {
@@ -119,8 +140,10 @@ impl Snapshot {
         let mut buffer = zeroize::Zeroizing::new([0; 65536]);
         let mut hash = Sha256::new();
         let mut len = 0u64;
+        let total = before.len();
+        let mut reported = std::time::Instant::now();
         loop {
-            check()?;
+            step(Step::Check)?;
             let n = source.read(&mut buffer[..]).map_err(|_| ErrorCode::Io)?;
             if n == 0 {
                 break;
@@ -132,7 +155,13 @@ impl Snapshot {
             file.write_all(&buffer[..n])
                 .map_err(crate::space::io_error)?;
             hash.update(&buffer[..n]);
+            // 큰 파일에서도 진행이 보이도록 일정 간격으로만 알림.
+            if reported.elapsed() >= std::time::Duration::from_millis(200) {
+                step(Step::Read { bytes: len, total })?;
+                reported = std::time::Instant::now();
+            }
         }
+        step(Step::Read { bytes: len, total })?;
         let after = source.metadata().map_err(|_| ErrorCode::Io)?;
         if filesystem::object(&source)? != object
             || before.len() != len
