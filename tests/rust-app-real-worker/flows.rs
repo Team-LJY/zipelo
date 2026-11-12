@@ -58,6 +58,7 @@ fn binary(name: &str) -> PathBuf {
 #[derive(Default)]
 struct Observation {
     jobs: Vec<Vec<&'static str>>,
+    starts: Vec<Start>,
 }
 struct ObservedFactory {
     process: ProcessFactory,
@@ -82,6 +83,9 @@ impl Factory for ObservedFactory {
 }
 impl Connection for ObservedConnection {
     fn send(&mut self, request: Request) -> Result<(), String> {
+        if let Command::Start(start) = &request.command {
+            self.observed.borrow_mut().starts.push(start.clone());
+        }
         self.connection.send(request)
     }
     fn poll(&mut self) -> Option<HostEvent> {
@@ -287,6 +291,7 @@ mod screen {
         }
     }
     include!("password_flows.rs");
+    include!("selection_flows.rs");
 
     fn archive_flow(name: &str, format: Format) {
         let scratch = Scratch::new();

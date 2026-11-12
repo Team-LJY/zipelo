@@ -98,75 +98,45 @@ pub fn remove_owned_empty(path: &Path) {
     let _ = fs::remove_dir(path);
 }
 
+fn requested(entry: &Entry, selection: &Selection) -> bool {
+    match selection {
+        Selection::All => true,
+        Selection::EntryIds(ids) => ids.contains(&entry.id),
+    }
+}
+
 pub fn target_files(
     entries: &[Entry],
-    selected: &BTreeSet<u32>,
-    only: bool,
+    selection: &Selection,
     gzip: Option<&str>,
 ) -> Option<BTreeSet<String>> {
-    let selected_names = entries
-        .iter()
-        .filter(|e| selected.contains(&e.id))
-        .map(|e| (e.name.as_str(), e.kind))
-        .collect::<Vec<_>>();
     let mut names = BTreeSet::new();
-    for entry in entries.iter().filter(|e| e.kind == Kind::File) {
-        let included = !only
-            || selected_names.iter().any(|(name, kind)| {
-                *name == entry.name
-                    || (*kind == Kind::Directory
-                        && entry
-                            .name
-                            .starts_with(&format!("{}/", name.trim_end_matches('/'))))
-            });
-        if included && !names.insert(gzip.unwrap_or(&entry.name).replace('\\', "/")) {
+    for entry in entries
+        .iter()
+        .filter(|entry| entry.kind == Kind::File && requested(entry, selection))
+    {
+        if !names.insert(gzip.unwrap_or(&entry.name).replace('\\', "/")) {
             return None;
         }
     }
     Some(names)
 }
 
-pub fn target_directories(
-    entries: &[Entry],
-    selected: &BTreeSet<u32>,
-    only: bool,
-) -> BTreeSet<String> {
-    let selected_directories = entries
-        .iter()
-        .filter(|entry| entry.kind == Kind::Directory && selected.contains(&entry.id))
-        .map(|entry| {
-            entry
-                .name
-                .replace('\\', "/")
-                .trim_end_matches('/')
-                .to_owned()
-        })
-        .collect::<BTreeSet<_>>();
+pub fn target_directories(entries: &[Entry], selection: &Selection) -> BTreeSet<String> {
     let mut directories = BTreeSet::new();
-    for entry in entries
-        .iter()
-        .filter(|entry| matches!(entry.kind, Kind::File | Kind::Directory))
-    {
+    for entry in entries.iter().filter(|entry| {
+        matches!(entry.kind, Kind::File | Kind::Directory) && requested(entry, selection)
+    }) {
         let normalized = entry.name.replace('\\', "/");
         let name = normalized.trim_end_matches('/');
-        let mut parent = name;
-        let mut ancestors = Vec::new();
-        while let Some((directory, _)) = parent.rsplit_once('/') {
-            ancestors.push(directory);
-            parent = directory;
-        }
-        if only
-            && !selected.contains(&entry.id)
-            && !ancestors
-                .iter()
-                .any(|directory| selected_directories.contains(*directory))
-        {
-            continue;
-        }
         if entry.kind == Kind::Directory {
             directories.insert(name.to_owned());
         }
-        directories.extend(ancestors.into_iter().map(str::to_owned));
+        let mut parent = name;
+        while let Some((directory, _)) = parent.rsplit_once('/') {
+            directories.insert(directory.to_owned());
+            parent = directory;
+        }
     }
     directories
 }

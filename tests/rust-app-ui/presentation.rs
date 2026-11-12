@@ -148,7 +148,7 @@ fn every_error_and_stage_has_user_facing_text() {
     assert_eq!(progress_text(Stage::Decode, false), "압축을 푸는 중");
 }
 #[test]
-fn folder_selection_expands_only_matching_descendants() {
+fn file_targets_follow_requested_ids_without_expanding_directories() {
     let entries = vec![
         Entry {
             id: 0,
@@ -176,8 +176,24 @@ fn folder_selection_expands_only_matching_descendants() {
         },
     ];
     assert_eq!(
-        target_files(&entries, &[0].into_iter().collect(), true, None),
+        target_files(&entries, &Selection::EntryIds(vec![0]), None),
+        Some(BTreeSet::new())
+    );
+    assert_eq!(
+        target_files(&entries, &Selection::EntryIds(vec![0, 2]), None),
+        Some(["docs-old/two.txt".into()].into_iter().collect())
+    );
+    assert_eq!(
+        target_files(&entries, &Selection::EntryIds(vec![1]), None),
         Some(["docs/one.txt".into()].into_iter().collect())
+    );
+    assert_eq!(
+        target_files(&entries, &Selection::All, None),
+        Some(
+            ["docs/one.txt".into(), "docs-old/two.txt".into()]
+                .into_iter()
+                .collect()
+        )
     );
 }
 
@@ -277,13 +293,11 @@ fn directory_targets_include_selected_members_and_implicit_parents() {
         },
     ];
     assert_eq!(
-        target_directories(&entries, &[0].into_iter().collect(), true),
-        ["top".into(), "top/empty".into(), "top/nested".into()]
-            .into_iter()
-            .collect()
+        target_directories(&entries, &Selection::EntryIds(vec![0])),
+        ["top".into()].into_iter().collect()
     );
     assert_eq!(
-        target_directories(&entries, &[2].into_iter().collect(), true),
+        target_directories(&entries, &Selection::EntryIds(vec![2])),
         ["top".into(), "top/nested".into()].into_iter().collect()
     );
 }
@@ -298,7 +312,7 @@ fn duplicate_names_prevent_file_completion_assumptions() {
         packed: None,
         encrypted: false,
     };
-    assert!(target_files(&[entry.clone(), entry], &BTreeSet::new(), false, None).is_none());
+    assert!(target_files(&[entry.clone(), entry], &Selection::All, None).is_none());
     assert_eq!(
         warnings(Some(&terminal()), true, None, &BTreeSet::new(), &[]),
         vec![UNCERTAIN]

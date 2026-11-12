@@ -160,29 +160,25 @@ impl ArchiveApp {
             .list_id
             .as_ref()
             .is_some_and(|id| id.format == Format::Gzip);
+        let selection = if self.selected_only {
+            Selection::EntryIds(self.model.selected.iter().copied().collect())
+        } else {
+            Selection::All
+        };
         self.targets = present::target_files(
             &self.model.entries,
-            &self.model.selected,
-            self.selected_only,
+            &selection,
             gzip.then_some(self.gzip_name.as_str()),
         );
         self.directories = if gzip {
             BTreeSet::new()
         } else {
-            present::target_directories(
-                &self.model.entries,
-                &self.model.selected,
-                self.selected_only,
-            )
+            present::target_directories(&self.model.entries, &selection)
         };
         let request = Start::Extract {
             archive: self.model.archive.clone().unwrap(),
             destination: self.destination.clone(),
-            selection: if self.selected_only {
-                Selection::EntryIds(self.model.selected.iter().copied().collect())
-            } else {
-                Selection::All
-            },
+            selection,
             list_id: self.model.list_id.clone().unwrap(),
             gzip_output_name: gzip.then(|| self.gzip_name.clone()),
         };
