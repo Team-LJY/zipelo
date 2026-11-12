@@ -617,10 +617,9 @@ impl ArchiveApp {
                     .inner_margin(egui::Margin {
                         left: 12,
                         right: 12,
-                        top: 6,
-                        // 이름 글자 줄 높이 아래에 남는 빈 공간만큼 줄여 아이콘 위와
-                        // 글자 아래의 보이는 여백을 같게 맞춤 (FONT_SMALL에서 13px씩).
-                        bottom: 3,
+                        // 버튼 안 내용은 보이는 모양 기준으로 가운데에 두므로 위아래를 같게 둠.
+                        top: 4,
+                        bottom: 4,
                     }),
             )
             .show(root, |ui| {

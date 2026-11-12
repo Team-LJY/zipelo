@@ -437,9 +437,61 @@ pub fn svg_icon(painter: &egui::Painter, rect: egui::Rect, asset: &str, color: C
 }
 
 /// 가장 긴 이름(압축해제, FONT_SMALL에서 약 48px) 양옆에 12px씩 남는 폭.
-pub const TOOL_SIZE: egui::Vec2 = egui::vec2(72.0, 68.0);
+pub const TOOL_SIZE: egui::Vec2 = egui::vec2(72.0, 60.0);
 const TOOL_ICON: f32 = 30.0;
 const TOOL_LABEL: f32 = FONT_SMALL;
+/// 아이콘 그림 아래와 이름 글자 위 사이의 보이는 간격.
+const TOOL_GAP: f32 = 6.0;
+
+/// SVG 폴리라인 점들의 세로 범위(24 단위 좌표).
+fn svg_y_range(asset: &str) -> Option<(f32, f32)> {
+    asset
+        .split("points=\"")
+        .skip(1)
+        .flat_map(|element| {
+            element
+                .split('"')
+                .next()
+                .unwrap_or_default()
+                .split_whitespace()
+                .filter_map(|pair| pair.split_once(',')?.1.parse::<f32>().ok())
+                .collect::<Vec<_>>()
+        })
+        .fold(None, |range: Option<(f32, f32)>, y| {
+            Some(range.map_or((y, y), |(lo, hi)| (lo.min(y), hi.max(y))))
+        })
+}
+
+/// 상단 메뉴 아이콘 세 개를 합친 그림 범위. 모든 버튼이 같은 기준을 써서 이름 높이가 맞음.
+fn tool_icon_ink() -> (f32, f32) {
+    let scale = TOOL_ICON / 24.0;
+    let half_stroke = TOOL_ICON / 18.0 / 2.0;
+    let (lo, hi) = [OPEN, CREATE, EXTRACT]
+        .iter()
+        .filter_map(|asset| svg_y_range(asset))
+        .fold((24.0f32, 0.0f32), |(lo, hi), (a, b)| (lo.min(a), hi.max(b)));
+    (lo * scale - half_stroke, hi * scale + half_stroke)
+}
+
+/// 글자 줄 상자가 아니라 실제로 그려지는 글자 모양의 위아래 범위.
+fn galley_ink(galley: &egui::Galley) -> (f32, f32) {
+    galley
+        .rows
+        .iter()
+        .flat_map(|row| {
+            row.glyphs
+                .iter()
+                .filter(|g| g.uv_rect.size.y > 0.0)
+                .map(move |g| {
+                    let top = row.pos.y + g.pos.y + g.uv_rect.offset.y;
+                    (top, top + g.uv_rect.size.y)
+                })
+        })
+        .fold(None, |range: Option<(f32, f32)>, (top, bottom)| {
+            Some(range.map_or((top, bottom), |(a, b)| (a.min(top), b.max(bottom))))
+        })
+        .unwrap_or((0.0, galley.size().y))
+}
 
 pub fn tool(
     ui: &mut egui::Ui,
@@ -470,23 +522,24 @@ pub fn tool(
         };
         ui.painter().rect_filled(rect, 8, fill);
     }
-    // 아이콘과 글자를 붙여 가운데에 두고, 아래쪽은 여백으로 남김.
-    let label_height = TOOL_LABEL * 1.3;
-    let gap = 4.0;
-    let top = rect.top() + (rect.height() - TOOL_ICON - gap - label_height) / 2.0;
+    // 아이콘 그림 위쪽부터 글자 모양 아래쪽까지를 하나로 보고 버튼 가운데에 둠.
+    // 그래서 마우스를 올려 배경이 보일 때 위아래 여백이 같음.
+    let galley =
+        ui.painter()
+            .layout_no_wrap(label.to_owned(), FontId::proportional(TOOL_LABEL), color);
+    let (icon_top, icon_bottom) = tool_icon_ink();
+    let (text_top, text_bottom) = galley_ink(&galley);
+    let block = (icon_bottom - icon_top) + TOOL_GAP + (text_bottom - text_top);
+    let start = rect.top() + (rect.height() - block) / 2.0;
     let icon_rect = egui::Rect::from_min_size(
-        egui::pos2(rect.center().x - TOOL_ICON / 2.0, top),
+        egui::pos2(rect.center().x - TOOL_ICON / 2.0, start - icon_top),
         egui::vec2(TOOL_ICON, TOOL_ICON),
     );
     svg_icon(ui.painter(), icon_rect, asset, color);
-    ui.painter().text(
-        egui::pos2(
-            rect.center().x,
-            icon_rect.bottom() + gap + label_height / 2.0,
-        ),
-        egui::Align2::CENTER_CENTER,
-        label,
-        FontId::proportional(TOOL_LABEL),
+    let text_y = start + (icon_bottom - icon_top) + TOOL_GAP - text_top;
+    ui.painter().galley(
+        egui::pos2(rect.center().x - galley.size().x / 2.0, text_y).round(),
+        galley,
         color,
     );
     focus(&response);
