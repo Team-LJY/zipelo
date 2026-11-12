@@ -864,7 +864,9 @@ impl ArchiveApp {
         let success = self.model.confirmed
             && self.model.error.is_none()
             && t.as_ref().is_some_and(|t| t.outcome == Outcome::Completed)
-            && warnings.is_empty();
+            && warnings
+                .iter()
+                .all(|warning| *warning == present::SYNC_WARNING);
         let cancelled =
             self.model.confirmed && t.as_ref().is_some_and(|t| t.outcome == Outcome::Cancelled);
         let title = if success {
@@ -929,7 +931,10 @@ impl ArchiveApp {
                     } else if let Some(error) = &self.model.error {
                         ui.label(present::client_error_text(error));
                     }
-                    for warning in &warnings {
+                    for warning in warnings
+                        .iter()
+                        .filter(|warning| **warning != present::SYNC_WARNING)
+                    {
                         ui.horizontal_wrapped(|ui| {
                             theme::icon(ui, Icon::Warning, 20.0);
                             ui.colored_label(theme::WARNING, *warning);
@@ -947,6 +952,9 @@ impl ArchiveApp {
                     }
                     if self.details {
                         theme::panel(theme::STRIPE).show(ui, |ui| {
+                            if warnings.contains(&present::SYNC_WARNING) {
+                                ui.label(present::SYNC_WARNING);
+                            }
                             if let Some(t) = &t {
                                 for line in terminal_lines(t) {
                                     ui.label(line);

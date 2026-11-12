@@ -86,7 +86,13 @@ pub fn prepare_destination(path: &Path, automatic: bool) -> io::Result<bool> {
         Ok(metadata) if metadata.is_dir() && !metadata.file_type().is_symlink() => Ok(false),
         Ok(_) => Err(io::Error::other(FOLDER_ERROR)),
         Err(error) if error.kind() == io::ErrorKind::NotFound && automatic => {
-            fs::create_dir(path)?;
+            let mut builder = fs::DirBuilder::new();
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::DirBuilderExt;
+                builder.mode(0o700);
+            }
+            builder.create(path)?;
             Ok(true)
         }
         Err(error) => Err(error),

@@ -146,3 +146,73 @@ fn extraction_completion_matches_actual_worker_selection_matrix() {
     }
     assert_reaped(&observed);
 }
+
+#[cfg(unix)]
+#[test]
+fn auto_destination_is_private_under_desktop_umask() {
+    use std::{os::unix::fs::PermissionsExt, process::Command};
+
+    const CHILD: &str = "ZIPELO_PRIVATE_DESTINATION_CHILD";
+    if std::env::var_os(CHILD).is_none() {
+        let output = Command::new("sh")
+            .args([
+                "-c",
+                "umask 0002; exec \"$@\"",
+                "zipelo-private-destination",
+            ])
+            .arg(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "screen::auto_destination_is_private_under_desktop_umask",
+                "--nocapture",
+            ])
+            .env(CHILD, "1")
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "umask 0002 추출 회귀 실패: {}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        return;
+    }
+
+    let mask = Command::new("sh").args(["-c", "umask"]).output().unwrap();
+    assert_eq!(String::from_utf8(mask.stdout).unwrap().trim(), "0002");
+    let scratch = Scratch::new();
+    let archive = scratch.path("sample.zip");
+    fs::copy(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../tests/rust-app-real-worker/fixtures/sample.zip"),
+        &archive,
+    )
+    .unwrap();
+    let output = scratch.path("sample");
+    assert!(!output.exists());
+    let (factory, observed) = observed_factory();
+    let mut screen = Screen::new(factory);
+    screen.open(&archive);
+    screen.click("풀기");
+    assert!(screen.app.model.busy());
+    screen.settle();
+    assert_eq!(
+        fs::metadata(&output).unwrap().permissions().mode() & 0o777,
+        0o700
+    );
+    assert_eq!(
+        fs::read(output.join("content.txt")).unwrap(),
+        b"Zipelo real worker flow\n"
+    );
+    assert_eq!(
+        screen.app.model.terminal.as_ref().unwrap().publication,
+        Publication::Complete
+    );
+    assert!(
+        screen
+            .render(vec![])
+            .iter()
+            .any(|(text, _)| text == "압축을 풀었습니다")
+    );
+    assert_reaped(&observed);
+}

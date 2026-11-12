@@ -1062,6 +1062,90 @@ mod widgets {
         assert!(!shown.iter().any(|(text, _)| text == UNCERTAIN));
     }
 
+    #[test]
+    fn completed_results_keep_folder_action_and_show_durability_only_in_details() {
+        for creating in [false, true] {
+            for durability in [
+                Durability::Synced,
+                Durability::Unconfirmed,
+                Durability::Failed,
+            ] {
+                let scratch = Folder::new();
+                let factory = FakeFactory::default();
+                let mut app = loaded(&scratch, &factory);
+                factory.state.borrow_mut().manual = true;
+                let ctx = egui::Context::default();
+                let name = if creating {
+                    let source = scratch.0.join("source.txt");
+                    fs::write(&source, b"source").unwrap();
+                    app.add_sources(vec![source]);
+                    policy_render(&ctx, &mut app, vec![]);
+                    policy_click(&ctx, &mut app, "만들기");
+                    match factory.state.borrow().starts.last().unwrap() {
+                        Start::CreateZip { output_file, .. } => output_file
+                            .file_name()
+                            .unwrap()
+                            .to_str()
+                            .unwrap()
+                            .to_owned(),
+                        _ => panic!("생성 요청 누락"),
+                    }
+                } else {
+                    assert!(app.begin_extract());
+                    "읽어주세요.txt".to_owned()
+                };
+                {
+                    let mut worker = factory.state.borrow_mut();
+                    worker.frame(Event::Accepted { encryption: false });
+                    worker.frame(Event::Output {
+                        entry_id: None,
+                        relative_name: name,
+                        disposition: Disposition::Created,
+                    });
+                    worker.finish(Outcome::Completed, Publication::Complete);
+                    for event in &mut worker.queue {
+                        if let HostEvent::Frame {
+                            event: Event::Terminal(terminal),
+                            ..
+                        } = event
+                        {
+                            terminal.durability = durability;
+                        }
+                    }
+                }
+                for _ in 0..30 {
+                    policy_render(&ctx, &mut app, vec![]);
+                }
+                let shown = policy_render(&ctx, &mut app, vec![]);
+                let title = if creating {
+                    "ZIP 파일을 만들었습니다"
+                } else {
+                    "압축을 풀었습니다"
+                };
+                assert!(
+                    shown.iter().any(|(text, _)| text == title),
+                    "{durability:?}: {shown:?}"
+                );
+                assert!(shown.iter().any(|(text, _)| text == "폴더 열기"));
+                assert!(
+                    !shown
+                        .iter()
+                        .any(|(text, _)| text == "다시 시도" || text == SYNC_WARNING)
+                );
+                policy_click(&ctx, &mut app, "자세히 보기");
+                let details = policy_render(&ctx, &mut app, vec![]);
+                assert_eq!(
+                    details.iter().any(|(text, _)| text == SYNC_WARNING),
+                    durability != Durability::Synced
+                );
+                policy_click(&ctx, &mut app, "자세히 닫기");
+                let closed = policy_render(&ctx, &mut app, vec![]);
+                assert!(!closed.iter().any(|(text, _)| text == SYNC_WARNING));
+                assert!(closed.iter().any(|(text, _)| text == "폴더 열기"));
+            }
+        }
+    }
+
     fn picker_frame(
         ctx: &egui::Context,
         picker: &mut Picker,
