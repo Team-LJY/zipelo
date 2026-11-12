@@ -2,7 +2,8 @@
 
 별도 프로세스의 stdin/stdout으로 revision 2 요청을 처리합니다. 제품 앱이 공유 codec으로 연결하며 프로세스 분리는 OS sandbox를 뜻하지 않습니다. 암호 기능은 capability=true이며 ZipCrypto 해제, WinZip AES-256 AE-1/AE-2 해제와 AE-2 생성을 지원합니다.
 
-- ZIP32/ZIP64 Store/Deflate 목록과 해제, ZIP32/ZIP64 생성, 기본 TAR/USTAR, GZ, TAR.GZ, 비암호화 7z 해제를 지원합니다. GZ 연결 멤버는 하나의 논리 스트림으로 합칩니다. 다중 볼륨, 비 UTF-8 ZIP 이름, PAX/GNU 확장과 특수 항목 해제는 미지원입니다.
+- ZIP32/ZIP64 Store/Deflate 목록과 해제, ZIP32/ZIP64 생성, 기본 TAR/USTAR, GZ, TAR.GZ, 비암호화 7z 해제를 지원합니다. GZ 연결 멤버는 하나의 논리 스트림으로 합칩니다. 다중 볼륨, UTF-8로 해석할 수 없는 ZIP 이름, PAX/GNU 확장과 특수 항목 해제는 미지원입니다.
+- ZIP 이름: UTF-8 플래그(비트 11)가 있으면 이름이 UTF-8이어야 하며 아니면 Integrity입니다. 플래그가 없으면 CRC가 원래 이름과 맞는 Info-ZIP Unicode Path 확장 필드(0x7075, 버전 1)를 우선 쓰고, 다음으로 UTF-8로 유효한 이름 바이트를 그대로 씁니다(Linux/macOS 도구의 기본 동작). CRC가 다르거나 버전이 다른 확장 필드는 무시합니다. 그 밖의 CP437/CP949 등 레거시 이름은 코드 페이지를 추측하지 않고 UnsupportedFeature로 거부합니다. 어느 경로로 얻은 이름이든 같은 경로 안전성 검사와 충돌 검사를 거칩니다.
 - ZIP/TAR/GZ/TAR.GZ/7z 목록과 해제는 입력 기본 한도 u64::MAX, 해제 총량 16 GiB, 항목 10,000개입니다. 요청 limits는 이 값을 낮출 수 있습니다. 64 KiB 버퍼와 임시 파일로 입력과 검증 완료 payload를 처리해 모든 출력의 CRC, 크기와 경로를 게시 전에 검사합니다. checkpoint마다 취소, 부모 프로세스 생존과 300초 한도를 확인합니다. ZIP 생성은 원본을 하나씩 스냅샷으로 읽어 스트리밍으로 압축하며 원본 크기 합계에 16 GiB 한도를 적용합니다. ZIP64 크기와 오프셋은 필요한 항목에만 기록합니다. slice 기반 archive parser는 입력 64 MiB/출력 128 MiB, slice ZIP builder는 원본 및 결과 128 MiB 한도를 유지합니다.
 - 경로 깊이는 64개 구성 요소, 이름/출력 계획 메타데이터 예산은 8 MiB, 출력 계획 노드는 32,768개로 제한합니다. 이름 복제와 인덱스 비용을 보수적으로 계산해 할당 전에 Limit으로 거부합니다.
 - GZip 내부 형식은 완전한 USTAR magic이 있을 때만 TAR로 판별합니다. magic이 없는 영값 데이터는 길이와 무관하게 raw GZip으로 유지하며 명시 출력명이 필요합니다.
@@ -42,7 +43,7 @@ revision 2의 기존 필드와 오류 tag 0~12 및 입력/출력 기본 한도�
 - 목록은 암호 없이 표시합니다. 해제 시 한 번 입력한 암호를 ZIP 전체에 적용하며 WrongPassword일 때 새 challenge_id로 최대 3회 요청합니다. 항목마다 다른 암호인 ZIP은 지원하지 않습니다. 헤더 확인값이 우연히 일치한 잘못된 암호는 Integrity로 끝날 수 있습니다. 인증 실패 후에는 다시 요청하거나 쓰지 않습니다.
 - 생성은 PasswordPurpose::Encrypt로 한 번 요청하며 빈 암호는 거부합니다. 암호는 최대 1024 UTF-8 바이트입니다. 대기 중 Cancel도 처리하고, 답변 없이 입력 EOF가 오면 Protocol로 종료합니다. 기존 300초 작업 제한에 암호 입력 대기 시간도 포함됩니다.
 - salt는 Linux /dev/urandom 또는 Windows BCryptGenRandom에서 얻으며 실패 시 생성을 중단합니다. 암호, 파생 키와 메모리 복호화 버퍼는 zeroize로 정리하고 AES 키 일정의 zeroize 기능을 켭니다. HMAC 내부 상태, OS 메모리/페이지 캐시 복사본과 임시 저장소의 평문에 대한 완전 소거를 보장하지 않습니다. 임시 평문 파일은 작업 종료 시 닫아 제거하며 보안 삭제를 뜻하지 않습니다.
-- Python hashlib/hmac과 OpenSSL로 만든 AES 표본 4개, Info-ZIP으로 만든 ZipCrypto 표본 2개를 tests/ 아래에 보관합니다. 생성한 AES ZIP도 Linux에서 독립 Python/OpenSSL 검증기로 확인합니다. OpenSSL/Info-ZIP은 시험 도구이며 제품 의존성이 아닙니다.
+- Python hashlib/hmac과 OpenSSL로 만든 AES 표본 4개, Info-ZIP으로 만든 ZipCrypto 표본 2개와 UTF-8 플래그 없이 한글 이름을 기록한 Info-ZIP 3.0 표본 4개(다중 항목 ZipCrypto 2개 포함)를 tests/ 아래에 보관합니다. 생성한 AES ZIP도 Linux에서 독립 Python/OpenSSL 검증기로 확인합니다. OpenSSL/Info-ZIP은 시험 도구이며 제품 의존성이 아닙니다.
 
 대용량 7z 표본은 Python LZMA로 실행 시 생성하고 Linux 시스템 libarchive의 스트리밍 판독으로 내용과 CRC를 먼저 확인합니다. libarchive는 시험에만 사용합니다.
 

@@ -348,6 +348,47 @@ pub(crate) fn aes_extra(extra: &[u8]) -> Result<Option<AesExtra>> {
     }
     Ok(found)
 }
+/// ZIP 항목 이름을 해석함.
+///
+/// - UTF-8 플래그(비트 11)가 있으면 이름은 UTF-8이어야 하며 아니면 손상으로 봄.
+/// - 플래그가 없으면 CRC가 원래 이름과 맞는 Info-ZIP Unicode Path 확장 필드(0x7075)를 먼저 씀.
+///   CRC가 다르거나 버전이 1이 아니면 APPNOTE 4.6.9에 따라 무시함.
+/// - 그다음 이름 바이트가 UTF-8로 유효하면 그대로 씀. Linux와 macOS 도구가 이렇게 기록함.
+/// - 그 밖의 바이트(CP437, CP949 등)는 코드 페이지를 추측하지 않고 지원하지 않음으로 거부함.
+///
+/// 어느 경우든 결과는 호출자가 `valid_name`으로 다시 검사함.
+pub(crate) fn zip_name(raw: &[u8], flags: u16, extra: &[u8]) -> Result<String> {
+    if flags & 0x0800 != 0 {
+        return std::str::from_utf8(raw)
+            .map(str::to_owned)
+            .map_err(|_| ErrorCode::Integrity);
+    }
+    let mut at = 0;
+    let mut unicode = None;
+    while at < extra.len() {
+        let tag = u16at(extra, at)?;
+        let len = u16at(extra, at + 2)? as usize;
+        let value = part(extra, at + 4, len)?;
+        if tag == 0x7075 {
+            if unicode.is_some() || len < 5 {
+                return Err(ErrorCode::Integrity);
+            }
+            unicode = Some(value);
+        }
+        at += 4 + len;
+    }
+    if let Some(value) = unicode
+        && value[0] == 1
+        && u32::from_le_bytes(value[1..5].try_into().unwrap()) == crc32(0, raw)
+    {
+        return std::str::from_utf8(&value[5..])
+            .map(str::to_owned)
+            .map_err(|_| ErrorCode::Integrity);
+    }
+    std::str::from_utf8(raw)
+        .map(str::to_owned)
+        .map_err(|_| ErrorCode::UnsupportedFeature)
+}
 fn zip(
     input: &[u8],
     limits: Limits,
@@ -423,10 +464,8 @@ fn zip(
             return Err(ErrorCode::Integrity);
         }
         let raw = part(input, at + 46, name_len)?;
-        if flags & 0x0800 == 0 && !raw.is_ascii() {
-            return Err(ErrorCode::UnsupportedFeature);
-        }
-        let name = std::str::from_utf8(raw).map_err(|_| ErrorCode::Integrity)?;
+        let name = zip_name(raw, flags, part(input, at + 46 + name_len, extra_len)?)?;
+        let name = name.as_str();
         let mode = u32at(h, 38)? >> 16;
         let kind = match mode & 0xf000 {
             0xa000 => EntryKind::Link,
