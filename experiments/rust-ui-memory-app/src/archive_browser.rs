@@ -94,3 +94,23 @@ pub fn expand_selection(entries: &[Entry], selected: &BTreeSet<u32>) -> BTreeSet
         .map(|entry| entry.id)
         .collect()
 }
+
+pub fn remove_selection(entries: &[Entry], selected: &mut BTreeSet<u32>, removed: &BTreeSet<u32>) {
+    let paths = entries
+        .iter()
+        .filter(|entry| removed.contains(&entry.id))
+        .filter_map(|entry| normalized(&entry.name))
+        .collect::<Vec<_>>();
+    let ancestors = entries
+        .iter()
+        .filter(|entry| entry.kind == Kind::Directory)
+        .filter_map(|entry| {
+            let prefix = format!("{}/", normalized(&entry.name)?);
+            paths
+                .iter()
+                .any(|path| path.starts_with(&prefix))
+                .then_some(entry.id)
+        })
+        .collect::<BTreeSet<_>>();
+    selected.retain(|id| !removed.contains(id) && !ancestors.contains(id));
+}

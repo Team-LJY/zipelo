@@ -43,6 +43,8 @@ def main():
         'app.add_sources(vec![base.join("읽어주세요.txt"), base.join("사진")]);',
         "let _ = &mut app;",
     )
+    helper = helper.replace('self.app.browse_folder("Install");', "")
+    helper = helper.replace('self.app.show_create(false);', "")
     (before / HELPER).write_text(helper)
     original = before / MANIFEST
     original.write_text(original.read_text() + BIN)

@@ -280,3 +280,37 @@ fn conflict_native_dialog_cancel_and_retry_preserve_selection_and_existing_files
         if destination == &chosen && ids == &vec![0]));
     assert_eq!(fs::read(scratch.0.join("existing")).unwrap(), b"preserve");
 }
+
+#[test]
+fn excluding_a_child_after_folder_selection_does_not_restore_it_during_extraction() {
+    let scratch = Folder::new();
+    let factory = FakeFactory::default();
+    let mut app = loaded(&scratch, &factory);
+    app.model.entries = [
+        (0, "docs", Kind::Directory),
+        (1, "docs/excluded.txt", Kind::File),
+        (2, "docs/retained.txt", Kind::File),
+    ]
+    .map(|(id, name, kind)| Entry {
+        id,
+        name: name.into(),
+        kind,
+        bytes: Some(1),
+        packed: None,
+        encrypted: false,
+    })
+    .to_vec();
+    app.model.selected = [0, 1, 2].into_iter().collect();
+    app.browse_folder("docs");
+    let dialogs = TestDialogs::default();
+    dialogs.0.borrow_mut().answers.push_back(Some(vec![scratch.0.clone()]));
+    app.set_dialogs(Box::new(dialogs));
+    let ctx = egui::Context::default();
+    policy_click(&ctx, &mut app, "excluded.txt");
+    assert_eq!(app.model.selected, [2].into_iter().collect());
+    policy_click(&ctx, &mut app, "압축해제");
+    assert!(matches!(
+        factory.state.borrow().starts.last(),
+        Some(Start::Extract { selection: Selection::EntryIds(ids), .. }) if ids == &vec![2]
+    ));
+}

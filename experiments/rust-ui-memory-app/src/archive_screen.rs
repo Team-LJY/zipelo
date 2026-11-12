@@ -655,7 +655,11 @@ impl ArchiveApp {
                 if all {
                     self.model.selected.extend(&visible);
                 } else {
-                    self.model.selected.retain(|id| !visible.contains(id));
+                    browser::remove_selection(
+                        &self.model.entries,
+                        &mut self.model.selected,
+                        &visible,
+                    );
                 }
             }
             theme::focus(&check);
@@ -693,7 +697,11 @@ impl ArchiveApp {
                                 if selected {
                                     self.model.selected.extend(&row.ids);
                                 } else {
-                                    self.model.selected.retain(|id| !row.ids.contains(id));
+                                    browser::remove_selection(
+                                        &self.model.entries,
+                                        &mut self.model.selected,
+                                        &row.ids,
+                                    );
                                 }
                             }
                             theme::icon(
@@ -728,7 +736,11 @@ impl ArchiveApp {
                                 self.browse_folder(&row.path);
                             } else if !row.directory && label.clicked() {
                                 if selected {
-                                    self.model.selected.retain(|id| !row.ids.contains(id));
+                                    browser::remove_selection(
+                                        &self.model.entries,
+                                        &mut self.model.selected,
+                                        &row.ids,
+                                    );
                                 } else {
                                     self.model.selected.extend(&row.ids);
                                 }
