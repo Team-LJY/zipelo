@@ -48,14 +48,24 @@ impl Screen {
         if !text.is_empty() {
             assert!(!rendered.iter().any(|(value, _)| value.contains(text)));
         }
-        if self.app.model.challenge.is_some_and(|(_, _, encrypt)| encrypt) {
+        if self
+            .app
+            .model
+            .challenge
+            .is_some_and(|(_, _, encrypt)| encrypt)
+        {
             self.set_text("archive-password-confirm", text);
         }
         self.click("확인");
     }
     fn start_password_extract(&mut self, output: &Path) {
         self.app.choose_destination(output.to_path_buf());
-        self.click("풀기");
+        self.dialogs
+            .0
+            .borrow_mut()
+            .answers
+            .push_back(Some(vec![output.to_path_buf()]));
+        self.click("압축해제");
         assert!(self.app.model.busy());
     }
     fn finish_password_job(&mut self, expected: Outcome) {
@@ -74,7 +84,7 @@ impl Screen {
         self.render(vec![]);
         self.set_text("zip-name", archive.file_name().unwrap().to_str().unwrap());
         self.click("암호로 보호하기");
-        self.click("만들기");
+        self.click("압축하기");
         assert!(self.app.model.busy(), "{}", self.app.model.status());
     }
 }
@@ -245,7 +255,12 @@ fn oversized_utf8_password_stays_in_dialog_then_accepts_valid_input() {
     let id = screen.password_request(1, false);
     screen.password_answer(&"가".repeat(342));
     assert_eq!(screen.app.model.challenge, Some((id, 1, false)));
-    assert!(screen.render(vec![]).iter().any(|(text, _)| text.contains("1~1024바이트")));
+    assert!(
+        screen
+            .render(vec![])
+            .iter()
+            .any(|(text, _)| text.contains("1~1024바이트"))
+    );
     assert_eq!(fs::read_dir(&output).unwrap().count(), 0);
     screen.password_answer(FIXTURE_PASSWORD);
     screen.finish_password_job(Outcome::Completed);
@@ -266,7 +281,12 @@ fn invalid_password_then_cancel(invalid: &str, close: bool) {
     if invalid.is_empty() {
         assert!(screen.app.model.input_error.is_none());
     } else {
-        assert!(screen.render(vec![]).iter().any(|(text, _)| text.contains("1~1024바이트")));
+        assert!(
+            screen
+                .render(vec![])
+                .iter()
+                .any(|(text, _)| text.contains("1~1024바이트"))
+        );
     }
     if close {
         screen.app.model.request_close();

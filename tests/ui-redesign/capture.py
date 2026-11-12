@@ -38,7 +38,7 @@ def capture(binary, variant, state, output, environment, width, height):
             window = None
             while time.monotonic() < deadline and app.poll() is None:
                 found = subprocess.run(
-                    ["xdotool", "search", "--onlyvisible", "--name", "^Zipelo UI capture"],
+                    ["xdotool", "search", "--onlyvisible", "--name", "Zipelo"],
                     env=environment, capture_output=True, text=True,
                 )
                 if found.returncode == 0:
@@ -101,7 +101,7 @@ def main():
     output.mkdir(parents=True, exist_ok=True)
     read_fd, write_fd = os.pipe()
     server = subprocess.Popen(
-        ["Xvfb", "-displayfd", str(write_fd), "-screen", "0", "1280x900x24", "-nolisten", "tcp"],
+        ["Xvfb", "-displayfd", str(write_fd), "-screen", "0", f"{max(1280, args.width)}x{max(900, args.height)}x24", "-nolisten", "tcp"],
         pass_fds=(write_fd,), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
     )
     os.close(write_fd)

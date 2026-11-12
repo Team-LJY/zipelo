@@ -393,11 +393,9 @@ fn browser_and_output_do_not_follow_symbolic_links() {
 #[cfg(feature = "ui")]
 mod widgets {
     use super::*;
+    use crate::dialogs::TestDialogs;
     use eframe::egui::{self, epaint::Shape};
-    use zipelo_ui_memory_app::{
-        archive_picker::{Choice, Picker, Purpose},
-        archive_screen::ArchiveApp,
-    };
+    use zipelo_ui_memory_app::{archive_dialog::Purpose, archive_screen::ArchiveApp};
 
     fn labels(shapes: &[egui::epaint::ClippedShape]) -> Vec<(String, egui::Pos2)> {
         fn walk(shape: &Shape, result: &mut Vec<(String, egui::Pos2)>) {
@@ -420,6 +418,7 @@ mod widgets {
         }
         result
     }
+
     fn render(
         ctx: &egui::Context,
         app: &mut ArchiveApp,
@@ -439,6 +438,7 @@ mod widgets {
         output.textures_delta.clear();
         labels(&output.shapes)
     }
+
     fn click(ctx: &egui::Context, app: &mut ArchiveApp, label: &str) {
         render(ctx, app, vec![]);
         let point = render(ctx, app, vec![])
@@ -463,6 +463,7 @@ mod widgets {
             );
         }
     }
+
     fn key(key: egui::Key) -> egui::Event {
         egui::Event::Key {
             key,
@@ -472,6 +473,7 @@ mod widgets {
             modifiers: egui::Modifiers::NONE,
         }
     }
+
     fn text(ctx: &egui::Context, app: &mut ArchiveApp, id: &str, value: &str) {
         ctx.memory_mut(|memory| memory.request_focus(egui::Id::unique(id)));
         render(
@@ -489,6 +491,7 @@ mod widgets {
             ],
         );
     }
+
     fn loaded(scratch: &Folder, factory: &FakeFactory) -> ArchiveApp {
         let mut app = ArchiveApp::new(
             Box::new(factory.clone()),
@@ -496,289 +499,8 @@ mod widgets {
             false,
         );
         pump(&mut app.model);
+        app.set_dialogs(Box::new(TestDialogs::default()));
         app
-    }
-    #[test]
-    fn empty_view_has_no_internal_status_and_keyboard_focus_is_reachable() {
-        let ctx = egui::Context::default();
-        let mut app = ArchiveApp::new(Box::new(FakeFactory::default()), None, false);
-        render(&ctx, &mut app, vec![]);
-        let shown = render(&ctx, &mut app, vec![key(egui::Key::Tab)]);
-        assert!(
-            shown
-                .iter()
-                .any(|(text, _)| text == "압축파일을 여기에 끌어 놓으세요")
-        );
-        assert!(!shown.iter().any(|(text, _)| text.contains("게시")
-            || text.contains("동기화")
-            || text.contains("시험 모드")));
-        assert!(ctx.memory(|memory| memory.focused().is_some()));
-        app.model.request_close();
-        let closing = render(&ctx, &mut app, vec![]);
-        assert!(!closing.iter().any(|(text, _)| text == UNCERTAIN));
-    }
-    #[test]
-    fn empty_selection_and_empty_zip_sources_do_not_start_work() {
-        let scratch = Folder::new();
-        let ctx = egui::Context::default();
-        let factory = FakeFactory::default();
-        let mut app = loaded(&scratch, &factory);
-        render(&ctx, &mut app, vec![]);
-        click(&ctx, &mut app, "선택한 항목만 풀기");
-        click(&ctx, &mut app, "풀기");
-        assert_eq!(factory.state.borrow().starts.len(), 1);
-        click(&ctx, &mut app, "ZIP 만들기");
-        click(&ctx, &mut app, "만들기");
-        assert_eq!(factory.state.borrow().starts.len(), 1);
-        assert!(!app.model.busy());
-    }
-    #[test]
-    fn destination_failure_sends_no_request_and_explains_folder_change() {
-        let scratch = Folder::new();
-        let factory = FakeFactory::default();
-        let mut app = loaded(&scratch, &factory);
-        let file = scratch.0.join("existing.txt");
-        fs::write(&file, "preserve").unwrap();
-        app.choose_destination(file.clone());
-        assert!(!app.begin_extract());
-        assert_eq!(factory.state.borrow().starts.len(), 1);
-        let ctx = egui::Context::default();
-        render(&ctx, &mut app, vec![]);
-        assert!(
-            render(&ctx, &mut app, vec![])
-                .iter()
-                .any(|(text, _)| text == FOLDER_ERROR)
-        );
-        assert_eq!(fs::read_to_string(file).unwrap(), "preserve");
-    }
-    #[test]
-    fn cancelling_removes_only_automatically_created_empty_folder() {
-        for case in ["automatic-empty", "automatic-nonempty", "chosen-empty"] {
-            let scratch = Folder::new();
-            let factory = FakeFactory::default();
-            let mut app = loaded(&scratch, &factory);
-            factory.state.borrow_mut().manual = true;
-            let destination = if case == "chosen-empty" {
-                let path = scratch.0.join("chosen");
-                fs::create_dir(&path).unwrap();
-                app.choose_destination(path.clone());
-                path
-            } else {
-                scratch.0.join("sample")
-            };
-            assert!(app.begin_extract());
-            if case == "automatic-nonempty" {
-                fs::write(destination.join("preserve"), "keep").unwrap();
-            }
-            {
-                let mut state = factory.state.borrow_mut();
-                state.frame(Event::Accepted { encryption: true });
-                state.finish(Outcome::Cancelled, Publication::None);
-            }
-            let ctx = egui::Context::default();
-            for _ in 0..30 {
-                render(&ctx, &mut app, vec![]);
-            }
-            assert!(!app.model.busy());
-            assert_eq!(destination.exists(), case != "automatic-empty");
-        }
-    }
-    #[test]
-    fn password_confirmation_requires_match_and_enter_sends_once() {
-        let scratch = Folder::new();
-        let factory = FakeFactory::manual();
-        let mut app = ArchiveApp::new(Box::new(factory.clone()), None, false);
-        assert!(app.model.begin(
-            Start::CreateZip {
-                sources: vec![(scratch.0.join("source"), "source".into())],
-                output_file: scratch.0.join("new.zip"),
-                method: Method::Deflate,
-                aes256: true
-            },
-            &mut factory.clone()
-        ));
-        {
-            let mut state = factory.state.borrow_mut();
-            state.frame(Event::Accepted { encryption: true });
-            state.frame(Event::PasswordRequired {
-                challenge_id: 17,
-                attempt: 1,
-                encrypt: true,
-            });
-        }
-        let ctx = egui::Context::default();
-        for _ in 0..12 {
-            render(&ctx, &mut app, vec![]);
-        }
-        assert_eq!(
-            ctx.memory(|memory| memory.focused()),
-            Some(egui::Id::unique("archive-password-input"))
-        );
-        text(&ctx, &mut app, "archive-password-input", "fixture-secret");
-        text(&ctx, &mut app, "archive-password-confirm", "different");
-        click(&ctx, &mut app, "확인");
-        assert!(!factory.state.borrow().password_seen);
-        text(&ctx, &mut app, "archive-password-confirm", "fixture-secret");
-        let shown = render(&ctx, &mut app, vec![key(egui::Key::Enter)]);
-        assert!(
-            !shown
-                .iter()
-                .any(|(text, _)| text.contains("fixture-secret"))
-        );
-        assert!(factory.state.borrow().password_seen);
-        assert!(app.model.challenge.is_none());
-    }
-    #[test]
-    fn picker_fits_minimum_window_and_opens_selected_file_with_enter() {
-        let scratch = Folder::new();
-        let file = scratch.0.join("one.zip");
-        fs::write(&file, "fixture").unwrap();
-        let ctx = egui::Context::default();
-        let mut picker = Picker::new(Purpose::Open, &scratch.0);
-        let mut result = None;
-        let mut draw = |events| {
-            let mut output = ctx.run_ui(
-                egui::RawInput {
-                    screen_rect: Some(egui::Rect::from_min_size(
-                        egui::Pos2::ZERO,
-                        egui::vec2(760.0, 540.0),
-                    )),
-                    events,
-                    ..Default::default()
-                },
-                |_ui| {
-                    result = picker.show(&ctx);
-                },
-            );
-            output.textures_delta.clear();
-            labels(&output.shapes)
-        };
-        draw(vec![]);
-        let shown = draw(vec![]);
-        for label in ["파일 열기", "열기", "홈"] {
-            let (_, point) = shown.iter().find(|(text, _)| text == label).unwrap();
-            assert!((0.0..540.0).contains(&point.y), "{label}: {point:?}");
-        }
-        let cancel = shown.iter().find(|(text, _)| text == "취소").unwrap().1;
-        let confirm = shown.iter().find(|(text, _)| text == "열기").unwrap().1;
-        assert!(cancel.x < confirm.x);
-        let point = shown.iter().find(|(text, _)| text == "one.zip").unwrap().1;
-        for pressed in [true, false] {
-            draw(vec![
-                egui::Event::PointerMoved(point),
-                egui::Event::PointerButton {
-                    pos: point,
-                    button: egui::PointerButton::Primary,
-                    pressed,
-                    modifiers: egui::Modifiers::NONE,
-                },
-            ]);
-        }
-        for _ in 0..40 {
-            if ctx
-                .memory(|memory| memory.focused())
-                .and_then(|id| ctx.read_response(id))
-                .is_some_and(|response| response.rect.contains(confirm))
-            {
-                break;
-            }
-            draw(vec![key(egui::Key::Tab)]);
-            let mut released = key(egui::Key::Tab);
-            if let egui::Event::Key { pressed, .. } = &mut released {
-                *pressed = false;
-            }
-            draw(vec![released]);
-        }
-        assert!(
-            ctx.memory(|memory| memory.focused())
-                .and_then(|id| ctx.read_response(id))
-                .is_some_and(|response| response.rect.contains(confirm))
-        );
-        draw(vec![key(egui::Key::Enter)]);
-        assert!(matches!(result, Some(Choice::Paths(ref paths)) if paths == &vec![file]));
-    }
-
-    fn focus_zip_action_with_tab(ctx: &egui::Context, app: &mut ArchiveApp, label: &str) {
-        render(ctx, app, vec![]);
-        let shown = render(ctx, app, vec![]);
-        let point = shown.iter().find(|(text, _)| text == label).unwrap().1;
-        for _ in 0..80 {
-            if ctx
-                .memory(|memory| memory.focused())
-                .and_then(|id| ctx.read_response(id))
-                .is_some_and(|response| response.rect.contains(point))
-            {
-                return;
-            }
-            render(ctx, app, vec![key(egui::Key::Tab)]);
-            let mut released = key(egui::Key::Tab);
-            if let egui::Event::Key { pressed, .. } = &mut released {
-                *pressed = false;
-            }
-            render(ctx, app, vec![released]);
-        }
-        panic!("키보드 초점 없음: {label}");
-    }
-
-    #[test]
-    fn keyboard_cancel_and_escape_never_start_zip_creation() {
-        for escape in [false, true] {
-            let scratch = Folder::new();
-            let factory = FakeFactory::manual();
-            let mut app = ArchiveApp::new(Box::new(factory.clone()), None, false);
-            let source = scratch.0.join("source.txt");
-            fs::write(&source, "fixture").unwrap();
-            app.add_sources(vec![source]);
-            let ctx = egui::Context::default();
-            focus_zip_action_with_tab(&ctx, &mut app, if escape { "만들기" } else { "취소" });
-            let mut events = vec![key(egui::Key::Enter)];
-            if escape {
-                events.push(key(egui::Key::Escape));
-            }
-            render(&ctx, &mut app, events);
-            let shown = render(&ctx, &mut app, vec![]);
-            assert!(factory.state.borrow().starts.is_empty());
-            assert!(!app.model.busy());
-            assert!(!scratch.0.join("source.zip").exists());
-            assert_eq!(
-                shown
-                    .iter()
-                    .filter(|(text, _)| text == "ZIP 만들기")
-                    .count(),
-                1
-            );
-        }
-    }
-
-    #[test]
-    fn zip_creation_enter_only_activates_focused_make_button() {
-        for make_button in [false, true] {
-            let scratch = Folder::new();
-            let factory = FakeFactory::manual();
-            let mut app = ArchiveApp::new(Box::new(factory.clone()), None, false);
-            let source = scratch.0.join("source.txt");
-            fs::write(&source, "fixture").unwrap();
-            app.add_sources(vec![source.clone()]);
-            let ctx = egui::Context::default();
-            render(&ctx, &mut app, vec![]);
-            if make_button {
-                focus_zip_action_with_tab(&ctx, &mut app, "만들기");
-            } else {
-                ctx.memory_mut(|memory| memory.request_focus(egui::Id::unique("zip-name")));
-                render(&ctx, &mut app, vec![]);
-            }
-            render(&ctx, &mut app, vec![key(egui::Key::Enter)]);
-            render(&ctx, &mut app, vec![]);
-            let state = factory.state.borrow();
-            assert_eq!(state.starts.len(), usize::from(make_button));
-            if make_button {
-                assert!(
-                    matches!(state.starts.last(), Some(Start::CreateZip {sources, output_file, ..})
-                    if sources == &vec![(source, "source.txt".into())]
-                        && output_file == &scratch.0.join("source.zip"))
-                );
-            }
-        }
     }
 
     fn policy_render(
@@ -854,134 +576,56 @@ mod widgets {
     }
 
     #[test]
-    fn secondary_button_enter_matrix_never_starts_creation_or_extraction() {
-        let cases = vec![
-            ("archive", "ZIP 만들기"),
-            ("archive", "다른 파일"),
-            ("archive", "폴더 바꾸기"),
-            ("archive", "선택한 항목만 풀기"),
-            ("create", "파일 추가"),
-            ("create", "폴더 추가"),
-            ("create", "빼기"),
-            ("create", "폴더 바꾸기"),
-            ("create", "암호로 보호하기"),
-            ("create", "자세한 설정"),
-            ("create", "취소"),
-            ("result", "자세히 보기"),
-            ("result", "자세히 닫기"),
-            ("result", "확인"),
-            ("progress", "취소"),
-            ("close-confirm", "계속 작업"),
-            ("close-confirm", "취소하고 닫기"),
-            ("close-wait", "닫기 취소"),
-            ("close-review", "계속 작업"),
-            ("close-review", "닫기"),
-        ];
-        let mut cases = cases
-            .into_iter()
-            .map(|(state, label)| (state, label.to_owned()))
-            .collect::<Vec<_>>();
-        for state in [
-            "picker-open",
-            "picker-destination",
-            "picker-files",
-            "picker-folder",
-            "picker-zip",
-        ] {
-            for (label, _) in shortcuts() {
-                cases.push((state, label));
-            }
-            for label in ["상위 폴더", "취소", "breadcrumb"] {
-                cases.push((state, label.to_owned()));
-            }
-        }
-        for (state, label) in cases {
-            let scratch = Folder::new();
-            let factory = FakeFactory::default();
-            let ctx = egui::Context::default();
-            let creating = matches!(
-                state,
-                "create" | "picker-files" | "picker-folder" | "picker-zip"
-            );
-            let mut app = ArchiveApp::new(
-                Box::new(factory.clone()),
-                (!creating).then(|| scratch.0.join("sample.zip")),
-                false,
-            );
-            if !creating {
-                pump(&mut app.model);
-            }
-            factory.state.borrow_mut().manual = true;
-            if creating {
-                let source = scratch.0.join("source.txt");
-                fs::write(&source, "fixture").unwrap();
-                app.add_sources(vec![source]);
-            }
-            if matches!(
-                state,
-                "progress" | "result" | "close-confirm" | "close-wait" | "close-review"
-            ) {
-                assert!(app.begin_extract());
-                if matches!(state, "result" | "close-review") {
-                    let mut worker = factory.state.borrow_mut();
-                    worker.frame(Event::Accepted { encryption: false });
-                    worker.finish(Outcome::Failed, Publication::None);
-                    drop(worker);
-                    for _ in 0..30 {
-                        policy_render(&ctx, &mut app, vec![]);
-                    }
-                }
-                if state.starts_with("close-") {
-                    app.model.request_close();
-                    if state == "close-wait" {
-                        app.model.confirm_close();
-                    }
-                }
-            }
-            match state {
-                "picker-open" => policy_click(&ctx, &mut app, "다른 파일"),
-                "picker-destination" | "picker-zip" => policy_click(&ctx, &mut app, "폴더 바꾸기"),
-                "picker-files" => policy_click(&ctx, &mut app, "파일 추가"),
-                "picker-folder" => policy_click(&ctx, &mut app, "폴더 추가"),
-                _ => {}
-            }
-            if state == "result" && label == "자세히 닫기" {
-                policy_click(&ctx, &mut app, "자세히 보기");
-            }
-            let before = factory.state.borrow().starts.len();
-            let label = if label == "breadcrumb" {
-                scratch
-                    .0
-                    .ancestors()
-                    .last()
-                    .unwrap()
-                    .as_os_str()
-                    .to_str()
-                    .unwrap()
-            } else {
-                label.as_str()
-            };
-            policy_focus(&ctx, &mut app, label);
-            policy_render(&ctx, &mut app, vec![key(egui::Key::Enter)]);
-            policy_render(&ctx, &mut app, vec![]);
-            assert_eq!(
-                factory.state.borrow().starts.len(),
-                before,
-                "{state}: {label}"
-            );
-        }
+    fn destination_failure_sends_no_request_and_explains_folder_change() {
         let scratch = Folder::new();
         let factory = FakeFactory::default();
         let mut app = loaded(&scratch, &factory);
-        factory.state.borrow_mut().manual = true;
+        let file = scratch.0.join("existing.txt");
+        fs::write(&file, "preserve").unwrap();
+        app.choose_destination(file.clone());
+        assert!(!app.begin_extract());
+        assert_eq!(factory.state.borrow().starts.len(), 1);
         let ctx = egui::Context::default();
-        policy_focus(&ctx, &mut app, "풀기");
-        policy_render(&ctx, &mut app, vec![key(egui::Key::Enter)]);
-        assert!(matches!(
-            factory.state.borrow().starts.last(),
-            Some(Start::Extract { .. })
-        ));
-        assert_eq!(factory.state.borrow().starts.len(), 2);
+        render(&ctx, &mut app, vec![]);
+        assert!(
+            render(&ctx, &mut app, vec![])
+                .iter()
+                .any(|(text, _)| text == FOLDER_ERROR)
+        );
+        assert_eq!(fs::read_to_string(file).unwrap(), "preserve");
+    }
+
+    #[test]
+    fn cancelling_removes_only_automatically_created_empty_folder() {
+        for case in ["automatic-empty", "automatic-nonempty", "chosen-empty"] {
+            let scratch = Folder::new();
+            let factory = FakeFactory::default();
+            let mut app = loaded(&scratch, &factory);
+            factory.state.borrow_mut().manual = true;
+            let destination = if case == "chosen-empty" {
+                let path = scratch.0.join("chosen");
+                fs::create_dir(&path).unwrap();
+                app.choose_destination(path.clone());
+                path
+            } else {
+                scratch.0.join("sample")
+            };
+            assert!(app.begin_extract());
+            if case == "automatic-nonempty" {
+                fs::write(destination.join("preserve"), "keep").unwrap();
+            }
+            {
+                let mut state = factory.state.borrow_mut();
+                state.frame(Event::Accepted { encryption: true });
+                state.finish(Outcome::Cancelled, Publication::None);
+            }
+            let ctx = egui::Context::default();
+            for _ in 0..30 {
+                render(&ctx, &mut app, vec![]);
+            }
+            assert!(!app.model.busy());
+            assert_eq!(destination.exists(), case != "automatic-empty");
+        }
     }
 
     #[test]
@@ -1080,7 +724,7 @@ mod widgets {
                     fs::write(&source, b"source").unwrap();
                     app.add_sources(vec![source]);
                     policy_render(&ctx, &mut app, vec![]);
-                    policy_click(&ctx, &mut app, "만들기");
+                    policy_click(&ctx, &mut app, "압축하기");
                     match factory.state.borrow().starts.last().unwrap() {
                         Start::CreateZip { output_file, .. } => output_file
                             .file_name()
@@ -1257,282 +901,7 @@ mod widgets {
             }
         }
     }
-
-    fn picker_frame(
-        ctx: &egui::Context,
-        picker: &mut Picker,
-        events: Vec<egui::Event>,
-    ) -> (Vec<(String, egui::Pos2)>, Option<Choice>) {
-        let mut choice = None;
-        let mut output = ctx.run_ui(
-            egui::RawInput {
-                screen_rect: Some(egui::Rect::from_min_size(
-                    egui::Pos2::ZERO,
-                    egui::vec2(760.0, 540.0),
-                )),
-                events,
-                ..Default::default()
-            },
-            |_ui| choice = picker.show(ctx),
-        );
-        output.textures_delta.clear();
-        (labels(&output.shapes), choice)
-    }
-
-    fn keyboard_activate_picker(
-        ctx: &egui::Context,
-        picker: &mut Picker,
-        label: &str,
-    ) -> Option<Choice> {
-        picker_frame(ctx, picker, vec![]);
-        let shown = picker_frame(ctx, picker, vec![]).0;
-        let point = shown.iter().find(|(text, _)| text == label).unwrap().1;
-        for _ in 0..80 {
-            let focused = ctx.memory(|memory| memory.focused());
-            if focused
-                .and_then(|id| ctx.read_response(id))
-                .is_some_and(|response| response.rect.contains(point))
-            {
-                let choice = picker_frame(ctx, picker, vec![key(egui::Key::Enter)]).1;
-                let mut released = key(egui::Key::Enter);
-                if let egui::Event::Key { pressed, .. } = &mut released {
-                    *pressed = false;
-                }
-                picker_frame(ctx, picker, vec![released]);
-                return choice;
-            }
-            picker_frame(ctx, picker, vec![key(egui::Key::Tab)]);
-            let mut released = key(egui::Key::Tab);
-            if let egui::Event::Key { pressed, .. } = &mut released {
-                *pressed = false;
-            }
-            picker_frame(ctx, picker, vec![released]);
-        }
-        panic!("키보드 초점 없음: {label}");
-    }
-
-    #[test]
-    fn keyboard_file_pickers_enter_child_before_confirming_file() {
-        for purpose in [Purpose::Open, Purpose::Files] {
-            let scratch = Folder::new();
-            let child = scratch.0.join("child");
-            fs::create_dir(&child).unwrap();
-            let file = child.join("inside.zip");
-            fs::write(&file, "fixture").unwrap();
-            let ctx = egui::Context::default();
-            let mut picker = Picker::new(purpose, &scratch.0);
-            assert!(keyboard_activate_picker(&ctx, &mut picker, "child").is_none());
-            assert!(
-                picker_frame(&ctx, &mut picker, vec![])
-                    .0
-                    .iter()
-                    .any(|(text, _)| text == "inside.zip")
-            );
-            let choice = keyboard_activate_picker(&ctx, &mut picker, "inside.zip");
-            assert!(matches!(choice, Some(Choice::Paths(paths)) if paths == vec![file]));
-        }
-    }
-
-    #[test]
-    fn keyboard_folder_pickers_navigate_before_explicit_folder_confirmation() {
-        for purpose in [
-            Purpose::Destination,
-            Purpose::Retry,
-            Purpose::Folder,
-            Purpose::ZipFolder,
-        ] {
-            let scratch = Folder::new();
-            let child = scratch.0.join("child");
-            fs::create_dir(&child).unwrap();
-            fs::write(child.join("inside.zip"), "fixture").unwrap();
-            let ctx = egui::Context::default();
-            let mut picker = Picker::new(purpose, &scratch.0);
-            assert!(keyboard_activate_picker(&ctx, &mut picker, "child").is_none());
-            assert!(
-                picker_frame(&ctx, &mut picker, vec![])
-                    .0
-                    .iter()
-                    .any(|(text, _)| text == "inside.zip")
-            );
-            let choice = keyboard_activate_picker(&ctx, &mut picker, "이 폴더 선택");
-            assert!(matches!(choice, Some(Choice::Paths(paths)) if paths == vec![child]));
-        }
-    }
-
-    #[test]
-    fn changed_zip_sources_retry_creation_with_or_without_open_archive() {
-        for opened in [false, true] {
-            let scratch = Folder::new();
-            let factory = FakeFactory::default();
-            let mut app = ArchiveApp::new(
-                Box::new(factory.clone()),
-                opened.then(|| scratch.0.join("unrelated.zip")),
-                false,
-            );
-            if opened {
-                pump(&mut app.model);
-            }
-            factory.state.borrow_mut().manual = true;
-            let source = scratch.0.join("source.txt");
-            fs::write(&source, "fixture").unwrap();
-            app.add_sources(vec![source]);
-            let ctx = egui::Context::default();
-            click(&ctx, &mut app, "만들기");
-            assert!(app.model.busy());
-            let request = factory.state.borrow().starts.last().unwrap().clone();
-            assert!(matches!(request, Start::CreateZip { .. }));
-            {
-                let mut state = factory.state.borrow_mut();
-                state.frame(Event::Accepted { encryption: false });
-                state.frame(Event::Terminal(Terminal {
-                    outcome: Outcome::Failed,
-                    error: Some(ErrorCode::SourceChanged),
-                    publication: Publication::None,
-                    created_count: 0,
-                    retained_partial_count: 0,
-                    durability: Durability::NotApplicable,
-                    cleanup: Cleanup::Complete,
-                }));
-                state.queue.extend([
-                    HostEvent::StdoutEof,
-                    HostEvent::StderrEof,
-                    HostEvent::Exited { success: true },
-                ]);
-            }
-            for _ in 0..30 {
-                render(&ctx, &mut app, vec![]);
-            }
-            assert!(!app.model.busy());
-            let shown = render(&ctx, &mut app, vec![]);
-            assert!(
-                shown
-                    .iter()
-                    .any(|(text, _)| text.contains("묶을 파일이 바뀌었습니다"))
-            );
-            assert!(!shown.iter().any(|(text, _)| text == "압축파일 다시 열기"));
-            let count = factory.state.borrow().starts.len();
-            click(&ctx, &mut app, "다시 만들기");
-            assert!(app.model.busy());
-            let state = factory.state.borrow();
-            assert_eq!(state.starts.len(), count + 1);
-            assert_eq!(state.starts.last(), Some(&request));
-        }
-    }
-}
-
-#[cfg(feature = "ui")]
-#[test]
-fn conflict_retry_waits_for_folder_choice_and_preserves_selection() {
-    use eframe::egui;
-    use zipelo_ui_memory_app::archive_screen::ArchiveApp;
-    let scratch = Folder::new();
-    let factory = FakeFactory::default();
-    let mut app = ArchiveApp::new(
-        Box::new(factory.clone()),
-        Some(scratch.0.join("sample.zip")),
-        false,
-    );
-    pump(&mut app.model);
-    app.model.selected.insert(0);
-    factory.state.borrow_mut().manual = true;
-    let ctx = egui::Context::default();
-    let render = |app: &mut ArchiveApp, events| {
-        let mut output = ctx.run_ui(
-            egui::RawInput {
-                screen_rect: Some(egui::Rect::from_min_size(
-                    egui::Pos2::ZERO,
-                    egui::vec2(760.0, 540.0),
-                )),
-                events,
-                ..Default::default()
-            },
-            |ui| app.show(ui),
-        );
-        output.textures_delta.clear();
-        fn walk(shape: &egui::epaint::Shape, labels: &mut Vec<(String, egui::Pos2)>) {
-            match shape {
-                egui::epaint::Shape::Text(text) => labels.push((
-                    text.galley.job.text.clone(),
-                    text.pos + text.galley.rect.size() / 2.0,
-                )),
-                egui::epaint::Shape::Vec(shapes) => {
-                    for shape in shapes {
-                        walk(shape, labels);
-                    }
-                }
-                _ => {}
-            }
-        }
-        let mut labels = Vec::new();
-        for shape in &output.shapes {
-            walk(&shape.shape, &mut labels);
-        }
-        labels
-    };
-    let click = |app: &mut ArchiveApp, text: &str| {
-        render(app, vec![]);
-        let point = render(app, vec![])
-            .into_iter()
-            .filter(|(value, _)| value == text)
-            .max_by(|a, b| a.1.y.total_cmp(&b.1.y))
-            .unwrap_or_else(|| panic!("항목 없음: {text}"))
-            .1;
-        for pressed in [true, false] {
-            render(
-                app,
-                vec![
-                    egui::Event::PointerMoved(point),
-                    egui::Event::PointerButton {
-                        pos: point,
-                        button: egui::PointerButton::Primary,
-                        pressed,
-                        modifiers: egui::Modifiers::NONE,
-                    },
-                ],
-            );
-        }
-    };
-    render(&mut app, vec![]);
-    click(&mut app, "선택한 항목만 풀기");
-    assert!(app.begin_extract());
-    let old = scratch.0.join("sample");
-    fs::write(old.join("existing"), "preserve").unwrap();
-    let chosen = scratch.0.join("chosen");
-    fs::create_dir(&chosen).unwrap();
-    {
-        let mut state = factory.state.borrow_mut();
-        state.frame(Event::Accepted { encryption: true });
-        state.frame(Event::Terminal(Terminal {
-            outcome: Outcome::Failed,
-            error: Some(ErrorCode::Conflict),
-            publication: Publication::None,
-            created_count: 0,
-            retained_partial_count: 0,
-            durability: Durability::NotApplicable,
-            cleanup: Cleanup::Complete,
-        }));
-        state.queue.extend([
-            HostEvent::StdoutEof,
-            HostEvent::StderrEof,
-            HostEvent::Exited { success: true },
-        ]);
-    }
-    for _ in 0..30 {
-        render(&mut app, vec![]);
-    }
-    assert_eq!(factory.state.borrow().starts.len(), 2);
-    click(&mut app, "다른 폴더에 풀기");
-    assert_eq!(factory.state.borrow().starts.len(), 2);
-    click(&mut app, "상위 폴더");
-    click(&mut app, "chosen");
-    click(&mut app, "이 폴더 선택");
-    assert!(matches!(factory.state.borrow().starts.last(),
-        Some(Start::Extract { destination, selection: Selection::EntryIds(ids), .. })
-        if destination == &chosen && ids == &vec![0]));
-    assert_eq!(
-        fs::read_to_string(old.join("existing")).unwrap(),
-        "preserve"
-    );
+    include!("toolbar.rs");
 }
 
 #[cfg(feature = "ui")]
@@ -1542,6 +911,8 @@ fn create_dialog_keeps_title_and_actions_visible_after_resize() {
     use zipelo_ui_memory_app::archive_screen::ArchiveApp;
     let scratch = Folder::new();
     let mut app = ArchiveApp::new(Box::new(FakeFactory::default()), None, false);
+    fs::write(scratch.0.join("one.txt"), b"fixture").unwrap();
+    fs::create_dir(scratch.0.join("photos")).unwrap();
     app.add_sources(vec![scratch.0.join("one.txt"), scratch.0.join("photos")]);
     let ctx = egui::Context::default();
     for size in [egui::vec2(1060.0, 720.0), egui::vec2(760.0, 540.0)] {
@@ -1574,7 +945,7 @@ fn create_dialog_keeps_title_and_actions_visible_after_resize() {
                 walk(&shape.shape, &mut texts);
             }
         }
-        for label in ["ZIP 만들기", "만들기", "취소"] {
+        for label in ["ZIP 만들기", "압축하기", "취소"] {
             let positions = texts
                 .iter()
                 .filter(|(text, _)| text == label)

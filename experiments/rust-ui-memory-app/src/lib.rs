@@ -14,7 +14,8 @@ pub mod archive_process;
 
 pub mod archive_present;
 
+pub mod archive_browser;
 #[cfg(feature = "ui")]
-pub mod archive_picker;
+pub mod archive_dialog;
 #[cfg(feature = "ui")]
 pub mod archive_theme;

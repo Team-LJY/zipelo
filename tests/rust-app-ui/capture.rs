@@ -112,6 +112,61 @@ fn entries() -> Vec<Entry> {
         },
     ]
 }
+fn toolbar_entries() -> Vec<Entry> {
+    let mut entries = vec![
+        Entry {
+            id: 0,
+            name: "Install".into(),
+            kind: Kind::Directory,
+            bytes: Some(0),
+            packed: None,
+            encrypted: false,
+        },
+        Entry {
+            id: 1,
+            name: "Install.exe".into(),
+            kind: Kind::File,
+            bytes: Some(234_906),
+            packed: None,
+            encrypted: false,
+        },
+    ];
+    for (index, name) in [
+        "cab1.cab",
+        "cab10.cab",
+        "cab11.cab",
+        "cab12.cab",
+        "cab2.cab",
+        "cab3.cab",
+        "cab4.cab",
+        "cab5.cab",
+    ]
+    .iter()
+    .enumerate()
+    {
+        entries.push(Entry {
+            id: index as u32 + 2,
+            name: format!("Install/{name}"),
+            kind: Kind::File,
+            bytes: Some(
+                [
+                    99_510_272,
+                    77_909_197,
+                    102_236_160,
+                    67_842_867,
+                    103_389_594,
+                    59_454_669,
+                    78_014_054,
+                    81_159_782,
+                ][index],
+            ),
+            packed: None,
+            encrypted: false,
+        });
+    }
+    entries
+}
+
 impl Factory for CaptureFactory {
     fn connect(&mut self, job: u64) -> Result<Box<dyn Connection>, String> {
         Ok(Box::new(CaptureConnection {
@@ -130,11 +185,17 @@ impl Connection for CaptureConnection {
                 self.event(Event::Accepted { encryption: true });
                 match start {
                     Start::List { .. } => {
-                        for entry in entries() {
+                        let entries = if self.mode.starts_with("toolbar-") {
+                            toolbar_entries()
+                        } else {
+                            entries()
+                        };
+                        let count = entries.len() as u32;
+                        for entry in entries {
                             self.event(Event::Entry(entry));
                         }
                         self.event(Event::ListEnd {
-                            entry_count: 3,
+                            entry_count: count,
                             list_id: ListId {
                                 catalog_version: 1,
                                 format: Format::Zip,
@@ -228,6 +289,12 @@ impl eframe::App for Capture {
         }
         if !self.triggered && self.app.model.list_id.is_some() {
             self.triggered = true;
+            if self.mode == "toolbar-folder" {
+                self.app.browse_folder("Install");
+            }
+            if self.mode == "toolbar-create" {
+                self.app.show_create(false);
+            }
             if [
                 "password",
                 "password-retry",

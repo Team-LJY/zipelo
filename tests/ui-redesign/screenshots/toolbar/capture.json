@@ -1,0 +1,20 @@
+[
+    {
+        "state": "toolbar-root",
+        "path": "tests/ui-redesign/screenshots/toolbar/toolbar-root.png",
+        "width": 1060,
+        "height": 720
+    },
+    {
+        "state": "toolbar-folder",
+        "path": "tests/ui-redesign/screenshots/toolbar/toolbar-folder.png",
+        "width": 1060,
+        "height": 720
+    },
+    {
+        "state": "toolbar-create",
+        "path": "tests/ui-redesign/screenshots/toolbar/toolbar-create.png",
+        "width": 1060,
+        "height": 720
+    }
+]
