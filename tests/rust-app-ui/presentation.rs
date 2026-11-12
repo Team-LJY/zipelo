@@ -543,6 +543,89 @@ mod widgets {
         assert!(matches!(result, Some(Choice::Paths(ref paths)) if paths == &vec![file]));
     }
 
+    fn focus_zip_action_with_tab(ctx: &egui::Context, app: &mut ArchiveApp, label: &str) {
+        render(ctx, app, vec![]);
+        let shown = render(ctx, app, vec![]);
+        let point = shown.iter().find(|(text, _)| text == label).unwrap().1;
+        for _ in 0..80 {
+            if ctx
+                .memory(|memory| memory.focused())
+                .and_then(|id| ctx.read_response(id))
+                .is_some_and(|response| response.rect.contains(point))
+            {
+                return;
+            }
+            render(ctx, app, vec![key(egui::Key::Tab)]);
+            let mut released = key(egui::Key::Tab);
+            if let egui::Event::Key { pressed, .. } = &mut released {
+                *pressed = false;
+            }
+            render(ctx, app, vec![released]);
+        }
+        panic!("키보드 초점 없음: {label}");
+    }
+
+    #[test]
+    fn keyboard_cancel_and_escape_never_start_zip_creation() {
+        for escape in [false, true] {
+            let scratch = Folder::new();
+            let factory = FakeFactory::manual();
+            let mut app = ArchiveApp::new(Box::new(factory.clone()), None, false);
+            let source = scratch.0.join("source.txt");
+            fs::write(&source, "fixture").unwrap();
+            app.add_sources(vec![source]);
+            let ctx = egui::Context::default();
+            focus_zip_action_with_tab(&ctx, &mut app, if escape { "만들기" } else { "취소" });
+            let mut events = vec![key(egui::Key::Enter)];
+            if escape {
+                events.push(key(egui::Key::Escape));
+            }
+            render(&ctx, &mut app, events);
+            let shown = render(&ctx, &mut app, vec![]);
+            assert!(factory.state.borrow().starts.is_empty());
+            assert!(!app.model.busy());
+            assert!(!scratch.0.join("source.zip").exists());
+            assert_eq!(
+                shown
+                    .iter()
+                    .filter(|(text, _)| text == "ZIP 만들기")
+                    .count(),
+                1
+            );
+        }
+    }
+
+    #[test]
+    fn zip_creation_enter_only_activates_focused_make_button() {
+        for make_button in [false, true] {
+            let scratch = Folder::new();
+            let factory = FakeFactory::manual();
+            let mut app = ArchiveApp::new(Box::new(factory.clone()), None, false);
+            let source = scratch.0.join("source.txt");
+            fs::write(&source, "fixture").unwrap();
+            app.add_sources(vec![source.clone()]);
+            let ctx = egui::Context::default();
+            render(&ctx, &mut app, vec![]);
+            if make_button {
+                focus_zip_action_with_tab(&ctx, &mut app, "만들기");
+            } else {
+                ctx.memory_mut(|memory| memory.request_focus(egui::Id::unique("zip-name")));
+                render(&ctx, &mut app, vec![]);
+            }
+            render(&ctx, &mut app, vec![key(egui::Key::Enter)]);
+            render(&ctx, &mut app, vec![]);
+            let state = factory.state.borrow();
+            assert_eq!(state.starts.len(), usize::from(make_button));
+            if make_button {
+                assert!(
+                    matches!(state.starts.last(), Some(Start::CreateZip {sources, output_file, ..})
+                    if sources == &vec![(source, "source.txt".into())]
+                        && output_file == &scratch.0.join("source.zip"))
+                );
+            }
+        }
+    }
+
     fn picker_frame(
         ctx: &egui::Context,
         picker: &mut Picker,

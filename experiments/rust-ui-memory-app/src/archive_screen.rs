@@ -1159,17 +1159,16 @@ impl ArchiveApp {
             ui.separator();
             let can_create = !self.sources.is_empty() && !self.zip_name.is_empty();
             let (cancel, confirm) = theme::action_pair(ui, "취소", Some(("만들기", can_create)));
-            create = confirm
-                || (can_create
-                    && self.picker.is_none()
-                    && ui.input(|i| i.key_pressed(egui::Key::Enter)));
             if cancel {
                 self.create = false;
                 self.ui_error = None;
+                return;
             }
+            create = confirm;
         });
-        if modal.should_close() {
+        if !self.create || modal.should_close() {
             self.create = false;
+            return;
         }
         if let Some(purpose) = pick {
             self.open_picker(purpose);
