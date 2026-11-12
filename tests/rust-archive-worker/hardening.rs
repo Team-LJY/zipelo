@@ -310,6 +310,32 @@ fn streamed_aes_counter_survives_many_read_chunks() {
     );
 }
 
+#[cfg(target_os = "linux")]
+#[test]
+fn worker_temp_isolated_from_unusable_inherited_directory() {
+    let s = Scratch::new();
+    let invalid = s.0.join("not-a-directory");
+    fs::write(&invalid, b"preserve inherited path").unwrap();
+    let output = Command::new(std::env::current_exe().unwrap())
+        .args([
+            "--exact",
+            "hardening::streamed_aes_counter_survives_many_read_chunks",
+            "--nocapture",
+        ])
+        .env("TMPDIR", &invalid)
+        .env("TMP", &invalid)
+        .env("TEMP", &invalid)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(fs::read(&invalid).unwrap(), b"preserve inherited path");
+}
+
 #[test]
 fn seven_zip_output_total_rejects_before_decode() {
     let s = Scratch::new();
