@@ -51,3 +51,8 @@ eframe = { version = "=0.37.0", optional = true, default-features = false, featu
 name = "renderer_fallback"
 path = "../../tests/rust-app-ui/renderer_fallback.rs"
 required-features = ["ui"]
+
+[[bin]]
+name = "zipelo-ui-capture"
+path = "../../tests/rust-app-ui/capture.rs"
+required-features = ["ui-fixture"]

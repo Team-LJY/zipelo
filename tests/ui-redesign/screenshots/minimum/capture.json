@@ -1,0 +1,92 @@
+[
+    {
+        "state": "empty",
+        "path": "tests/ui-redesign/screenshots/minimum/empty.png",
+        "width": 760,
+        "height": 540
+    },
+    {
+        "state": "hover",
+        "path": "tests/ui-redesign/screenshots/minimum/hover.png",
+        "width": 760,
+        "height": 540
+    },
+    {
+        "state": "opened",
+        "path": "tests/ui-redesign/screenshots/minimum/opened.png",
+        "width": 760,
+        "height": 540
+    },
+    {
+        "state": "selected-empty",
+        "path": "tests/ui-redesign/screenshots/minimum/selected-empty.png",
+        "width": 760,
+        "height": 540
+    },
+    {
+        "state": "picker",
+        "path": "tests/ui-redesign/screenshots/minimum/picker.png",
+        "width": 760,
+        "height": 540
+    },
+    {
+        "state": "create",
+        "path": "tests/ui-redesign/screenshots/minimum/create.png",
+        "width": 760,
+        "height": 540
+    },
+    {
+        "state": "create-filled",
+        "path": "tests/ui-redesign/screenshots/minimum/create-filled.png",
+        "width": 760,
+        "height": 540
+    },
+    {
+        "state": "password",
+        "path": "tests/ui-redesign/screenshots/minimum/password.png",
+        "width": 760,
+        "height": 540
+    },
+    {
+        "state": "password-retry",
+        "path": "tests/ui-redesign/screenshots/minimum/password-retry.png",
+        "width": 760,
+        "height": 540
+    },
+    {
+        "state": "password-create",
+        "path": "tests/ui-redesign/screenshots/minimum/password-create.png",
+        "width": 760,
+        "height": 540
+    },
+    {
+        "state": "progress",
+        "path": "tests/ui-redesign/screenshots/minimum/progress.png",
+        "width": 760,
+        "height": 540
+    },
+    {
+        "state": "progress-unknown",
+        "path": "tests/ui-redesign/screenshots/minimum/progress-unknown.png",
+        "width": 760,
+        "height": 540
+    },
+    {
+        "state": "cancelling",
+        "path": "tests/ui-redesign/screenshots/minimum/cancelling.png",
+        "width": 760,
+        "height": 540
+    },
+    {
+        "state": "success",
+        "path": "tests/ui-redesign/screenshots/minimum/success.png",
+        "width": 760,
+        "height": 540
+    },
+    {
+        "state": "error",
+        "path": "tests/ui-redesign/screenshots/minimum/error.png",
+        "width": 760,
+        "height": 540
+    }
+]

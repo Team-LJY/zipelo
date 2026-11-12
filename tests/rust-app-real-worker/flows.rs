@@ -230,9 +230,17 @@ mod screen {
             let point = self.locate(label);
             self.click_at(point);
         }
-        fn fill(&mut self, label: &str, offset: egui::Vec2, value: &Path) {
-            let point = self.locate(label) + offset;
+        fn set_text(&mut self, id: &str, value: &str) {
+            self.render(vec![]);
+            let point = self
+                .context
+                .read_response(egui::Id::unique(id))
+                .unwrap()
+                .rect
+                .center();
             self.click_at(point);
+            self.context
+                .memory_mut(|memory| memory.request_focus(egui::Id::unique(id)));
             self.render(vec![
                 egui::Event::Key {
                     key: egui::Key::A,
@@ -241,8 +249,17 @@ mod screen {
                     repeat: false,
                     modifiers: egui::Modifiers::COMMAND,
                 },
-                egui::Event::Text(value.to_str().unwrap().to_string()),
+                egui::Event::Text(value.into()),
             ]);
+        }
+        fn escape(&mut self) {
+            self.render(vec![egui::Event::Key {
+                key: egui::Key::Escape,
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers: egui::Modifiers::NONE,
+            }]);
         }
         fn settle(&mut self) {
             let deadline = Instant::now() + Duration::from_secs(10);
@@ -254,14 +271,12 @@ mod screen {
             completed(&self.app.model);
         }
         fn open(&mut self, archive: &Path) {
-            self.click("파일 열기");
-            self.fill("압축파일 절대 경로", egui::vec2(0.0, 22.0), archive);
-            self.click("열기");
+            self.app.open_path(archive.to_path_buf());
             assert!(self.app.model.busy());
             self.settle();
         }
         fn extract(&mut self, destination: &Path) {
-            self.fill("출력 폴더", egui::vec2(100.0, 0.0), destination);
+            self.app.choose_destination(destination.to_path_buf());
             self.click("풀기");
             assert!(self.app.model.busy());
             self.settle();
@@ -345,14 +360,10 @@ mod screen {
         let output = make_directory(&scratch.path("output"));
         let (factory, observed) = observed_factory();
         let mut screen = Screen::new(factory);
-        screen.click("ZIP 만들기");
-        screen.fill(
-            "원본 파일 절대 경로 / 한 줄에 하나",
-            egui::vec2(0.0, 25.0),
-            &source,
-        );
-        screen.fill("저장할 ZIP 절대 경로", egui::vec2(0.0, 22.0), &archive);
-        screen.click("ZIP 만들기");
+        screen.app.add_sources(vec![source.clone()]);
+        screen.render(vec![]);
+        screen.set_text("zip-name", archive.file_name().unwrap().to_str().unwrap());
+        screen.click("만들기");
         assert!(screen.app.model.busy());
         screen.settle();
         assert!(archive.is_file());

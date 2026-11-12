@@ -7,7 +7,7 @@ mod fake;
 mod renderer;
 #[path = "system_font.rs"]
 mod system_font;
-use eframe::egui::{self, Color32, FontData, FontDefinitions, FontFamily, FontId, TextStyle};
+use eframe::egui::{self, FontData, FontDefinitions, FontFamily};
 fn main() -> eframe::Result {
     let result = run();
     #[cfg(target_os = "windows")]
@@ -63,23 +63,7 @@ fn run() -> eframe::Result {
                     .families
                     .insert(FontFamily::Proportional, vec!["noto-kr".into()]);
                 cc.egui_ctx.set_fonts(fonts);
-                cc.egui_ctx.set_visuals(egui::Visuals::light());
-                cc.egui_ctx.style_mut_of(egui::Theme::Light, |style| {
-                    style
-                        .text_styles
-                        .insert(TextStyle::Body, FontId::proportional(18.0));
-                    style
-                        .text_styles
-                        .insert(TextStyle::Button, FontId::proportional(18.0));
-                    style
-                        .text_styles
-                        .insert(TextStyle::Heading, FontId::proportional(26.0));
-                    style.visuals.panel_fill = Color32::WHITE;
-                    style.visuals.override_text_color = Some(Color32::from_rgb(24, 39, 57));
-                    style.visuals.selection.bg_fill = Color32::from_rgb(211, 230, 246);
-                    style.spacing.item_spacing = egui::vec2(12.0, 10.0);
-                    style.spacing.button_padding = egui::vec2(14.0, 10.0);
-                });
+                zipelo_ui_memory_app::archive_theme::apply(&cc.egui_ctx);
                 let (fixture, startup) = zipelo_ui_memory_app::archive_ui::launch_args(
                     std::env::args_os().skip(1).collect(),
                     std::env::current_dir()?,

@@ -413,7 +413,7 @@ fn renders_every_flow_with_actual_egui_widgets() {
         1060.0,
     );
     let create = render(&mut app, vec![], 1060.0);
-    assert!(create.iter().any(|(t, _)| t == "저장할 ZIP 절대 경로"));
+    assert!(create.iter().any(|(t, _)| t == "2. 저장 위치"));
     let mut app = ArchiveApp::new(Box::new(f.clone()), Some(path("locked.zip")), true);
     for _ in 0..8 {
         app.model.poll();
@@ -422,7 +422,7 @@ fn renders_every_flow_with_actual_egui_widgets() {
         render(&mut app, vec![], width);
         render(&mut app, vec![], width);
         let password = render(&mut app, vec![], width);
-        assert!(password.iter().any(|(t, _)| t.contains("암호 전달")));
+        assert!(password.iter().any(|(t, _)| t == "암호가 필요합니다"));
     }
     assert!(app.model.password("synthetic secret".into()));
     pump(&mut app.model);
@@ -644,29 +644,31 @@ fn extract_button_sends_gzip_name_only_for_raw_gzip() {
                 }],
             );
         };
+        let scratch = presentation::Folder::new();
+        app.choose_destination(scratch.0.clone());
         render(&mut app, vec![]);
-        let texts = render(&mut app, vec![]);
-        let folder = texts
-            .iter()
-            .find(|(text, _)| text == "출력 폴더")
-            .unwrap()
-            .1;
-        click(&mut app, folder + egui::vec2(100.0, 0.0));
-        render(
-            &mut app,
-            vec![egui::Event::Text(
-                path("button-output").to_string_lossy().into_owned(),
-            )],
-        );
         if format == Format::Gzip {
-            let texts = render(&mut app, vec![]);
-            let name = texts
-                .iter()
-                .find(|(text, _)| text == "출력 파일명")
+            render(&mut app, vec![]);
+            let input = ctx
+                .read_response(egui::Id::unique("gzip-name"))
                 .unwrap()
-                .1;
-            click(&mut app, name + egui::vec2(100.0, 0.0));
-            render(&mut app, vec![egui::Event::Text("plain.txt".into())]);
+                .rect
+                .center();
+            click(&mut app, input);
+            ctx.memory_mut(|memory| memory.request_focus(egui::Id::unique("gzip-name")));
+            render(
+                &mut app,
+                vec![
+                    egui::Event::Key {
+                        key: egui::Key::A,
+                        physical_key: None,
+                        pressed: true,
+                        repeat: false,
+                        modifiers: egui::Modifiers::COMMAND,
+                    },
+                    egui::Event::Text("plain.txt".into()),
+                ],
+            );
         }
         let texts = render(&mut app, vec![]);
         let button = texts.iter().find(|(text, _)| text == "풀기").unwrap().1;
@@ -846,3 +848,5 @@ fn password_validation_and_retry_do_not_erase_transport_failure() {
     assert_eq!(model.error.as_deref(), Some("pipe error"));
     assert!(!model.confirmed);
 }
+
+mod presentation;

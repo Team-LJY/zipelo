@@ -1,0 +1,32 @@
+# Zipelo 화면 회귀 확인
+
+설계 기준은 docs/ui-design-v0.1.md의 수용 기준 23개이며, 비교 기준 커밋은 b10c7eedddd202f83766aa8f001142cdfdb4097c임.
+
+## 기능 시험
+
+프로젝트 루트에서 실행함.
+
+```sh
+python3 tests/ci/run_rust.py local
+```
+
+tests/rust-app-ui/presentation.rs에서 결과 안내, 오류 문구, 폴더 생성과 정리, 선택창, 암호 확인, 키보드 입력과 최소 크기를 검증함. tests/rust-app-real-worker/flows.rs와 password_flows.rs는 실제 작업자를 사용해 파일 생성과 재해제, 암호 재입력 및 취소 후 파일 보존을 검증함.
+
+## 전후 화면 재현
+
+Linux의 Xvfb, xdotool, ImageMagick import와 시스템 CJK 글꼴이 필요함. 제품 의존성은 추가하지 않음. 실행 파일 준비는 로컬 Git 객체와 기존 Cargo 오프라인 캐시를 사용함. 기존 산출물은 지우지 않으며 새 output 폴더를 지정함.
+
+```sh
+python3 tests/ui-redesign/prepare.py --output tests/ui-redesign/runs/reproduce --target-dir tests/ui-redesign/runs/target
+python3 tests/ui-redesign/capture.py --binary tests/ui-redesign/runs/reproduce/before-capture --variant before
+python3 tests/ui-redesign/capture.py --binary tests/ui-redesign/runs/reproduce/after-capture --variant after
+python3 tests/ui-redesign/capture.py --binary tests/ui-redesign/runs/reproduce/after-capture --variant after --width 760 --height 540 --output tests/ui-redesign/screenshots/minimum
+```
+
+촬영기는 전용 Xvfb를 만들고 X11을 지정하며 종료 시 자신이 만든 창과 서버만 종료함. 결과는 screenshots/before, screenshots/after, screenshots/minimum에 저장함. 15개 상태를 각각 촬영하며 capture.json에 크기와 경로를 기록함.
+
+촬영 화면은 tests/rust-app-ui/capture.rs의 합성 입력임. 글꼴과 eframe 렌더러 및 실제 화면 컴포넌트를 사용하고 "화면 시험 모드"를 표시함. 암호 불일치 화면에는 고정된 시험 문자열만 입력함. 합성 작업자는 실제 압축 파일을 읽거나 결과 파일을 저장하지 않으며, 기본 풀 위치 생성은 tests/ui-redesign/runs/fixtures 아래에서 확인함. 실제 파일 작업 검증은 별도의 real_worker 시험 결과와 구분함.
+
+기준 화면 준비 시 같은 촬영 도우미를 기준 커밋 소스에 넣고, 새 화면 전용 메서드 두 곳만 기존 공개 모델 호출로 바꿈. 기준 제품 소스는 바꾸지 않음. --states 옵션으로 일부 상태만 다시 촬영할 수 있으며 다른 상태의 기록은 보존함.
+
+최소 크기에서 ZIP 만들기 본문은 내부 스크롤로 모든 설정에 접근함. 주 버튼과 취소 버튼은 본문 스크롤 밖에 고정함. 폴더 열기는 셸 없이 운영체제 명령에 경로 하나를 인자로 전달하며, 특수 문자가 있는 경로도 시험함. Windows 실제 화면과 운영체제 파일 탐색기 실행 확인은 이 Linux 촬영 기록에 포함하지 않음.

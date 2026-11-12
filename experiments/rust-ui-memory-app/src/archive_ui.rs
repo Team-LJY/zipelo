@@ -280,6 +280,11 @@ impl Model {
     pub fn busy(&self) -> bool {
         self.running.is_some()
     }
+    pub fn cancellation_requested(&self) -> bool {
+        self.running
+            .as_ref()
+            .is_some_and(|run| run.cancel_sequence.is_some())
+    }
     pub fn job_id(&self) -> Option<u64> {
         self.running.as_ref().map(|r| r.id)
     }
