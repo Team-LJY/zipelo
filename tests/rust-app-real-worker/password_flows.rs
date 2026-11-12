@@ -211,7 +211,8 @@ fn cancel_password_extraction_waits_for_cleanup_without_writes() {
         Close::Waiting | Close::Review
     ));
     screen.finish_password_job(Outcome::Cancelled);
-    assert_eq!(screen.app.model.close, Close::Review);
+    // 정리가 끝나면 결과 확인 안내 없이 바로 닫힘.
+    assert_eq!(screen.app.model.close, Close::Allowed);
     assert_eq!(fs::read(output.join("existing.txt")).unwrap(), b"preserve");
     assert_eq!(fs::read_dir(output).unwrap().count(), 1);
     assert_reaped(&observed);

@@ -460,7 +460,9 @@ fn renders_every_flow_with_actual_egui_widgets() {
     pump(&mut app.model);
     render(&mut app, vec![], 1060.0);
     let result = render(&mut app, vec![], 1060.0);
-    assert!(result.iter().any(|(t, _)| t == "결과 확인 후 닫기"));
+    // 작업 정리가 끝나면 결과 확인 안내 없이 바로 닫힘.
+    assert!(!result.iter().any(|(t, _)| t == "결과 확인 후 닫기"));
+    assert_eq!(app.model.close, Close::Allowed);
 }
 
 #[test]

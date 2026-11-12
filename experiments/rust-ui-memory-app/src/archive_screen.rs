@@ -811,9 +811,15 @@ impl ArchiveApp {
         }
         if ctx.input(|i| i.viewport().close_requested()) {
             self.model.request_close();
+            // 실행 중인 작업이 없으면 결과 확인 안내 없이 바로 닫음.
+            self.model.acknowledge_close();
             if self.model.close != Close::Allowed {
                 ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
             }
+        }
+        if self.model.close == Close::Review {
+            // 작업을 취소하고 닫기로 한 뒤 정리가 끝난 경우도 안내 없이 닫음.
+            self.model.acknowledge_close();
         }
         if self.model.close == Close::Allowed {
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
@@ -2377,7 +2383,11 @@ impl ArchiveApp {
     }
 
     fn close_dialog(&mut self, ctx: &egui::Context) {
-        if self.model.close == Close::Open || self.model.close == Close::Allowed {
+        // Review(결과 확인 후 닫기)는 show()에서 바로 확인 처리하므로 그리지 않음.
+        if matches!(
+            self.model.close,
+            Close::Open | Close::Allowed | Close::Review
+        ) {
             return;
         }
         egui::Modal::new(egui::Id::unique("archive-close")).show(ctx, |ui| {
@@ -2402,53 +2412,6 @@ impl ArchiveApp {
                     if theme::action(ui, "닫기 취소", false, true).clicked() {
                         self.model.keep_open();
                     }
-                }
-                Close::Review => {
-                    let creating = matches!(self.last_request, Some(Start::CreateZip { .. }));
-                    ui.heading("결과 확인 후 닫기");
-                    let wrote = self
-                        .last_request
-                        .as_ref()
-                        .is_some_and(|request| !matches!(request, Start::List { .. }));
-                    ui.label(if !wrote {
-                        "프로그램을 닫을까요?".to_owned()
-                    } else if self.model.confirmed {
-                        "작업 결과를 확인한 뒤 닫으세요".to_owned()
-                    } else {
-                        present::operation_text(present::UNCERTAIN, creating)
-                    });
-                    egui::ScrollArea::vertical()
-                        .max_height(160.0)
-                        .show(ui, |ui| {
-                            if let Some(code) = self.model.terminal.as_ref().and_then(|t| t.error) {
-                                ui.colored_label(
-                                    theme::ERROR,
-                                    present::operation_text(present::error_text(code), creating),
-                                );
-                            }
-                            if wrote {
-                                for warning in present::warnings(
-                                    self.model.terminal.as_ref(),
-                                    self.model.confirmed,
-                                    self.targets.as_ref(),
-                                    &self.directories,
-                                    &self.model.outputs,
-                                ) {
-                                    ui.colored_label(
-                                        theme::WARNING,
-                                        present::operation_text(warning, creating),
-                                    );
-                                }
-                            }
-                        });
-                    ui.horizontal(|ui| {
-                        if theme::action(ui, "계속 작업", false, true).clicked() {
-                            self.model.keep_open();
-                        }
-                        if theme::action(ui, "닫기", true, true).clicked() {
-                            self.model.acknowledge_close();
-                        }
-                    });
                 }
                 _ => {}
             }
