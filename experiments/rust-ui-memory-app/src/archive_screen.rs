@@ -32,6 +32,7 @@ pub struct ArchiveApp {
     picker: Option<Picker>,
     last_request: Option<Start>,
     targets: Option<BTreeSet<String>>,
+    directories: BTreeSet<String>,
     dismissed: bool,
     details: bool,
     checked_destination: bool,
@@ -63,6 +64,7 @@ impl ArchiveApp {
             picker: None,
             last_request: None,
             targets: None,
+            directories: BTreeSet::new(),
             dismissed: false,
             details: false,
             checked_destination: false,
@@ -99,6 +101,7 @@ impl ArchiveApp {
             .into();
         self.selected_only = false;
         self.targets = None;
+        self.directories.clear();
         self.start(Start::List { archive });
     }
 
@@ -163,6 +166,15 @@ impl ArchiveApp {
             self.selected_only,
             gzip.then_some(self.gzip_name.as_str()),
         );
+        self.directories = if gzip {
+            BTreeSet::new()
+        } else {
+            present::target_directories(
+                &self.model.entries,
+                &self.model.selected,
+                self.selected_only,
+            )
+        };
         let request = Start::Extract {
             archive: self.model.archive.clone().unwrap(),
             destination: self.destination.clone(),
@@ -212,6 +224,7 @@ impl ArchiveApp {
             sources.push((path.clone(), name.to_owned()));
         }
         self.targets = Some([self.zip_name.clone()].into_iter().collect());
+        self.directories.clear();
         if self.start(Start::CreateZip {
             sources,
             output_file,
@@ -762,10 +775,6 @@ impl ArchiveApp {
                     if theme::action(ui, "풀기", true, enabled)
                         .on_disabled_hover_text("풀 항목을 선택하세요")
                         .clicked()
-                        || (enabled
-                            && !self.create
-                            && self.picker.is_none()
-                            && ui.input(|i| i.key_pressed(egui::Key::Enter)))
                     {
                         self.begin_extract();
                     }
@@ -852,6 +861,7 @@ impl ArchiveApp {
                 t.as_ref(),
                 self.model.confirmed,
                 self.targets.as_ref(),
+                &self.directories,
                 &self.model.outputs,
             )
         };
@@ -1182,6 +1192,10 @@ impl ArchiveApp {
         let (_, attempt, encrypt) = self.model.challenge.unwrap();
         let mut submit = false;
         let mut cancel = false;
+        let password_enter = ctx.memory(|memory| memory.focused()).is_some_and(|id| {
+            id == egui::Id::unique("archive-password-input")
+                || id == egui::Id::unique("archive-password-confirm")
+        }) && ctx.input(|input| input.key_pressed(egui::Key::Enter));
         let modal = egui::Modal::new(egui::Id::unique("archive-password")).show(ctx, |ui| {
             ui.set_width((ctx.content_rect().width() - 64.0).min(420.0));
             ui.heading(if encrypt {
@@ -1254,7 +1268,7 @@ impl ArchiveApp {
                 && (!encrypt || self.password == self.password_confirm);
             let actions = theme::action_pair(ui, "취소", Some(("확인", valid)));
             cancel = actions.0;
-            submit = actions.1 || (valid && ui.input(|i| i.key_pressed(egui::Key::Enter)));
+            submit = actions.1 || (valid && password_enter);
         });
         if modal.should_close() || cancel {
             self.clear_password();
@@ -1317,6 +1331,7 @@ impl ArchiveApp {
                                     self.model.terminal.as_ref(),
                                     self.model.confirmed,
                                     self.targets.as_ref(),
+                                    &self.directories,
                                     &self.model.outputs,
                                 ) {
                                     ui.colored_label(theme::WARNING, warning);

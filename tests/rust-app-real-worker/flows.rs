@@ -351,6 +351,49 @@ mod screen {
     fn targz_open_and_extract_via_actual_widgets_and_worker() {
         archive_flow("sample.tar.gz", Format::TarGzip);
     }
+
+    #[test]
+    fn empty_directory_zip_extracts_successfully_with_existing_directory_reuse() {
+        let scratch = Scratch::new();
+        let source = make_directory(&scratch.path("empty-source"));
+        fs::create_dir(source.join("child")).unwrap();
+        let archive = scratch.path("empty-source.zip");
+        let output = make_directory(&scratch.path("output"));
+        let (factory, observed) = observed_factory();
+        let mut screen = Screen::new(factory);
+        screen.app.add_sources(vec![source]);
+        screen.render(vec![]);
+        screen.click("만들기");
+        screen.settle();
+        assert!(archive.is_file());
+        screen.open(&archive);
+        assert!(
+            screen
+                .app
+                .model
+                .entries
+                .iter()
+                .all(|entry| entry.kind == Kind::Directory)
+        );
+        for expected in [2, 0] {
+            screen.extract(&output);
+            assert!(output.join("empty-source/child").is_dir());
+            assert_eq!(
+                screen.app.model.terminal.as_ref().unwrap().created_count,
+                expected
+            );
+            let shown = screen.render(vec![]);
+            assert!(shown.iter().any(|(text, _)| text == "압축을 풀었습니다"));
+            assert!(
+                !shown
+                    .iter()
+                    .any(|(text, _)| text.contains("저장이 끝났는지"))
+            );
+            screen.click("확인");
+        }
+        assert_reaped(&observed);
+    }
+
     #[test]
     fn create_zip_reopen_and_extract_via_actual_widgets_and_worker() {
         let scratch = Scratch::new();

@@ -242,9 +242,7 @@ impl Picker {
                     };
                     let enabled = !paths.is_empty() && !self.error;
                     let (cancel, confirm) = theme::action_pair(ui, "취소", Some((label, enabled)));
-                    if navigate.is_none()
-                        && (confirm || (enabled && ui.input(|i| i.key_pressed(egui::Key::Enter))))
-                    {
+                    if navigate.is_none() && confirm {
                         choice = Some(Choice::Paths(paths));
                     }
                     if cancel {

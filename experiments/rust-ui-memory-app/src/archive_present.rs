@@ -126,10 +126,56 @@ pub fn target_files(
     Some(names)
 }
 
+pub fn target_directories(
+    entries: &[Entry],
+    selected: &BTreeSet<u32>,
+    only: bool,
+) -> BTreeSet<String> {
+    let selected_directories = entries
+        .iter()
+        .filter(|entry| entry.kind == Kind::Directory && selected.contains(&entry.id))
+        .map(|entry| {
+            entry
+                .name
+                .replace('\\', "/")
+                .trim_end_matches('/')
+                .to_owned()
+        })
+        .collect::<BTreeSet<_>>();
+    let mut directories = BTreeSet::new();
+    for entry in entries
+        .iter()
+        .filter(|entry| matches!(entry.kind, Kind::File | Kind::Directory))
+    {
+        let normalized = entry.name.replace('\\', "/");
+        let name = normalized.trim_end_matches('/');
+        let mut parent = name;
+        let mut ancestors = Vec::new();
+        while let Some((directory, _)) = parent.rsplit_once('/') {
+            ancestors.push(directory);
+            parent = directory;
+        }
+        if only
+            && !selected.contains(&entry.id)
+            && !ancestors
+                .iter()
+                .any(|directory| selected_directories.contains(*directory))
+        {
+            continue;
+        }
+        if entry.kind == Kind::Directory {
+            directories.insert(name.to_owned());
+        }
+        directories.extend(ancestors.into_iter().map(str::to_owned));
+    }
+    directories
+}
+
 pub fn warnings(
     terminal: Option<&Terminal>,
     confirmed: bool,
     targets: Option<&BTreeSet<String>>,
+    directories: &BTreeSet<String>,
     outputs: &[(String, Disposition)],
 ) -> Vec<&'static str> {
     let Some(t) = terminal.filter(|_| confirmed) else {
@@ -160,13 +206,23 @@ pub fn warnings(
     if uncertain {
         result.push(UNCERTAIN);
     } else if let Some(targets) = targets {
-        let saved = targets.intersection(&created).count();
-        if !targets.is_empty() && saved == targets.len() && retained {
+        let files = created
+            .difference(directories)
+            .cloned()
+            .collect::<BTreeSet<_>>();
+        let saved = targets.intersection(&files).count();
+        let unknown = !targets.is_disjoint(directories)
+            || created
+                .iter()
+                .any(|name| !targets.contains(name) && !directories.contains(name));
+        if unknown {
+            result.push(UNCERTAIN);
+        } else if !targets.is_empty() && saved == targets.len() && retained {
             result.push(LEFTOVERS);
             all_saved_with_leftovers = true;
         } else if saved > 0 && saved < targets.len() && t.outcome != Outcome::Completed {
             result.push(PARTIAL);
-        } else if (saved == 0 && !created.is_empty())
+        } else if (saved == 0 && !files.is_empty())
             || (retained && saved == 0)
             || (t.outcome == Outcome::Completed && saved != targets.len())
         {

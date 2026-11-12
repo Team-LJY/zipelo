@@ -29,6 +29,7 @@ fn partial_extraction_requires_matching_file_reports() {
             Some(&t),
             true,
             Some(&targets()),
+            &BTreeSet::new(),
             &[("one.txt".into(), Disposition::Created)]
         ),
         vec![PARTIAL]
@@ -45,6 +46,7 @@ fn all_saved_with_temporary_leftover_is_not_partial_extraction() {
             Some(&t),
             true,
             Some(&files),
+            &BTreeSet::new(),
             &[
                 ("one.txt".into(), Disposition::Created),
                 ("temp".into(), Disposition::PartialRetained)
@@ -62,8 +64,14 @@ fn leftover_without_file_reports_and_commit_uncertainty_are_unknown() {
         vec![("temp".into(), Disposition::PartialRetained)],
         vec![("one.txt".into(), Disposition::CommitUncertain)],
     ] {
-        assert!(warnings(Some(&t), true, Some(&targets()), &outputs).contains(&UNCERTAIN));
-        assert!(!warnings(Some(&t), true, Some(&targets()), &outputs).contains(&PARTIAL));
+        assert!(
+            warnings(Some(&t), true, Some(&targets()), &BTreeSet::new(), &outputs)
+                .contains(&UNCERTAIN)
+        );
+        assert!(
+            !warnings(Some(&t), true, Some(&targets()), &BTreeSet::new(), &outputs)
+                .contains(&PARTIAL)
+        );
     }
 }
 #[test]
@@ -72,7 +80,7 @@ fn synchronization_and_cleanup_warnings_are_both_visible() {
     t.created_count = 0;
     t.durability = Durability::Unconfirmed;
     t.cleanup = Cleanup::Failed;
-    let result = warnings(Some(&t), true, Some(&targets()), &[]);
+    let result = warnings(Some(&t), true, Some(&targets()), &BTreeSet::new(), &[]);
     assert!(result.contains(&SYNC_WARNING));
     assert!(result.contains(&CLEANUP_WARNING));
 }
@@ -86,7 +94,9 @@ fn missing_terminal_exit_or_contradictory_reports_never_claim_unsaved() {
     assert!(!definitely_unsaved(Some(&t), false, &[]));
     let reports = [("one.txt".into(), Disposition::Created)];
     assert!(!definitely_unsaved(Some(&t), true, &reports));
-    assert!(warnings(Some(&t), true, Some(&targets()), &reports).contains(&UNCERTAIN));
+    assert!(
+        warnings(Some(&t), true, Some(&targets()), &BTreeSet::new(), &reports).contains(&UNCERTAIN)
+    );
 }
 #[test]
 fn unsafe_path_and_conflict_preserve_result_classification() {
@@ -98,12 +108,15 @@ fn unsafe_path_and_conflict_preserve_result_classification() {
                 Some(&t),
                 true,
                 Some(&targets()),
+                &BTreeSet::new(),
                 &[("one.txt".into(), Disposition::Created)]
             ),
             vec![PARTIAL]
         );
         t.publication = Publication::Uncertain;
-        assert!(warnings(Some(&t), true, Some(&targets()), &[]).contains(&UNCERTAIN));
+        assert!(
+            warnings(Some(&t), true, Some(&targets()), &BTreeSet::new(), &[]).contains(&UNCERTAIN)
+        );
         t.publication = Publication::None;
         t.created_count = 0;
         assert!(definitely_unsaved(Some(&t), true, &[]));
@@ -167,6 +180,114 @@ fn folder_selection_expands_only_matching_descendants() {
         Some(["docs/one.txt".into()].into_iter().collect())
     );
 }
+
+#[test]
+fn directory_reports_allow_empty_and_mixed_archives_without_hiding_unknown_outputs() {
+    let directories = ["parent".into(), "parent/empty".into()]
+        .into_iter()
+        .collect();
+    let empty = BTreeSet::new();
+    let mut t = terminal();
+    t.outcome = Outcome::Completed;
+    t.error = None;
+    t.publication = Publication::Complete;
+    t.created_count = 2;
+    let reports = [
+        ("parent".into(), Disposition::Created),
+        ("parent/empty".into(), Disposition::Created),
+    ];
+    assert!(warnings(Some(&t), true, Some(&empty), &directories, &reports).is_empty());
+    t.created_count = 0;
+    assert!(warnings(Some(&t), true, Some(&empty), &directories, &[]).is_empty());
+    let files = ["parent/file.txt".into()].into_iter().collect();
+    t.created_count = 2;
+    let reports = [
+        ("parent".into(), Disposition::Created),
+        ("parent/file.txt".into(), Disposition::Created),
+    ];
+    assert!(warnings(Some(&t), true, Some(&files), &directories, &reports).is_empty());
+    t.created_count = 1;
+    assert!(
+        warnings(
+            Some(&t),
+            true,
+            Some(&files),
+            &directories,
+            &[("parent".into(), Disposition::Created)]
+        )
+        .contains(&UNCERTAIN)
+    );
+    assert!(
+        warnings(
+            Some(&t),
+            true,
+            Some(&empty),
+            &directories,
+            &[("unknown".into(), Disposition::Created)]
+        )
+        .contains(&UNCERTAIN)
+    );
+    t.publication = Publication::Uncertain;
+    assert!(
+        warnings(
+            Some(&t),
+            true,
+            Some(&empty),
+            &directories,
+            &[("parent".into(), Disposition::CommitUncertain)]
+        )
+        .contains(&UNCERTAIN)
+    );
+}
+
+#[test]
+fn directory_targets_include_selected_members_and_implicit_parents() {
+    let entries = [
+        Entry {
+            id: 0,
+            name: "top".into(),
+            kind: Kind::Directory,
+            bytes: None,
+            packed: None,
+            encrypted: false,
+        },
+        Entry {
+            id: 1,
+            name: "top/empty".into(),
+            kind: Kind::Directory,
+            bytes: None,
+            packed: None,
+            encrypted: false,
+        },
+        Entry {
+            id: 2,
+            name: "top/nested/file.txt".into(),
+            kind: Kind::File,
+            bytes: None,
+            packed: None,
+            encrypted: false,
+        },
+        Entry {
+            id: 3,
+            name: "other/empty".into(),
+            kind: Kind::Directory,
+            bytes: None,
+            packed: None,
+            encrypted: false,
+        },
+    ];
+    assert_eq!(
+        target_directories(&entries, &[0].into_iter().collect(), true),
+        ["top".into(), "top/empty".into(), "top/nested".into()]
+            .into_iter()
+            .collect()
+    );
+    assert_eq!(
+        target_directories(&entries, &[2].into_iter().collect(), true),
+        ["top".into(), "top/nested".into()].into_iter().collect()
+    );
+}
+
 #[test]
 fn duplicate_names_prevent_file_completion_assumptions() {
     let entry = Entry {
@@ -179,7 +300,7 @@ fn duplicate_names_prevent_file_completion_assumptions() {
     };
     assert!(target_files(&[entry.clone(), entry], &BTreeSet::new(), false, None).is_none());
     assert_eq!(
-        warnings(Some(&terminal()), true, None, &[]),
+        warnings(Some(&terminal()), true, None, &BTreeSet::new(), &[]),
         vec![UNCERTAIN]
     );
 }
@@ -539,6 +660,26 @@ mod widgets {
                 },
             ]);
         }
+        for _ in 0..40 {
+            if ctx
+                .memory(|memory| memory.focused())
+                .and_then(|id| ctx.read_response(id))
+                .is_some_and(|response| response.rect.contains(confirm))
+            {
+                break;
+            }
+            draw(vec![key(egui::Key::Tab)]);
+            let mut released = key(egui::Key::Tab);
+            if let egui::Event::Key { pressed, .. } = &mut released {
+                *pressed = false;
+            }
+            draw(vec![released]);
+        }
+        assert!(
+            ctx.memory(|memory| memory.focused())
+                .and_then(|id| ctx.read_response(id))
+                .is_some_and(|response| response.rect.contains(confirm))
+        );
         draw(vec![key(egui::Key::Enter)]);
         assert!(matches!(result, Some(Choice::Paths(ref paths)) if paths == &vec![file]));
     }
@@ -624,6 +765,287 @@ mod widgets {
                 );
             }
         }
+    }
+
+    fn policy_render(
+        ctx: &egui::Context,
+        app: &mut ArchiveApp,
+        events: Vec<egui::Event>,
+    ) -> Vec<(String, egui::Pos2)> {
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(1060.0, 720.0),
+                )),
+                events,
+                ..Default::default()
+            },
+            |ui| app.show(ui),
+        );
+        output.textures_delta.clear();
+        labels(&output.shapes)
+    }
+
+    fn policy_focus(ctx: &egui::Context, app: &mut ArchiveApp, label: &str) {
+        policy_render(ctx, app, vec![]);
+        for _ in 0..100 {
+            let shown = policy_render(ctx, app, vec![]);
+            let point = shown
+                .iter()
+                .rev()
+                .find(|(text, _)| text == label)
+                .unwrap_or_else(|| panic!("표시 없음: {label}"))
+                .1;
+            if ctx
+                .memory(|memory| memory.focused())
+                .and_then(|id| ctx.read_response(id))
+                .is_some_and(|response| response.rect.contains(point))
+            {
+                return;
+            }
+            policy_render(ctx, app, vec![key(egui::Key::Tab)]);
+            let mut released = key(egui::Key::Tab);
+            if let egui::Event::Key { pressed, .. } = &mut released {
+                *pressed = false;
+            }
+            policy_render(ctx, app, vec![released]);
+        }
+        panic!("키보드 초점 없음: {label}");
+    }
+
+    fn policy_click(ctx: &egui::Context, app: &mut ArchiveApp, label: &str) {
+        policy_render(ctx, app, vec![]);
+        let point = policy_render(ctx, app, vec![])
+            .iter()
+            .rev()
+            .find(|(text, _)| text == label)
+            .unwrap()
+            .1;
+        for pressed in [true, false] {
+            policy_render(
+                ctx,
+                app,
+                vec![
+                    egui::Event::PointerMoved(point),
+                    egui::Event::PointerButton {
+                        pos: point,
+                        button: egui::PointerButton::Primary,
+                        pressed,
+                        modifiers: egui::Modifiers::NONE,
+                    },
+                ],
+            );
+        }
+    }
+
+    #[test]
+    fn secondary_button_enter_matrix_never_starts_creation_or_extraction() {
+        let cases = vec![
+            ("archive", "ZIP 만들기"),
+            ("archive", "다른 파일"),
+            ("archive", "폴더 바꾸기"),
+            ("archive", "선택한 항목만 풀기"),
+            ("create", "파일 추가"),
+            ("create", "폴더 추가"),
+            ("create", "빼기"),
+            ("create", "폴더 바꾸기"),
+            ("create", "암호로 보호하기"),
+            ("create", "자세한 설정"),
+            ("create", "취소"),
+            ("result", "자세히 보기"),
+            ("result", "자세히 닫기"),
+            ("result", "확인"),
+            ("progress", "취소"),
+            ("close-confirm", "계속 작업"),
+            ("close-confirm", "취소하고 닫기"),
+            ("close-wait", "닫기 취소"),
+            ("close-review", "계속 작업"),
+            ("close-review", "닫기"),
+        ];
+        let mut cases = cases
+            .into_iter()
+            .map(|(state, label)| (state, label.to_owned()))
+            .collect::<Vec<_>>();
+        for state in [
+            "picker-open",
+            "picker-destination",
+            "picker-files",
+            "picker-folder",
+            "picker-zip",
+        ] {
+            for (label, _) in shortcuts() {
+                cases.push((state, label));
+            }
+            for label in ["상위 폴더", "취소", "breadcrumb"] {
+                cases.push((state, label.to_owned()));
+            }
+        }
+        for (state, label) in cases {
+            let scratch = Folder::new();
+            let factory = FakeFactory::default();
+            let ctx = egui::Context::default();
+            let creating = matches!(
+                state,
+                "create" | "picker-files" | "picker-folder" | "picker-zip"
+            );
+            let mut app = ArchiveApp::new(
+                Box::new(factory.clone()),
+                (!creating).then(|| scratch.0.join("sample.zip")),
+                false,
+            );
+            if !creating {
+                pump(&mut app.model);
+            }
+            factory.state.borrow_mut().manual = true;
+            if creating {
+                let source = scratch.0.join("source.txt");
+                fs::write(&source, "fixture").unwrap();
+                app.add_sources(vec![source]);
+            }
+            if matches!(
+                state,
+                "progress" | "result" | "close-confirm" | "close-wait" | "close-review"
+            ) {
+                assert!(app.begin_extract());
+                if matches!(state, "result" | "close-review") {
+                    let mut worker = factory.state.borrow_mut();
+                    worker.frame(Event::Accepted { encryption: false });
+                    worker.finish(Outcome::Failed, Publication::None);
+                    drop(worker);
+                    for _ in 0..30 {
+                        policy_render(&ctx, &mut app, vec![]);
+                    }
+                }
+                if state.starts_with("close-") {
+                    app.model.request_close();
+                    if state == "close-wait" {
+                        app.model.confirm_close();
+                    }
+                }
+            }
+            match state {
+                "picker-open" => policy_click(&ctx, &mut app, "다른 파일"),
+                "picker-destination" | "picker-zip" => policy_click(&ctx, &mut app, "폴더 바꾸기"),
+                "picker-files" => policy_click(&ctx, &mut app, "파일 추가"),
+                "picker-folder" => policy_click(&ctx, &mut app, "폴더 추가"),
+                _ => {}
+            }
+            if state == "result" && label == "자세히 닫기" {
+                policy_click(&ctx, &mut app, "자세히 보기");
+            }
+            let before = factory.state.borrow().starts.len();
+            let label = if label == "breadcrumb" {
+                scratch
+                    .0
+                    .ancestors()
+                    .last()
+                    .unwrap()
+                    .as_os_str()
+                    .to_str()
+                    .unwrap()
+            } else {
+                label.as_str()
+            };
+            policy_focus(&ctx, &mut app, label);
+            policy_render(&ctx, &mut app, vec![key(egui::Key::Enter)]);
+            policy_render(&ctx, &mut app, vec![]);
+            assert_eq!(
+                factory.state.borrow().starts.len(),
+                before,
+                "{state}: {label}"
+            );
+        }
+        let scratch = Folder::new();
+        let factory = FakeFactory::default();
+        let mut app = loaded(&scratch, &factory);
+        factory.state.borrow_mut().manual = true;
+        let ctx = egui::Context::default();
+        policy_focus(&ctx, &mut app, "풀기");
+        policy_render(&ctx, &mut app, vec![key(egui::Key::Enter)]);
+        assert!(matches!(
+            factory.state.borrow().starts.last(),
+            Some(Start::Extract { .. })
+        ));
+        assert_eq!(factory.state.borrow().starts.len(), 2);
+    }
+
+    #[test]
+    fn password_secondary_enter_does_not_submit_valid_input() {
+        for encrypt in [false, true] {
+            for label in ["보기", "숨기기", "취소"] {
+                let scratch = Folder::new();
+                let factory = FakeFactory::manual();
+                let mut app = ArchiveApp::new(Box::new(factory.clone()), None, false);
+                assert!(app.model.begin(
+                    Start::CreateZip {
+                        sources: vec![(scratch.0.join("source"), "source".into())],
+                        output_file: scratch.0.join("output.zip"),
+                        method: Method::Deflate,
+                        aes256: true
+                    },
+                    &mut factory.clone()
+                ));
+                {
+                    let mut worker = factory.state.borrow_mut();
+                    worker.frame(Event::Accepted { encryption: true });
+                    worker.frame(Event::PasswordRequired {
+                        challenge_id: 17,
+                        attempt: 1,
+                        encrypt,
+                    });
+                }
+                let ctx = egui::Context::default();
+                for _ in 0..12 {
+                    policy_render(&ctx, &mut app, vec![]);
+                }
+                text(&ctx, &mut app, "archive-password-input", "fixture-secret");
+                if encrypt {
+                    text(&ctx, &mut app, "archive-password-confirm", "fixture-secret");
+                }
+                if label == "숨기기" {
+                    policy_click(&ctx, &mut app, "보기");
+                }
+                policy_focus(&ctx, &mut app, label);
+                policy_render(&ctx, &mut app, vec![key(egui::Key::Enter)]);
+                assert!(!factory.state.borrow().password_seen, "{label}");
+                assert_eq!(factory.state.borrow().starts.len(), 1);
+            }
+        }
+    }
+
+    #[test]
+    fn directory_only_extraction_displays_success() {
+        let scratch = Folder::new();
+        let factory = FakeFactory::default();
+        let mut app = loaded(&scratch, &factory);
+        app.model.entries = vec![Entry {
+            id: 0,
+            name: "empty".into(),
+            kind: Kind::Directory,
+            bytes: Some(0),
+            packed: None,
+            encrypted: false,
+        }];
+        factory.state.borrow_mut().manual = true;
+        assert!(app.begin_extract());
+        {
+            let mut worker = factory.state.borrow_mut();
+            worker.frame(Event::Accepted { encryption: false });
+            worker.frame(Event::Output {
+                entry_id: None,
+                relative_name: "empty".into(),
+                disposition: Disposition::Created,
+            });
+            worker.finish(Outcome::Completed, Publication::Complete);
+        }
+        let ctx = egui::Context::default();
+        for _ in 0..30 {
+            policy_render(&ctx, &mut app, vec![]);
+        }
+        let shown = policy_render(&ctx, &mut app, vec![]);
+        assert!(shown.iter().any(|(text, _)| text == "압축을 풀었습니다"));
+        assert!(!shown.iter().any(|(text, _)| text == UNCERTAIN));
     }
 
     fn picker_frame(
