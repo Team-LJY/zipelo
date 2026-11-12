@@ -100,18 +100,22 @@ fn narrow_archive_keeps_columns_and_virtualizes_thousands_of_long_names() {
     assert_narrow_text(&output);
     let text = layout_text(&output);
     assert!(text.len() < 100);
+    // 암호가 걸린 항목은 이름 앞에 *가 붙음.
     let first = text
         .iter()
-        .find(|(text, _, _)| text == &format!("0000-{name}"))
+        .find(|(text, _, _)| text.trim_start_matches('*') == format!("0000-{name}"))
         .unwrap();
     assert!(first.2);
+    // 크기는 스크롤 막대 자리(오른쪽 24px)를 침범하지 않는 행 안쪽에 남음.
     assert!(
         text.iter()
-            .any(|(text, rect, _)| text == "31 B" && rect.right() < 720.0)
+            .any(|(text, rect, _)| text == "31 B" && rect.right() <= 736.0)
     );
-    for expected in ["크기", "암호", "5000개 항목", "선택 5000개"] {
+    for expected in ["크기", "5000개 항목", "선택 5000개"] {
         assert!(text.iter().any(|(text, _, _)| text == expected));
     }
+    // 암호 열은 없고 이름 앞의 *로만 표시함.
+    assert!(!text.iter().any(|(text, _, _)| text == "암호"));
     let title = output
         .viewport_output
         .values()
@@ -123,7 +127,13 @@ fn narrow_archive_keeps_columns_and_virtualizes_thousands_of_long_names() {
         .unwrap();
     assert!(title.contains('…') && title.ends_with(" — Zipelo"));
     assert!(title.chars().count() < full_title.chars().count());
-    assert_full_tooltip(&ctx, &mut app, first.1.center(), &first.0);
+    // 툴팁은 표시용 *를 뺀 실제 이름을 보여 줌.
+    assert_full_tooltip(
+        &ctx,
+        &mut app,
+        first.1.center(),
+        first.0.trim_start_matches('*'),
+    );
     let output = narrow_frame(&ctx, &mut app, 14.0, vec![egui::Event::PointerGone]);
     let point = layout_text(&output)
         .into_iter()
@@ -152,7 +162,7 @@ fn narrow_deep_folder_path_is_elided_without_displacing_search() {
     assert!(path.2);
     assert!(
         text.iter()
-            .any(|(text, rect, _)| text == "파일 찾기" && rect.right() < 760.0)
+            .any(|(text, rect, _)| text == "파일 검색" && rect.right() < 760.0)
     );
     assert_full_tooltip(&ctx, &mut app, path.1.center(), &full);
 }

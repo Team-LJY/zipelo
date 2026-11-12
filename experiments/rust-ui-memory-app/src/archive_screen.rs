@@ -614,10 +614,16 @@ impl ArchiveApp {
             .frame(
                 theme::panel(theme::PANEL)
                     .corner_radius(0)
-                    .inner_margin(egui::Margin::symmetric(16, 4)),
+                    .inner_margin(egui::Margin {
+                        left: 12,
+                        right: 12,
+                        top: 6,
+                        bottom: 10,
+                    }),
             )
             .show(root, |ui| {
                 ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing.x = 4.0;
                     let idle = !self.model.busy()
                         && self.model.close == Close::Open
                         && self.picker.is_none();
@@ -644,37 +650,29 @@ impl ArchiveApp {
                 });
             });
         egui::Panel::bottom("archive-status")
+            .exact_size(theme::STATUS_HEIGHT)
+            .resizable(false)
             .frame(
-                theme::panel(theme::STRIPE)
-                    .corner_radius(0)
-                    .inner_margin(egui::Margin::symmetric(16, 8)),
+                egui::Frame::new()
+                    .fill(theme::STRIPE)
+                    .inner_margin(egui::Margin::symmetric(16, 0)),
             )
             .show(root, |ui| {
-                ui.horizontal(|ui| {
-                    let width = (ui.available_width() - ui.spacing().item_spacing.x) / 2.0;
-                    theme::bounded_text(
-                        ui,
-                        &format!(
-                            "{}개 항목",
-                            browser::rows(&self.model.entries, &self.folder, &self.search).len()
-                        ),
-                        width,
-                    );
-                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                        theme::bounded_text(
-                            ui,
-                            &format!(
-                                "선택 {}개",
-                                browser::rows(&self.model.entries, &self.folder, &self.search)
-                                    .iter()
-                                    .filter(|row| !row.ids.is_empty()
-                                        && row.ids.is_subset(&self.model.selected))
-                                    .count()
-                            ),
-                            width,
-                        );
-                    });
-                });
+                let rows = browser::rows(&self.model.entries, &self.folder, &self.search);
+                let selected = rows
+                    .iter()
+                    .filter(|row| !row.ids.is_empty() && row.ids.is_subset(&self.model.selected))
+                    .count();
+                let rect = ui.max_rect();
+                let half = (rect.width() - theme::SPACE) / 2.0;
+                theme::status_text(
+                    ui,
+                    rect,
+                    &format!("{}개 항목", rows.len()),
+                    half,
+                    Align::Min,
+                );
+                theme::status_text(ui, rect, &format!("선택 {selected}개"), half, Align::Max);
             });
         if ctx.embed_viewports() && self.work_visible() {
             // 별도 창을 만들 수 없을 때만 쓰는 대체 배치. 목록을 가리지 않도록 하단에 둠.
@@ -799,56 +797,91 @@ impl ArchiveApp {
     }
 
     fn archive_list(&mut self, ui: &mut egui::Ui) {
-        theme::panel(theme::STRIPE).corner_radius(0).show(ui, |ui| {
-            ui.horizontal(|ui| {
-                let up = theme::icon_button(
-                    ui,
-                    "위로",
-                    theme::UP,
-                    !self.folder.is_empty() && !self.model.busy(),
-                );
-                if up.clicked() {
-                    let parent = self
-                        .folder
-                        .rsplit_once('/')
-                        .map_or("", |(parent, _)| parent)
-                        .to_owned();
-                    self.browse_folder(&parent);
-                }
-                ui.label("현재 경로");
-                let path = format!("/{}", self.folder);
-                let width = (ui.available_width() - 270.0).max(0.0);
-                egui::Frame::new()
-                    .fill(theme::PANEL)
-                    .stroke(egui::Stroke::new(1.0, theme::BORDER))
-                    .corner_radius(6)
-                    .inner_margin(egui::Margin::symmetric(8, 7))
-                    .show(ui, |ui| {
-                        theme::bounded_text(ui, &path, (width - 18.0).max(0.0));
-                    });
-                let (rect, _) =
-                    ui.allocate_exact_size(egui::vec2(20.0, 20.0), egui::Sense::hover());
-                theme::svg_icon(ui.painter(), rect, theme::SEARCH, theme::MUTED);
-                let search = ui.add_sized(
-                    [220.0, 36.0],
-                    egui::TextEdit::singleline(&mut self.search)
-                        .id(egui::Id::unique("archive-search"))
-                        .hint_text("파일 찾기"),
-                );
-                theme::focus(&search);
-                if search.changed() {
-                    self.clear_list_selection();
-                }
+        // 경로 줄은 입력란 높이만 차지하고 창 너비 전체를 회색으로 채움.
+        egui::Frame::new()
+            .fill(theme::STRIPE)
+            .inner_margin(egui::Margin {
+                left: 8,
+                right: 12,
+                top: 0,
+                bottom: 0,
+            })
+            .show(ui, |ui| {
+                ui.set_min_width(ui.available_width());
+                ui.horizontal(|ui| {
+                    ui.set_height(theme::FIELD);
+                    // 간격은 아래에서 직접 넣어 위치가 흔들리지 않게 함.
+                    ui.spacing_mut().item_spacing.x = 0.0;
+                    let up = theme::flat_icon_button(
+                        ui,
+                        "위로",
+                        theme::UP,
+                        !self.folder.is_empty() && !self.model.busy(),
+                        egui::vec2(theme::FIELD, theme::FIELD),
+                    );
+                    if up.clicked() {
+                        let parent = self
+                            .folder
+                            .rsplit_once('/')
+                            .map_or("", |(parent, _)| parent)
+                            .to_owned();
+                        self.browse_folder(&parent);
+                    }
+                    ui.add_space(6.0);
+                    let path = format!("/{}", self.folder);
+                    let search_width = 240.0;
+                    let gap = 8.0;
+                    let path_width = (ui.available_width() - search_width - gap).max(0.0);
+                    // 두 입력란은 같은 높이의 칸을 받아 같은 세로 위치에 그림.
+                    let (path_rect, _) = ui.allocate_exact_size(
+                        egui::vec2(path_width, theme::FIELD),
+                        egui::Sense::hover(),
+                    );
+                    theme::field_frame(ui, path_rect, false);
+                    // 부모 배치에 영향을 주지 않는 하위 영역에 경로 글자를 그림.
+                    let mut text_ui = ui.new_child(
+                        egui::UiBuilder::new()
+                            .max_rect(path_rect.shrink2(egui::vec2(10.0, 0.0)))
+                            .layout(Layout::left_to_right(Align::Center)),
+                    );
+                    theme::bounded_text(&mut text_ui, &path, (path_width - 20.0).max(0.0));
+                    ui.add_space(gap);
+                    let (search_rect, _) = ui.allocate_exact_size(
+                        egui::vec2(search_width, theme::FIELD),
+                        egui::Sense::hover(),
+                    );
+                    let search_id = egui::Id::unique("archive-search");
+                    let focused = ui.memory(|m| m.has_focus(search_id));
+                    theme::field_frame(ui, search_rect, focused);
+                    let icon = egui::Rect::from_center_size(
+                        egui::pos2(search_rect.left() + 20.0, search_rect.center().y),
+                        egui::vec2(16.0, 16.0),
+                    );
+                    theme::svg_icon(ui.painter(), icon, theme::SEARCH, theme::MUTED);
+                    let search = ui.put(
+                        egui::Rect::from_min_max(
+                            egui::pos2(icon.right() + 8.0, search_rect.top() + 1.0),
+                            egui::pos2(search_rect.right() - 8.0, search_rect.bottom() - 1.0),
+                        ),
+                        egui::TextEdit::singleline(&mut self.search)
+                            .id(search_id)
+                            .frame(egui::Frame::NONE)
+                            .margin(egui::Margin::ZERO)
+                            .align(egui::Align2::LEFT_CENTER)
+                            .hint_text("파일 검색"),
+                    );
+                    if search.changed() {
+                        self.clear_list_selection();
+                    }
+                });
             });
-        });
         let rows = browser::rows(&self.model.entries, &self.folder, &self.search);
 
-        let name_width = (ui.available_width() - 16.0 - 28.0 - 96.0 - 64.0 - 40.0).max(120.0);
+        let name_width = (ui.available_width() - 16.0 - 28.0 - 96.0 - 40.0).max(120.0);
         ui.horizontal(|ui| {
             ui.add_space(16.0 + 28.0);
             theme::column_label(ui, RichText::new("이름").strong(), name_width, Align::Min);
             theme::column_label(ui, "크기", 96.0, Align::Max);
-            theme::column_label(ui, "암호", 64.0, Align::Min);
         });
         ui.separator();
         let active = !self.model.busy()
@@ -1027,7 +1060,14 @@ impl ArchiveApp {
                                 },
                                 20.0,
                             );
-                            theme::bounded_text(ui, &row.name, name_width);
+                            // 암호가 걸린 항목은 이름 앞에 *를 붙여 표시함.
+                            let name = if row.encrypted {
+                                format!("*{}", row.name)
+                            } else {
+                                row.name.clone()
+                            };
+                            // 툴팁은 표시용 *를 빼고 실제 이름을 보여 줌.
+                            theme::bounded_text_hover(ui, &name, &row.name, name_width);
                             theme::column_label(
                                 ui,
                                 if row.directory {
@@ -1040,9 +1080,6 @@ impl ArchiveApp {
                                 96.0,
                                 Align::Max,
                             );
-                            if row.encrypted {
-                                theme::icon(ui, Icon::Lock, 16.0);
-                            }
                         },
                     );
                     if active

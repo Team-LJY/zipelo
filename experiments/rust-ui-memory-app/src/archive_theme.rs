@@ -29,6 +29,35 @@ pub const ROW: f32 = 32.0;
 pub const BUTTON: f32 = 40.0;
 pub const BODY: f32 = 17.0;
 pub const TITLE: f32 = 22.0;
+/// 경로와 검색 입력란의 높이. 위쪽 경로 줄은 이 높이만큼만 차지함.
+pub const FIELD: f32 = 36.0;
+/// 테두리 없는 버튼에 마우스를 올리거나 누를 때의 배경.
+pub const HOVER: Color32 = Color32::from_rgb(229, 233, 239);
+pub const PRESS: Color32 = Color32::from_rgb(214, 220, 229);
+
+/// 앱에 포함한 기본 글꼴 (SIL OFL 1.1, assets/fonts/OFL.txt).
+pub const PRETENDARD: &[u8] = include_bytes!("assets/fonts/Pretendard-Regular.ttf");
+
+/// Pretendard를 기본 글꼴로 쓰고, 없는 글자는 운영체제 한글 글꼴로 대신 그림.
+pub fn fonts(fallback: Option<(Vec<u8>, u32)>) -> egui::FontDefinitions {
+    let mut fonts = egui::FontDefinitions::empty();
+    fonts.font_data.insert(
+        "pretendard".into(),
+        egui::FontData::from_static(PRETENDARD).into(),
+    );
+    let mut family = vec!["pretendard".to_owned()];
+    if let Some((bytes, index)) = fallback {
+        let mut data = egui::FontData::from_owned(bytes);
+        data.index = index;
+        fonts.font_data.insert("system-kr".into(), data.into());
+        family.push("system-kr".into());
+    }
+    fonts
+        .families
+        .insert(egui::FontFamily::Proportional, family.clone());
+    fonts.families.insert(egui::FontFamily::Monospace, family);
+    fonts
+}
 
 pub fn apply(ctx: &egui::Context) {
     ctx.set_theme(egui::Theme::Light);
@@ -75,6 +104,10 @@ pub fn apply(ctx: &egui::Context) {
         style.spacing.interact_size.y = ROW;
         style.spacing.window_margin = egui::Margin::same(PAD);
         style.visuals.disabled_alpha = 0.4;
+        // 클릭과 표시가 즉시 바뀌도록 서서히 나타남, 부드러운 스크롤, 커서 깜빡임을 모두 끔.
+        style.animation_time = 0.0;
+        style.scroll_animation = egui::style::ScrollAnimation::none();
+        style.visuals.text_cursor.blink = false;
     });
 }
 
@@ -120,6 +153,53 @@ pub fn action(ui: &mut egui::Ui, text: &str, primary: bool, enabled: bool) -> eg
         .inner;
     focus(&response);
     response
+}
+
+pub const STATUS_HEIGHT: f32 = 34.0;
+
+/// 입력란 모양의 테두리를 그림. 초점이 있으면 파란 테두리.
+pub fn field_frame(ui: &egui::Ui, rect: egui::Rect, focused: bool) {
+    ui.painter().rect(
+        rect,
+        6,
+        PANEL,
+        Stroke::new(1.0, if focused { BLUE } else { BORDER }),
+        egui::StrokeKind::Inside,
+    );
+}
+
+/// 상태 줄 글자를 칸의 세로 가운데에 그림. 넘치면 줄이고 전체 글자는 툴팁으로 보여 줌.
+pub fn status_text(
+    ui: &mut egui::Ui,
+    rect: egui::Rect,
+    text: &str,
+    width: f32,
+    align: egui::Align,
+) {
+    let mut job =
+        egui::text::LayoutJob::simple_singleline(text.into(), FontId::proportional(BODY), TEXT);
+    job.wrap = egui::text::TextWrapping {
+        max_width: width.max(0.0),
+        max_rows: 1,
+        ..Default::default()
+    };
+    let galley = ui.fonts_mut(|fonts| fonts.layout_job(job));
+    let size = galley.size();
+    let x = if align == egui::Align::Max {
+        rect.right() - size.x
+    } else {
+        rect.left()
+    };
+    let text_rect = egui::Rect::from_min_size(egui::pos2(x, rect.center().y - size.y / 2.0), size);
+    ui.painter().galley(text_rect.min, galley, TEXT);
+    let response = ui.interact(
+        text_rect,
+        ui.scope_id()
+            .with(("status-text", align == egui::Align::Max)),
+        egui::Sense::hover(),
+    );
+    response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Label, true, text));
+    response.on_hover_text(text);
 }
 
 pub fn panel(fill: Color32) -> egui::Frame {
@@ -200,6 +280,16 @@ pub fn icon(ui: &mut egui::Ui, kind: Icon, size: f32) {
 }
 
 pub fn bounded_text(ui: &mut egui::Ui, text: &str, width: f32) -> egui::Response {
+    bounded_text_hover(ui, text, text, width)
+}
+
+/// 폭에 맞춰 줄인 글자를 그리고, 마우스를 올리면 hover 글자를 보여 줌.
+pub fn bounded_text_hover(
+    ui: &mut egui::Ui,
+    text: &str,
+    hover: &str,
+    width: f32,
+) -> egui::Response {
     let width = width.max(0.0);
     ui.allocate_ui_with_layout(
         egui::vec2(width, ui.text_style_height(&TextStyle::Body)),
@@ -211,7 +301,7 @@ pub fn bounded_text(ui: &mut egui::Ui, text: &str, width: f32) -> egui::Response
         },
     )
     .inner
-    .on_hover_text(text)
+    .on_hover_text(hover)
 }
 
 pub fn window_title(ui: &egui::Ui, text: &str, width: f32) -> String {
@@ -290,18 +380,9 @@ pub fn indeterminate(ui: &mut egui::Ui) {
         egui::vec2(ui.available_width(), SPACE * 2.0),
         egui::Sense::hover(),
     );
-    ui.painter().rect_filled(rect, 8, BORDER);
-    let phase = if ui.style().animation_time > 0.0 {
-        ui.input(|i| (i.time * 0.6).fract()) as f32
-    } else {
-        0.5
-    };
-    let width = (SPACE * 8.0).min(rect.width());
-    let pulse = egui::Rect::from_min_size(
-        rect.min + egui::vec2((rect.width() - width) * phase, 0.0),
-        egui::vec2(width, rect.height()),
-    );
-    ui.painter().rect_filled(pulse, 8, BLUE);
+    // 움직이는 표시 없이 전체 막대를 옅은 파란색으로 채워 진행 중임을 나타냄.
+    ui.painter()
+        .rect_filled(rect, 8, Color32::from_rgb(191, 211, 248));
     response.widget_info(|| {
         egui::WidgetInfo::labeled(
             egui::Role::ProgressIndicator,
@@ -333,12 +414,18 @@ pub fn svg_icon(painter: &egui::Painter, rect: egui::Rect, asset: &str, color: C
                 )
             })
             .collect::<Vec<_>>();
-        painter.add(egui::Shape::line(
-            points,
-            Stroke::new(rect.width() / 18.0, color),
-        ));
+        let width = rect.width() / 18.0;
+        // 꼭짓점과 끝점에 원을 더해 둥근 이음과 둥근 끝을 만듦.
+        for point in &points {
+            painter.circle_filled(*point, width / 2.0, color);
+        }
+        painter.add(egui::Shape::line(points, Stroke::new(width, color)));
     }
 }
+
+pub const TOOL_SIZE: egui::Vec2 = egui::vec2(96.0, 68.0);
+const TOOL_ICON: f32 = 30.0;
+const TOOL_LABEL: f32 = 15.0;
 
 pub fn tool(
     ui: &mut egui::Ui,
@@ -347,35 +434,82 @@ pub fn tool(
     enabled: bool,
     blue: bool,
 ) -> egui::Response {
-    let response = ui.add_enabled(
-        enabled,
-        egui::Button::new(
-            egui::RichText::new(label)
-                .size(18.0)
-                .color(Color32::TRANSPARENT),
-        )
-        .frame(false)
-        .min_size(egui::vec2(108.0, 86.0)),
+    let (rect, response) = ui.allocate_exact_size(
+        TOOL_SIZE,
+        if enabled {
+            egui::Sense::click()
+        } else {
+            egui::Sense::hover()
+        },
     );
-    let rect = response.rect;
+    response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, enabled, label));
     let color = if enabled {
         if blue { BLUE } else { TEXT }
     } else {
         MUTED
     };
-    let icon_rect = egui::Rect::from_center_size(
-        egui::pos2(rect.center().x, rect.top() + 27.0),
-        egui::vec2(36.0, 36.0),
+    if enabled && (response.hovered() || response.has_focus()) {
+        let fill = if response.is_pointer_button_down_on() {
+            PRESS
+        } else {
+            HOVER
+        };
+        ui.painter().rect_filled(rect, 8, fill);
+    }
+    // 아이콘과 글자를 붙여 가운데에 두고, 아래쪽은 여백으로 남김.
+    let label_height = TOOL_LABEL * 1.3;
+    let gap = 4.0;
+    let top = rect.top() + (rect.height() - TOOL_ICON - gap - label_height) / 2.0;
+    let icon_rect = egui::Rect::from_min_size(
+        egui::pos2(rect.center().x - TOOL_ICON / 2.0, top),
+        egui::vec2(TOOL_ICON, TOOL_ICON),
     );
-    ui.painter()
-        .rect_filled(rect.shrink2(egui::vec2(1.0, 27.0)), 0, PANEL);
     svg_icon(ui.painter(), icon_rect, asset, color);
     ui.painter().text(
-        egui::pos2(rect.center().x, rect.bottom() - 15.0),
+        egui::pos2(
+            rect.center().x,
+            icon_rect.bottom() + gap + label_height / 2.0,
+        ),
         egui::Align2::CENTER_CENTER,
         label,
-        FontId::proportional(18.0),
+        FontId::proportional(TOOL_LABEL),
         color,
+    );
+    focus(&response);
+    response
+}
+
+/// 테두리와 배경 없이 아이콘만 그리는 버튼. 사용할 수 있을 때만 마우스를 올리면 배경이 어두워짐.
+pub fn flat_icon_button(
+    ui: &mut egui::Ui,
+    name: &str,
+    asset: &str,
+    enabled: bool,
+    size: egui::Vec2,
+) -> egui::Response {
+    let (rect, response) = ui.allocate_exact_size(
+        size,
+        if enabled {
+            egui::Sense::click()
+        } else {
+            egui::Sense::hover()
+        },
+    );
+    let response = response.on_hover_text(name);
+    response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, enabled, name));
+    if enabled && response.hovered() {
+        let fill = if response.is_pointer_button_down_on() {
+            PRESS
+        } else {
+            HOVER
+        };
+        ui.painter().rect_filled(rect, 6, fill);
+    }
+    svg_icon(
+        ui.painter(),
+        egui::Rect::from_center_size(rect.center(), egui::vec2(20.0, 20.0)),
+        asset,
+        if enabled { TEXT } else { MUTED },
     );
     focus(&response);
     response

@@ -7,7 +7,7 @@ mod fake;
 mod renderer;
 #[path = "system_font.rs"]
 mod system_font;
-use eframe::egui::{self, FontData, FontDefinitions, FontFamily};
+use eframe::egui;
 fn main() -> eframe::Result {
     let result = run();
     #[cfg(target_os = "windows")]
@@ -43,7 +43,10 @@ fn show_startup_error(message: &str) {
 
 fn run() -> eframe::Result {
     let custom_frame = zipelo_ui_memory_app::window_frame::custom_frame_needed();
-    let font = system_font::load().map_err(|e| eframe::Error::AppCreation(Box::new(e)))?;
+    // 운영체제 한글 글꼴은 Pretendard에 없는 글자를 위한 대체 글꼴로만 씀.
+    let fallback = system_font::load()
+        .ok()
+        .map(|font| (font.bytes, font.face_index));
     renderer::run_native(
         "Zipelo",
         eframe::NativeOptions {
@@ -54,17 +57,10 @@ fn run() -> eframe::Result {
             ..Default::default()
         },
         || {
-            let bytes = font.bytes.clone();
-            let face_index = font.face_index;
+            let fallback = fallback.clone();
             Box::new(move |cc| {
-                let mut fonts = FontDefinitions::empty();
-                let mut data = FontData::from_owned(bytes);
-                data.index = face_index;
-                fonts.font_data.insert("noto-kr".into(), data.into());
-                fonts
-                    .families
-                    .insert(FontFamily::Proportional, vec!["noto-kr".into()]);
-                cc.egui_ctx.set_fonts(fonts);
+                cc.egui_ctx
+                    .set_fonts(zipelo_ui_memory_app::archive_theme::fonts(fallback));
                 zipelo_ui_memory_app::archive_theme::apply(&cc.egui_ctx);
                 let (fixture, startup) = zipelo_ui_memory_app::archive_ui::launch_args(
                     std::env::args_os().skip(1).collect(),
