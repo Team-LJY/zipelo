@@ -316,7 +316,11 @@ fn excluding_a_child_after_folder_selection_does_not_restore_it_during_extractio
     app.model.selected = [0, 1, 2].into_iter().collect();
     app.browse_folder("docs");
     let dialogs = TestDialogs::default();
-    dialogs.0.borrow_mut().answers.push_back(Some(vec![scratch.0.clone()]));
+    dialogs
+        .0
+        .borrow_mut()
+        .answers
+        .push_back(Some(vec![scratch.0.clone()]));
     app.set_dialogs(Box::new(dialogs));
     let ctx = egui::Context::default();
     policy_click(&ctx, &mut app, "excluded.txt");
@@ -340,7 +344,11 @@ fn gzip_save_cancel_and_invalid_output_do_not_start_an_extraction() {
     policy_click(&ctx, &mut app, "압축해제");
     assert_eq!(factory.state.borrow().starts.len(), 1);
     assert_eq!(dialogs.0.borrow().requests[0].purpose, Purpose::SaveGzip);
-    dialogs.0.borrow_mut().answers.push_back(Some(vec![scratch.0.join("invalid:name")]));
+    dialogs
+        .0
+        .borrow_mut()
+        .answers
+        .push_back(Some(vec![scratch.0.join("invalid:name")]));
     policy_click(&ctx, &mut app, "압축해제");
     assert_eq!(factory.state.borrow().starts.len(), 1);
     assert!(!app.model.busy());
@@ -464,4 +472,44 @@ fn empty_list_notices_remain_visible_in_the_archive_content_area() {
         assert!(shown.iter().any(|(text, _, _)| text == "0개 항목"));
         assert_eq!(factory.state.borrow().starts.len(), 1);
     }
+}
+
+#[test]
+fn failed_zip_creation_shows_save_location_and_no_extraction_copy() {
+    let scratch = Folder::new();
+    let factory = FakeFactory::default();
+    let mut app = ArchiveApp::new(Box::new(factory.clone()), None, false);
+    app.set_dialogs(Box::new(TestDialogs::default()));
+    let source = scratch.0.join("source.txt");
+    fs::write(&source, b"source").unwrap();
+    app.add_sources(vec![source]);
+    let ctx = egui::Context::default();
+    policy_click(&ctx, &mut app, "압축하기");
+    for _ in 0..30 {
+        policy_render(&ctx, &mut app, vec![]);
+    }
+    assert!(!app.model.busy());
+    app.model.outputs.clear();
+    app.model.terminal = Some(Terminal {
+        outcome: Outcome::Failed,
+        error: Some(ErrorCode::InvalidRequest),
+        publication: Publication::None,
+        created_count: 0,
+        retained_partial_count: 0,
+        durability: Durability::NotApplicable,
+        cleanup: Cleanup::Complete,
+    });
+    let shown = policy_render(&ctx, &mut app, vec![]);
+    for expected in [
+        "ZIP 파일을 만들지 못했습니다",
+        "저장 위치와 추가한 항목을 확인하세요",
+        "ZIP 파일을 만들지 않았습니다",
+    ] {
+        assert!(shown.iter().any(|(text, _)| text == expected), "{shown:?}");
+    }
+    assert!(
+        !shown
+            .iter()
+            .any(|(text, _)| text.contains("풀 위치") || text.contains("풀지 않았습니다"))
+    );
 }

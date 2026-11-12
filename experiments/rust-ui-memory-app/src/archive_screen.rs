@@ -162,7 +162,7 @@ impl ArchiveApp {
                 self.ui_error = Some("파일이나 폴더의 이름을 확인하세요".into());
                 return;
             }
-            validated.push(path);
+            validated.push(crate::archive_path::worker_path(&path));
         }
         let paths = validated;
         if self.sources.is_empty() {
@@ -895,7 +895,11 @@ impl ArchiveApp {
                 if error.starts_with("암호는") {
                     error.as_str()
                 } else {
-                    "풀 위치와 선택한 항목을 확인하세요"
+                    if matches!(self.last_request, Some(Start::CreateZip { .. })) {
+                        "저장 위치와 추가한 항목을 확인하세요"
+                    } else {
+                        "풀 위치와 선택한 항목을 확인하세요"
+                    }
                 },
             );
         }
@@ -1034,12 +1038,15 @@ impl ArchiveApp {
                         theme::bounded_text(ui, &path, ui.available_width());
                     } else if let Some(code) = t.as_ref().and_then(|t| t.error) {
                         ui.label(if creating && code == ErrorCode::SourceChanged {
-                            "묶을 파일이 바뀌었습니다. 파일을 확인한 뒤 다시 만드세요"
+                            "묶을 파일이 바뀌었습니다. 파일을 확인한 뒤 다시 만드세요".to_owned()
                         } else {
-                            present::error_text(code)
+                            present::operation_text(present::error_text(code), creating)
                         });
                     } else if let Some(error) = &self.model.error {
-                        ui.label(present::client_error_text(error));
+                        ui.label(present::operation_text(
+                            present::client_error_text(error),
+                            creating,
+                        ));
                     }
                     for warning in warnings
                         .iter()
@@ -1048,7 +1055,10 @@ impl ArchiveApp {
                     {
                         ui.horizontal_wrapped(|ui| {
                             theme::icon(ui, Icon::Warning, 20.0);
-                            ui.colored_label(theme::WARNING, warning);
+                            ui.colored_label(
+                                theme::WARNING,
+                                present::operation_text(warning, creating),
+                            );
                         });
                     }
                     if !success
@@ -1059,13 +1069,17 @@ impl ArchiveApp {
                             &self.model.outputs,
                         )
                     {
-                        ui.label("아무 파일도 풀지 않았습니다");
+                        ui.label(if creating {
+                            "ZIP 파일을 만들지 않았습니다"
+                        } else {
+                            "아무 파일도 풀지 않았습니다"
+                        });
                     }
                     if self.details {
                         theme::panel(theme::STRIPE).show(ui, |ui| {
                             if durability_in_details {
                                 if let Some(warning) = durability_warning {
-                                    ui.label(warning);
+                                    ui.label(present::operation_text(warning, creating));
                                 }
                             }
                             if let Some(t) = &t {
@@ -1441,23 +1455,27 @@ impl ArchiveApp {
                     }
                 }
                 Close::Review => {
+                    let creating = matches!(self.last_request, Some(Start::CreateZip { .. }));
                     ui.heading("결과 확인 후 닫기");
                     let wrote = self
                         .last_request
                         .as_ref()
                         .is_some_and(|request| !matches!(request, Start::List { .. }));
                     ui.label(if !wrote {
-                        "프로그램을 닫을까요?"
+                        "프로그램을 닫을까요?".to_owned()
                     } else if self.model.confirmed {
-                        "작업 결과를 확인한 뒤 닫으세요"
+                        "작업 결과를 확인한 뒤 닫으세요".to_owned()
                     } else {
-                        present::UNCERTAIN
+                        present::operation_text(present::UNCERTAIN, creating)
                     });
                     egui::ScrollArea::vertical()
                         .max_height(160.0)
                         .show(ui, |ui| {
                             if let Some(code) = self.model.terminal.as_ref().and_then(|t| t.error) {
-                                ui.colored_label(theme::ERROR, present::error_text(code));
+                                ui.colored_label(
+                                    theme::ERROR,
+                                    present::operation_text(present::error_text(code), creating),
+                                );
                             }
                             if wrote {
                                 for warning in present::warnings(
@@ -1467,7 +1485,10 @@ impl ArchiveApp {
                                     &self.directories,
                                     &self.model.outputs,
                                 ) {
-                                    ui.colored_label(theme::WARNING, warning);
+                                    ui.colored_label(
+                                        theme::WARNING,
+                                        present::operation_text(warning, creating),
+                                    );
                                 }
                             }
                         });

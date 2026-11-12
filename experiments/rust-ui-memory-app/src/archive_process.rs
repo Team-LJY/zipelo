@@ -150,7 +150,7 @@ fn list_to_ui(id: wire::ListId) -> ui::ListId {
 fn start_to_wire(start: ui::Start) -> wire::Start {
     let action = match start {
         ui::Start::List { archive } => wire::Action::List {
-            archive: wire::NativePath::from_path(&archive),
+            archive: wire::NativePath::from_path(&crate::archive_path::worker_path(&archive)),
         },
         ui::Start::Extract {
             archive,
@@ -159,8 +159,10 @@ fn start_to_wire(start: ui::Start) -> wire::Start {
             list_id,
             gzip_output_name,
         } => wire::Action::Extract {
-            archive: wire::NativePath::from_path(&archive),
-            destination: wire::NativePath::from_path(&destination),
+            archive: wire::NativePath::from_path(&crate::archive_path::worker_path(&archive)),
+            destination: wire::NativePath::from_path(&crate::archive_path::worker_path(
+                &destination,
+            )),
             selection: match selection {
                 ui::Selection::All => wire::Selection::All,
                 ui::Selection::EntryIds(ids) => wire::Selection::EntryIds(ids),
@@ -177,11 +179,13 @@ fn start_to_wire(start: ui::Start) -> wire::Start {
             sources: sources
                 .into_iter()
                 .map(|(path, archive_name)| wire::Source {
-                    path: wire::NativePath::from_path(&path),
+                    path: wire::NativePath::from_path(&crate::archive_path::worker_path(&path)),
                     archive_name,
                 })
                 .collect(),
-            output_file: wire::NativePath::from_path(&output_file),
+            output_file: wire::NativePath::from_path(&crate::archive_path::worker_path(
+                &output_file,
+            )),
             method: match method {
                 ui::Method::Store => wire::Method::Store,
                 ui::Method::Deflate => wire::Method::Deflate,

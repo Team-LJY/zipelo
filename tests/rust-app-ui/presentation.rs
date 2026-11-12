@@ -773,8 +773,13 @@ mod widgets {
                 assert!(shown.iter().any(|(text, _)| text == "폴더 열기"));
                 assert!(!shown.iter().any(|(text, _)| text == "다시 시도"));
                 assert!(!shown.iter().any(|(text, _)| text == SYNC_WARNING));
+                let sync_failed = if creating {
+                    "파일을 디스크에 완전히 저장하지 못했습니다. 저장 위치 폴더를 확인하세요."
+                } else {
+                    "파일을 디스크에 완전히 저장하지 못했습니다. 풀 위치 폴더를 확인하세요."
+                };
                 assert_eq!(
-                    shown.iter().any(|(text, _)| text == "파일을 디스크에 완전히 저장하지 못했습니다. 풀 위치 폴더를 확인하세요."),
+                    shown.iter().any(|(text, _)| text == sync_failed),
                     durability == Durability::Failed
                 );
                 policy_click(&ctx, &mut app, "자세히 보기");
@@ -787,7 +792,7 @@ mod widgets {
                 let closed = policy_render(&ctx, &mut app, vec![]);
                 assert!(!closed.iter().any(|(text, _)| text == SYNC_WARNING));
                 assert_eq!(
-                    closed.iter().any(|(text, _)| text == "파일을 디스크에 완전히 저장하지 못했습니다. 풀 위치 폴더를 확인하세요."),
+                    closed.iter().any(|(text, _)| text == sync_failed),
                     durability == Durability::Failed
                 );
                 assert!(closed.iter().any(|(text, _)| text == "폴더 열기"));

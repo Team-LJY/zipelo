@@ -1,8 +1,91 @@
 #![allow(dead_code)]
 #[path = "../../experiments/rust-ui-memory-app/src/archive_ui.rs"]
 mod archive_ui;
+use zipelo_ui_memory_app::archive_path;
 mod adapter {
     include!("../../experiments/rust-ui-memory-app/src/archive_process.rs");
+
+    #[cfg(windows)]
+    #[test]
+    fn all_worker_path_fields_use_the_same_safe_drive_conversion() {
+        use std::path::{Path, PathBuf};
+        let input = PathBuf::from(r"\\?\C:\fixture\archive.zip");
+        let output = PathBuf::from(r"\\?\C:\fixture\output");
+        let expected_input = Path::new(r"C:\fixture\archive.zip");
+        let expected_output = Path::new(r"C:\fixture\output");
+        let wire::Action::List { archive } = start_to_wire(ui::Start::List {
+            archive: input.clone(),
+        })
+        .action
+        else {
+            panic!("목록 요청 누락")
+        };
+        assert_eq!(archive.to_path().unwrap(), expected_input);
+        let wire::Action::Extract {
+            archive,
+            destination,
+            ..
+        } = start_to_wire(ui::Start::Extract {
+            archive: input.clone(),
+            destination: output.clone(),
+            selection: ui::Selection::All,
+            list_id: token(
+                ui::Format::Zip,
+                ui::SourceObject::Windows {
+                    volume: 1,
+                    file_id: [2; 16],
+                },
+            ),
+            gzip_output_name: None,
+        })
+        .action
+        else {
+            panic!("추출 요청 누락")
+        };
+        assert_eq!(archive.to_path().unwrap(), expected_input);
+        assert_eq!(destination.to_path().unwrap(), expected_output);
+        for aes256 in [false, true] {
+            let wire::Action::CreateZip {
+                sources,
+                output_file,
+                encryption,
+                ..
+            } = start_to_wire(ui::Start::CreateZip {
+                sources: vec![(input.clone(), "source.txt".into())],
+                output_file: output.clone(),
+                method: ui::Method::Deflate,
+                aes256,
+            })
+            .action
+            else {
+                panic!("생성 요청 누락")
+            };
+            assert_eq!(sources[0].path.to_path().unwrap(), expected_input);
+            assert_eq!(output_file.to_path().unwrap(), expected_output);
+            assert_eq!(
+                encryption,
+                if aes256 {
+                    wire::Encryption::Aes256
+                } else {
+                    wire::Encryption::None
+                }
+            );
+        }
+        for text in [
+            r"\\?\UNC\server\share\one.zip",
+            r"\\server\share\one.zip",
+            r"\\?\C:\a\..\one.zip",
+        ] {
+            let wire::Action::List { archive } = start_to_wire(ui::Start::List {
+                archive: text.into(),
+            })
+            .action
+            else {
+                panic!("목록 요청 누락")
+            };
+            assert!(archive.to_path().is_err());
+        }
+    }
 
     fn token(format: ui::Format, source_object: ui::SourceObject) -> ui::ListId {
         ui::ListId {
