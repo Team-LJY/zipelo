@@ -18,7 +18,7 @@ pub const WARNING: Color32 = Color32::from_rgb(180, 83, 9);
 pub const WARNING_BG: Color32 = Color32::from_rgb(255, 247, 232);
 pub const ERROR: Color32 = Color32::from_rgb(185, 28, 28);
 pub const ERROR_BG: Color32 = Color32::from_rgb(253, 237, 237);
-pub const FOLDER: Color32 = Color32::from_rgb(224, 165, 38);
+pub const FOLDER: Color32 = Color32::from_rgb(240, 160, 0);
 pub const FILE: Color32 = Color32::from_rgb(123, 135, 148);
 pub const SPACE: f32 = 8.0;
 pub const PAD: i8 = 16;
@@ -27,7 +27,7 @@ pub const DROP_HEIGHT: f32 = 280.0;
 pub const DROP_RADIUS: u8 = 12;
 pub const ROW: f32 = 32.0;
 pub const BUTTON: f32 = 40.0;
-pub const BODY: f32 = 15.0;
+pub const BODY: f32 = 17.0;
 pub const TITLE: f32 = 22.0;
 
 pub fn apply(ctx: &egui::Context) {
@@ -199,6 +199,37 @@ pub fn icon(ui: &mut egui::Ui, kind: Icon, size: f32) {
     }
 }
 
+pub fn bounded_text(ui: &mut egui::Ui, text: &str, width: f32) -> egui::Response {
+    let width = width.max(0.0);
+    ui.allocate_ui_with_layout(
+        egui::vec2(width, ui.text_style_height(&TextStyle::Body)),
+        ui.layout().clone(),
+        |ui| {
+            ui.set_min_width(width);
+            ui.set_max_width(width);
+            ui.add(egui::Label::new(text).truncate())
+        },
+    )
+    .inner
+    .on_hover_text(text)
+}
+
+pub fn window_title(ui: &egui::Ui, text: &str, width: f32) -> String {
+    let mut job =
+        egui::text::LayoutJob::simple_singleline(text.into(), FontId::proportional(BODY), TEXT);
+    job.wrap = egui::text::TextWrapping {
+        max_width: width.max(0.0),
+        max_rows: 1,
+        break_anywhere: true,
+        ..Default::default()
+    };
+    ui.fonts_mut(|fonts| fonts.layout_job(job))
+        .rows
+        .iter()
+        .flat_map(|row| row.glyphs.iter().map(|glyph| glyph.chr))
+        .collect()
+}
+
 pub fn column_label(
     ui: &mut egui::Ui,
     text: impl Into<egui::WidgetText>,
@@ -278,4 +309,94 @@ pub fn indeterminate(ui: &mut egui::Ui) {
             "전체 크기를 알 수 없는 작업 진행 중",
         )
     });
+}
+
+pub const OPEN: &str = include_str!("assets/icons/open-archive.svg");
+pub const CREATE: &str = include_str!("assets/icons/create-zip.svg");
+pub const EXTRACT: &str = include_str!("assets/icons/extract-archive.svg");
+pub const UP: &str = include_str!("assets/icons/navigate-up.svg");
+pub const CLOSE: &str = include_str!("assets/icons/close-dialog.svg");
+
+pub fn svg_icon(painter: &egui::Painter, rect: egui::Rect, asset: &str, color: Color32) {
+    for element in asset.split("points=\"").skip(1) {
+        let points = element
+            .split('"')
+            .next()
+            .unwrap_or_default()
+            .split_whitespace()
+            .filter_map(|pair| {
+                let (x, y) = pair.split_once(',')?;
+                Some(
+                    rect.min
+                        + egui::vec2(x.parse::<f32>().ok()?, y.parse::<f32>().ok()?)
+                            * (rect.width() / 24.0),
+                )
+            })
+            .collect::<Vec<_>>();
+        painter.add(egui::Shape::line(
+            points,
+            Stroke::new(rect.width() / 18.0, color),
+        ));
+    }
+}
+
+pub fn tool(
+    ui: &mut egui::Ui,
+    label: &str,
+    asset: &str,
+    enabled: bool,
+    blue: bool,
+) -> egui::Response {
+    let response = ui.add_enabled(
+        enabled,
+        egui::Button::new(
+            egui::RichText::new(label)
+                .size(18.0)
+                .color(Color32::TRANSPARENT),
+        )
+        .frame(false)
+        .min_size(egui::vec2(108.0, 86.0)),
+    );
+    let rect = response.rect;
+    let color = if enabled {
+        if blue { BLUE } else { TEXT }
+    } else {
+        MUTED
+    };
+    let icon_rect = egui::Rect::from_center_size(
+        egui::pos2(rect.center().x, rect.top() + 27.0),
+        egui::vec2(36.0, 36.0),
+    );
+    ui.painter()
+        .rect_filled(rect.shrink2(egui::vec2(1.0, 27.0)), 0, PANEL);
+    svg_icon(ui.painter(), icon_rect, asset, color);
+    ui.painter().text(
+        egui::pos2(rect.center().x, rect.bottom() - 15.0),
+        egui::Align2::CENTER_CENTER,
+        label,
+        FontId::proportional(18.0),
+        color,
+    );
+    focus(&response);
+    response
+}
+
+pub const SEARCH: &str = include_str!("assets/icons/search-files.svg");
+
+pub fn icon_button(ui: &mut egui::Ui, name: &str, asset: &str, enabled: bool) -> egui::Response {
+    let response = ui
+        .add_enabled(
+            enabled,
+            egui::Button::new("").min_size(egui::vec2(38.0, 36.0)),
+        )
+        .on_hover_text(name);
+    response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, enabled, name));
+    svg_icon(
+        ui.painter(),
+        egui::Rect::from_center_size(response.rect.center(), egui::vec2(22.0, 22.0)),
+        asset,
+        if enabled { TEXT } else { MUTED },
+    );
+    focus(&response);
+    response
 }

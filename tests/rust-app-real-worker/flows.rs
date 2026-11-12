@@ -156,19 +156,28 @@ fn completed(model: &Model) {
     );
 }
 #[cfg(feature = "ui")]
+#[path = "../rust-app-ui/dialogs.rs"]
+mod dialogs;
+#[cfg(feature = "ui")]
 mod screen {
+    use super::dialogs::TestDialogs;
     use super::*;
     use eframe::egui::{self, epaint::Shape};
     use zipelo_ui_memory_app::archive_screen::ArchiveApp;
     struct Screen {
         context: egui::Context,
         app: ArchiveApp,
+        dialogs: TestDialogs,
     }
     impl Screen {
         fn new(factory: ObservedFactory) -> Self {
+            let dialogs = TestDialogs::default();
+            let mut app = ArchiveApp::new(Box::new(factory), None, false);
+            app.set_dialogs(Box::new(dialogs.clone()));
             Self {
                 context: egui::Context::default(),
-                app: ArchiveApp::new(Box::new(factory), None, false),
+                app,
+                dialogs,
             }
         }
         fn render(&mut self, events: Vec<egui::Event>) -> Vec<(String, egui::Pos2)> {
@@ -235,6 +244,10 @@ mod screen {
             self.click_at(point);
         }
         fn set_text(&mut self, id: &str, value: &str) {
+            if id == "zip-name" {
+                self.dialogs.0.borrow_mut().save_name = Some(value.to_owned());
+                return;
+            }
             self.render(vec![]);
             let point = self
                 .context
@@ -281,7 +294,12 @@ mod screen {
         }
         fn extract(&mut self, destination: &Path) {
             self.app.choose_destination(destination.to_path_buf());
-            self.click("풀기");
+            self.dialogs
+                .0
+                .borrow_mut()
+                .answers
+                .push_back(Some(vec![destination.to_path_buf()]));
+            self.click("압축해제");
             assert!(self.app.model.busy());
             self.settle();
             assert_eq!(
@@ -292,6 +310,7 @@ mod screen {
     }
     include!("password_flows.rs");
     include!("selection_flows.rs");
+    include!("native_dialog_flows.rs");
 
     fn archive_flow(name: &str, format: Format) {
         let scratch = Scratch::new();
@@ -368,7 +387,7 @@ mod screen {
         let mut screen = Screen::new(factory);
         screen.app.add_sources(vec![source]);
         screen.render(vec![]);
-        screen.click("만들기");
+        screen.click("압축하기");
         screen.settle();
         assert!(archive.is_file());
         screen.open(&archive);
@@ -411,7 +430,7 @@ mod screen {
         screen.app.add_sources(vec![source.clone()]);
         screen.render(vec![]);
         screen.set_text("zip-name", archive.file_name().unwrap().to_str().unwrap());
-        screen.click("만들기");
+        screen.click("압축하기");
         assert!(screen.app.model.busy());
         screen.settle();
         assert!(archive.is_file());
@@ -449,12 +468,16 @@ fn broken_or_incomplete_worker_output_is_not_success() {
         fs::copy(binary("zipelo-real-worker-probe"), &probe).unwrap();
         let mut factory = ProcessFactory::new(probe);
         let mut model = Model::default();
-        assert!(model.begin(
-            Start::List {
-                archive: scratch.path("sample.zip")
-            },
-            &mut factory
-        ));
+        assert!(
+            model.begin(
+                Start::List {
+                    archive: scratch.path("sample.zip")
+                },
+                &mut factory
+            ),
+            "{:?}",
+            model.error
+        );
         model.request_close();
         model.confirm_close();
         assert_eq!(model.close, Close::Waiting);
@@ -474,12 +497,16 @@ fn dropping_live_connection_kills_and_reaps_owned_child() {
     fs::copy(binary("zipelo-real-worker-probe"), &probe).unwrap();
     let mut factory = ProcessFactory::new(probe);
     let mut model = Model::default();
-    assert!(model.begin(
-        Start::List {
-            archive: scratch.path("sample.zip")
-        },
-        &mut factory
-    ));
+    assert!(
+        model.begin(
+            Start::List {
+                archive: scratch.path("sample.zip")
+            },
+            &mut factory
+        ),
+        "{:?}",
+        model.error
+    );
     let deadline = Instant::now() + Duration::from_secs(5);
     while !scratch.path("probe.pid").exists() {
         assert!(Instant::now() < deadline);
@@ -615,12 +642,16 @@ fn cancel_racing_child_exit_preserves_completed_result_before_poll() {
     for iteration in 0..100 {
         let mut factory = CompletedFactory(ProcessFactory::new(binary("zipelo-archive-worker")));
         let mut model = Model::default();
-        assert!(model.begin(
-            Start::List {
-                archive: archive.clone()
-            },
-            &mut factory
-        ));
+        assert!(
+            model.begin(
+                Start::List {
+                    archive: archive.clone()
+                },
+                &mut factory
+            ),
+            "{:?}",
+            model.error
+        );
         assert!(model.terminal.is_none());
         model.cancel();
         wait(&mut model);
@@ -637,12 +668,16 @@ fn cancel_racing_exit_without_terminal_remains_unconfirmed() {
     fs::copy(binary("zipelo-real-worker-probe"), &probe).unwrap();
     let mut factory = ProcessFactory::new(probe);
     let mut model = Model::default();
-    assert!(model.begin(
-        Start::List {
-            archive: scratch.path("sample.zip")
-        },
-        &mut factory
-    ));
+    assert!(
+        model.begin(
+            Start::List {
+                archive: scratch.path("sample.zip")
+            },
+            &mut factory
+        ),
+        "{:?}",
+        model.error
+    );
     std::thread::sleep(Duration::from_millis(2));
     model.cancel();
     model.request_close();

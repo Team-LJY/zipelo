@@ -36,7 +36,7 @@ fn extraction_completion_matches_actual_worker_selection_matrix() {
     screen.app.add_sources(vec![docs, root_file]);
     screen.render(vec![]);
     screen.set_text("zip-name", "selection.zip");
-    screen.click("만들기");
+    screen.click("압축하기");
     screen.settle();
 
     let cases: [(&str, Option<&[&str]>, &[&str]); 6] = [
@@ -56,17 +56,21 @@ fn extraction_completion_matches_actual_worker_selection_matrix() {
             Some(&["docs/nested/one.txt", "root.txt"]),
             &["docs", "docs/nested", "docs/nested/one.txt", "root.txt"],
         ),
-        ("directory", Some(&["docs"]), &["docs"]),
+        (
+            "directory",
+            Some(&["docs"]),
+            &["docs", "docs/empty", "docs/nested", "docs/nested/one.txt"],
+        ),
         (
             "mixed",
             Some(&["docs", "docs/nested/one.txt"]),
-            &["docs", "docs/nested", "docs/nested/one.txt"],
+            &["docs", "docs/empty", "docs/nested", "docs/nested/one.txt"],
         ),
         ("empty", Some(&["docs/empty"]), &["docs", "docs/empty"]),
         (
             "nested-directory",
             Some(&["docs/nested"]),
-            &["docs", "docs/nested"],
+            &["docs", "docs/nested", "docs/nested/one.txt"],
         ),
     ];
     for (name, selected, expected) in cases {
@@ -88,7 +92,6 @@ fn extraction_completion_matches_actual_worker_selection_matrix() {
         });
         if let Some(ids) = &ids {
             screen.app.model.selected = ids.clone();
-            screen.click("선택한 항목만 풀기");
         }
         let output = make_directory(&scratch.path(name));
         screen.extract(&output);
@@ -125,7 +128,16 @@ fn extraction_completion_matches_actual_worker_selection_matrix() {
             Start::Extract { selection, .. } => match (selection, &ids) {
                 (Selection::All, None) => {}
                 (Selection::EntryIds(actual), Some(ids)) => {
-                    assert_eq!(actual, &ids.iter().copied().collect::<Vec<_>>(), "{name}");
+                    assert_eq!(
+                        actual,
+                        &zipelo_ui_memory_app::archive_browser::expand_selection(
+                            &screen.app.model.entries,
+                            ids
+                        )
+                        .into_iter()
+                        .collect::<Vec<_>>(),
+                        "{name}"
+                    );
                 }
                 _ => panic!("요청 선택 범위 불일치: {name}"),
             },
@@ -193,7 +205,7 @@ fn auto_destination_is_private_under_desktop_umask() {
     let (factory, observed) = observed_factory();
     let mut screen = Screen::new(factory);
     screen.open(&archive);
-    screen.click("풀기");
+    assert!(screen.app.begin_extract());
     assert!(screen.app.model.busy());
     screen.settle();
     assert_eq!(

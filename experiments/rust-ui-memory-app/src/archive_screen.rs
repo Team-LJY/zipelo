@@ -1,5 +1,6 @@
 use crate::{
-    archive_picker::{Choice, Picker, Purpose},
+    archive_browser as browser,
+    archive_dialog::{DialogRequest, Dialogs, NativeDialogs, Purpose},
     archive_present as present,
     archive_theme::{self as theme, Icon},
     archive_ui::*,
@@ -28,8 +29,9 @@ pub struct ArchiveApp {
     create: bool,
     selected_only: bool,
     method: Method,
-    fixture: bool,
-    picker: Option<Picker>,
+    dialogs: Box<dyn Dialogs>,
+    folder: String,
+    search: String,
     last_request: Option<Start>,
     targets: Option<BTreeSet<String>>,
     directories: BTreeSet<String>,
@@ -41,7 +43,7 @@ pub struct ArchiveApp {
 }
 
 impl ArchiveApp {
-    pub fn new(factory: Box<dyn Factory>, startup: Option<PathBuf>, fixture: bool) -> Self {
+    pub fn new(factory: Box<dyn Factory>, startup: Option<PathBuf>, _fixture: bool) -> Self {
         let mut app = Self {
             model: Model::default(),
             factory,
@@ -60,8 +62,9 @@ impl ArchiveApp {
             create: false,
             selected_only: false,
             method: Method::Deflate,
-            fixture,
-            picker: None,
+            dialogs: Box::new(NativeDialogs),
+            folder: String::new(),
+            search: String::new(),
             last_request: None,
             targets: None,
             directories: BTreeSet::new(),
@@ -75,6 +78,23 @@ impl ArchiveApp {
             app.open_path(path);
         }
         app
+    }
+
+    pub fn set_dialogs(&mut self, dialogs: Box<dyn Dialogs>) {
+        self.dialogs = dialogs;
+    }
+
+    pub fn browse_folder(&mut self, folder: &str) {
+        self.folder = folder.trim_matches('/').to_owned();
+        self.search.clear();
+    }
+
+    pub fn show_create(&mut self, encrypted: bool) {
+        if !self.model.busy() {
+            self.create = true;
+            self.aes256 = encrypted;
+            self.ui_error = None;
+        }
     }
 
     fn clear_password(&mut self) {
@@ -92,14 +112,10 @@ impl ArchiveApp {
         self.clear_password();
         self.destination = present::default_destination(&archive);
         self.automatic_destination = true;
-        self.gzip_name = archive
-            .file_name()
-            .unwrap_or_default()
-            .to_string_lossy()
-            .strip_suffix(".gz")
-            .unwrap_or("압축 해제 파일")
-            .into();
+        self.gzip_name = present::gzip_output_name(&archive);
         self.selected_only = false;
+        self.folder.clear();
+        self.search.clear();
         self.targets = None;
         self.directories.clear();
         self.start(Start::List { archive });
@@ -124,6 +140,31 @@ impl ArchiveApp {
         if self.model.busy() {
             return;
         }
+        let mut validated = Vec::new();
+        for path in paths {
+            let Ok(metadata) = std::fs::symlink_metadata(&path) else {
+                self.ui_error = Some("파일이나 폴더를 찾지 못했습니다. 다시 선택하세요".into());
+                return;
+            };
+            if metadata.file_type().is_symlink() || !(metadata.is_file() || metadata.is_dir()) {
+                self.ui_error = Some("일반 파일과 폴더만 추가할 수 있습니다".into());
+                return;
+            }
+            let Ok(path) = path.canonicalize() else {
+                return;
+            };
+            if path.to_str().is_none()
+                || !path
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .is_some_and(valid_leaf)
+            {
+                self.ui_error = Some("파일이나 폴더의 이름을 확인하세요".into());
+                return;
+            }
+            validated.push(path);
+        }
+        let paths = validated;
         if self.sources.is_empty() {
             if let Some(first) = paths.first() {
                 self.zip_folder = first.parent().unwrap_or(Path::new("/")).to_path_buf();
@@ -161,7 +202,11 @@ impl ArchiveApp {
             .as_ref()
             .is_some_and(|id| id.format == Format::Gzip);
         let selection = if self.selected_only {
-            Selection::EntryIds(self.model.selected.iter().copied().collect())
+            Selection::EntryIds(
+                browser::expand_selection(&self.model.entries, &self.model.selected)
+                    .into_iter()
+                    .collect(),
+            )
         } else {
             Selection::All
         };
@@ -232,24 +277,113 @@ impl ArchiveApp {
     }
 
     fn open_picker(&mut self, purpose: Purpose) {
-        let start = match purpose {
-            Purpose::Destination | Purpose::Retry => self.destination.clone(),
-            Purpose::ZipFolder => self.zip_folder.clone(),
-            Purpose::Open => self
+        if self.model.busy() {
+            return;
+        }
+        let gzip = self
+            .model
+            .list_id
+            .as_ref()
+            .is_some_and(|id| id.format == Format::Gzip);
+        let purpose = match (purpose, gzip) {
+            (Purpose::Destination, true) => Purpose::SaveGzip,
+            (Purpose::Retry, true) => Purpose::RetryGzip,
+            _ => purpose,
+        };
+        let directory = match purpose {
+            Purpose::SaveZip => self.zip_folder.clone(),
+            Purpose::Destination | Purpose::SaveGzip => self
                 .model
                 .archive
-                .as_deref()
-                .and_then(Path::parent)
+                .as_ref()
+                .and_then(|path| path.parent())
                 .map(Path::to_path_buf)
                 .unwrap_or_else(present::home_directory),
+            Purpose::Retry | Purpose::RetryGzip => self.destination.clone(),
             _ => self
                 .sources
                 .last()
-                .and_then(|p| p.parent())
+                .and_then(|path| path.parent())
                 .map(Path::to_path_buf)
                 .unwrap_or_else(present::home_directory),
         };
-        self.picker = Some(Picker::new(purpose, &start));
+        let request = DialogRequest {
+            purpose,
+            directory,
+            file_name: if matches!(purpose, Purpose::SaveGzip | Purpose::RetryGzip) {
+                self.gzip_name.clone()
+            } else {
+                self.zip_name.clone()
+            },
+        };
+        let answer = self.dialogs.choose(request);
+        if answer.is_ok()
+            && self.ui_error.as_deref() == Some(crate::archive_dialog::DIALOG_UNAVAILABLE)
+        {
+            self.ui_error = None;
+        }
+        match answer {
+            Ok(Some(paths)) if !paths.is_empty() => {
+                let path = paths[0].clone();
+                match purpose {
+                    Purpose::Open => {
+                        if std::fs::symlink_metadata(&path)
+                            .is_ok_and(|m| m.is_file() && !m.file_type().is_symlink())
+                        {
+                            self.open_path(path);
+                        } else {
+                            self.ui_error = Some("일반 압축파일을 선택하세요".into());
+                        }
+                    }
+                    Purpose::Files | Purpose::Folder => self.add_sources(paths),
+                    Purpose::Destination | Purpose::Retry => {
+                        self.choose_destination(path);
+                        self.selected_only = !self.model.selected.is_empty();
+                        if purpose == Purpose::Retry {
+                            self.retry();
+                        } else {
+                            self.begin_extract();
+                        }
+                    }
+                    Purpose::SaveGzip | Purpose::RetryGzip => {
+                        let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+                            self.ui_error = Some("저장할 파일 이름을 확인하세요".into());
+                            return;
+                        };
+                        if !present::valid_output_leaf(name) {
+                            self.ui_error = Some("저장할 파일 이름을 확인하세요".into());
+                            return;
+                        }
+                        let name = name.to_owned();
+                        self.choose_destination(
+                            path.parent().unwrap_or(Path::new("/")).to_path_buf(),
+                        );
+                        self.gzip_name = name.clone();
+                        self.selected_only = !self.model.selected.is_empty();
+                        if purpose == Purpose::RetryGzip {
+                            if let Some(Start::Extract {
+                                gzip_output_name, ..
+                            }) = &mut self.last_request
+                            {
+                                *gzip_output_name = Some(name);
+                            }
+                            self.retry();
+                        } else {
+                            self.begin_extract();
+                        }
+                    }
+                    Purpose::SaveZip => {
+                        if let Some(name) = path.file_name().and_then(|name| name.to_str()) {
+                            self.zip_name = name.to_owned();
+                            self.zip_folder = path.parent().unwrap_or(Path::new("/")).to_path_buf();
+                            self.begin_zip();
+                        }
+                    }
+                }
+            }
+            Ok(_) => {}
+            Err(error) => self.ui_error = Some(error),
+        }
     }
 
     fn retry(&mut self) {
@@ -278,34 +412,18 @@ impl ArchiveApp {
         }
     }
 
-    fn show_picker(&mut self, ctx: &egui::Context) {
-        let answer = self.picker.as_mut().and_then(|picker| picker.show(ctx));
-        if let Some(answer) = answer {
-            let purpose = self.picker.take().unwrap().purpose;
-            if let Choice::Paths(paths) = answer {
-                if let Some(path) = paths.first() {
-                    match purpose {
-                        Purpose::Open => self.open_path(path.clone()),
-                        Purpose::Destination | Purpose::Retry => {
-                            self.choose_destination(path.clone());
-                            if purpose == Purpose::Retry {
-                                self.retry();
-                            }
-                        }
-                        Purpose::ZipFolder => self.zip_folder = path.clone(),
-                        Purpose::Files | Purpose::Folder => self.add_sources(paths),
-                    }
-                }
-            }
-        }
-    }
-
     fn on_drop(&mut self, paths: Vec<PathBuf>) {
-        if self.model.busy() || paths.is_empty() || self.picker.is_some() {
+        if self.model.busy() || paths.is_empty() {
             return;
         }
         if paths.len() == 1 && !self.create && !paths[0].is_dir() {
-            self.open_path(paths[0].clone());
+            if std::fs::symlink_metadata(&paths[0])
+                .is_ok_and(|m| m.is_file() && !m.file_type().is_symlink())
+            {
+                self.open_path(paths[0].clone());
+            } else {
+                self.ui_error = Some("일반 압축파일을 선택하세요".into());
+            }
         } else {
             self.add_sources(paths);
         }
@@ -358,45 +476,96 @@ impl ArchiveApp {
         if self.model.close == Close::Allowed {
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
         }
+        let title = self
+            .model
+            .archive
+            .as_ref()
+            .map(|path| {
+                let full = if path.is_absolute() {
+                    path.clone()
+                } else {
+                    std::env::current_dir().unwrap_or_default().join(path)
+                };
+                format!("{} — Zipelo", full.display())
+            })
+            .unwrap_or_else(|| "Zipelo".into());
+        let short_title = if let Some(path) = title.strip_suffix(" — Zipelo") {
+            format!(
+                "{} — Zipelo",
+                theme::window_title(root, path, ctx.content_rect().width() - 300.0)
+            )
+        } else {
+            title.clone()
+        };
+        ctx.send_viewport_cmd(egui::ViewportCommand::Title(short_title));
         egui::Panel::top("archive-actions")
-            .frame(theme::panel(theme::PANEL).corner_radius(0))
+            .frame(
+                theme::panel(theme::PANEL)
+                    .corner_radius(0)
+                    .inner_margin(egui::Margin::symmetric(16, 4)),
+            )
             .show(root, |ui| {
                 ui.horizontal(|ui| {
-                    theme::icon(ui, Icon::Archive, 24.0);
-                    ui.heading("Zipelo");
-                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                        if theme::action(
-                            ui,
-                            "ZIP 만들기",
-                            false,
-                            !self.model.busy() && self.model.close == Close::Open,
-                        )
-                        .on_disabled_hover_text("작업이 끝나면 ZIP을 만들 수 있습니다")
+                    let idle = !self.model.busy() && self.model.close == Close::Open;
+                    if theme::tool(ui, "열기", theme::OPEN, idle, false)
+                        .on_hover_text(&title)
                         .clicked()
-                        {
-                            self.create = true;
-                            self.ui_error = None;
-                        }
+                    {
+                        self.open_picker(Purpose::Open);
+                    }
+                    if theme::tool(ui, "압축하기", theme::CREATE, idle, false).clicked() {
+                        self.show_create(false);
+                    }
+                    if theme::tool(
+                        ui,
+                        "압축해제",
+                        theme::EXTRACT,
+                        self.model.can_extract(),
+                        true,
+                    )
+                    .clicked()
+                    {
+                        self.open_picker(Purpose::Destination);
+                    }
+                });
+            });
+        egui::Panel::bottom("archive-status")
+            .frame(
+                theme::panel(theme::STRIPE)
+                    .corner_radius(0)
+                    .inner_margin(egui::Margin::symmetric(16, 8)),
+            )
+            .show(root, |ui| {
+                ui.horizontal(|ui| {
+                    let width = (ui.available_width() - ui.spacing().item_spacing.x) / 2.0;
+                    theme::bounded_text(
+                        ui,
+                        &format!(
+                            "{}개 항목",
+                            browser::rows(&self.model.entries, &self.folder, &self.search).len()
+                        ),
+                        width,
+                    );
+                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                        theme::bounded_text(
+                            ui,
+                            &format!("선택 {}개", self.model.selected.len()),
+                            width,
+                        );
                     });
                 });
-                if self.fixture {
-                    ui.colored_label(
-                        theme::WARNING,
-                        "화면 시험 모드 / 파일을 읽거나 저장하지 않습니다",
-                    );
-                }
             });
-        if self.model.archive.is_some()
-            || self.model.busy()
-            || self.result_visible()
-            || self.ui_error.is_some()
-        {
+        if self.model.busy() || self.result_visible() || (self.ui_error.is_some() && !self.create) {
             egui::Panel::bottom("archive-work")
                 .frame(theme::panel(theme::PANEL).corner_radius(0))
                 .show(root, |ui| self.work_area(ui));
         }
         egui::CentralPanel::default()
-            .frame(theme::panel(theme::BACKGROUND))
+            .frame(
+                theme::panel(theme::PANEL)
+                    .corner_radius(0)
+                    .inner_margin(egui::Margin::ZERO),
+            )
             .show(root, |ui| {
                 if self.model.archive.is_some() {
                     self.archive_list(ui);
@@ -407,7 +576,6 @@ impl ArchiveApp {
         if self.create && !self.model.busy() {
             self.create_dialog(&ctx);
         }
-        self.show_picker(&ctx);
         if self.model.challenge.is_some() {
             self.password_dialog(&ctx, new_challenge);
         }
@@ -492,222 +660,190 @@ impl ArchiveApp {
     }
 
     fn archive_list(&mut self, ui: &mut egui::Ui) {
-        let archive = self.model.archive.as_ref().unwrap().clone();
-        ui.horizontal(|ui| {
-            theme::icon(ui, Icon::Archive, 32.0);
-            let name = archive.file_name().unwrap_or_default().to_string_lossy();
-            let limit = ((ui.available_width() - 144.0) / theme::TITLE).max(10.0) as usize;
-            ui.heading(present::middle_text(&name, limit))
-                .on_hover_text(archive.display().to_string());
-            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                if theme::action(ui, "다른 파일", false, !self.model.busy()).clicked() {
-                    self.open_picker(Purpose::Open);
+        theme::panel(theme::STRIPE).corner_radius(0).show(ui, |ui| {
+            ui.horizontal(|ui| {
+                let up = theme::icon_button(
+                    ui,
+                    "위로",
+                    theme::UP,
+                    !self.folder.is_empty() && !self.model.busy(),
+                );
+                if up.clicked() {
+                    let parent = self
+                        .folder
+                        .rsplit_once('/')
+                        .map_or("", |(parent, _)| parent)
+                        .to_owned();
+                    self.browse_folder(&parent);
                 }
+                ui.label("현재 경로");
+                let path = format!("/{}", self.folder);
+                let width = (ui.available_width() - 270.0).max(0.0);
+                egui::Frame::new()
+                    .fill(theme::PANEL)
+                    .stroke(egui::Stroke::new(1.0, theme::BORDER))
+                    .corner_radius(6)
+                    .inner_margin(egui::Margin::symmetric(8, 7))
+                    .show(ui, |ui| {
+                        theme::bounded_text(ui, &path, (width - 18.0).max(0.0));
+                    });
+                let (rect, _) =
+                    ui.allocate_exact_size(egui::vec2(20.0, 20.0), egui::Sense::hover());
+                theme::svg_icon(ui.painter(), rect, theme::SEARCH, theme::MUTED);
+                let search = ui.add_sized(
+                    [220.0, 36.0],
+                    egui::TextEdit::singleline(&mut self.search)
+                        .id(egui::Id::unique("archive-search"))
+                        .hint_text("파일 찾기"),
+                );
+                theme::focus(&search);
             });
         });
-        let bytes = self
-            .model
-            .entries
+        let rows = browser::rows(&self.model.entries, &self.folder, &self.search);
+        let visible = rows
             .iter()
-            .filter_map(|entry| entry.bytes)
-            .sum();
-        ui.colored_label(
-            theme::MUTED,
-            format!(
-                "항목 {}개, {}",
-                self.model.entries.len(),
-                present::bytes_text(bytes)
-            ),
-        );
-        ui.add_space(theme::SPACE);
-        let selectable = self
-            .model
-            .entries
-            .iter()
-            .filter(|e| matches!(e.kind, Kind::File | Kind::Directory))
-            .map(|e| e.id)
+            .flat_map(|row| row.ids.iter().copied())
             .collect::<BTreeSet<_>>();
-        let mut all = !selectable.is_empty() && selectable.is_subset(&self.model.selected);
-        let widths =
-            (ui.available_width() - 32.0 - 96.0 - 64.0 - theme::SPACE * 4.0 - 32.0).max(160.0);
-        theme::panel(theme::PANEL)
-            .inner_margin(egui::Margin::symmetric(theme::SPACE as i8, 0))
-            .show(ui, |ui| {
-                ui.horizontal(|ui| {
-                    let response = ui
-                        .add_enabled(
-                            !self.model.busy() && !selectable.is_empty(),
-                            egui::Checkbox::without_text(&mut all),
-                        )
-                        .on_hover_text("전체 선택");
-                    response.widget_info(|| {
-                        egui::WidgetInfo::selected(
-                            egui::Role::CheckBox,
-                            !self.model.busy(),
-                            all,
-                            "전체 선택",
-                        )
-                    });
-                    theme::focus(&response);
-                    if response.changed() {
-                        self.model.selected = if all {
-                            selectable.clone()
-                        } else {
-                            BTreeSet::new()
-                        };
-                    }
-                    theme::column_label(ui, RichText::new("이름").strong(), widths, Align::Min);
-                    theme::column_label(ui, "크기", 96.0, Align::Max);
-                    theme::column_label(ui, "암호", 64.0, Align::Min);
-                });
-                ui.separator();
-                if self.model.entries.is_empty() {
-                    ui.vertical_centered(|ui| {
-                        ui.add_space(theme::SPACE * 8.0);
-                        ui.label(if self.model.list_id.is_some() {
-                            "이 압축파일은 비어 있습니다"
-                        } else {
-                            "압축파일을 읽는 중"
-                        });
-                    });
+        let mut all = !visible.is_empty() && visible.is_subset(&self.model.selected);
+        let name_width = (ui.available_width() - 32.0 - 96.0 - 64.0 - 64.0).max(160.0);
+        ui.horizontal(|ui| {
+            ui.add_space(16.0);
+            let check = ui
+                .add_enabled(
+                    !self.model.busy() && !visible.is_empty(),
+                    egui::Checkbox::without_text(&mut all),
+                )
+                .on_hover_text("전체 선택");
+            if check.changed() {
+                if all {
+                    self.model.selected.extend(&visible);
                 } else {
-                    egui::ScrollArea::vertical()
-                        .id_salt("archive-rows")
-                        .auto_shrink([false, false])
-                        .show_rows(ui, theme::ROW, self.model.entries.len(), |ui, rows| {
-                            for index in rows {
-                                let entry = &self.model.entries[index];
-                                let enabled = !self.model.busy()
-                                    && matches!(entry.kind, Kind::File | Kind::Directory);
-                                let mut selected = self.model.selected.contains(&entry.id);
-                                let width = ui.available_width();
-                                let (rect, row) = ui.allocate_exact_size(
-                                    egui::vec2(width, theme::ROW),
-                                    if enabled {
-                                        egui::Sense::click()
-                                    } else {
-                                        egui::Sense::hover()
-                                    },
-                                );
-                                ui.painter().rect_filled(
-                                    rect,
-                                    0,
-                                    if selected {
-                                        theme::SELECTED
-                                    } else if index % 2 == 0 {
-                                        theme::PANEL
-                                    } else {
-                                        theme::STRIPE
-                                    },
-                                );
-                                let mut changed = false;
-                                ui.scope_builder(
-                                    egui::UiBuilder::new()
-                                        .max_rect(rect)
-                                        .layout(Layout::left_to_right(Align::Center)),
-                                    |ui| {
-                                        let check = ui.add_enabled(
-                                            enabled,
-                                            egui::Checkbox::without_text(&mut selected),
-                                        );
-                                        check.widget_info(|| {
-                                            egui::WidgetInfo::selected(
-                                                egui::Role::CheckBox,
-                                                enabled,
-                                                selected,
-                                                &entry.name,
-                                            )
-                                        });
-                                        theme::focus(&check);
-                                        changed = check.changed();
-                                        ui.allocate_ui_with_layout(
-                                            egui::vec2(widths, theme::ROW),
-                                            Layout::left_to_right(Align::Center),
-                                            |ui| {
-                                                ui.set_min_width(widths);
-                                                theme::icon(
-                                                    ui,
-                                                    if entry.kind == Kind::Directory {
-                                                        Icon::Folder
-                                                    } else {
-                                                        Icon::File
-                                                    },
-                                                    20.0,
-                                                );
-                                                let name = if matches!(
-                                                    entry.kind,
-                                                    Kind::Link | Kind::Other
-                                                ) {
-                                                    format!("{} (링크)", entry.name)
-                                                } else {
-                                                    entry.name.clone()
-                                                };
-                                                let limit = ((widths - 32.0) / theme::BODY).max(8.0)
-                                                    as usize;
-                                                ui.label(present::middle_text(&name, limit));
-                                            },
-                                        );
-                                        ui.allocate_ui_with_layout(
-                                            egui::vec2(96.0, theme::ROW),
-                                            Layout::right_to_left(Align::Center),
-                                            |ui| {
-                                                ui.set_min_width(96.0);
-                                                ui.label(entry.bytes.map_or_else(
-                                                    || "알 수 없음".into(),
-                                                    present::bytes_text,
-                                                ));
-                                            },
-                                        );
-                                        ui.allocate_ui_with_layout(
-                                            egui::vec2(64.0, theme::ROW),
-                                            Layout::left_to_right(Align::Center),
-                                            |ui| {
-                                                ui.set_min_width(64.0);
-                                                if entry.encrypted {
-                                                    theme::icon(ui, Icon::Lock, 16.0);
-                                                    ui.label("있음");
-                                                }
-                                            },
-                                        );
-                                    },
-                                );
-                                row.widget_info(|| {
-                                    egui::WidgetInfo::selected(
-                                        egui::Role::Button,
-                                        enabled,
-                                        selected,
-                                        &entry.name,
-                                    )
-                                });
-                                row.clone().on_hover_text(&entry.name);
-                                theme::focus(&row);
-                                let content = ui.interact(
-                                    egui::Rect::from_min_max(
-                                        rect.min + egui::vec2(32.0, 0.0),
-                                        rect.max,
-                                    ),
-                                    row.id.with("content"),
-                                    if enabled {
-                                        egui::Sense::CLICK
-                                    } else {
-                                        egui::Sense::hover()
-                                    },
-                                );
-                                if enabled && !changed && (row.clicked() || content.clicked()) {
-                                    selected = !selected;
-                                    changed = true;
-                                }
-                                if changed {
-                                    if selected {
-                                        self.model.selected.insert(entry.id);
-                                    } else {
-                                        self.model.selected.remove(&entry.id);
-                                    }
+                    browser::remove_selection(
+                        &self.model.entries,
+                        &mut self.model.selected,
+                        &visible,
+                    );
+                }
+            }
+            theme::focus(&check);
+            theme::column_label(ui, RichText::new("이름").strong(), name_width, Align::Min);
+            theme::column_label(ui, "크기", 96.0, Align::Max);
+            theme::column_label(ui, "암호", 64.0, Align::Min);
+        });
+        ui.separator();
+        egui::ScrollArea::vertical()
+            .id_salt("archive-rows")
+            .auto_shrink([false, false])
+            .show_rows(ui, 38.0, rows.len(), |ui, range| {
+                for index in range {
+                    let row = &rows[index];
+                    let mut selected =
+                        !row.ids.is_empty() && row.ids.is_subset(&self.model.selected);
+                    let response = ui
+                        .horizontal(|ui| {
+                            ui.set_min_height(36.0);
+                            ui.add_space(16.0);
+                            let check = ui.add_enabled(
+                                !self.model.busy() && !row.ids.is_empty(),
+                                egui::Checkbox::without_text(&mut selected),
+                            );
+                            check.widget_info(|| {
+                                egui::WidgetInfo::selected(
+                                    egui::Role::CheckBox,
+                                    !self.model.busy(),
+                                    selected,
+                                    &row.name,
+                                )
+                            });
+                            theme::focus(&check);
+                            if check.changed() {
+                                if selected {
+                                    self.model.selected.extend(&row.ids);
+                                } else {
+                                    browser::remove_selection(
+                                        &self.model.entries,
+                                        &mut self.model.selected,
+                                        &row.ids,
+                                    );
                                 }
                             }
-                        });
+                            theme::icon(
+                                ui,
+                                if row.directory {
+                                    Icon::Folder
+                                } else {
+                                    Icon::File
+                                },
+                                20.0,
+                            );
+                            let label = ui
+                                .allocate_ui_with_layout(
+                                    egui::vec2((name_width - 28.0).max(0.0), 34.0),
+                                    Layout::left_to_right(Align::Center),
+                                    |ui| {
+                                        ui.set_min_width((name_width - 28.0).max(0.0));
+                                        ui.set_max_width((name_width - 28.0).max(0.0));
+                                        ui.add_enabled(
+                                            !self.model.busy(),
+                                            egui::Button::new(&row.name)
+                                                .truncate()
+                                                .selected(selected)
+                                                .frame(false)
+                                                .min_size(egui::vec2(0.0, 34.0)),
+                                        )
+                                    },
+                                )
+                                .inner
+                                .on_hover_text(&row.name);
+                            theme::focus(&label);
+                            let enter =
+                                label.has_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+                            if row.directory && (label.double_clicked() || enter) {
+                                self.browse_folder(&row.path);
+                            } else if !row.directory && label.clicked() {
+                                if selected {
+                                    browser::remove_selection(
+                                        &self.model.entries,
+                                        &mut self.model.selected,
+                                        &row.ids,
+                                    );
+                                } else {
+                                    self.model.selected.extend(&row.ids);
+                                }
+                            }
+                            theme::column_label(
+                                ui,
+                                if row.directory {
+                                    "0 B".into()
+                                } else {
+                                    row.bytes
+                                        .map(present::bytes_text)
+                                        .unwrap_or_else(|| "—".into())
+                                },
+                                96.0,
+                                Align::Max,
+                            );
+                            if row.encrypted {
+                                theme::icon(ui, Icon::Lock, 16.0);
+                            }
+                        })
+                        .response;
+                    ui.painter().hline(
+                        response.rect.x_range(),
+                        response.rect.bottom(),
+                        egui::Stroke::new(1.0, theme::BORDER),
+                    );
                 }
             });
+        if rows.is_empty() {
+            ui.centered_and_justified(|ui| {
+                ui.label(if self.search.is_empty() {
+                    "이 폴더는 비어 있습니다"
+                } else {
+                    "일치하는 항목이 없습니다"
+                });
+            });
+        }
     }
 
     fn result_visible(&self) -> bool {
@@ -724,61 +860,28 @@ impl ArchiveApp {
             })
     }
 
+    fn error_notice(ui: &mut egui::Ui, error: &str) {
+        let response = theme::panel(theme::ERROR_BG)
+            .show(ui, |ui| {
+                ui.horizontal_wrapped(|ui| {
+                    theme::icon(ui, Icon::Error, 24.0);
+                    ui.colored_label(theme::ERROR, error);
+                });
+            })
+            .response;
+        response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Alert, true, error));
+    }
+
     fn work_area(&mut self, ui: &mut egui::Ui) {
         if self.model.busy() {
             self.progress(ui);
         } else if self.result_visible() {
             self.result(ui);
-        } else if self.model.list_id.is_some() {
-            ui.horizontal(|ui| {
-                ui.strong("풀 위치");
-                let width = ui.available_width() - 136.0;
-                theme::column_label(
-                    ui,
-                    present::middle_text(
-                        &self.destination.display().to_string(),
-                        (width / theme::BODY).max(10.0) as usize,
-                    ),
-                    width,
-                    Align::Min,
-                )
-                .on_hover_text(self.destination.display().to_string());
-                if theme::action(ui, "폴더 바꾸기", false, true).clicked() {
-                    self.open_picker(Purpose::Destination);
-                }
-            });
-            if self
-                .model
-                .list_id
-                .as_ref()
-                .is_some_and(|id| id.format == Format::Gzip)
-            {
-                ui.horizontal(|ui| {
-                    ui.label("저장할 파일 이름");
-                    let edit = ui.add(
-                        egui::TextEdit::singleline(&mut self.gzip_name)
-                            .id(egui::Id::unique("gzip-name")),
-                    );
-                    theme::focus(&edit);
-                });
-            }
-            ui.horizontal(|ui| {
-                let response = ui.checkbox(&mut self.selected_only, "선택한 항목만 풀기");
-                theme::focus(&response);
-                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    let enabled = self.model.can_extract()
-                        && (!self.selected_only || !self.model.selected.is_empty());
-                    if theme::action(ui, "풀기", true, enabled)
-                        .on_disabled_hover_text("풀 항목을 선택하세요")
-                        .clicked()
-                    {
-                        self.begin_extract();
-                    }
-                });
-            });
         }
-        if let Some(error) = &self.ui_error {
-            ui.colored_label(theme::ERROR, error);
+        if !self.create
+            && let Some(error) = &self.ui_error
+        {
+            Self::error_notice(ui, error);
             if error == present::FOLDER_ERROR
                 && theme::action(ui, "폴더 바꾸기", false, true).clicked()
             {
@@ -921,12 +1024,13 @@ impl ArchiveApp {
                 .max_height(max_height)
                 .show(ui, |ui| {
                     if success {
-                        ui.label(match self.last_request.as_ref() {
+                        let path = match self.last_request.as_ref() {
                             Some(Start::CreateZip { output_file, .. }) => {
                                 output_file.display().to_string()
                             }
                             _ => format!("{} 폴더에 저장했습니다.", self.destination.display()),
-                        });
+                        };
+                        theme::bounded_text(ui, &path, ui.available_width());
                     } else if let Some(code) = t.as_ref().and_then(|t| t.error) {
                         ui.label(if creating && code == ErrorCode::SourceChanged {
                             "묶을 파일이 바뀌었습니다. 파일을 확인한 뒤 다시 만드세요"
@@ -972,7 +1076,11 @@ impl ArchiveApp {
                                 ui.label(error);
                             }
                             for (name, state) in &self.model.outputs {
-                                ui.label(format!("{name}: {}", disposition_label(*state)));
+                                theme::bounded_text(
+                                    ui,
+                                    &format!("{name}: {}", disposition_label(*state)),
+                                    ui.available_width(),
+                                );
                             }
                         });
                     }
@@ -1007,7 +1115,19 @@ impl ArchiveApp {
                 let action = if success {
                     Some(("폴더 열기", true))
                 } else if conflict {
-                    Some(("다른 폴더에 풀기", !uncertain || self.checked_destination))
+                    Some((
+                        if self
+                            .model
+                            .list_id
+                            .as_ref()
+                            .is_some_and(|id| id.format == Format::Gzip)
+                        {
+                            "다른 이름으로 저장"
+                        } else {
+                            "다른 폴더에 풀기"
+                        },
+                        !uncertain || self.checked_destination,
+                    ))
                 } else if t
                     .as_ref()
                     .is_some_and(|t| t.error == Some(ErrorCode::SourceChanged))
@@ -1034,7 +1154,9 @@ impl ArchiveApp {
                 if primary {
                     match action.map(|(label, _)| label) {
                         Some("폴더 열기") => folder = true,
-                        Some("다른 폴더에 풀기") => choose = true,
+                        Some("다른 폴더에 풀기" | "다른 이름으로 저장") => {
+                            choose = true
+                        }
                         Some("압축파일 다시 열기") => reopen = true,
                         Some("다시 시도" | "다시 만들기") => retry = true,
                         _ => {}
@@ -1076,64 +1198,93 @@ impl ArchiveApp {
     }
 
     fn create_dialog(&mut self, ctx: &egui::Context) {
-        let mut create = false;
+        let mut compress = false;
         let mut pick = None;
+        let mut cancel = false;
         let modal = egui::Modal::new(egui::Id::unique("create-zip")).show(ctx, |ui| {
-            ui.set_width((ctx.content_rect().width() - 64.0).min(560.0));
-            ui.heading("ZIP 만들기");
+            ui.set_width((ctx.content_rect().width() - 64.0).min(600.0));
+            ui.horizontal(|ui| {
+                ui.heading("ZIP 만들기");
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    let close = theme::icon_button(ui, "닫기", theme::CLOSE, true);
+                    theme::focus(&close);
+                    cancel = close.clicked();
+                });
+            });
+            if let Some(error) = &self.ui_error {
+                Self::error_notice(ui, error);
+            }
             egui::ScrollArea::vertical()
                 .id_salt("create-fields")
-                .scroll_bar_visibility(if ctx.content_rect().height() < 600.0 {
-                    egui::scroll_area::ScrollBarVisibility::AlwaysVisible
-                } else {
-                    egui::scroll_area::ScrollBarVisibility::VisibleWhenNeeded
-                })
-                .max_height((ctx.content_rect().height() - 200.0).max(240.0))
+                .max_height(
+                    (ctx.content_rect().height()
+                        - 180.0
+                        - if self.ui_error.is_some() { 96.0 } else { 0.0 })
+                    .max(120.0),
+                )
                 .show(ui, |ui| {
-                    ui.strong("1. 묶을 파일과 폴더");
-                    let mut remove = None;
-                    theme::panel(theme::STRIPE).show(ui, |ui| {
-                        egui::ScrollArea::vertical()
-                            .id_salt("zip-sources")
-                            .max_height(128.0)
-                            .show(ui, |ui| {
-                                if self.sources.is_empty() {
-                                    ui.label("여기에 파일이나 폴더를 끌어 놓으세요");
-                                }
-                                for (index, path) in self.sources.iter().enumerate() {
-                                    ui.horizontal(|ui| {
-                                        theme::icon(
-                                            ui,
-                                            if path.is_dir() {
-                                                Icon::Folder
-                                            } else {
-                                                Icon::File
-                                            },
-                                            20.0,
-                                        );
-                                        theme::column_label(
-                                            ui,
-                                            present::middle_text(
-                                                &path
-                                                    .file_name()
-                                                    .unwrap_or_default()
-                                                    .to_string_lossy(),
-                                                28,
-                                            ),
-                                            ui.available_width() - 80.0,
-                                            Align::Min,
-                                        )
-                                        .on_hover_text(path.display().to_string());
-                                        if theme::action(ui, "빼기", false, true).clicked() {
-                                            remove = Some(index);
-                                        }
-                                    });
-                                }
+                    ui.add_space(16.0);
+                    let frame = theme::panel(theme::STRIPE)
+                        .stroke(egui::Stroke::new(1.0, theme::DASH))
+                        .inner_margin(egui::Margin::same(24));
+                    let area = frame
+                        .show(ui, |ui| {
+                            ui.set_min_size(egui::vec2(ui.available_width(), 144.0));
+                            ui.vertical_centered(|ui| {
+                                theme::icon(ui, Icon::File, 44.0);
+                                ui.add_space(16.0);
+                                ui.label(
+                                    RichText::new("파일이나 폴더를 여기에 끌어 놓으세요")
+                                        .size(18.0),
+                                );
                             });
+                        })
+                        .response;
+                    let drop = ui.interact(
+                        area.rect,
+                        egui::Id::unique("zip-source-drop"),
+                        egui::Sense::click(),
+                    );
+                    theme::focus(&drop);
+                    drop.widget_info(|| {
+                        egui::WidgetInfo::labeled(egui::Role::Button, true, "파일 추가")
                     });
-                    if let Some(index) = remove {
-                        self.sources.remove(index);
+                    if drop.clicked() {
+                        pick = Some(Purpose::Files);
                     }
+                    egui::ScrollArea::vertical()
+                        .id_salt("zip-sources")
+                        .max_height(86.0)
+                        .show(ui, |ui| {
+                            let mut remove = None;
+                            for (index, path) in self.sources.iter().enumerate() {
+                                ui.horizontal(|ui| {
+                                    theme::icon(
+                                        ui,
+                                        if path.is_dir() {
+                                            Icon::Folder
+                                        } else {
+                                            Icon::File
+                                        },
+                                        20.0,
+                                    );
+                                    let name =
+                                        path.file_name().unwrap_or_default().to_string_lossy();
+                                    theme::bounded_text(
+                                        ui,
+                                        &name,
+                                        (ui.available_width() - 72.0).max(0.0),
+                                    )
+                                    .on_hover_text(path.display().to_string());
+                                    if ui.button("빼기").clicked() {
+                                        remove = Some(index);
+                                    }
+                                });
+                            }
+                            if let Some(index) = remove {
+                                self.sources.remove(index);
+                            }
+                        });
                     ui.horizontal(|ui| {
                         if theme::action(ui, "파일 추가", false, true).clicked() {
                             pick = Some(Purpose::Files);
@@ -1142,61 +1293,30 @@ impl ArchiveApp {
                             pick = Some(Purpose::Folder);
                         }
                     });
-                    ui.add_space(theme::SPACE);
-                    ui.strong("2. 저장 위치");
+                    ui.add_space(16.0);
                     ui.horizontal(|ui| {
-                        ui.label("이름");
-                        let edit = ui.add(
-                            egui::TextEdit::singleline(&mut self.zip_name)
-                                .id(egui::Id::unique("zip-name"))
-                                .desired_width(ui.available_width()),
-                        );
-                        theme::focus(&edit);
+                        theme::icon(ui, Icon::Lock, 24.0);
+                        ui.strong("암호화");
                     });
-                    if let Some(error) = &self.ui_error {
-                        ui.colored_label(theme::ERROR, error);
-                    }
-                    ui.horizontal(|ui| {
-                        ui.label("폴더");
-                        theme::column_label(
-                            ui,
-                            present::middle_text(&self.zip_folder.display().to_string(), 30),
-                            ui.available_width() - 136.0,
-                            Align::Min,
-                        )
-                        .on_hover_text(self.zip_folder.display().to_string());
-                        if theme::action(ui, "폴더 바꾸기", false, true).clicked() {
-                            pick = Some(Purpose::ZipFolder);
-                        }
-                    });
-                    ui.add_space(theme::SPACE);
-                    ui.strong("3. 보호");
-                    let response = ui.checkbox(&mut self.aes256, "암호로 보호하기");
-                    theme::focus(&response);
-                    ui.collapsing("자세한 설정", |ui| {
-                        ui.radio_value(&mut self.method, Method::Deflate, "작게 압축(기본)");
-                        ui.radio_value(&mut self.method, Method::Store, "빠르게 묶기");
-                    });
+                    let check = ui.checkbox(&mut self.aes256, "암호로 보호하기");
+                    theme::focus(&check);
+                    ui.add_space(16.0);
                 });
-            ui.separator();
-            let can_create = !self.sources.is_empty() && !self.zip_name.is_empty();
-            let (cancel, confirm) = theme::action_pair(ui, "취소", Some(("만들기", can_create)));
-            if cancel {
-                self.create = false;
-                self.ui_error = None;
-                return;
-            }
-            create = confirm;
+            let (dismiss, confirm) =
+                theme::action_pair(ui, "취소", Some(("압축하기", !self.sources.is_empty())));
+            cancel |= dismiss;
+            compress = confirm;
         });
-        if !self.create || modal.should_close() {
+        if cancel || modal.should_close() {
             self.create = false;
+            self.ui_error = None;
             return;
         }
         if let Some(purpose) = pick {
             self.open_picker(purpose);
         }
-        if create {
-            self.begin_zip();
+        if compress {
+            self.open_picker(Purpose::SaveZip);
         }
     }
 

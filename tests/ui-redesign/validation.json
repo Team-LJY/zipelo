@@ -1,19 +1,17 @@
 {
-    "recorded_at_utc": "2026-11-12T03:45:10.544496+00:00",
-    "baseline": "b10c7eedddd202f83766aa8f001142cdfdb4097c",
-    "tested_local_commit": "ce59f4c3b40ed90279adc51c9af7b7643a440cc6",
-    "tested_source_tree": "64e6912da7bdcb29548a5aff3fda0dd8a7c955da",
-    "equivalent_remote_source_commit": "c33df7202a170e0ed46dd21525cac0af060a4e18",
+    "recorded_at_utc": "2026-11-12T06:50:59.515143+00:00",
+    "tested_local_commit": "2228c846a91d10f82051fac5cf80d25fb4ea132f",
+    "tested_source_tree": "140cd3b560846d6ef267b9c22e9af399ca3558c0",
+    "equivalent_remote_source_commit": "8ce724306fa9cadc13967f6db37be304325cb81b",
     "command": "python3 tests/ci/run_rust.py local",
     "exit_code": 0,
-    "rust_tests_passed": 1004,
+    "rust_tests_passed": 1015,
     "runner_tests_passed": 34,
-    "ui_suite_tests_passed": 59,
-    "actual_worker_ui_tests_passed": 24,
-    "native_x11_row_selection": "passed",
-    "local_log_sha256": "d7a4a3c5d49beb00ad227ff9dc59b623fead99b5693ccae3be78f3bd49af3b6e",
+    "ui_suite_tests_passed": 68,
+    "actual_worker_ui_tests_passed": 26,
+    "local_log_sha256": "3514f176373ec2ffacaeb033d7877bc8da5623ec768f090a3c4e1abc91c50ee6",
     "local_results": {
-        "head": "ce59f4c3b40ed90279adc51c9af7b7643a440cc6",
+        "head": "2228c846a91d10f82051fac5cf80d25fb4ea132f",
         "platform": "linux",
         "windows_cross_target": "x86_64-pc-windows-gnu",
         "windows_runtime_tested": false,
@@ -398,574 +396,249 @@
             }
         ]
     },
+    "screenshots_source_local_commit": "53829027d861c0a152e18f31e551ddea54400b7a",
     "screenshots": [
         {
-            "state": "empty",
-            "path": "tests/ui-redesign/screenshots/before/empty.png",
+            "state": "toolbar-root",
+            "path": "tests/ui-redesign/screenshots/toolbar/toolbar-root.png",
             "width": 1060,
             "height": 720,
-            "sha256": "1988e11668e01abd1341bc03023df13d435833ee23ead3efa11bb4c3d514ccba"
+            "sha256": "3fd44fbbfdbec77dc749adfa0563003a2f05d8badd7566c879389d3d2b2bcdc4"
         },
         {
-            "state": "hover",
-            "path": "tests/ui-redesign/screenshots/before/hover.png",
+            "state": "toolbar-folder",
+            "path": "tests/ui-redesign/screenshots/toolbar/toolbar-folder.png",
             "width": 1060,
             "height": 720,
-            "sha256": "1988e11668e01abd1341bc03023df13d435833ee23ead3efa11bb4c3d514ccba"
+            "sha256": "98570928b8f5b9550a21ca904d257728d94a579f67e5febe2344bd123a93c614"
         },
         {
-            "state": "opened",
-            "path": "tests/ui-redesign/screenshots/before/opened.png",
+            "state": "toolbar-create",
+            "path": "tests/ui-redesign/screenshots/toolbar/toolbar-create.png",
             "width": 1060,
             "height": 720,
-            "sha256": "320b42e6b1bf0ff544cd74940bed32fba0faadad51f957b7e4cc1817733faeab"
-        },
-        {
-            "state": "selected-empty",
-            "path": "tests/ui-redesign/screenshots/before/selected-empty.png",
-            "width": 1060,
-            "height": 720,
-            "sha256": "320b42e6b1bf0ff544cd74940bed32fba0faadad51f957b7e4cc1817733faeab"
-        },
-        {
-            "state": "picker",
-            "path": "tests/ui-redesign/screenshots/before/picker.png",
-            "width": 1060,
-            "height": 720,
-            "sha256": "c0b5054e7025299644274b68603b3d2b2f150a2044b6e704454845098debaa70"
-        },
-        {
-            "state": "create",
-            "path": "tests/ui-redesign/screenshots/before/create.png",
-            "width": 1060,
-            "height": 720,
-            "sha256": "3979abd3dc074bc7fee42dd2d79f7262c3c2935bf1d55b2c74fbd8edf10e2625"
-        },
-        {
-            "state": "create-filled",
-            "path": "tests/ui-redesign/screenshots/before/create-filled.png",
-            "width": 1060,
-            "height": 720,
-            "sha256": "0e7c1c9ab40ffb6310ce5005d3adfbadc55631a7139b99252fce6ff58a0e2706"
-        },
-        {
-            "state": "password",
-            "path": "tests/ui-redesign/screenshots/before/password.png",
-            "width": 1060,
-            "height": 720,
-            "sha256": "41f59fe60cb3a5ef63573736df0eb38b88b419fb6eb5a2aedea818676f0f813c"
-        },
-        {
-            "state": "password-retry",
-            "path": "tests/ui-redesign/screenshots/before/password-retry.png",
-            "width": 1060,
-            "height": 720,
-            "sha256": "43afccce9815128026aca6b9490f58290d4976731a865bc0725fcce5a6626569"
-        },
-        {
-            "state": "password-create",
-            "path": "tests/ui-redesign/screenshots/before/password-create.png",
-            "width": 1060,
-            "height": 720,
-            "sha256": "190ba66bec6ea968548bce8278039e0607491e8699559e4d8be80ace587673ff"
-        },
-        {
-            "state": "progress",
-            "path": "tests/ui-redesign/screenshots/before/progress.png",
-            "width": 1060,
-            "height": 720,
-            "sha256": "d40e0812c9f255fba0ad727bae8e7f950124ef8abb1e15ae53872a3b5a367040"
-        },
-        {
-            "state": "progress-unknown",
-            "path": "tests/ui-redesign/screenshots/before/progress-unknown.png",
-            "width": 1060,
-            "height": 720,
-            "sha256": "d17726db1bf9b29df112b097623c5aad6be02003814607462d77b8c2f77bb609"
-        },
-        {
-            "state": "cancelling",
-            "path": "tests/ui-redesign/screenshots/before/cancelling.png",
-            "width": 1060,
-            "height": 720,
-            "sha256": "4c7c0955366734e18719b80eff79ed6381091ddf44e3a89be6d4d847e8b00f90"
-        },
-        {
-            "state": "success",
-            "path": "tests/ui-redesign/screenshots/before/success.png",
-            "width": 1060,
-            "height": 720,
-            "sha256": "b18467f76c63eacf6a7e611490efde23faee89e69a0f7825a8cff5b08d038aec"
-        },
-        {
-            "state": "error",
-            "path": "tests/ui-redesign/screenshots/before/error.png",
-            "width": 1060,
-            "height": 720,
-            "sha256": "ec3763e9e3962d21cc71809df9c7c97fbd26ddaf527a554189d1e00df227572a"
-        },
-        {
-            "state": "empty",
-            "path": "tests/ui-redesign/screenshots/after/empty.png",
-            "width": 1060,
-            "height": 720,
-            "sha256": "35c598ce360ee5be23aa33ab70aac12a48ea961f080ade33468f6e4c398932bf"
-        },
-        {
-            "state": "hover",
-            "path": "tests/ui-redesign/screenshots/after/hover.png",
-            "width": 1060,
-            "height": 720,
-            "sha256": "6decbc79373fcba255a64a0ff16891e79f0757e4845660b956e13c9d6d0a1fbe"
-        },
-        {
-            "state": "opened",
-            "path": "tests/ui-redesign/screenshots/after/opened.png",
-            "width": 1060,
-            "height": 720,
-            "sha256": "d3fd4a2af3c52e258ef21579dd70b0a91d1b5dfcdb644eebf99232967501700d"
-        },
-        {
-            "state": "selected-empty",
-            "path": "tests/ui-redesign/screenshots/after/selected-empty.png",
-            "width": 1060,
-            "height": 720,
-            "sha256": "b81514d441d5179337e4c9815cd8907ee1a9056e23722ea8086082a9c3cdd546"
-        },
-        {
-            "state": "picker",
-            "path": "tests/ui-redesign/screenshots/after/picker.png",
-            "width": 1060,
-            "height": 720,
-            "sha256": "464563184f7b1c0afe681e05fb3453b805f1d955843e70c4342fd2fffebc5038"
-        },
-        {
-            "state": "create",
-            "path": "tests/ui-redesign/screenshots/after/create.png",
-            "width": 1060,
-            "height": 720,
-            "sha256": "39e52bd325051f1f092339ba39a5a11791b20bb808400faf4bc7db22e90ca3fb"
-        },
-        {
-            "state": "create-filled",
-            "path": "tests/ui-redesign/screenshots/after/create-filled.png",
-            "width": 1060,
-            "height": 720,
-            "sha256": "375ea0d10f086e9584381611f805e5465c14d2dd0ff0ef9df0834f64002fe60b"
-        },
-        {
-            "state": "password",
-            "path": "tests/ui-redesign/screenshots/after/password.png",
-            "width": 1060,
-            "height": 720,
-            "sha256": "30d9cdc276d97a2edc5fafdef441000c3032e3994120b4ce829da30622e7e1de"
-        },
-        {
-            "state": "password-retry",
-            "path": "tests/ui-redesign/screenshots/after/password-retry.png",
-            "width": 1060,
-            "height": 720,
-            "sha256": "ffdd6581e7492f4528f47ed419cf9e00af824bc3638934eaf15b577db1fb3637"
-        },
-        {
-            "state": "password-create",
-            "path": "tests/ui-redesign/screenshots/after/password-create.png",
-            "width": 1060,
-            "height": 720,
-            "sha256": "c49d4ea79bf23b264d8dafe495a4166e3096effbdede56a9a75cc7940b0cc3b0"
-        },
-        {
-            "state": "progress",
-            "path": "tests/ui-redesign/screenshots/after/progress.png",
-            "width": 1060,
-            "height": 720,
-            "sha256": "d7e817d8244a7d76f98a711cc0ce9feb8f771131a8cb51c233ef708fb793cc5f"
-        },
-        {
-            "state": "progress-unknown",
-            "path": "tests/ui-redesign/screenshots/after/progress-unknown.png",
-            "width": 1060,
-            "height": 720,
-            "sha256": "ffeef237f2a9b327942feea2d8e4a245cb8b80c97efe11dc25c73b82fd6c8120"
-        },
-        {
-            "state": "cancelling",
-            "path": "tests/ui-redesign/screenshots/after/cancelling.png",
-            "width": 1060,
-            "height": 720,
-            "sha256": "c27b82f5d44457cb5b429b6ba223b26563da4867121de625bb2c9c6866fe389a"
-        },
-        {
-            "state": "success",
-            "path": "tests/ui-redesign/screenshots/after/success.png",
-            "width": 1060,
-            "height": 720,
-            "sha256": "6dba2e5f58f64cd15c2a3d731d7ca19402b5acaf30fd4e428a039af298061497"
-        },
-        {
-            "state": "error",
-            "path": "tests/ui-redesign/screenshots/after/error.png",
-            "width": 1060,
-            "height": 720,
-            "sha256": "2ae603987ace913bb0837a2d6d82b816f6ce81f1da063c17402b1c968b868e26"
-        },
-        {
-            "state": "empty",
-            "path": "tests/ui-redesign/screenshots/minimum/empty.png",
-            "width": 760,
-            "height": 540,
-            "sha256": "aa7d22e39473ce2d41e8df8e6b1ebbf34ee2d1fb92e76507f45dad24002d9834"
-        },
-        {
-            "state": "hover",
-            "path": "tests/ui-redesign/screenshots/minimum/hover.png",
-            "width": 760,
-            "height": 540,
-            "sha256": "3124b512c51588940b1da68b9f37668ffcfec13c2cacbef41e9ad00193a8658f"
-        },
-        {
-            "state": "opened",
-            "path": "tests/ui-redesign/screenshots/minimum/opened.png",
-            "width": 760,
-            "height": 540,
-            "sha256": "8c966fd37ca62cd234bf1bdfd15bdebe2cc81b22bde965258faf75a31837ac17"
-        },
-        {
-            "state": "selected-empty",
-            "path": "tests/ui-redesign/screenshots/minimum/selected-empty.png",
-            "width": 760,
-            "height": 540,
-            "sha256": "70c447dc34f05ec946d03302686cda95ae6d74771c18481d7382e841610c5520"
-        },
-        {
-            "state": "picker",
-            "path": "tests/ui-redesign/screenshots/minimum/picker.png",
-            "width": 760,
-            "height": 540,
-            "sha256": "cb99f35b0785da3f71d9f14b35b1d55d8926643ba04d645c0c61c76c6018b4c9"
-        },
-        {
-            "state": "create",
-            "path": "tests/ui-redesign/screenshots/minimum/create.png",
-            "width": 760,
-            "height": 540,
-            "sha256": "e4a771ed79f3101d27ae625737e6ba9d685dd7aef1b2284dff6abd4362640693"
-        },
-        {
-            "state": "create-filled",
-            "path": "tests/ui-redesign/screenshots/minimum/create-filled.png",
-            "width": 760,
-            "height": 540,
-            "sha256": "d79f30ba454e6ee4bae7bfac991c8571f67b7bf1ed5e7f38e59546f39c0d560c"
-        },
-        {
-            "state": "password",
-            "path": "tests/ui-redesign/screenshots/minimum/password.png",
-            "width": 760,
-            "height": 540,
-            "sha256": "2f8e783690a2b64497a266a11c1ed8040e644cc659b1ebe0ee8539f5d158c938"
-        },
-        {
-            "state": "password-retry",
-            "path": "tests/ui-redesign/screenshots/minimum/password-retry.png",
-            "width": 760,
-            "height": 540,
-            "sha256": "8f2608ed54e2d8f35184cd02cb3b93bfeb5da59a06c8a1f165e1ae26314e999c"
-        },
-        {
-            "state": "password-create",
-            "path": "tests/ui-redesign/screenshots/minimum/password-create.png",
-            "width": 760,
-            "height": 540,
-            "sha256": "9a43e565393bf0e2f0c4f875ba18f7ea48c713be27e1a963b117bfa54fb9fe15"
-        },
-        {
-            "state": "progress",
-            "path": "tests/ui-redesign/screenshots/minimum/progress.png",
-            "width": 760,
-            "height": 540,
-            "sha256": "01f9101c787294c0678d6adba5dd6f028254e695679128c734f60c1eef211dab"
-        },
-        {
-            "state": "progress-unknown",
-            "path": "tests/ui-redesign/screenshots/minimum/progress-unknown.png",
-            "width": 760,
-            "height": 540,
-            "sha256": "c9ffadc20480efb0136a6d3f149bf3f0385692593d144d11ad03077967c1e5fc"
-        },
-        {
-            "state": "cancelling",
-            "path": "tests/ui-redesign/screenshots/minimum/cancelling.png",
-            "width": 760,
-            "height": 540,
-            "sha256": "40b7cce8552c2f907303854e004f6fe55e1597e50ea961134868747d3ee2a6a1"
-        },
-        {
-            "state": "success",
-            "path": "tests/ui-redesign/screenshots/minimum/success.png",
-            "width": 760,
-            "height": 540,
-            "sha256": "d4093cbe39cd904309533bcdc4dc65fd55876ca394c8667d108779c8074532d7"
-        },
-        {
-            "state": "error",
-            "path": "tests/ui-redesign/screenshots/minimum/error.png",
-            "width": 760,
-            "height": 540,
-            "sha256": "6d7e08861d65111c7355ade5f2e92722afa4a496071180f9ad0126ae340aad74"
+            "sha256": "07914ea158c697c02ac5151ca0363cb2dd99e99ef2d14b8c6f684dbe801f12a7"
         }
     ],
-    "acceptance_evidence": [
-        {
-            "criteria": [
-                1,
-                2,
-                3,
-                4,
-                8
+    "screenshot_scope": "The earlier 1060x720 toolbar and portal-failure images are retained evidence. The current 760x540 long-layout captures exercise the updated name, path, source-list, status and result layout with actual eframe rendering and synthetic data.",
+    "historical_screenshots": "before, after and minimum folders record the previous UI and are not current verification.",
+    "coverage": {
+        "virtual_folders_and_current_folder_search": "browser_builds_virtual_folders_and_expands_only_the_selected_subtree; keyboard_opens_virtual_folder_and_searches_only_its_children",
+        "native_dialog_contract": "native_dialog_cancellation_never_starts_a_job; focused_compress_button_opens_save_dialog_and_starts_exactly_once; conflict_native_dialog_cancel_and_retry_preserve_selection_and_existing_files",
+        "folder_request_ids": "native_destination_expands_directory_ids_and_uses_archive_parent_default; extraction_completion_matches_actual_worker_selection_matrix",
+        "selection_exclusion": "excluding_a_child_after_folder_selection_does_not_restore_it_during_extraction",
+        "dropped_path_validation": "invalid_source_batch_is_rejected_without_starting_or_adding_valid_members; dropped-file tests never read file bytes on UI thread",
+        "enter_policy": "Focused buttons activate with Enter; password input submission is the only exception. toolbar_and_modal_keyboard_do_not_submit_from_secondary_controls; password_secondary_enter_does_not_submit_valid_input",
+        "durability": "completed_results_keep_folder_action_and_distinguish_durability; durability_warning_visibility_matches_completed_failed_and_partial_results (9 combinations)",
+        "private_destination": "auto_destination_is_private_under_desktop_umask",
+        "minimum_size": "create_dialog_keeps_title_and_actions_visible_after_resize (760x540)",
+        "renderer_and_contract": "Renderer fallback and contract revision 2 remain unchanged and pass local suites.",
+        "zip_password_option": "toolbar_has_three_actions_and_zip_password_option_remains_available; real-worker AES ZIP create/extract tests",
+        "raw_gzip_save_dialog": {
+            "tests": [
+                "gzip_suggested_names_are_portable_and_preserve_valid_stems",
+                "gzip_save_cancel_and_invalid_output_do_not_start_an_extraction",
+                "raw_gzip_save_dialog_corrects_names_and_preserves_cancel_and_conflict_retry"
             ],
-            "evidence": [
-                "Xvfb empty, hover, opened, success",
-                "widgets::empty_view_has_no_internal_status_and_keyboard_focus_is_reachable"
+            "cases": [
+                ".gz",
+                "report:2026.gz (Unix source name)",
+                "report.GZ",
+                "report.Gz",
+                "report.gz"
+            ],
+            "assertions": [
+                "safe prefilled filename and archive parent",
+                "cancel leaves jobs unchanged",
+                "chosen leaf and parent reach actual worker",
+                "conflict keeps existing bytes",
+                "retry cancellation starts no job",
+                "retry uses newly chosen filename",
+                "source bytes remain unchanged",
+                "actual extracted content and confirmed completion"
             ]
         },
-        {
-            "criteria": [
-                5,
-                20,
-                21
+        "archive_open_filters": {
+            "tests": [
+                "archive_filter_contains_every_case_variant_and_all_files_option",
+                "mixed_case_zip_names_open_and_extract_through_native_dialog_responses"
             ],
-            "evidence": [
-                "automatic_destination_creation_and_failure_are_distinct",
-                "only_new_empty_output_is_removed_and_nonempty_is_preserved",
-                "widgets::destination_failure_sends_no_request_and_explains_folder_change",
-                "widgets::cancelling_removes_only_automatically_created_empty_folder"
-            ]
+            "case_variants": 30,
+            "all_files": "*",
+            "actual_worker_archive_names": [
+                "sample.ZIP",
+                "sample.Zip",
+                "sample.zIp"
+            ],
+            "scope": "Pure unit test verifies the shared native filter list; Windows passes it to rfd and Linux converts it to portal globs. Actual worker tests inject dialog answers. Successful native filter interaction is not tested."
         },
-        {
-            "criteria": [
-                6,
-                7
+        "native_dialog_failure": {
+            "tests": [
+                "portal_response_distinguishes_cancellation_from_backend_failure",
+                "missing_portal_returns_errors_for_every_dialog",
+                "dialog_failures_show_alerts_while_cancelled_dialogs_remain_silent"
             ],
-            "evidence": [
-                "widgets::picker_fits_minimum_window_and_opens_selected_file_with_enter",
-                "widgets::empty_selection_and_empty_zip_sources_do_not_start_work",
-                "Xvfb picker, selected-empty",
-                "widgets::keyboard_file_pickers_enter_child_before_confirming_file",
-                "widgets::keyboard_folder_pickers_navigate_before_explicit_folder_confirmation"
-            ]
+            "ui_purposes": [
+                "Open",
+                "Files",
+                "Folder",
+                "Destination",
+                "SaveZip",
+                "SaveGzip"
+            ],
+            "actual_linux_backend_purposes": [
+                "Open",
+                "Files",
+                "Folder",
+                "Destination",
+                "Retry",
+                "SaveZip",
+                "SaveGzip",
+                "RetryGzip"
+            ],
+            "assertions": [
+                "Explicit portal cancellation remains silent and starts no job",
+                "Backend failures, missing portal, non-file URI errors and empty success responses show a friendly error",
+                "A single visible alert is rendered in the active screen or create modal",
+                "Cancellation after recovery clears the obsolete backend error and starts no job"
+            ],
+            "isolation": "Actual NativeDialogs runs in a child process with a nonexistent private D-Bus endpoint; the parent session environment is unchanged. UI failure responses are additionally injected for six action paths.",
+            "dependency_reuse": "Linux directly uses the ashpd 0.11.1 and pollster 0.4.0 already present through rfd. No new package nodes or versions were added. Windows retains rfd."
         },
-        {
-            "criteria": [
-                9,
-                10
+        "long_text_layout": {
+            "viewport": [
+                760,
+                540
             ],
-            "evidence": [
-                "partial_extraction_requires_matching_file_reports",
-                "all_saved_with_temporary_leftover_is_not_partial_extraction",
-                "leftover_without_file_reports_and_commit_uncertainty_are_unknown",
-                "synchronization_and_cleanup_warnings_are_both_visible",
-                "missing_terminal_exit_or_contradictory_reports_never_claim_unsaved",
-                "unsafe_path_and_conflict_preserve_result_classification",
-                "every_error_and_stage_has_user_facing_text",
-                "client_protocol_errors_hide_internal_terms_but_preserve_exit_uncertainty",
-                "directory_reports_allow_empty_and_mixed_archives_without_hiding_unknown_outputs",
-                "directory_targets_include_selected_members_and_implicit_parents",
-                "directory_only_extraction_displays_success",
-                "empty_directory_zip_extracts_successfully_with_existing_directory_reuse"
-            ]
-        },
-        {
-            "criteria": [
-                11
+            "name_characters": 220,
+            "entries": 5000,
+            "tests": [
+                "narrow_archive_keeps_columns_and_virtualizes_thousands_of_long_names",
+                "narrow_deep_folder_path_is_elided_without_displacing_search",
+                "narrow_create_sources_keep_remove_and_footer_actions_visible",
+                "narrow_result_path_is_elided_and_full_path_remains_in_tooltip"
             ],
-            "evidence": [
-                "actual worker password_flows.rs",
-                "Xvfb password, password-retry"
-            ]
-        },
-        {
-            "criteria": [
-                12
+            "assertions": [
+                "Rendered text stays within viewport width",
+                "File names and deep paths are elided by the text layout engine",
+                "Size and encryption columns, search, status counters and create/remove/footer actions remain visible",
+                "Only visible rows are rendered for 5,000 entries",
+                "Full file name, current folder path and result path remain available in hover tooltips",
+                "Native title command is shortened to fit and retains the Zipelo suffix; full archive title is available in the Open action tooltip"
             ],
-            "evidence": [
-                "widgets::password_confirmation_requires_match_and_enter_sends_once",
-                "Xvfb password-create"
-            ]
-        },
-        {
-            "criteria": [
-                13
-            ],
-            "evidence": [
-                "late_cancel_and_terminal_wait_use_finishing_text",
-                "Xvfb progress, progress-unknown, cancelling"
-            ]
-        },
-        {
-            "criteria": [
-                14
-            ],
-            "evidence": [
-                "folder_open_command_preserves_shell_characters_as_one_argument"
-            ],
-            "limit": "운영체제 파일 탐색기 실제 실행은 확인하지 않음"
-        },
-        {
-            "criteria": [
-                15
-            ],
-            "evidence": [
-                "actual worker flows.rs",
-                "widgets::empty_selection_and_empty_zip_sources_do_not_start_work",
-                "Xvfb create, create-filled",
-                "widgets::changed_zip_sources_retry_creation_with_or_without_open_archive"
-            ]
-        },
-        {
-            "criteria": [
-                16,
-                17
-            ],
-            "evidence": [
-                "15 Xvfb minimum-size captures",
-                "create_dialog_keeps_title_and_actions_visible_after_resize",
-                "widgets::empty_view_has_no_internal_status_and_keyboard_focus_is_reachable",
-                "widgets::picker_fits_minimum_window_and_opens_selected_file_with_enter",
-                "check_row_selection.py",
-                "archive_theme::focus",
-                "widgets::keyboard_cancel_and_escape_never_start_zip_creation",
-                "widgets::zip_creation_enter_only_activates_focused_make_button",
-                "secondary_button_enter_matrix_never_starts_creation_or_extraction",
-                "password_secondary_enter_does_not_submit_valid_input"
-            ],
-            "limit": "전체 보조 기술 접근성 감사는 수행하지 않음"
-        },
-        {
-            "criteria": [
-                18
-            ],
-            "evidence": [
-                "archive_theme.rs 공통 색과 간격 및 Painter 아이콘",
-                "source review"
-            ]
-        },
-        {
-            "criteria": [
-                19
-            ],
-            "evidence": [
-                "contract revision 2 source unchanged",
-                "local contract tests"
-            ]
-        },
-        {
-            "criteria": [
-                22
-            ],
-            "evidence": [
-                "conflict_retry_waits_for_folder_choice_and_preserves_selection",
-                "unsafe_path_and_conflict_preserve_result_classification"
-            ]
-        },
-        {
-            "criteria": [
-                23
-            ],
-            "evidence": [
-                "45 Xvfb screenshots",
-                "python3 tests/ci/run_rust.py local"
-            ]
+            "scope": "Actual egui layout geometry and tooltip rendering; synthetic listing plus generated local source file and destination directory. Native Windows title-bar rendering is not tested."
         }
-    ],
+    },
+    "licenses": {
+        "command": "python3 packaging/licenses.py --manifest experiments/rust-ui-memory-app/Cargo.toml --manifest experiments/rust-archive-worker/Cargo.toml --output tests/ui-redesign/runs/THIRD-PARTY-LICENSES.txt --audit tests/ui-redesign/runs/portal-license-audit.json",
+        "exit_code": 0,
+        "packages": 451,
+        "missing": 0,
+        "generated_notice_bytes": 4226433,
+        "generated_notice_sha256": "89cfd7d606b95b258c421c339b7a940e515a963813e8b7f21116ac22f8c68b0f",
+        "audit_sha256": "c55559082489bb898d4bdcb64c9308478a6084ef5cdafb89cba367ab0cf9c576",
+        "new_dialog_dependencies": [
+            {
+                "name": "ashpd",
+                "version": "0.11.1",
+                "license": "MIT",
+                "files": [
+                    {
+                        "path": "LICENSE",
+                        "sha256": "ae26bc7b1bc91fb8648f6a298decbb1a77090a56c9d04e2c23b8365e5f54acb5"
+                    }
+                ]
+            },
+            {
+                "name": "rfd",
+                "version": "0.16.0",
+                "license": "MIT",
+                "files": [
+                    {
+                        "path": "LICENSE",
+                        "sha256": "65fc947f4bac882a2cd104ef73c246b1b037059df9f2b3a58b7f77f0b9e56071"
+                    }
+                ]
+            }
+        ],
+        "packaging": "Existing Windows and Ubuntu packaging entrypoints generate THIRD-PARTY-LICENSES.txt from the updated lockfiles. Installer execution and package runtime were not tested in this change."
+    },
     "limitations": [
-        "화면은 합성 작업자 입력을 실제 eframe 컴포넌트로 렌더링한 Xvfb 촬영임",
-        "실제 파일 생성과 해제는 별도 actual worker 시험에서 검증함",
-        "Windows는 교차 빌드만 확인했으며 실제 UI 실행과 설치를 시험하지 않음",
-        "운영체제 파일 탐색기 실행과 전체 보조 기술 접근성 감사는 수행하지 않음"
+        "Windows cross-build only; the new UI, installation and native dialog interaction have not been executed on Windows.",
+        "Linux native backend failure is exercised through a child process and Xvfb. Successful portal selection and actual user cancellation interaction remain untested; their response handling has unit and injected UI coverage.",
+        "Xvfb images use synthetic listing data; real file operations are separately tested with the actual worker.",
+        "Full assistive-technology audit and actual OS file-manager launching are not included."
     ],
-    "storage_note": "초기 실행은 디스크 공간 부족으로 실패했으나 본인 소유의 이전 빌드 캐시 정리 후 변경 없는 작업자 대용량 시험까지 통과함",
-    "screenshots_source_commit": "fe20354c9b07f68150459c0163c36b77d7158c27",
-    "review_regressions": {
-        "review": "https://github.com/Team-LJY/zipelo/pull/85#pullrequestreview-5867462969",
-        "tests": [
-            "keyboard_file_pickers_enter_child_before_confirming_file",
-            "keyboard_folder_pickers_navigate_before_explicit_folder_confirmation",
-            "changed_zip_sources_retry_creation_with_or_without_open_archive"
-        ],
-        "baseline": "3 tests failed before correction",
-        "fixed": "passed",
-        "coverage": "파일 선택 2개와 폴더 선택 4개 모드의 Tab 및 Enter 탐색, 기존 압축파일 유무 두 경우의 동일 CreateZip 요청 재전송"
-    },
-    "native_x11_row_selection_source_commit": "f1e973b2e5c8972936387b10e86cabb499d5c10f",
-    "cancel_regressions": {
-        "tests": [
-            "keyboard_cancel_and_escape_never_start_zip_creation",
-            "zip_creation_enter_only_activates_focused_make_button"
-        ],
-        "baseline": "Cancel focused Enter sent CreateZip before correction",
-        "fixed": "Cancel Enter and Escape send no request; filename Enter does not create; focused Make Enter sends one request",
-        "result": "passed"
-    },
-    "enter_policy": "Enter activates only the focused button; password text inputs may submit",
-    "enter_policy_regressions": [
-        "secondary_button_enter_matrix_never_starts_creation_or_extraction",
-        "password_secondary_enter_does_not_submit_valid_input"
+    "toolbar_actions": [
+        "열기",
+        "압축하기",
+        "압축해제"
     ],
-    "directory_result_regressions": [
-        "directory_reports_allow_empty_and_mixed_archives_without_hiding_unknown_outputs",
-        "directory_targets_include_selected_members_and_implicit_parents",
-        "directory_only_extraction_displays_success",
-        "empty_directory_zip_extracts_successfully_with_existing_directory_reuse"
+    "existing_archive_reencryption": "Excluded from v0.1; no toolbar action.",
+    "portal_failure_screenshots_source_local_commit": "ac9d4c5adcc33ba315d67642f26f0573002b6b05",
+    "portal_failure_screenshots": [
+        {
+            "state": "dialog-unavailable",
+            "path": "tests/ui-redesign/screenshots/portal-failure/dialog-unavailable.png",
+            "width": 1060,
+            "height": 720,
+            "sha256": "79088d332dd8f36b4b8ea65a390b4ecf226388dc25e45604cad97cd62cdc3278"
+        },
+        {
+            "state": "create-dialog-unavailable",
+            "path": "tests/ui-redesign/screenshots/portal-failure/create-dialog-unavailable.png",
+            "width": 1060,
+            "height": 720,
+            "sha256": "d00e76552e16fd88e3eca61e2b674ec6fa522f8d5ddf57f0fd90d3eed67c26f8"
+        }
     ],
-    "selection_completion_regressions": {
-        "test": "extraction_completion_matches_actual_worker_selection_matrix",
-        "result": "passed",
-        "cases": [
-            "all",
-            "files",
-            "directory",
-            "mixed",
-            "empty",
-            "nested-directory"
-        ],
-        "assertions": [
-            "actual request IDs",
-            "exact output reports and created_count",
-            "exact filesystem paths and file content",
-            "Completed and Complete terminal with confirmed exit",
-            "success text without missing-file or uncertain-save warning"
-        ],
-        "scope": "Completion uses the same Selection as the request; selected directories do not imply descendants; required ancestors are included."
-    },
-    "platform_result_regressions": {
-        "tests": [
-            "auto_destination_is_private_under_desktop_umask",
-            "completed_results_keep_folder_action_and_distinguish_durability"
-        ],
-        "baseline": "Both tests failed before correction: worker UnsafePath under umask 0002; Completed + Unconfirmed displayed extraction failure and retry.",
-        "result": "passed",
-        "coverage": [
-            "Isolated child process with umask 0002; auto-created destination mode 0700; actual worker extraction and file content; confirmed success.",
-            "Extract and CreateZip Completed results with Synced, Unconfirmed and Failed durability retain success and folder action. Unconfirmed is shown in details; Failed is immediately visible with a distinct warning."
-        ],
-        "windows_runtime_tested": false
-    },
-    "durability_warning_visibility_regression": {
-        "test": "durability_warning_visibility_matches_completed_failed_and_partial_results",
-        "baseline": "Both durability UI tests failed on Completed + Failed before correction.",
-        "result": "passed",
-        "cases": [
-            "Completed + Complete + Synced",
-            "Completed + Complete + Unconfirmed",
-            "Completed + Complete + Failed",
-            "Failed + None + Synced",
-            "Failed + None + Unconfirmed",
-            "Failed + None + Failed",
-            "Failed + Partial + Synced",
-            "Failed + Partial + Unconfirmed",
-            "Failed + Partial + Failed"
-        ],
-        "coverage": "Publication warnings and durability notices are separate. Only successful Completed + Unconfirmed defers its notice to details. Failed durability always displays its distinct warning immediately. Failed and partial Unconfirmed warnings are immediate; expanded details never duplicate warnings."
+    "portal_failure_screenshot_scope": "Actual eframe and NativeDialogs Linux backend with an unreachable private D-Bus address and synthetic archive listing. Success-path portal interaction is not covered.",
+    "validation_notes": [
+        "Two ad hoc cargo test attempts using default parallelism intermittently failed to start copied worker probes in existing tests. The required local runner uses --test-threads=1 and all 26 real-worker tests passed. No worker or probe implementation was changed.",
+        "This layout task first failed the large worker test with DiskFull. Own obsolete capture binaries and generated ZIP corpus payloads were removed, retaining logs and results.tsv. The unchanged source then passed the complete local command. Shared build caches were not removed."
+    ],
+    "long_layout_screenshots_source_local_commit": "2228c846a91d10f82051fac5cf80d25fb4ea132f",
+    "long_layout_screenshots": [
+        {
+            "state": "long-list",
+            "path": "tests/ui-redesign/screenshots/long-layout/long-list.png",
+            "width": 760,
+            "height": 540,
+            "sha256": "96deeb47d35f2fabc062c2c37ae133b02693f63926d0d10135244adaa25093cd"
+        },
+        {
+            "state": "long-folder",
+            "path": "tests/ui-redesign/screenshots/long-layout/long-folder.png",
+            "width": 760,
+            "height": 540,
+            "sha256": "ff12d0e071977e13f1315ad0febbaa7ca98158c26e77e19871627b387ca70628"
+        },
+        {
+            "state": "long-create",
+            "path": "tests/ui-redesign/screenshots/long-layout/long-create.png",
+            "width": 760,
+            "height": 540,
+            "sha256": "957a8d544bea1dd166134acadddd1e0c15b94f0fab6502cfa86a5cff81ee1a1a"
+        },
+        {
+            "state": "long-result",
+            "path": "tests/ui-redesign/screenshots/long-layout/long-result.png",
+            "width": 760,
+            "height": 540,
+            "sha256": "f88f934379dff0c90961a8f3adf9d46bfe1e6afdd0583b102fdb533d7e1d1049"
+        }
+    ],
+    "local_retry": {
+        "first_exit_code": 1,
+        "first_log_sha256": "488941866c676358b1b61860266f19b8373109c9075d2c2dd80228ba965275d3",
+        "failed_test": "hardening::linux::gigabyte_seven_zip_and_zip_creation_stay_below_64_mib",
+        "failure": "DiskFull during the large Deflate creation case",
+        "recovery": {
+            "removed_own_generated_bytes": 669517168,
+            "available_bytes_after_cleanup": 13080125440,
+            "scope": "Own obsolete capture binary copies and generated ZIP corpus payloads only; logs and results.tsv retained; shared build cache untouched."
+        },
+        "source_changed_between_attempts": false,
+        "retry_exit_code": 0
     }
 }

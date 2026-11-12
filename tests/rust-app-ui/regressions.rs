@@ -1,4 +1,8 @@
+#[cfg(feature = "ui")]
+mod dialogs;
 mod fake;
+#[cfg(feature = "ui")]
+mod native_dialogs;
 use fake::*;
 use std::path::PathBuf;
 use zipelo_ui_memory_app::archive_ui::*;
@@ -81,7 +85,7 @@ fn gzip_requires_explicit_leaf() {
     for name in [None, Some("../escape".into()), Some("sub/file".into())] {
         assert!(!m.extract(path("output"), false, name, &mut f));
     }
-    assert!(m.extract(path("output"), false, Some("plain.txt".into()), &mut f));
+    assert!(m.extract(path("output"), false, Some("압축 해제 파일".into()), &mut f));
     pump(&mut m);
 }
 #[test]
@@ -387,8 +391,15 @@ fn renders_every_flow_with_actual_egui_widgets() {
         assert!(!output.shapes.is_empty());
         text(&output.shapes)
     };
+    render(&mut app, vec![], 1060.0);
+    render(&mut app, vec![], 1060.0);
     let initial = render(&mut app, vec![], 1060.0);
-    let point = initial.iter().find(|(t, _)| t == "ZIP 만들기").unwrap().1;
+    let point = initial
+        .iter()
+        .rev()
+        .find(|(t, _)| t == "압축하기")
+        .unwrap()
+        .1;
     render(
         &mut app,
         vec![
@@ -413,7 +424,7 @@ fn renders_every_flow_with_actual_egui_widgets() {
         1060.0,
     );
     let create = render(&mut app, vec![], 1060.0);
-    assert!(create.iter().any(|(t, _)| t == "2. 저장 위치"));
+    assert!(create.iter().any(|(t, _)| t == "암호로 보호하기"));
     let mut app = ArchiveApp::new(Box::new(f.clone()), Some(path("locked.zip")), true);
     for _ in 0..8 {
         app.model.poll();
@@ -479,7 +490,9 @@ fn dropped_native_file_opens_without_ui_reading_contents() {
     let ctx = egui::Context::default();
     let f = FakeFactory::default();
     let mut app = ArchiveApp::new(Box::new(f.clone()), None, true);
-    let file = path("dropped.zip");
+    let scratch = presentation::Folder::new();
+    let file = scratch.0.join("dropped.zip");
+    std::fs::write(&file, b"fixture").unwrap();
     let mut output = ctx.run_ui(
         egui::RawInput {
             dropped_files: vec![std::sync::Arc::new(DropFile(file.clone()))],
@@ -647,31 +660,24 @@ fn extract_button_sends_gzip_name_only_for_raw_gzip() {
         let scratch = presentation::Folder::new();
         app.choose_destination(scratch.0.clone());
         render(&mut app, vec![]);
-        if format == Format::Gzip {
-            render(&mut app, vec![]);
-            let input = ctx
-                .read_response(egui::Id::unique("gzip-name"))
-                .unwrap()
-                .rect
-                .center();
-            click(&mut app, input);
-            ctx.memory_mut(|memory| memory.request_focus(egui::Id::unique("gzip-name")));
-            render(
-                &mut app,
-                vec![
-                    egui::Event::Key {
-                        key: egui::Key::A,
-                        physical_key: None,
-                        pressed: true,
-                        repeat: false,
-                        modifiers: egui::Modifiers::COMMAND,
-                    },
-                    egui::Event::Text("plain.txt".into()),
-                ],
-            );
-        }
+        let dialogs = dialogs::TestDialogs::default();
+        dialogs
+            .0
+            .borrow_mut()
+            .answers
+            .push_back(Some(vec![if format == Format::Gzip {
+                scratch.0.join("압축 해제 파일")
+            } else {
+                scratch.0.clone()
+            }]));
+        app.set_dialogs(Box::new(dialogs));
         let texts = render(&mut app, vec![]);
-        let button = texts.iter().find(|(text, _)| text == "풀기").unwrap().1;
+        let button = texts
+            .iter()
+            .rev()
+            .find(|(text, _)| text == "압축해제")
+            .unwrap()
+            .1;
         click(&mut app, button);
         let state = factory.state.borrow();
         assert_eq!(
@@ -685,7 +691,7 @@ fn extract_button_sends_gzip_name_only_for_raw_gzip() {
             } => assert_eq!(
                 gzip_output_name,
                 &if format == Format::Gzip {
-                    Some("plain.txt".into())
+                    Some("압축 해제 파일".into())
                 } else {
                     None
                 }
