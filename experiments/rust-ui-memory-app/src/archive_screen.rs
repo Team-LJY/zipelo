@@ -731,6 +731,16 @@ impl ArchiveApp {
             theme::column_label(ui, "암호", 64.0, Align::Min);
         });
         ui.separator();
+        if rows.is_empty() {
+            ui.centered_and_justified(|ui| {
+                ui.label(if self.search.is_empty() {
+                    "이 폴더는 비어 있습니다"
+                } else {
+                    "일치하는 항목이 없습니다"
+                });
+            });
+            return;
+        }
         egui::ScrollArea::vertical()
             .id_salt("archive-rows")
             .auto_shrink([false, false])
@@ -835,15 +845,6 @@ impl ArchiveApp {
                     );
                 }
             });
-        if rows.is_empty() {
-            ui.centered_and_justified(|ui| {
-                ui.label(if self.search.is_empty() {
-                    "이 폴더는 비어 있습니다"
-                } else {
-                    "일치하는 항목이 없습니다"
-                });
-            });
-        }
     }
 
     fn result_visible(&self) -> bool {

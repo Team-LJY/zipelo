@@ -415,3 +415,53 @@ fn dialog_failures_show_alerts_while_cancelled_dialogs_remain_silent() {
         }
     }
 }
+
+#[test]
+fn empty_list_notices_remain_visible_in_the_archive_content_area() {
+    for case in ["archive", "folder", "search"] {
+        let scratch = Folder::new();
+        let factory = FakeFactory::default();
+        let mut app = loaded(&scratch, &factory);
+        if case == "archive" {
+            app.model.entries.clear();
+        }
+        if case == "folder" {
+            app.model.entries[0].name = "empty".into();
+            app.model.entries[0].kind = Kind::Directory;
+            app.browse_folder("empty");
+        }
+        let ctx = egui::Context::default();
+        narrow_frame(&ctx, &mut app, 0.0, vec![]);
+        if case == "search" {
+            ctx.memory_mut(|memory| memory.request_focus(egui::Id::unique("archive-search")));
+            narrow_frame(
+                &ctx,
+                &mut app,
+                0.1,
+                vec![egui::Event::Text("no-match".into())],
+            );
+        }
+        for frame in 2..8 {
+            narrow_frame(&ctx, &mut app, frame as f64 / 10.0, vec![]);
+        }
+        let output = narrow_frame(&ctx, &mut app, 1.0, vec![]);
+        let expected = if case == "search" {
+            "일치하는 항목이 없습니다"
+        } else {
+            "이 폴더는 비어 있습니다"
+        };
+        let shown = layout_text(&output);
+        let notice = shown
+            .iter()
+            .find(|(text, _, _)| text == expected)
+            .unwrap_or_else(|| panic!("{case}: 안내 없음"));
+        assert!(
+            notice.1.top() > 200.0 && notice.1.bottom() < 490.0,
+            "{case}: {:?}",
+            notice.1
+        );
+        assert_narrow_text(&output);
+        assert!(shown.iter().any(|(text, _, _)| text == "0개 항목"));
+        assert_eq!(factory.state.borrow().starts.len(), 1);
+    }
+}
