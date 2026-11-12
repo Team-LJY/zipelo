@@ -1,17 +1,17 @@
 {
-    "recorded_at_utc": "2026-11-12T07:24:03.358981+00:00",
-    "tested_local_commit": "b6c645b7509217c0aa44480611e5fc9cf2b22bad",
-    "tested_source_tree": "5f4e0879caeab4d3a92ebb7ba6520e88303a9968",
-    "equivalent_remote_source_commit": "949a1fa5685e70f4ab98aada9b99e5ca5b9cfb10",
+    "recorded_at_utc": "2026-11-12T08:38:18.166754+00:00",
+    "tested_local_commit": "bbce491cd2c2adaf6b462a6f17be51e65e86a54e",
+    "tested_source_tree": "2dcb2293a3f4fc3ed91a4f1cc6391461968e6c37",
+    "equivalent_remote_source_commit": "a2ddcdee9554bb1806cf83e5d84e9ca0bdba9777",
     "command": "python3 tests/ci/run_rust.py local",
     "exit_code": 0,
-    "rust_tests_passed": 1016,
+    "rust_tests_passed": 1020,
     "runner_tests_passed": 34,
-    "ui_suite_tests_passed": 69,
+    "ui_suite_tests_passed": 73,
     "actual_worker_ui_tests_passed": 26,
-    "local_log_sha256": "7cf00b3f314939a14be5d6849183c5f78260bd5fe8da7f8ccbe4511fd0f065d0",
+    "local_log_sha256": "cd986a9fdabcf70cf5c10a4eb710440044ff43c2ce857e4dbd7fd80a6c828732",
     "local_results": {
-        "head": "b6c645b7509217c0aa44480611e5fc9cf2b22bad",
+        "head": "bbce491cd2c2adaf6b462a6f17be51e65e86a54e",
         "platform": "linux",
         "windows_cross_target": "x86_64-pc-windows-gnu",
         "windows_runtime_tested": false,
@@ -542,6 +542,22 @@
             "baseline": "Fails: the notice is outside the visible list content area after the expanding ScrollArea.",
             "baseline_log_sha256": "53c59d86aceb87ae7db157629779e5c830ef1a1291131d748c2ee83291159db8",
             "fixed": "Passed: notice stays between list header and status bar, count is zero and no extra worker request starts."
+        },
+        "windows_worker_paths": {
+            "conversion": "Only unambiguous verbatim drive paths become ordinary drive paths. All five adapter path fields share this conversion. UNC, devices, parent traversal, alternate streams, reserved names and ambiguous components remain unchanged for worker rejection.",
+            "linux_tests": [
+                "ordinary_verbatim_drives_are_converted_without_changing_components",
+                "unc_devices_and_ambiguous_components_remain_blocked",
+                "creation_messages_use_save_vocabulary_and_preserve_warnings",
+                "failed_zip_creation_shows_save_location_and_no_extraction_copy"
+            ],
+            "windows_cross_compiled_tests": [
+                "windows_native_contract_accepts_drives_and_still_rejects_unc",
+                "all_worker_path_fields_use_the_same_safe_drive_conversion",
+                "create_zip_reopen_and_extract_via_actual_widgets_and_worker",
+                "cold_start_creates_aes_zip_then_reopens_and_extracts_with_password"
+            ],
+            "worker_contract": "Revision 2 and worker implementation unchanged; existing source link checks and publication-warning conditions retained."
         }
     },
     "licenses": {
@@ -579,7 +595,7 @@
         "packaging": "Existing Windows and Ubuntu packaging entrypoints generate THIRD-PARTY-LICENSES.txt from the updated lockfiles. Installer execution and package runtime were not tested in this change."
     },
     "limitations": [
-        "Windows cross-build only; the new UI, installation and native dialog interaction have not been executed on Windows.",
+        "Windows all-target cross-build passed, including the Windows-specific contract tests and normal/AES creation flows. This correction has not been executed on Windows; a new installer VM run remains required.",
         "Linux native backend failure is exercised through a child process and Xvfb. Successful portal selection and actual user cancellation interaction remain untested; their response handling has unit and injected UI coverage.",
         "Xvfb images use synthetic listing data; real file operations are separately tested with the actual worker.",
         "Full assistive-technology audit and actual OS file-manager launching are not included."
@@ -609,7 +625,9 @@
     ],
     "portal_failure_screenshot_scope": "Actual eframe and NativeDialogs Linux backend with an unreachable private D-Bus address and synthetic archive listing. Success-path portal interaction is not covered.",
     "validation_notes": [
-        "The empty-list regression failed before the correction and passed afterwards for three states. The complete local command passed on the corrected source. Build caches were removed after verification; source, Git data, test logs and toolchains remain."
+        "Earlier screenshot and cache-cleanup fields are historical evidence from PR90 and PR91; no new screenshots or cache cleanup were performed for this correction.",
+        "Initial checks found a missing test-adapter module import and an old creation warning expectation. Both were corrected; the targeted UI suite (73 tests) and the final complete local command passed.",
+        "The final source validation is followed only by this evidence update."
     ],
     "long_layout_screenshots_source_local_commit": "2228c846a91d10f82051fac5cf80d25fb4ea132f",
     "long_layout_screenshots": [
@@ -655,6 +673,7 @@
         "total_reclaimed_bytes": 69957828608,
         "available_bytes_after_cleanup": 83569205248,
         "active_cache_processes": [],
-        "scope": "Only own generated build cache under tests/rw/tests/ci/target; source, Git data, logs and toolchains retained."
+        "scope": "Only own generated build cache under tests/rw/tests/ci/target; source, Git data, logs and toolchains retained.",
+        "historical": true
     }
 }
