@@ -68,7 +68,16 @@ fn bzip2_reference_tar_and_concatenated_streams() {
 #[test]
 fn xz_reference_tar_checks_filters_and_concatenated_streams() {
     for case in [
-        "normal", "multi", "padding", "crc32", "sha256", "no-check", "filters",
+        "normal",
+        "multi",
+        "multi-block",
+        "multi-block-filters",
+        "stored-chunks",
+        "padding",
+        "crc32",
+        "sha256",
+        "no-check",
+        "filters",
     ] {
         normal("xz", case);
     }
@@ -122,6 +131,27 @@ fn xz_truncation_corruption_and_trailing_data_never_publish() {
         let events = run_case(&s, Limits::default());
         no_output(&s, &events, ErrorCode::Integrity);
     }
+}
+
+#[test]
+fn xz_index_sizes_cannot_cancel_between_streams() {
+    let s = fixture("xz", "index-stream-sizes");
+    let events = run_case(&s, Limits::default());
+    no_output(&s, &events, ErrorCode::Integrity);
+}
+
+#[test]
+fn xz_index_sizes_cannot_cancel_between_blocks() {
+    let s = fixture("xz", "index-block-sizes");
+    let events = run_case(&s, Limits::default());
+    no_output(&s, &events, ErrorCode::Integrity);
+}
+
+#[test]
+fn xz_index_unpadded_sizes_must_match_each_block() {
+    let s = fixture("xz", "index-unpadded-sizes");
+    let events = run_case(&s, Limits::default());
+    no_output(&s, &events, ErrorCode::Integrity);
 }
 
 #[test]

@@ -41,14 +41,14 @@ TAR.BZ2와 TAR.XZ는 확장자가 아닌 BZh 및 XZ 매직으로 판별하고 �
 
 해제 총량은 TAR 헤더와 패딩을 포함해 기존 16 GiB 이하이며 요청으로 낮출 수 있습니다. 64 KiB씩 실제 해제량을 확인하고 기록 전에 임시 저장소의 공간을 검사합니다. XZ는 블록별 LZMA2 디코더 메모리 32 MiB, 인덱스 8 MiB, 스트림 수와 스트림당 블록 수 각각 32,768을 상한으로 둡니다. 이 상한을 넘는 정상 파일도 Limit로 거부합니다. 해제 전체와 TAR 경로, 항목 종류 및 이름 충돌을 검증하기 전에는 목적지에 게시하지 않습니다. 출력 공간 검사, 안전한 충돌 처리, 취소와 300초 시간 제한도 기존 흐름을 사용합니다.
 
-XZ의 헤더, 인덱스, 푸터 CRC와 역방향 크기 및 전체 선언 해제량을 확인하고 실제 해제량과 비교합니다. 라이브러리는 데이터 블록의 지원되는 CRC32/CRC64/SHA256 검사를 수행합니다. XZ의 Check=None도 형식대로 허용하므로 데이터 체크섬이 없는 파일의 내용 무결성을 보장하지 않습니다. TAR의 PAX/GNU 확장, 링크와 특수 항목의 기존 제한도 유지합니다.
+XZ의 헤더, 인덱스, 푸터 CRC와 역방향 크기 및 전체 선언 해제량을 확인하고 실제 해제량과 비교합니다. 각 블록의 헤더와 LZMA2 청크 경계를 따라 압축 길이와 해제량을 인덱스 레코드 및 선택적 헤더 크기와 대조하므로 다른 블록이나 연결 스트림의 크기 변조가 상쇄되어도 Integrity로 거부합니다. 지원하는 BCJ와 Delta 필터는 길이를 보존합니다. 이 사전 검사는 payload를 해제하거나 할당하지 않으며 기존 디코더가 청크 내용과 데이터 블록의 CRC32/CRC64/SHA256 검사를 수행한 뒤에만 게시합니다. [XZ 명세 4.3절](https://tukaani.org/xz/xz-file-format.txt)의 블록별 Unpadded Size와 Uncompressed Size 검사를 적용합니다. XZ의 Check=None도 형식대로 허용하므로 데이터 체크섬이 없는 파일의 내용 무결성을 보장하지 않습니다. TAR의 PAX/GNU 확장, 링크와 특수 항목의 기존 제한도 유지합니다.
 
 통신에는 기존 Format::Tar=1을 사용합니다. 압축 방식별 새 형식 값이나 메시지 변경은 없으며 목록 식별자는 원본 객체, 길이와 SHA256을 계속 포함합니다. 화면의 파일 선택 필터와 지원 안내, 새 형식의 UI 상황 추가는 frontend 연동 범위입니다.
 
 의존성 선택 근거는 다음과 같습니다.
 
 - [bzip2 0.6.1](https://docs.rs/crate/bzip2/0.6.1/source/Cargo.toml)은 MIT OR Apache-2.0이며 기본 백엔드가 Rust 구현인 libbz2-rs-sys입니다. 고정 lockfile은 libbz2-rs-sys 0.2.6(bzip2-1.0.6 자유 라이선스)을 선택하고 Rust 할당자를 사용합니다. C 구현인 bzip2-sys 기능과 stdio/C 할당자는 활성화하지 않습니다.
-- [lzma-rust2 0.25.0](https://docs.rs/lzma-rust2/latest/lzma_rust2/struct.XzReader.html)은 Apache-2.0의 Rust 구현입니다. std와 xz만 활성화해 인코더와 다중 스레드 구현을 제외하고 사전 할당 전 메모리 제한을 적용합니다. CRC와 인덱스를 검증하며 연결 스트림을 끝까지 읽습니다.
+- [lzma-rust2 0.25.0](https://docs.rs/lzma-rust2/latest/lzma_rust2/struct.XzReader.html)은 Apache-2.0의 Rust 구현입니다. std와 xz만 활성화해 인코더와 다중 스레드 구현을 제외하고 사전 할당 전 메모리 제한을 적용합니다. CRC와 인덱스 레코드 개수를 검증하며 연결 스트림을 끝까지 읽습니다. 레코드별 크기는 작업자가 별도로 대조합니다.
 - 두 라이브러리와 새 전이 의존성의 원문은 Cargo 체크섬을 대조하는 기존 packaging/licenses.py가 고지에 자동 포함합니다. tests/release-packages/test_compressed_tar_licenses.py는 실제 고지에 세 압축 라이브러리의 원문과 해시가 포함되고 C 압축 백엔드가 없는지 확인합니다.
 - 2026-11-13 [RustSec 공개 목록](https://rustsec.org/advisories/)에서 bzip2, libbz2-rs-sys, lzma-rust2 이름의 항목은 찾지 못했습니다. 새 전이 sha2 0.11.1은 RUSTSEC-2021-0100의 수정 범위(>=0.9.8)에 해당합니다. 전체 최신 DB 자동 감사와 취약점 부재를 보장하는 확인은 수행하지 않았습니다.
 

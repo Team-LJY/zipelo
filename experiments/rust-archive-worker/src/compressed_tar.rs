@@ -145,6 +145,122 @@ fn vli(bytes: &[u8], cursor: &mut usize) -> Result<u64> {
     Err(ErrorCode::Integrity)
 }
 
+fn lzma2_size(
+    source: &mut File,
+    mut at: u64,
+    end: u64,
+    expected: u64,
+    check: &mut impl FnMut() -> Result<()>,
+) -> Result<()> {
+    let mut size = 0u64;
+    while at < end {
+        let mut control = [0];
+        read_at(source, at, &mut control, check)?;
+        at += 1;
+        if control[0] == 0 {
+            return if at == end && size == expected {
+                Ok(())
+            } else {
+                Err(ErrorCode::Integrity)
+            };
+        }
+        let header_len = match control[0] {
+            1 | 2 => 2,
+            128..=255 => 4 + usize::from(control[0] >= 192),
+            _ => return Err(ErrorCode::Integrity),
+        };
+        if end - at < header_len as u64 {
+            return Err(ErrorCode::Integrity);
+        }
+        let mut header = [0; 5];
+        read_at(source, at, &mut header[..header_len], check)?;
+        at += header_len as u64;
+        let unpacked = u64::from(u16::from_be_bytes(header[..2].try_into().unwrap())) + 1;
+        let (packed, unpacked) = if control[0] >= 128 {
+            (
+                u64::from(u16::from_be_bytes(header[2..4].try_into().unwrap())) + 1,
+                (u64::from(control[0] & 31) << 16) + unpacked,
+            )
+        } else {
+            (unpacked, unpacked)
+        };
+        at = at
+            .checked_add(packed)
+            .filter(|at| *at <= end)
+            .ok_or(ErrorCode::Integrity)?;
+        size = size
+            .checked_add(unpacked)
+            .filter(|size| *size <= expected)
+            .ok_or(ErrorCode::Integrity)?;
+    }
+    Err(ErrorCode::Integrity)
+}
+
+fn xz_block(
+    source: &mut File,
+    start: u64,
+    unpadded: u64,
+    size: u64,
+    check_size: u64,
+    check: &mut impl FnMut() -> Result<()>,
+) -> Result<()> {
+    let mut header = [0; 1024];
+    read_at(source, start, &mut header[..1], check)?;
+    if header[0] == 0 {
+        return Err(ErrorCode::Integrity);
+    }
+    let header_len = (usize::from(header[0]) + 1) * 4;
+    let packed = unpadded
+        .checked_sub(header_len as u64 + check_size)
+        .filter(|packed| *packed != 0)
+        .ok_or(ErrorCode::Integrity)?;
+    read_at(source, start, &mut header[..header_len], check)?;
+    let data = &header[..header_len - 4];
+    if zlib_rs::crc32::crc32(0, data)
+        != u32::from_le_bytes(header[header_len - 4..header_len].try_into().unwrap())
+    {
+        return Err(ErrorCode::Integrity);
+    }
+    let flags = header[1];
+    if flags & 0x3c != 0 {
+        return Err(ErrorCode::UnsupportedFeature);
+    }
+    let mut cursor = 2;
+    if flags & 0x40 != 0 && vli(data, &mut cursor)? != packed {
+        return Err(ErrorCode::Integrity);
+    }
+    if flags & 0x80 != 0 && vli(data, &mut cursor)? != size {
+        return Err(ErrorCode::Integrity);
+    }
+    let filters = usize::from(flags & 3) + 1;
+    for number in 0..filters {
+        let id = vli(data, &mut cursor)?;
+        // 지원 필터는 길이를 보존하며 마지막 필터는 LZMA2임.
+        let supported = if number + 1 == filters {
+            id == 0x21
+        } else {
+            (0x03..=0x0b).contains(&id)
+        };
+        if !supported {
+            return Err(ErrorCode::UnsupportedFeature);
+        }
+        let properties = vli(data, &mut cursor)?;
+        cursor = cursor
+            .checked_add(usize::try_from(properties).map_err(|_| ErrorCode::Integrity)?)
+            .filter(|cursor| *cursor <= data.len())
+            .ok_or(ErrorCode::Integrity)?;
+    }
+    if data[cursor..].iter().any(|byte| *byte != 0) {
+        return Err(ErrorCode::Integrity);
+    }
+    let data_start = start
+        .checked_add(header_len as u64)
+        .ok_or(ErrorCode::Integrity)?;
+    let data_end = data_start.checked_add(packed).ok_or(ErrorCode::Integrity)?;
+    // 청크 경계와 해제량을 블록별로 대조한 뒤 기존 디코더가 내용과 체크섬을 검증함.
+    lzma2_size(source, data_start, data_end, size, check)
+}
+
 // 역방향 인덱스 검사는 디코더의 할당과 실제 해제량 검사보다 먼저 수행함.
 fn xz_layout(source: &mut File, limit: u64, check: &mut impl FnMut() -> Result<()>) -> Result<u64> {
     use zlib_rs::crc32::crc32;
@@ -198,6 +314,7 @@ fn xz_layout(source: &mut File, limit: u64, check: &mut impl FnMut() -> Result<(
             return Err(ErrorCode::Limit);
         }
         let mut blocks = 0u64;
+        let mut records = Vec::new();
         for _ in 0..count {
             check()?;
             let unpadded = vli(&index[..data_end], &mut cursor)?;
@@ -212,6 +329,7 @@ fn xz_layout(source: &mut File, limit: u64, check: &mut impl FnMut() -> Result<(
                 .checked_add(size)
                 .filter(|total| *total <= limit)
                 .ok_or(ErrorCode::Limit)?;
+            records.push((unpadded, size));
         }
         if data_end - cursor > 3 || index[cursor..data_end].iter().any(|byte| *byte != 0) {
             return Err(ErrorCode::Integrity);
@@ -227,6 +345,18 @@ fn xz_layout(source: &mut File, limit: u64, check: &mut impl FnMut() -> Result<(
             || crc32(0, &header[6..8]) != u32::from_le_bytes(header[8..].try_into().unwrap())
         {
             return Err(ErrorCode::Integrity);
+        }
+        let check_size = match header[7] {
+            0 => 0,
+            1 => 4,
+            4 => 8,
+            10 => 32,
+            _ => return Err(ErrorCode::UnsupportedFeature),
+        };
+        let mut block_at = start + 12;
+        for (unpadded, size) in records {
+            xz_block(source, block_at, unpadded, size, check_size, check)?;
+            block_at += (unpadded + 3) & !3;
         }
         end = start;
     }
