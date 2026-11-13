@@ -21,6 +21,10 @@ elif case == "many-entries":
     with zipfile.ZipFile(root / "input", "w") as archive:
         for entry_id in range(200_000):
             archive.writestr(f"e{entry_id}", b"")
+elif case == "selection-entries":
+    with zipfile.ZipFile(root / "input", "w") as archive:
+        for entry_id in range(32_770):
+            archive.writestr(f"e{entry_id}", b"x")
 elif case == "empty-directories":
     with zipfile.ZipFile(root / "input", "w") as archive:
         for entry_id in range(36):

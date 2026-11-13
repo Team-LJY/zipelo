@@ -858,3 +858,83 @@ fn zip_creation_still_stops_after_sixty_seconds_without_progress() {
     assert_eq!(terminal(&events).cleanup, Cleanup::Complete);
     assert!(!s.0.join("new.zip").exists());
 }
+
+#[cfg(target_os = "linux")]
+#[test]
+fn large_selection_reaches_worker_permission_and_destination_checks() {
+    let s = setup();
+    generate(&s, "selection-entries");
+    let mut start = request(&s, Limits::default().output, Limits::default().output);
+    start.start.action = Action::List {
+        archive: s.path("input"),
+    };
+    let mut count = 0;
+    let mut list_id = None;
+    let events = run_record(&s, start, None, false, |event| {
+        match event {
+            Message::Entry(entry) => {
+                assert_eq!(entry.entry_id, count);
+                count += 1;
+            }
+            Message::ListEnd { list_id: id, .. } => list_id = Some(id.clone()),
+            _ => {}
+        }
+        approve(event)
+    });
+    assert_eq!(terminal(&events).outcome, Outcome::Completed);
+    assert_eq!(count, 32_770);
+    let list_id = list_id.unwrap();
+    for decision in 0..3 {
+        let mut start = request(&s, Limits::default().output, Limits::default().output);
+        if let Action::Extract {
+            selection,
+            list_id: token,
+            ..
+        } = &mut start.start.action
+        {
+            *selection = Selection::EntryIds((0..32_769).collect());
+            *token = Some(list_id.clone());
+        }
+        let mut asked = false;
+        let events = run_fault(&s, start, Some("space-destination"), |event| {
+            if let Message::ResourceRequired {
+                challenge_id,
+                scope,
+                ..
+            } = event
+            {
+                asked = true;
+                assert!(scope.entries && !scope.output && !scope.ratio);
+                assert_eq!(fs::read_dir(s.0.join("output")).unwrap().count(), 0);
+                return Some(if decision == 1 {
+                    vec![Message::Cancel]
+                } else {
+                    vec![Message::ResourceReply {
+                        challenge_id: *challenge_id,
+                        scope: *scope,
+                        allow: decision == 2,
+                    }]
+                });
+            }
+            None
+        });
+        assert!(asked);
+        assert_eq!(
+            terminal(&events).outcome,
+            if decision == 2 {
+                Outcome::Failed
+            } else {
+                Outcome::Cancelled
+            },
+            "{decision}: {events:?}"
+        );
+        if decision == 2 {
+            assert_eq!(terminal(&events).error, ErrorCode::DiskFull);
+            assert!(s.0.join("marker").exists());
+        }
+        assert_eq!(terminal(&events).publication, Publication::None);
+        assert_eq!(terminal(&events).created_count, 0);
+        assert_eq!(terminal(&events).cleanup, Cleanup::Complete);
+        assert_eq!(fs::read_dir(s.0.join("output")).unwrap().count(), 0);
+    }
+}

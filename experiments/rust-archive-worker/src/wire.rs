@@ -3,11 +3,14 @@ use std::io::{self, Read, Write};
 
 pub const MAX_BODY: usize = 1_048_576;
 pub const MAX_FRAMES: u64 = 1_000_000;
+const LEGACY_VECTOR_ITEMS: usize = 32_768;
+const MAX_SELECTION_IDS: usize = 200_000;
 fn invalid() -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, "invalid worker frame")
 }
 struct Encoder {
     bytes: Vec<u8>,
+    selection_limit: usize,
 }
 impl Encoder {
     fn put(&mut self, b: &[u8]) -> io::Result<()> {
@@ -27,6 +30,7 @@ impl Encoder {
 struct Decoder<'a> {
     bytes: &'a [u8],
     at: usize,
+    selection_limit: usize,
 }
 impl<'a> Decoder<'a> {
     fn take(&mut self, n: usize) -> io::Result<&'a [u8]> {
@@ -81,28 +85,34 @@ impl<T: Wire> Wire for Option<T> {
         }
     }
 }
+fn encode_vec<T: Wire>(values: &[T], limit: usize, e: &mut Encoder) -> io::Result<()> {
+    if values.len() > limit {
+        return Err(invalid());
+    }
+    (values.len() as u32).enc(e)?;
+    for value in values {
+        value.enc(e)?;
+    }
+    Ok(())
+}
+fn decode_vec<T: Wire>(limit: usize, d: &mut Decoder<'_>) -> io::Result<Vec<T>> {
+    let n = u32::dec(d)? as usize;
+    if n > limit || n > d.bytes.len() - d.at {
+        return Err(invalid());
+    }
+    let mut values = Vec::new();
+    values.try_reserve(n).map_err(|_| invalid())?;
+    for _ in 0..n {
+        values.push(T::dec(d)?);
+    }
+    Ok(values)
+}
 impl<T: Wire> Wire for Vec<T> {
     fn enc(&self, e: &mut Encoder) -> io::Result<()> {
-        if self.len() > 32768 {
-            return Err(invalid());
-        }
-        (self.len() as u32).enc(e)?;
-        for v in self {
-            v.enc(e)?;
-        }
-        Ok(())
+        encode_vec(self, LEGACY_VECTOR_ITEMS, e)
     }
     fn dec(d: &mut Decoder<'_>) -> io::Result<Self> {
-        let n = u32::dec(d)? as usize;
-        if n > 32768 || n > d.bytes.len() - d.at {
-            return Err(invalid());
-        }
-        let mut v = Vec::new();
-        v.try_reserve(n).map_err(|_| invalid())?;
-        for _ in 0..n {
-            v.push(T::dec(d)?);
-        }
-        Ok(v)
+        decode_vec(LEGACY_VECTOR_ITEMS, d)
     }
 }
 impl Wire for String {
@@ -254,14 +264,14 @@ impl Wire for Selection {
             Self::All => 0u8.enc(e),
             Self::EntryIds(ids) => {
                 1u8.enc(e)?;
-                ids.enc(e)
+                encode_vec(ids, e.selection_limit, e)
             }
         }
     }
     fn dec(d: &mut Decoder<'_>) -> io::Result<Self> {
         match u8::dec(d)? {
             0 => Ok(Self::All),
-            1 => Ok(Self::EntryIds(Wire::dec(d)?)),
+            1 => Ok(Self::EntryIds(decode_vec(d.selection_limit, d)?)),
             _ => Err(invalid()),
         }
     }
@@ -325,7 +335,10 @@ impl Wire for Action {
 }
 impl Message {
     fn encode(&self) -> io::Result<(u16, Vec<u8>)> {
-        let mut e = Encoder { bytes: Vec::new() };
+        let mut e = Encoder {
+            bytes: Vec::new(),
+            selection_limit: LEGACY_VECTOR_ITEMS,
+        };
         let kind = match self {
             Self::Start(v) => {
                 v.enc(&mut e)?;
@@ -364,6 +377,7 @@ impl Message {
                 if !v.valid() {
                     return Err(invalid());
                 }
+                e.selection_limit = LEGACY_VECTOR_ITEMS.max(v.ceiling.entries as usize);
                 v.enc(&mut e)?;
                 6
             }
@@ -485,7 +499,15 @@ impl Message {
         Ok((kind, e.bytes))
     }
     fn decode(kind: u16, b: &[u8]) -> io::Result<Self> {
-        let mut d = Decoder { bytes: b, at: 0 };
+        let mut d = Decoder {
+            bytes: b,
+            at: 0,
+            selection_limit: if kind == 6 {
+                MAX_SELECTION_IDS
+            } else {
+                LEGACY_VECTOR_ITEMS
+            },
+        };
         let m = match kind {
             1 => Self::Start(Wire::dec(&mut d)?),
             2 => {
@@ -514,7 +536,13 @@ impl Message {
             },
             6 => {
                 let start = GuardedStart::dec(&mut d)?;
-                if !start.valid() {
+                let limit = LEGACY_VECTOR_ITEMS.max(start.ceiling.entries as usize);
+                if !start.valid()
+                    || matches!(
+                        &start.start.action,
+                        Action::Extract { selection: Selection::EntryIds(ids), .. } if ids.len() > limit
+                    )
+                {
                     return Err(invalid());
                 }
                 Self::StartGuarded(start)
@@ -677,3 +705,7 @@ impl<W: Write> Writer<W> {
         Ok(())
     }
 }
+
+#[cfg(test)]
+#[path = "../../../tests/rust-archive-worker/selection_wire.rs"]
+mod tests;
