@@ -1,5 +1,8 @@
 #![forbid(unsafe_code)]
 
+#[cfg(all(feature = "ui-fixture", debug_assertions))]
+extern crate self as zipelo_ui_memory_app;
+
 pub use core_memory as core;
 pub mod controller;
 pub mod runtime;

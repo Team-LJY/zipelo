@@ -64,3 +64,8 @@ required-features = ["ui"]
 name = "zipelo-ui-capture"
 path = "../../tests/rust-app-ui/capture.rs"
 required-features = ["ui-fixture"]
+
+[[test]]
+name = "ui_scenarios"
+path = "../../tests/rust-app-ui/scenario_tests.rs"
+required-features = ["ui-fixture"]
