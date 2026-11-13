@@ -22,7 +22,25 @@ int fsync(int fd) {
     int result = original(fd);
     if (result == 0) {
         const char *mode = getenv("ZIPELO_TEST_FAULT");
-        atomic_fetch_add(&elapsed, mode && !strcmp(mode, "clock-stall") ? 60 : 10);
+        if (mode && !strcmp(mode, "clock-stall")) {
+            atomic_fetch_add(&elapsed, 60);
+        } else if (mode && !strcmp(mode, "clock-progress")) {
+            atomic_fetch_add(&elapsed, 10);
+        }
+    }
+    return result;
+}
+
+ssize_t write(int fd, const void *buffer, size_t count) {
+    ssize_t (*original)(int, const void *, size_t) = dlsym(RTLD_NEXT, "write");
+    ssize_t result = original(fd, buffer, count);
+    if (result >= 30 && count >= 30 && !memcmp(buffer, "PK\003\004", 4)) {
+        const char *mode = getenv("ZIPELO_TEST_FAULT");
+        if (mode && !strcmp(mode, "clock-create-progress")) {
+            atomic_fetch_add(&elapsed, 10);
+        } else if (mode && !strcmp(mode, "clock-create-stall")) {
+            atomic_fetch_add(&elapsed, 60);
+        }
     }
     return result;
 }

@@ -223,6 +223,7 @@ pub(crate) fn zip(
         header.extend(name);
         header.extend(extra);
         io(output.write_all(&header))?;
+        check.activity()?;
         io(packed.rewind())?;
         if let Some(password) = password {
             crate::crypto::aes_encrypt_file(

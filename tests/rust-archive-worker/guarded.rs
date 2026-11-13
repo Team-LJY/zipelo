@@ -769,3 +769,92 @@ fn metadata_growth_requires_a_grant_even_below_entry_and_output_caps() {
         9000
     );
 }
+
+#[cfg(target_os = "linux")]
+fn create_progress_request(
+    s: &Scratch,
+    kind: EntryKind,
+    size: usize,
+    method: Method,
+) -> GuardedStart {
+    fs::create_dir(s.0.join("source")).unwrap();
+    for entry_id in 0..36 {
+        let path = s.0.join(format!("source/entry-{entry_id}"));
+        if kind == EntryKind::Directory {
+            fs::create_dir(path).unwrap();
+        } else {
+            fs::write(path, vec![0; size]).unwrap();
+        }
+    }
+    let mut start = request(s, 64, 128);
+    start.start.action = Action::CreateZip {
+        sources: vec![Source {
+            path: s.path("source"),
+            archive_name: "source".into(),
+        }],
+        output_file: s.path("new.zip"),
+        method,
+        encryption: Encryption::None,
+    };
+    start
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn created_empty_files_and_directories_refresh_idle_deadline() {
+    for method in [Method::Store, Method::Deflate] {
+        for (kind, size) in [
+            (EntryKind::Directory, 0),
+            (EntryKind::File, 0),
+            (EntryKind::File, 1),
+        ] {
+            let s = setup();
+            let start = create_progress_request(&s, kind, size, method);
+            let mut approved = false;
+            let events = run_fault(&s, start, Some("clock-create-progress"), |event| {
+                if matches!(event, Message::ResourceRequired { .. }) {
+                    approved = true;
+                }
+                approve(event)
+            });
+            assert!(approved);
+            assert_eq!(
+                terminal(&events).outcome,
+                Outcome::Completed,
+                "{method:?} {kind:?} {size}: {events:?}"
+            );
+            assert_eq!(terminal(&events).publication, Publication::Complete);
+            assert_eq!(terminal(&events).created_count, 1);
+            let bytes = fs::read(s.0.join("new.zip")).unwrap();
+            let parsed = archive::parse(&bytes, Limits::default(), true, &mut || Ok(())).unwrap();
+            assert_eq!(parsed.members.len(), 37);
+            assert!(parsed.members.iter().any(|member| {
+                member.entry.name == "source" && member.entry.kind == EntryKind::Directory
+            }));
+            for entry_id in 0..36 {
+                let name = format!("source/entry-{entry_id}");
+                let member = parsed
+                    .members
+                    .iter()
+                    .find(|member| member.entry.name == name)
+                    .unwrap();
+                assert_eq!(member.entry.kind, kind);
+                assert_eq!(member.data, vec![0; size]);
+            }
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn zip_creation_still_stops_after_sixty_seconds_without_progress() {
+    let s = setup();
+    let start = create_progress_request(&s, EntryKind::Directory, 0, Method::Store);
+    let events = run_fault(&s, start, Some("clock-create-stall"), approve);
+    assert_eq!(terminal(&events).outcome, Outcome::Failed, "{events:?}");
+    assert_eq!(terminal(&events).error, ErrorCode::Limit);
+    assert_eq!(terminal(&events).publication, Publication::None);
+    assert_eq!(terminal(&events).created_count, 0);
+    assert_eq!(terminal(&events).cleanup, Cleanup::Complete);
+    assert!(!s.0.join("new.zip").exists());
+}
