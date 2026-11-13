@@ -1,6 +1,6 @@
 use crate::archive_ui::*;
 use std::{
-    collections::BTreeSet,
+    collections::{BTreeMap, BTreeSet},
     fs, io,
     path::{Path, PathBuf},
 };
@@ -137,10 +137,9 @@ pub fn resolved_targets(
     resolutions: &[Resolution],
 ) -> Option<BTreeSet<String>> {
     let mut names = targets?.clone();
+    let entries: BTreeMap<_, _> = entries.iter().map(|entry| (entry.id, entry)).collect();
     for resolution in resolutions {
-        let entry = entries
-            .iter()
-            .find(|entry| entry.id == resolution.entry_id)?;
+        let entry = entries.get(&resolution.entry_id)?;
         let original = gzip.unwrap_or(&entry.name).replace('\\', "/");
         if !names.remove(&original) {
             return None;

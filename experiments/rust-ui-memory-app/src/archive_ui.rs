@@ -278,6 +278,8 @@ struct Running {
     exit: Option<bool>,
     cancel_sequence: Option<u64>,
     conflict_ids: BTreeSet<u64>,
+    resolved_ids: BTreeSet<u32>,
+    file_ids: BTreeSet<u32>,
 }
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum Close {
@@ -432,6 +434,13 @@ impl Model {
             exit: None,
             cancel_sequence: None,
             conflict_ids: BTreeSet::new(),
+            resolved_ids: BTreeSet::new(),
+            file_ids: self
+                .entries
+                .iter()
+                .filter(|e| e.kind == Kind::File)
+                .map(|e| e.id)
+                .collect(),
         });
         started
     }
@@ -726,16 +735,11 @@ impl Model {
                     }
                     Event::ConflictResolved(resolution) => {
                         if !matches!(run.start, Start::Extract { .. })
-                            || !self.entries.iter().any(|entry| {
-                                entry.id == resolution.entry_id && entry.kind == Kind::File
-                            })
+                            || !run.file_ids.contains(&resolution.entry_id)
                             || self.resolutions.len() >= 100_000
-                            || self
-                                .resolutions
-                                .iter()
-                                .any(|r| r.entry_id == resolution.entry_id)
                             || !valid_relative(&resolution.relative_name)
                             || resolution.relative_name.len() > 4096
+                            || !run.resolved_ids.insert(resolution.entry_id)
                         {
                             self.error = Some("파일 충돌 결과가 유효하지 않습니다".into());
                         } else {
