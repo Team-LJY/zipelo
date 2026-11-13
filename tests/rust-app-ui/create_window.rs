@@ -525,3 +525,114 @@ fn unchecking_password_also_forgets_undo_history() {
         "지운 암호가 실행 취소로 되살아남"
     );
 }
+
+fn native_picker_render(ctx: &egui::Context, app: &mut ArchiveApp) {
+    for _ in 0..3 {
+        let mut raw = egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(
+                egui::Pos2::ZERO,
+                egui::vec2(1060.0, 720.0),
+            )),
+            ..Default::default()
+        };
+        raw.viewports.insert(
+            egui::ViewportId::ROOT,
+            egui::ViewportInfo {
+                outer_rect: Some(egui::Rect::from_min_size(
+                    egui::pos2(100.0, 100.0),
+                    egui::vec2(1060.0, 720.0),
+                )),
+                focused: Some(true),
+                ..Default::default()
+            },
+        );
+        let _ = ctx.run_ui(raw, |ui| app.show(ui));
+    }
+}
+
+#[test]
+fn native_picker_lowers_child_windows_and_restores_their_position_and_level() {
+    for save in [false, true] {
+        for encrypted in [false, true] {
+            for failed in [false, true] {
+                let scratch = Folder::new();
+                let factory = FakeFactory::default();
+                let mut app = loaded(&scratch, &factory);
+                let source = scratch.0.join("photos");
+                fs::create_dir(&source).unwrap();
+                fs::write(source.join("a.txt"), b"source").unwrap();
+                app.add_sources(vec![source]);
+                let ctx = egui::Context::default();
+                ctx.set_embed_viewports(false);
+                install_work_child_renderer();
+                native_picker_render(&ctx, &mut app);
+                if encrypted {
+                    let check = work_child_label("암호로 보호하기").unwrap();
+                    work_child_click(&ctx, &mut app, check);
+                    for name in ["zip-password-input", "zip-password-confirm"] {
+                        WORK_CHILD.with(|child| {
+                            let mut child = child.borrow_mut();
+                            child.focus = Some(egui::Id::unique(name));
+                            child.events = vec![egui::Event::Text("secret".into())];
+                        });
+                        native_picker_render(&ctx, &mut app);
+                    }
+                    native_picker_render(&ctx, &mut app);
+                }
+                let id = egui::ViewportId::from_hash_of("archive-create");
+                let builder = || {
+                    WORK_CHILD.with(|child| {
+                        child
+                            .borrow()
+                            .builders
+                            .iter()
+                            .rev()
+                            .find(|(window, _)| *window == id)
+                            .unwrap()
+                            .1
+                            .clone()
+                    })
+                };
+                let before = builder();
+                assert!(before.position.is_some());
+                assert_eq!(before.window_level, Some(egui::WindowLevel::AlwaysOnTop));
+                let dialogs = HeldDialogs::default();
+                app.set_dialogs(Box::new(dialogs.clone()));
+                let starts = factory.state.borrow().starts.len();
+                if save {
+                    let compress = work_child_label("압축하기").unwrap();
+                    work_child_click(&ctx, &mut app, compress);
+                } else {
+                    policy_click(&ctx, &mut app, "압축하기");
+                }
+                assert_eq!(
+                    dialogs.0.borrow().len(),
+                    1,
+                    "save={save}, encrypted={encrypted}, failed={failed}"
+                );
+                native_picker_render(&ctx, &mut app);
+                let during = builder();
+                assert_eq!(during.window_level, Some(egui::WindowLevel::Normal));
+                assert_eq!(during.position, before.position);
+                assert_eq!(during.inner_size, before.inner_size);
+                let rendered = work_rendered();
+                native_picker_render(&ctx, &mut app);
+                assert_eq!(work_rendered(), rendered);
+                assert_eq!(factory.state.borrow().starts.len(), starts);
+                dialogs.0.borrow()[0]
+                    .send(if failed {
+                        Err(zipelo_ui_memory_app::archive_dialog::DIALOG_UNAVAILABLE.into())
+                    } else {
+                        Ok(None)
+                    })
+                    .unwrap();
+                native_picker_render(&ctx, &mut app);
+                let after = builder();
+                assert_eq!(after.window_level, before.window_level);
+                assert_eq!(after.position, before.position);
+                assert_eq!(factory.state.borrow().starts.len(), starts);
+                assert!(work_child_label("암호로 보호하기").is_some());
+            }
+        }
+    }
+}

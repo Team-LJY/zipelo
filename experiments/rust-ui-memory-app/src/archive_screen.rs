@@ -103,6 +103,7 @@ impl WorkWindow {
         size: egui::Vec2,
         title: &str,
         decorations: bool,
+        native_dialog_open: bool,
     ) -> egui::ViewportBuilder {
         let (parent, parent_focused, now) = ctx.input(|i| {
             (
@@ -158,11 +159,13 @@ impl WorkWindow {
             .with_minimize_button(false)
             .with_maximize_button(false)
             .with_taskbar(false)
-            .with_window_level(if parent_focused || child_focused {
-                egui::WindowLevel::AlwaysOnTop
-            } else {
-                egui::WindowLevel::Normal
-            });
+            .with_window_level(
+                if !native_dialog_open && (parent_focused || child_focused) {
+                    egui::WindowLevel::AlwaysOnTop
+                } else {
+                    egui::WindowLevel::Normal
+                },
+            );
         if let Some(position) = self.initial {
             builder = builder.with_position(position);
         }
@@ -1594,9 +1597,14 @@ impl ArchiveApp {
         let window_title = format!("{title} — Zipelo");
         let custom_frame = self.custom_frame;
         let size = egui::vec2(WORK_WIDTH, self.work.height);
-        let builder = self
-            .work
-            .builder(ctx, id, size, &window_title, !custom_frame);
+        let builder = self.work.builder(
+            ctx,
+            id,
+            size,
+            &window_title,
+            !custom_frame,
+            self.picker.is_some(),
+        );
         let height = ctx.show_viewport_immediate(id, builder, |ui, class| {
             if ui.ctx().input(|i| i.viewport().close_requested()) {
                 if self.model.busy() {
@@ -2054,7 +2062,9 @@ impl ArchiveApp {
             self.create_win.height = self.create_win.height.max(CREATE_MIN_HEIGHT);
         }
         let size = egui::vec2(CREATE_WIDTH, self.create_win.height);
-        let builder = self.create_win.builder(ctx, id, size, title, !custom_frame);
+        let builder =
+            self.create_win
+                .builder(ctx, id, size, title, !custom_frame, self.picker.is_some());
         let mut close = false;
         let height = ctx.show_viewport_immediate(id, builder, |ui, class| {
             if ui.ctx().input(|i| i.viewport().close_requested()) {
