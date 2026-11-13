@@ -211,7 +211,7 @@ fn tar(
         if cursor > len {
             return Err(ErrorCode::Integrity);
         }
-        metadata.charge(&name)?;
+        metadata.charge_with(&name, check.metadata_limits())?;
         let name = archive::valid_name(&name, kind == EntryKind::Directory)?;
         offsets.push(start);
         members.push(Member {
@@ -226,7 +226,7 @@ fn tar(
             data: Vec::new(),
         });
     }
-    archive::validate_members(&members)?;
+    archive::validate_members_with(&members, check)?;
     Ok(Catalog {
         format,
         members,
@@ -591,7 +591,7 @@ fn zip(
         if kind == EntryKind::Directory && size != 0 {
             return Err(ErrorCode::Integrity);
         }
-        metadata.charge(name)?;
+        metadata.charge_with(name, check.metadata_limits())?;
         let name = archive::valid_name(name, kind == EntryKind::Directory)?;
         if add(local, 30)? > central {
             return Err(ErrorCode::Integrity);
@@ -690,7 +690,7 @@ fn zip(
     if next != central {
         return Err(ErrorCode::Integrity);
     }
-    archive::validate_members(&members)?;
+    archive::validate_members_with(&members, check)?;
     // 작은 항목으로 나뉜 고압축 입력도 디코딩 전에 합계로 확인함.
     check.observe(
         ResourceUsage {

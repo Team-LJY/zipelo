@@ -7,30 +7,74 @@ pub const MAX_PATH_DEPTH: usize = 64;
 pub const MAX_METADATA_BYTES: usize = 8 * 1024 * 1024;
 pub const MAX_OUTPUT_NODES: usize = 32_768;
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct MetadataLimits {
+    pub(crate) bytes: usize,
+    pub(crate) nodes: usize,
+    pub(crate) enlarged: bool,
+}
+impl Default for MetadataLimits {
+    fn default() -> Self {
+        Self {
+            bytes: MAX_METADATA_BYTES,
+            nodes: MAX_OUTPUT_NODES,
+            enlarged: false,
+        }
+    }
+}
+impl MetadataLimits {
+    pub(crate) fn approved() -> Self {
+        Self {
+            bytes: 64 * 1024 * 1024,
+            nodes: 262_144,
+            enlarged: true,
+        }
+    }
+}
+
 #[derive(Default)]
 pub(crate) struct MetadataBudget {
     bytes: usize,
     nodes: usize,
 }
 impl MetadataBudget {
+    fn charge_cost(&mut self, bytes: usize, nodes: usize, limits: MetadataLimits) -> Result<()> {
+        let bytes = self
+            .bytes
+            .checked_add(bytes)
+            .filter(|n| *n <= limits.bytes)
+            .ok_or(ErrorCode::Limit)?;
+        let nodes = self
+            .nodes
+            .checked_add(nodes)
+            .filter(|n| *n <= limits.nodes)
+            .ok_or(ErrorCode::Limit)?;
+        self.bytes = bytes;
+        self.nodes = nodes;
+        Ok(())
+    }
     pub(crate) fn charge(&mut self, name: &str) -> Result<()> {
+        self.charge_with(name, MetadataLimits::default())
+    }
+    pub(crate) fn charge_with(&mut self, name: &str, limits: MetadataLimits) -> Result<()> {
         // 이름 복제와 인덱스 노드 비용을 할당 전에 계산함.
         let cost = name
             .len()
             .checked_mul(4)
             .and_then(|n| n.checked_add(256))
             .ok_or(ErrorCode::Limit)?;
-        self.bytes = self
-            .bytes
-            .checked_add(cost)
-            .filter(|n| *n <= MAX_METADATA_BYTES)
-            .ok_or(ErrorCode::Limit)?;
-        self.nodes = self
-            .nodes
-            .checked_add(1)
-            .filter(|n| *n <= MAX_OUTPUT_NODES)
-            .ok_or(ErrorCode::Limit)?;
-        Ok(())
+        self.charge_cost(cost, 1, limits)
+    }
+    pub(crate) fn charge_copy(&mut self, name: &str, limits: MetadataLimits) -> Result<()> {
+        if !limits.enlarged {
+            return self.charge_with(name, limits);
+        }
+        // 확대 계획의 경로와 대기 이름은 기존 항목 노드에 속한 복사 비용임.
+        self.charge_cost(
+            name.len().checked_mul(4).ok_or(ErrorCode::Limit)?,
+            0,
+            limits,
+        )
     }
 }
 
@@ -99,10 +143,17 @@ pub fn valid_name(name: &str, directory: bool) -> Result<String> {
     Ok(name.to_owned())
 }
 pub fn validate_members(members: &[Member]) -> Result<()> {
+    validate_members_with(members, &mut || Ok(()))
+}
+pub(crate) fn validate_members_with(
+    members: &[Member],
+    check: &mut impl crate::resources::Monitor,
+) -> Result<()> {
     let mut names = BTreeMap::<String, bool>::new();
     let mut budget = MetadataBudget::default();
     for member in members {
-        budget.charge(&member.entry.name)?;
+        check.activity()?;
+        budget.charge_with(&member.entry.name, check.metadata_limits())?;
         let directory = member.entry.kind == EntryKind::Directory;
         let name = valid_name(&member.entry.name, directory)?.to_lowercase();
         if names.insert(name, directory).is_some() {
@@ -110,6 +161,7 @@ pub fn validate_members(members: &[Member]) -> Result<()> {
         }
     }
     for name in names.keys() {
+        check.activity()?;
         let mut parent = name.as_str();
         while let Some((p, _)) = parent.rsplit_once('/') {
             if names.get(p) == Some(&false) {
@@ -120,19 +172,23 @@ pub fn validate_members(members: &[Member]) -> Result<()> {
     }
     Ok(())
 }
-pub(crate) fn output_directories(members: &[Member]) -> Result<BTreeSet<String>> {
-    validate_members(members)?;
+pub(crate) fn output_directories(
+    members: &[Member],
+    check: &mut impl crate::resources::Monitor,
+) -> Result<BTreeSet<String>> {
+    validate_members_with(members, check)?;
     let mut budget = MetadataBudget::default();
     let mut dirs = BTreeSet::new();
     for member in members {
-        budget.charge(&member.entry.name)?;
+        check.activity()?;
+        budget.charge_with(&member.entry.name, check.metadata_limits())?;
         if member.entry.kind == EntryKind::Directory && !dirs.contains(member.entry.name.as_str()) {
             dirs.insert(member.entry.name.clone());
         }
         let mut name = member.entry.name.as_str();
         while let Some((parent, _)) = name.rsplit_once('/') {
             if !dirs.contains(parent) {
-                budget.charge(parent)?;
+                budget.charge_with(parent, check.metadata_limits())?;
                 dirs.insert(parent.to_owned());
             }
             name = parent;
@@ -816,3 +872,7 @@ pub fn create_zip_with_password(
     bounded_append(&mut out, &end, limits.output)?;
     Ok(out)
 }
+
+#[cfg(test)]
+#[path = "../../../tests/rust-archive-worker/metadata_policy.rs"]
+mod metadata_tests;

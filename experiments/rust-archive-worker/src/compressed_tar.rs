@@ -319,7 +319,7 @@ fn xz_layout(
             end = at;
         }
         streams += 1;
-        if streams > crate::archive::MAX_OUTPUT_NODES {
+        if streams > check.metadata_limits().nodes {
             return Err(ErrorCode::Limit);
         }
         let footer_at = end.checked_sub(12).ok_or(ErrorCode::Integrity)?;
@@ -331,7 +331,7 @@ fn xz_layout(
             return Err(ErrorCode::Integrity);
         }
         let index_len = (u64::from(u32::from_le_bytes(footer[4..8].try_into().unwrap())) + 1) * 4;
-        if index_len > crate::archive::MAX_METADATA_BYTES as u64 {
+        if index_len > check.metadata_limits().bytes as u64 {
             return Err(ErrorCode::Limit);
         }
         if index_len < 8 {
@@ -351,7 +351,7 @@ fn xz_layout(
         }
         let mut cursor = 1;
         let count = vli(&index[..data_end], &mut cursor)?;
-        if count > crate::archive::MAX_OUTPUT_NODES as u64 {
+        if count > check.metadata_limits().nodes as u64 {
             return Err(ErrorCode::Limit);
         }
         let mut blocks = 0u64;

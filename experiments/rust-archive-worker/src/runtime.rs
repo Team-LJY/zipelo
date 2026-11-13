@@ -430,6 +430,7 @@ impl<W: Write> Job<W> {
                     for member in &catalog.members {
                         self.check()?;
                         self.event(Message::Entry(member.entry.clone()))?;
+                        self.activity()?;
                     }
                     self.event(Message::ListEnd {
                         entry_count: catalog.members.len() as u32,
@@ -547,7 +548,7 @@ impl<W: Write> Job<W> {
                                 .is_none_or(|s| s.contains(&m.entry.entry_id))
                         })
                         .collect::<Vec<_>>();
-                    let dirs = archive::output_directories(&members)?;
+                    let dirs = archive::output_directories(&members, self)?;
                     let files = members
                         .iter()
                         .filter(|m| m.entry.kind == EntryKind::File)
@@ -681,6 +682,11 @@ impl<W: Write> Job<W> {
     }
 }
 impl<W: Write> Monitor for Job<W> {
+    fn metadata_limits(&self) -> archive::MetadataLimits {
+        self.budget
+            .as_ref()
+            .map_or_else(archive::MetadataLimits::default, |b| b.metadata_limits())
+    }
     fn check(&mut self) -> Result<()> {
         Job::check(self)
     }

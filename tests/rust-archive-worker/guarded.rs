@@ -681,3 +681,76 @@ fn publication_still_stops_after_sixty_seconds_without_progress() {
     assert_eq!(terminal(&events).created_count, 0);
     assert_eq!(fs::read_dir(s.0.join("output")).unwrap().count(), 0);
 }
+
+#[test]
+fn approved_list_reaches_two_hundred_thousand_short_entries() {
+    let s = setup();
+    generate(&s, "many-entries");
+    let mut start = request(&s, Limits::default().output, Limits::default().output);
+    start.start.action = Action::List {
+        archive: s.path("input"),
+    };
+    start.ceiling.entries = start.start.limits.entries;
+    let events = run(&s, start.clone(), |_| None);
+    assert_eq!(terminal(&events).error, ErrorCode::Limit);
+    assert!(
+        !events
+            .iter()
+            .any(|e| matches!(e, Message::ResourceRequired { .. }))
+    );
+    start.ceiling.entries = 200_000;
+    let events = run(&s, start, approve);
+    assert_eq!(
+        terminal(&events).outcome,
+        Outcome::Completed,
+        "{:?}",
+        terminal(&events)
+    );
+    let count = events
+        .iter()
+        .filter_map(|e| match e {
+            Message::Entry(entry) => Some(entry),
+            _ => None,
+        })
+        .enumerate()
+        .map(|(i, entry)| {
+            assert_eq!(entry.entry_id, i as u32);
+            assert_eq!(entry.name, format!("e{i}"));
+        })
+        .count();
+    assert_eq!(count, 200_000);
+    assert_eq!(terminal(&events).created_count, 0);
+}
+
+#[test]
+fn metadata_growth_requires_a_grant_even_below_entry_and_output_caps() {
+    let s = setup();
+    generate(&s, "wide-names");
+    let mut start = request(&s, 1, 1);
+    start.start.action = Action::List {
+        archive: s.path("input"),
+    };
+    start.ceiling.entries = start.start.limits.entries;
+    let events = run(&s, start.clone(), |_| None);
+    assert_eq!(terminal(&events).error, ErrorCode::Limit);
+    assert!(
+        !events
+            .iter()
+            .any(|e| matches!(e, Message::ResourceRequired { .. } | Message::Entry(_)))
+    );
+    start.ceiling.output = 2;
+    let events = run(&s, start, approve);
+    assert_eq!(
+        terminal(&events).outcome,
+        Outcome::Completed,
+        "{:?}",
+        terminal(&events)
+    );
+    assert_eq!(
+        events
+            .iter()
+            .filter(|e| matches!(e, Message::Entry(_)))
+            .count(),
+        9000
+    );
+}

@@ -1,5 +1,5 @@
 use crate::{
-    archive::{MAX_METADATA_BYTES, Member, MetadataBudget, valid_name, validate_members},
+    archive::{Member, MetadataBudget, valid_name, validate_members_with},
     protocol::*,
 };
 use std::collections::BTreeSet;
@@ -403,6 +403,7 @@ fn files(
     r: &mut Reader<'_>,
     limits: Limits,
     streams: Option<&Streams>,
+    check: &mut impl crate::resources::Monitor,
 ) -> Result<(Vec<Member>, Vec<usize>)> {
     let count = r.number(limits.entries as usize)?;
     let mut empty = vec![false; count];
@@ -418,7 +419,7 @@ fn files(
         if !seen.insert(property) {
             return Err(ErrorCode::Integrity);
         }
-        let len = r.number(MAX_METADATA_BYTES)?;
+        let len = r.number(check.metadata_limits().bytes)?;
         let mut value = Reader::new(r.take(len)?);
         match property {
             14 => {
@@ -443,6 +444,7 @@ fn files(
                 let mut decoded = Vec::new();
                 let mut budget = MetadataBudget::default();
                 for _ in 0..count {
+                    check.activity()?;
                     let mut units = Vec::new();
                     loop {
                         let n = u16::from_le_bytes(value.take(2)?.try_into().unwrap());
@@ -455,7 +457,7 @@ fn files(
                         units.push(n);
                     }
                     let name = String::from_utf16(&units).map_err(|_| ErrorCode::Integrity)?;
-                    budget.charge(&name)?;
+                    budget.charge_with(&name, check.metadata_limits())?;
                     decoded.push(name);
                 }
                 names = Some(decoded);
@@ -549,7 +551,7 @@ fn files(
     if descriptions.next().is_some() {
         return Err(ErrorCode::Integrity);
     }
-    validate_members(&members)?;
+    validate_members_with(&members, check)?;
     Ok((members, stream_indices))
 }
 pub(crate) fn open(
@@ -580,7 +582,7 @@ pub(crate) fn open(
     }
     let offset = u64::from_le_bytes(header[12..20].try_into().unwrap());
     let len = u64::from_le_bytes(header[20..28].try_into().unwrap());
-    if len > MAX_METADATA_BYTES as u64 {
+    if len > check.metadata_limits().bytes as u64 {
         return Err(ErrorCode::Limit);
     }
     let start = offset.checked_add(32).ok_or(ErrorCode::Integrity)?;
@@ -613,7 +615,7 @@ pub(crate) fn open(
     if bytes[0] == 23 {
         let mut r = Reader::new(&bytes[1..]);
         let header_limits = Limits {
-            output: MAX_METADATA_BYTES as u64,
+            output: check.metadata_limits().bytes as u64,
             ..limits
         };
         let streams = Streams::read(&mut r, header_limits)?;
@@ -638,7 +640,7 @@ pub(crate) fn open(
     let mut tag = r.byte()?;
     if tag == 2 {
         while r.byte()? != 0 {
-            let len = r.number(MAX_METADATA_BYTES)?;
+            let len = r.number(check.metadata_limits().bytes)?;
             r.take(len)?;
         }
         tag = r.byte()?;
@@ -651,7 +653,7 @@ pub(crate) fn open(
         tag = r.byte()?;
     }
     let (members, stream_indices) = if tag == 5 {
-        let f = files(&mut r, limits, streams.as_ref())?;
+        let f = files(&mut r, limits, streams.as_ref(), check)?;
         tag = r.byte()?;
         f
     } else {

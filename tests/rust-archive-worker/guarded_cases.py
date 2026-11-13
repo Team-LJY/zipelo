@@ -13,6 +13,14 @@ if case == "bomb":
         block = bytes(1024 * 1024)
         for _ in range(257):
             output.write(block)
+elif case == "wide-names":
+    with zipfile.ZipFile(root / "input", "w") as archive:
+        for entry_id in range(9000):
+            archive.writestr(f"{entry_id:04}" + "x" * 236, b"")
+elif case == "many-entries":
+    with zipfile.ZipFile(root / "input", "w") as archive:
+        for entry_id in range(200_000):
+            archive.writestr(f"e{entry_id}", b"")
 elif case == "empty-directories":
     with zipfile.ZipFile(root / "input", "w") as archive:
         for entry_id in range(36):

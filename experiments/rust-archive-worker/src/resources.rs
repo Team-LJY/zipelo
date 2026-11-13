@@ -4,6 +4,9 @@ use std::time::Duration;
 type Result<T> = std::result::Result<T, ErrorCode>;
 
 pub trait Monitor {
+    fn metadata_limits(&self) -> crate::archive::MetadataLimits {
+        crate::archive::MetadataLimits::default()
+    }
     fn check(&mut self) -> Result<()>;
     fn activity(&mut self) -> Result<()> {
         self.check()
@@ -24,6 +27,13 @@ pub(crate) struct Budget {
     pub granted: ResourceScope,
 }
 impl Budget {
+    pub fn metadata_limits(&self) -> crate::archive::MetadataLimits {
+        if self.granted.any() {
+            crate::archive::MetadataLimits::approved()
+        } else {
+            crate::archive::MetadataLimits::default()
+        }
+    }
     pub fn required(&self, usage: ResourceUsage) -> Result<ResourceScope> {
         let bytes = usage
             .estimated_bytes

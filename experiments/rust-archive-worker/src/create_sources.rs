@@ -233,7 +233,7 @@ impl Plan {
                 data: Vec::new(),
             })
             .collect::<Vec<_>>();
-        archive::validate_members(&members)?;
+        archive::validate_members_with(&members, check)?;
         Ok(plan)
     }
     fn visit(
@@ -250,8 +250,9 @@ impl Plan {
         let metadata: Metadata = input.file.metadata().map_err(crate::space::io_error)?;
         let directory = metadata.is_dir();
         let name = archive::valid_name(&name, directory)?;
-        self.budget.charge(&name)?;
-        self.budget.charge(&path.to_string_lossy())?;
+        self.budget.charge_with(&name, check.metadata_limits())?;
+        self.budget
+            .charge_copy(&path.to_string_lossy(), check.metadata_limits())?;
         let size = if directory { 0 } else { metadata.len() };
         self.total = self
             .total
@@ -299,7 +300,7 @@ impl Plan {
                     .file_name()
                     .into_string()
                     .map_err(|_| ErrorCode::UnsafePath)?;
-                self.budget.charge(&leaf)?;
+                self.budget.charge_copy(&leaf, check.metadata_limits())?;
                 children.push(leaf);
                 check.observe(
                     ResourceUsage {
