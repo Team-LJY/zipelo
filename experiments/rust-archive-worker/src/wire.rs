@@ -158,6 +158,25 @@ structure!(ListId {
 });
 structure!(Source { path, archive_name });
 structure!(Start { action, limits });
+structure!(GuardedStart {
+    start,
+    ceiling,
+    interactive
+});
+structure!(ResourceScope {
+    output,
+    entries,
+    ratio
+});
+structure!(ResourceUsage {
+    estimated_bytes,
+    actual_bytes,
+    estimated_entries,
+    actual_entries,
+    compressed_bytes,
+    ratio_output_bytes,
+    available_bytes
+});
 structure!(Entry {
     entry_id,
     name,
@@ -341,6 +360,39 @@ impl Message {
                 apply_to_remaining.enc(&mut e)?;
                 5
             }
+            Self::StartGuarded(v) => {
+                if !v.valid() {
+                    return Err(invalid());
+                }
+                v.enc(&mut e)?;
+                6
+            }
+            Self::ResourceReply {
+                challenge_id,
+                scope,
+                allow,
+            } => {
+                challenge_id.enc(&mut e)?;
+                scope.enc(&mut e)?;
+                allow.enc(&mut e)?;
+                7
+            }
+            Self::ResourceRequired {
+                challenge_id,
+                action,
+                scope,
+                usage,
+                soft_limits,
+                ceiling,
+            } => {
+                challenge_id.enc(&mut e)?;
+                action.enc(&mut e)?;
+                scope.enc(&mut e)?;
+                usage.enc(&mut e)?;
+                soft_limits.enc(&mut e)?;
+                ceiling.enc(&mut e)?;
+                110
+            }
             Self::Accepted { action, encryption } => {
                 action.enc(&mut e)?;
                 encryption.enc(&mut e)?;
@@ -459,6 +511,26 @@ impl Message {
                 challenge_id: Wire::dec(&mut d)?,
                 choice: Wire::dec(&mut d)?,
                 apply_to_remaining: Wire::dec(&mut d)?,
+            },
+            6 => {
+                let start = GuardedStart::dec(&mut d)?;
+                if !start.valid() {
+                    return Err(invalid());
+                }
+                Self::StartGuarded(start)
+            }
+            7 => Self::ResourceReply {
+                challenge_id: Wire::dec(&mut d)?,
+                scope: Wire::dec(&mut d)?,
+                allow: Wire::dec(&mut d)?,
+            },
+            110 => Self::ResourceRequired {
+                challenge_id: Wire::dec(&mut d)?,
+                action: Wire::dec(&mut d)?,
+                scope: Wire::dec(&mut d)?,
+                usage: Wire::dec(&mut d)?,
+                soft_limits: Wire::dec(&mut d)?,
+                ceiling: Wire::dec(&mut d)?,
             },
             100 => Self::Accepted {
                 action: Wire::dec(&mut d)?,

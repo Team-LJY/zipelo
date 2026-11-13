@@ -52,7 +52,7 @@ impl Catalog {
         limits: Limits,
         decode: bool,
         password: Option<&[u8]>,
-        check: &mut impl FnMut() -> Result<()>,
+        check: &mut impl crate::resources::Monitor,
     ) -> Result<Self> {
         let mut magic = [0; 6];
         let n = len.min(6) as usize;
@@ -121,7 +121,7 @@ fn tar(
     len: u64,
     limits: Limits,
     format: Format,
-    check: &mut impl FnMut() -> Result<()>,
+    check: &mut impl crate::resources::Monitor,
 ) -> Result<Catalog> {
     let mut cursor = 0u64;
     let mut total = 0u64;
@@ -129,7 +129,7 @@ fn tar(
     let mut offsets = Vec::new();
     let mut metadata = MetadataBudget::default();
     loop {
-        check()?;
+        check.check()?;
         let mut header = [0; 512];
         if add(cursor, 512)? > len {
             return Err(ErrorCode::Integrity);
@@ -142,13 +142,14 @@ fn tar(
             let mut buffer = Zeroizing::new([0; CHUNK]);
             let mut remaining = len - cursor - 512;
             while remaining != 0 {
-                check()?;
+                check.check()?;
                 let n = remaining.min(CHUNK as u64) as usize;
                 io(data.read_exact(&mut buffer[..n]))?;
                 if buffer[..n].iter().any(|b| *b != 0) {
                     return Err(ErrorCode::Integrity);
                 }
                 remaining -= n as u64;
+                check.activity()?;
             }
             break;
         }
@@ -193,6 +194,15 @@ fn tar(
             .checked_add(size)
             .filter(|n| *n <= limits.output)
             .ok_or(ErrorCode::Limit)?;
+        check.observe(
+            ResourceUsage {
+                estimated_bytes: Some(total),
+                actual_entries: Some(members.len() as u32 + 1),
+                ..ResourceUsage::default()
+            },
+            Some(&data),
+        )?;
+        check.activity()?;
         let start = add(cursor, 512)?;
         cursor = add(
             start,
@@ -232,8 +242,9 @@ fn inflate(
     gzip: bool,
     limit: u64,
     output: &mut File,
-    check: &mut impl FnMut() -> Result<()>,
+    check: &mut impl crate::resources::Monitor,
 ) -> Result<(u64, u32)> {
+    let base = io(output.stream_position())?;
     let mut remaining = length;
     let mut buffer = Zeroizing::new([0; CHUNK]);
     let mut plain = Zeroizing::new([0; CHUNK]);
@@ -244,7 +255,7 @@ fn inflate(
     loop {
         let mut stream = Inflate::new(gzip, if gzip { 31 } else { 15 });
         loop {
-            check()?;
+            check.check()?;
             if used == have && remaining != 0 {
                 have = input
                     .read(&mut buffer[..remaining.min(CHUNK as u64) as usize])
@@ -266,6 +277,18 @@ fn inflate(
                 .checked_add(n as u64)
                 .filter(|n| *n <= limit)
                 .ok_or(ErrorCode::Limit)?;
+            check.observe(
+                ResourceUsage {
+                    actual_bytes: Some(base.checked_add(total).ok_or(ErrorCode::Limit)?),
+                    compressed_bytes: Some(length),
+                    ratio_output_bytes: Some(total),
+                    ..ResourceUsage::default()
+                },
+                Some(output),
+            )?;
+            if n != 0 {
+                check.activity()?;
+            }
             crc = crc32(crc, &plain[..n]);
             crate::space::ensure(output, n as u64)?;
             io(output.write_all(&plain[..n]))?;
@@ -398,7 +421,7 @@ fn zip(
     limits: Limits,
     decode: bool,
     password: Option<&[u8]>,
-    check: &mut impl FnMut() -> Result<()>,
+    check: &mut impl crate::resources::Monitor,
 ) -> Result<Catalog> {
     if len < 22 {
         return Err(ErrorCode::Integrity);
@@ -463,6 +486,13 @@ fn zip(
     if count > limits.entries as u64 {
         return Err(ErrorCode::Limit);
     }
+    check.observe(
+        ResourceUsage {
+            estimated_entries: Some(count as u32),
+            ..ResourceUsage::default()
+        },
+        Some(source),
+    )?;
     if add(central, central_size)? != central_end {
         return Err(ErrorCode::Integrity);
     }
@@ -473,7 +503,7 @@ fn zip(
     let mut packed = Vec::new();
     let mut spans = Vec::new();
     for id in 0..count {
-        check()?;
+        check.check()?;
         if add(cursor, 46)? > central_end {
             return Err(ErrorCode::Integrity);
         }
@@ -532,6 +562,17 @@ fn zip(
             .checked_add(size)
             .filter(|n| *n <= limits.output)
             .ok_or(ErrorCode::Limit)?;
+        check.observe(
+            ResourceUsage {
+                estimated_bytes: Some(total),
+                estimated_entries: Some(count as u32),
+                compressed_bytes: Some(compressed - overhead),
+                ratio_output_bytes: Some(size),
+                ..ResourceUsage::default()
+            },
+            Some(source),
+        )?;
+        check.activity()?;
         let mode = u32at(&h, 38) >> 16;
         let kind = match mode & 0xf000 {
             0xa000 => EntryKind::Link,
@@ -654,7 +695,7 @@ fn zip(
     }
     let mut offsets = Vec::new();
     for (member, packed) in members.iter().zip(packed) {
-        check()?;
+        check.check()?;
         offsets.push(io(data.stream_position())?);
         if !decode {
             continue;
@@ -691,7 +732,7 @@ fn zip(
             let mut total = 0u64;
             let mut crc = 0;
             loop {
-                check()?;
+                check.check()?;
                 let n = io(reader.read(&mut buffer[..]))?;
                 if n == 0 {
                     break;
@@ -700,6 +741,8 @@ fn zip(
                     .checked_add(n as u64)
                     .filter(|n| *n <= member.entry.size)
                     .ok_or(ErrorCode::Integrity)?;
+                check.activity()?;
+                crate::space::ensure(&data, n as u64)?;
                 crc = crc32(crc, &buffer[..n]);
                 io(data.write_all(&buffer[..n]))?;
             }

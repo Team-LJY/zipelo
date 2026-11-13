@@ -42,7 +42,7 @@ fn pack(
     length: u64,
     method: Method,
     output: &mut File,
-    check: &mut impl FnMut() -> Result<()>,
+    check: &mut impl crate::resources::Monitor,
 ) -> Result<(u64, u32)> {
     io(input.rewind())?;
     let mut input = input.take(length);
@@ -52,11 +52,13 @@ fn pack(
     let mut size = 0u64;
     if method == Method::Store {
         loop {
-            check()?;
+            check.check()?;
             let n = io(input.read(&mut buffer[..]))?;
             if n == 0 {
                 break;
             }
+            check.activity()?;
+            crate::space::ensure(output, n as u64)?;
             crc = crc32(crc, &buffer[..n]);
             io(output.write_all(&buffer[..n]))?;
             size += n as u64;
@@ -68,12 +70,12 @@ fn pack(
     }
     let mut stream = Deflate::new(6, false, 15);
     loop {
-        check()?;
+        check.check()?;
         let n = io(input.read(&mut buffer[..]))?;
         crc = crc32(crc, &buffer[..n]);
         let mut used = 0;
         loop {
-            check()?;
+            check.check()?;
             let a = stream.total_in();
             let b = stream.total_out();
             let status = stream
@@ -89,7 +91,11 @@ fn pack(
                 .map_err(|_| ErrorCode::Internal)?;
             used += (stream.total_in() - a) as usize;
             let written = (stream.total_out() - b) as usize;
+            crate::space::ensure(output, written as u64)?;
             io(output.write_all(&encoded[..written]))?;
+            if used != 0 || written != 0 {
+                check.activity()?;
+            }
             size = size.checked_add(written as u64).ok_or(ErrorCode::Limit)?;
             if status == Status::StreamEnd {
                 if stream.total_in() != length {
@@ -110,7 +116,7 @@ pub(crate) use crate::create_sources::Plan;
 pub(crate) fn plan(
     sources: &[Source],
     limits: Limits,
-    check: &mut impl FnMut() -> Result<()>,
+    check: &mut impl crate::resources::Monitor,
 ) -> Result<Plan> {
     Plan::new(sources, limits, check)
 }
@@ -119,7 +125,7 @@ pub(crate) fn zip(
     method: Method,
     limits: Limits,
     password: Option<&[u8]>,
-    check: &mut impl FnMut() -> Result<()>,
+    check: &mut impl crate::resources::Monitor,
 ) -> Result<(File, u64)> {
     let mut output = spool::temporary()?;
     let mut central = Vec::new();
@@ -130,7 +136,7 @@ pub(crate) fn zip(
         let directory = member.entry.kind == EntryKind::Directory;
         let method = if directory { Method::Store } else { method };
         let password = if directory { None } else { password };
-        check()?;
+        check.check()?;
         let remaining = limits
             .input
             .min(limits.output)
@@ -229,12 +235,14 @@ pub(crate) fn zip(
         } else {
             let mut buffer = Zeroizing::new([0; 65536]);
             loop {
-                check()?;
+                check.check()?;
                 let n = io(packed.read(&mut buffer[..]))?;
                 if n == 0 {
                     break;
                 }
+                crate::space::ensure(&output, n as u64)?;
                 io(output.write_all(&buffer[..n]))?;
+                check.activity()?;
             }
         }
         let mut extra = zip64_extra(length, packed_size, Some(offset));
@@ -277,13 +285,17 @@ pub(crate) fn zip(
         central.extend(name);
         central.extend(extra);
     }
-    check()?;
+    check.check()?;
     let at = io(output.stream_position())?;
     crate::space::ensure(&output, central.len() as u64 + 98)?;
     io(output.write_all(&central))?;
     let large_at = io(output.stream_position())?;
     let mut end = Vec::new();
-    if have_zip64 || at >= u32::MAX as u64 || central.len() >= u32::MAX as usize {
+    if have_zip64
+        || plan.items.len() >= u16::MAX as usize
+        || at >= u32::MAX as u64
+        || central.len() >= u32::MAX as usize
+    {
         end.extend(b"PK\x06\x06");
         put64(&mut end, 44);
         put16(&mut end, 45);

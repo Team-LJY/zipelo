@@ -26,6 +26,7 @@ impl<'a> History<'a> {
     }
     fn flush(&mut self) -> Result<()> {
         use std::io::Write;
+        crate::space::ensure(self.file, self.pending.len() as u64)?;
         self.file
             .write_all(&self.pending)
             .map_err(crate::space::io_error)?;
@@ -405,13 +406,25 @@ impl Model {
         dictionary: usize,
         target: u64,
         eos: bool,
-        check: &mut impl FnMut() -> Result<()>,
+        check: &mut impl crate::resources::Monitor,
     ) -> Result<()> {
         let mut range = Range::new(input, length)?;
         let mut next_check = out.len();
         while out.len() < target {
             if out.len() >= next_check {
-                check()?;
+                check.check()?;
+                if out.len() > next_check.saturating_sub(65536) {
+                    check.activity()?;
+                }
+                check.observe(
+                    crate::protocol::ResourceUsage {
+                        actual_bytes: Some(
+                            out.base.checked_add(out.len()).ok_or(ErrorCode::Limit)?,
+                        ),
+                        ..crate::protocol::ResourceUsage::default()
+                    },
+                    Some(out.file),
+                )?;
                 next_check = out.len() + 65536;
             }
             if self.symbol(&mut range, out, history, dictionary, target)? {
@@ -442,7 +455,7 @@ pub(crate) fn decode_stream(
     lzma2: bool,
     size: u64,
     output: &mut std::fs::File,
-    check: &mut impl FnMut() -> Result<()>,
+    check: &mut impl crate::resources::Monitor,
 ) -> Result<()> {
     use std::io::{BufReader, Read};
     crate::space::ensure(output, size)?;
@@ -492,8 +505,9 @@ pub(crate) fn decode_stream(
     let mut need_state = true;
     let mut model: Option<Model> = None;
     loop {
-        check()?;
+        check.check()?;
         let control = byte(&mut reader)?;
+        check.activity()?;
         if control == 0 {
             let mut extra = [0];
             if reader.read(&mut extra).map_err(crate::space::io_error)? != 0 || out.len() != size {

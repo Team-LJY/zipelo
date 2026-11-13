@@ -90,7 +90,7 @@ pub fn object(file: &File) -> Result<SourceObject> {
 pub fn snapshot(
     path: &Path,
     limit: u64,
-    check: &mut impl FnMut() -> Result<()>,
+    check: &mut impl crate::resources::Monitor,
 ) -> Result<Snapshot> {
     let mut options = OpenOptions::new();
     options.read(true);
@@ -117,7 +117,7 @@ pub fn snapshot(
     let mut hash = Sha256::new();
     let mut buffer = [0; 65536];
     loop {
-        check()?;
+        check.check()?;
         let n = file.read(&mut buffer).map_err(|_| ErrorCode::Io)?;
         if n == 0 {
             break;
@@ -663,6 +663,7 @@ pub fn publish_reader_mode(
                 if n == 0 {
                     return Err(ErrorCode::Io);
                 }
+                crate::space::ensure(&file, n as u64)?;
                 file.write_all(&buffer[..n])
                     .map_err(crate::space::io_error)?;
                 remaining -= n as u64;

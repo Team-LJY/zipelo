@@ -201,7 +201,7 @@ impl Plan {
     pub fn new(
         sources: &[Source],
         limits: Limits,
-        check: &mut impl FnMut() -> Result<()>,
+        check: &mut impl crate::resources::Monitor,
     ) -> Result<Self> {
         if sources.len() > limits.entries as usize {
             return Err(ErrorCode::Limit);
@@ -214,7 +214,7 @@ impl Plan {
         };
         let mut roots = std::collections::BTreeSet::new();
         for source in sources {
-            check()?;
+            check.check()?;
             let name = archive::valid_name(&source.archive_name, false)?;
             if !roots.insert(name.to_lowercase()) {
                 return Err(ErrorCode::Conflict);
@@ -241,9 +241,9 @@ impl Plan {
         path: PathBuf,
         name: String,
         input: Input,
-        check: &mut impl FnMut() -> Result<()>,
+        check: &mut impl crate::resources::Monitor,
     ) -> Result<()> {
-        check()?;
+        check.check()?;
         if self.items.len() >= self.limits.entries as usize {
             return Err(ErrorCode::Limit);
         }
@@ -258,6 +258,15 @@ impl Plan {
             .checked_add(size)
             .filter(|n| *n <= self.limits.input.min(self.limits.output))
             .ok_or(ErrorCode::Limit)?;
+        check.observe(
+            ResourceUsage {
+                estimated_bytes: Some(self.total),
+                actual_entries: Some(self.items.len() as u32 + 1),
+                ..ResourceUsage::default()
+            },
+            None,
+        )?;
+        check.activity()?;
         self.items.push(Planned {
             member: Member {
                 entry: Entry {
@@ -281,7 +290,7 @@ impl Plan {
         if directory {
             let mut children = Vec::new();
             for entry in input.children(&path)? {
-                check()?;
+                check.check()?;
                 if self.items.len() + children.len() >= self.limits.entries as usize {
                     return Err(ErrorCode::Limit);
                 }
@@ -292,6 +301,15 @@ impl Plan {
                     .map_err(|_| ErrorCode::UnsafePath)?;
                 self.budget.charge(&leaf)?;
                 children.push(leaf);
+                check.observe(
+                    ResourceUsage {
+                        estimated_bytes: Some(self.total),
+                        estimated_entries: Some((self.items.len() + children.len()) as u32),
+                        ..ResourceUsage::default()
+                    },
+                    None,
+                )?;
+                check.activity()?;
             }
             children.sort();
             for leaf in children {
@@ -301,10 +319,11 @@ impl Plan {
         }
         Ok(())
     }
-    pub fn verify(&self, check: &mut impl FnMut() -> Result<()>) -> Result<()> {
+    pub fn verify(&self, check: &mut impl crate::resources::Monitor) -> Result<()> {
         for item in &self.items {
-            check()?;
+            check.check()?;
             item.open()?;
+            check.activity()?;
         }
         Ok(())
     }

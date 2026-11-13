@@ -2,6 +2,7 @@ use crate::{
     archive,
     filesystem::{self, Dir},
     protocol::*,
+    resources::{Budget, Monitor, Watchdog},
     wire::{Reader, Writer},
 };
 use std::{
@@ -16,6 +17,7 @@ type Result<T> = std::result::Result<T, ErrorCode>;
 enum Challenge {
     Password(u64),
     Conflict(u64),
+    Resource(u64, ResourceScope),
 }
 struct State<W> {
     writer: Writer<W>,
@@ -25,6 +27,7 @@ struct State<W> {
     challenge: Option<Challenge>,
     conflict_reply: Option<(ConflictChoice, bool)>,
     password: Option<Secret>,
+    resource_reply: Option<bool>,
     input_closed: bool,
 }
 struct Job<W> {
@@ -32,12 +35,79 @@ struct Job<W> {
     wake: Arc<Condvar>,
     next_challenge: u64,
     interactive: bool,
+    action: ActionKind,
+    budget: Option<Budget>,
+    watchdog: Watchdog,
     remaining_choice: Option<ConflictChoice>,
     started: Instant,
     terminal: Terminal,
     parent: crate::parent::Parent,
 }
 impl<W: Write> Job<W> {
+    fn request_resource(
+        &mut self,
+        scope: ResourceScope,
+        mut usage: ResourceUsage,
+        storage: Option<&std::fs::File>,
+    ) -> Result<()> {
+        let budget = self.budget.as_ref().ok_or(ErrorCode::Internal)?;
+        let (soft_limits, ceiling) = (budget.soft, budget.ceiling);
+        if let Some(file) = storage {
+            usage.available_bytes =
+                Some(crate::space::available(file)?.min(u64::MAX as u128) as u64);
+        }
+        self.next_challenge = self.next_challenge.checked_add(1).ok_or(ErrorCode::Limit)?;
+        let id = self.next_challenge;
+        let state_ref = Arc::clone(&self.state);
+        let mut state = state_ref.lock().map_err(|_| ErrorCode::Internal)?;
+        if state.challenge.is_some() {
+            return Err(ErrorCode::Internal);
+        }
+        state.challenge = Some(Challenge::Resource(id, scope));
+        state
+            .writer
+            .send(&Message::ResourceRequired {
+                challenge_id: id,
+                action: self.action,
+                scope,
+                usage,
+                soft_limits,
+                ceiling,
+            })
+            .map_err(|_| ErrorCode::Io)?;
+        let waiting = Instant::now();
+        loop {
+            self.parent.check()?;
+            if let Some(error) = state.fault {
+                return Err(error);
+            }
+            if state.cancelled {
+                return Err(ErrorCode::None);
+            }
+            if let Some(allow) = state.resource_reply.take() {
+                if !allow {
+                    return Err(ErrorCode::None);
+                }
+                self.budget
+                    .as_mut()
+                    .ok_or(ErrorCode::Internal)?
+                    .grant(scope);
+                self.watchdog.resume(self.started.elapsed(), true);
+                return Ok(());
+            }
+            if state.input_closed {
+                return Err(ErrorCode::Protocol);
+            }
+            if waiting.elapsed() >= Duration::from_secs(300) {
+                return Err(ErrorCode::Limit);
+            }
+            state = self
+                .wake
+                .wait_timeout(state, Duration::from_millis(50))
+                .map_err(|_| ErrorCode::Internal)?
+                .0;
+        }
+    }
     fn password(&mut self, purpose: PasswordPurpose, attempt: u32) -> Result<Secret> {
         self.check()?;
         self.next_challenge = self.next_challenge.checked_add(1).ok_or(ErrorCode::Limit)?;
@@ -53,6 +123,7 @@ impl<W: Write> Job<W> {
                 purpose,
             })
             .map_err(|_| ErrorCode::Io)?;
+        let waiting = Instant::now();
         loop {
             self.parent.check()?;
             if let Some(error) = state.fault {
@@ -62,12 +133,17 @@ impl<W: Write> Job<W> {
                 return Err(ErrorCode::None);
             }
             if let Some(secret) = state.password.take() {
+                self.watchdog.resume(self.started.elapsed(), false);
                 return Ok(secret);
             }
             if state.input_closed {
                 return Err(ErrorCode::Protocol);
             }
-            if self.started.elapsed() > Duration::from_secs(300) {
+            if if self.budget.is_some() {
+                waiting.elapsed() >= Duration::from_secs(300)
+            } else {
+                self.started.elapsed() > Duration::from_secs(300)
+            } {
                 return Err(ErrorCode::Limit);
             }
             state = self
@@ -98,6 +174,7 @@ impl<W: Write> Job<W> {
                 existing_size,
             })
             .map_err(|_| ErrorCode::Io)?;
+        let waiting = Instant::now();
         loop {
             self.parent.check()?;
             if let Some(error) = state.fault {
@@ -110,12 +187,17 @@ impl<W: Write> Job<W> {
                 if apply {
                     self.remaining_choice = Some(choice);
                 }
+                self.watchdog.resume(self.started.elapsed(), false);
                 return Ok(choice);
             }
             if state.input_closed {
                 return Err(ErrorCode::Protocol);
             }
-            if self.started.elapsed() > Duration::from_secs(300) {
+            if if self.budget.is_some() {
+                waiting.elapsed() >= Duration::from_secs(300)
+            } else {
+                self.started.elapsed() > Duration::from_secs(300)
+            } {
                 return Err(ErrorCode::Limit);
             }
             state = self
@@ -168,9 +250,6 @@ impl<W: Write> Job<W> {
     }
     fn check(&mut self) -> Result<()> {
         self.parent.check()?;
-        if self.started.elapsed() > Duration::from_secs(300) {
-            return Err(ErrorCode::Limit);
-        }
         let state = self.state.lock().map_err(|_| ErrorCode::Internal)?;
         if let Some(error) = state.fault {
             return Err(error);
@@ -178,7 +257,7 @@ impl<W: Write> Job<W> {
         if state.cancelled && state.phase == 0 {
             return Err(ErrorCode::None);
         }
-        Ok(())
+        self.watchdog.check(self.started.elapsed())
     }
     fn cutoff(&mut self) -> Result<()> {
         self.check()?;
@@ -220,7 +299,12 @@ impl<W: Write> Job<W> {
             Some(length),
             self.terminal.created_count as u32,
         )?;
+        let mut first_chunk = true;
         let p = filesystem::publish_reader_mode(root, name, data, length, replace, &mut |commit| {
+            if !first_chunk {
+                self.activity()?;
+            }
+            first_chunk = false;
             if commit && last {
                 self.cutoff()
             } else {
@@ -272,11 +356,23 @@ impl<W: Write> Job<W> {
         if !start.limits.valid() {
             return Err(ErrorCode::InvalidRequest);
         }
+        let limits = self.budget.as_ref().map_or(start.limits, |b| b.ceiling);
         self.event(Message::Accepted {
             action: start.action.kind(),
             encryption: true,
         })?;
         self.check()?;
+        if let Some(budget) = &self.budget {
+            let scope = ResourceScope {
+                output: budget.ceiling.output > budget.soft.output,
+                entries: budget.ceiling.entries > budget.soft.entries,
+                ratio: false,
+            };
+            if scope.any() {
+                let temporary = crate::spool::temporary()?;
+                self.request_resource(scope, ResourceUsage::default(), Some(&temporary))?;
+            }
+        }
         match start.action {
             Action::List {
                 archive: ref source,
@@ -288,16 +384,16 @@ impl<W: Write> Job<W> {
                 let extract = matches!(start.action, Action::Extract { .. });
                 let path = source.to_path()?;
                 self.progress(Stage::Read, 0, None, 0)?;
-                let mut snapshot = crate::spool::Snapshot::open_reporting(
-                    &path,
-                    start.limits.input,
-                    &mut |step| match step {
-                        crate::spool::Step::Check => self.check(),
-                        crate::spool::Step::Read { bytes, total } => {
-                            self.progress(Stage::Read, bytes, Some(total), 0)
+                let mut snapshot =
+                    crate::spool::Snapshot::open_reporting(&path, limits.input, &mut |step| {
+                        match step {
+                            crate::spool::Step::Check => self.check(),
+                            crate::spool::Step::Read { bytes, total } => {
+                                self.activity()?;
+                                self.progress(Stage::Read, bytes, Some(total), 0)
+                            }
                         }
-                    },
-                )?;
+                    })?;
                 if let Action::Extract {
                     list_id: Some(expected),
                     ..
@@ -315,10 +411,10 @@ impl<W: Write> Job<W> {
                 let mut catalog = crate::streaming::Catalog::open(
                     &mut snapshot.file,
                     snapshot.len,
-                    start.limits,
+                    limits,
                     false,
                     None,
-                    &mut || self.check(),
+                    self,
                 )?;
                 let list_id = ListId {
                     catalog_version: 1,
@@ -423,10 +519,10 @@ impl<W: Write> Job<W> {
                             match crate::streaming::Catalog::open(
                                 &mut snapshot.file,
                                 snapshot.len,
-                                start.limits,
+                                limits,
                                 true,
                                 secret.as_ref().map(|s| s.0.as_slice()),
-                                &mut || self.check(),
+                                self,
                             ) {
                                 Ok(decoded) => {
                                     catalog = decoded;
@@ -554,7 +650,7 @@ impl<W: Write> Job<W> {
                 let name = archive::valid_name(leaf, false)?;
                 let root = Dir::root(output.parent().ok_or(ErrorCode::InvalidRequest)?)?;
                 filesystem::preflight(&root, &[(name.clone(), EntryKind::File)])?;
-                let members = crate::create::plan(&sources, start.limits, &mut || self.check())?;
+                let members = crate::create::plan(&sources, limits, self)?;
                 let secret = if encryption == Encryption::Aes256 {
                     let secret = self.password(PasswordPurpose::Encrypt, 1)?;
                     if secret.0.is_empty() {
@@ -567,9 +663,9 @@ impl<W: Write> Job<W> {
                 let (mut data, length) = crate::create::zip(
                     &members,
                     method,
-                    start.limits,
+                    limits,
                     secret.as_ref().map(|s| s.0.as_slice()),
-                    &mut || self.check(),
+                    self,
                 )?;
                 filesystem::preflight_space(&root, &[(name.clone(), length)], None)?;
                 self.output_reader(&root, &name, &mut data, length, None, true, None)?;
@@ -580,6 +676,27 @@ impl<W: Write> Job<W> {
         Ok(())
     }
 }
+impl<W: Write> Monitor for Job<W> {
+    fn check(&mut self) -> Result<()> {
+        Job::check(self)
+    }
+    fn activity(&mut self) -> Result<()> {
+        self.check()?;
+        self.watchdog.activity(self.started.elapsed())
+    }
+    fn observe(&mut self, usage: ResourceUsage, storage: Option<&std::fs::File>) -> Result<()> {
+        self.check()?;
+        let Some(budget) = &self.budget else {
+            return Ok(());
+        };
+        let scope = budget.required(usage)?;
+        if !scope.any() {
+            return Ok(());
+        }
+        self.request_resource(scope, usage, storage)
+    }
+}
+
 pub fn serve<R: Read + Send + 'static, W: Write + Send + 'static>(
     input: R,
     output: W,
@@ -590,9 +707,17 @@ pub fn serve<R: Read + Send + 'static, W: Write + Send + 'static>(
     let (job, _, message) = reader
         .read()?
         .ok_or_else(|| std::io::Error::from(std::io::ErrorKind::UnexpectedEof))?;
-    let (start, interactive) = match message {
-        Message::Start(start) => (start, false),
-        Message::StartInteractive(start) => (start, true),
+    let (start, interactive, budget) = match message {
+        Message::Start(start) => (start, false, None),
+        Message::StartInteractive(start) => (start, true, None),
+        Message::StartGuarded(guarded) if guarded.valid() => {
+            let budget = Budget {
+                soft: guarded.start.limits,
+                ceiling: guarded.ceiling,
+                granted: ResourceScope::default(),
+            };
+            (guarded.start, guarded.interactive, Some(budget))
+        }
         _ => {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
@@ -608,6 +733,7 @@ pub fn serve<R: Read + Send + 'static, W: Write + Send + 'static>(
         challenge: None,
         conflict_reply: None,
         password: None,
+        resource_reply: None,
         input_closed: false,
     }));
     let wake = Arc::new(Condvar::new());
@@ -668,6 +794,24 @@ pub fn serve<R: Read + Send + 'static, W: Write + Send + 'static>(
                     }
                     control_wake.notify_all();
                 }
+                Message::ResourceReply {
+                    challenge_id,
+                    scope,
+                    allow,
+                } => {
+                    if state.phase != 0
+                        || state.challenge != Some(Challenge::Resource(challenge_id, scope))
+                        || state.resource_reply.is_some()
+                    {
+                        state.fault = Some(ErrorCode::Protocol);
+                    } else {
+                        state.challenge = None;
+                        if !state.cancelled {
+                            state.resource_reply = Some(allow);
+                        }
+                    }
+                    control_wake.notify_all();
+                }
                 Message::Cancel => {
                     let status = match state.phase {
                         2 => CancelStatus::Finished,
@@ -703,6 +847,9 @@ pub fn serve<R: Read + Send + 'static, W: Write + Send + 'static>(
         wake,
         next_challenge: 0,
         interactive,
+        action: start.action.kind(),
+        budget,
+        watchdog: Watchdog::new(),
         remaining_choice: None,
         parent,
         started: Instant::now(),
@@ -733,6 +880,7 @@ pub fn serve<R: Read + Send + 'static, W: Write + Send + 'static>(
     state.challenge = None;
     state.password = None;
     state.conflict_reply = None;
+    state.resource_reply = None;
     if let Some(error) = state.fault.or(error) {
         context.terminal.error = error;
         context.terminal.outcome = if error == ErrorCode::None {

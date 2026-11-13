@@ -158,13 +158,13 @@ fn inflate(
     input: &[u8],
     gzip: bool,
     limit: u64,
-    check: &mut impl FnMut() -> Result<()>,
+    check: &mut impl crate::resources::Monitor,
 ) -> Result<(Vec<u8>, usize)> {
     let mut stream = Inflate::new(gzip, if gzip { 31 } else { 15 });
     let mut out = Vec::new();
     let mut buffer = [0; 65536];
     loop {
-        check()?;
+        check.check()?;
         let before_in = stream.total_in();
         let before_out = stream.total_out();
         let status = stream
@@ -184,7 +184,11 @@ fn inflate(
         }
     }
 }
-fn gzip(input: &[u8], limits: Limits, check: &mut impl FnMut() -> Result<()>) -> Result<Vec<u8>> {
+fn gzip(
+    input: &[u8],
+    limits: Limits,
+    check: &mut impl crate::resources::Monitor,
+) -> Result<Vec<u8>> {
     let mut at = 0;
     let mut result = Vec::new();
     while at < input.len() {
@@ -230,14 +234,14 @@ fn tar(
     input: &[u8],
     limits: Limits,
     decode: bool,
-    check: &mut impl FnMut() -> Result<()>,
+    check: &mut impl crate::resources::Monitor,
 ) -> Result<Vec<Member>> {
     let mut at = 0;
     let mut members = Vec::new();
     let mut total = 0u64;
     let mut metadata = MetadataBudget::default();
     loop {
-        check()?;
+        check.check()?;
         let header = part(input, at, 512)?;
         if header.iter().all(|b| *b == 0) {
             if part(input, at + 512, 512)?.iter().any(|b| *b != 0)
@@ -394,7 +398,7 @@ fn zip(
     limits: Limits,
     decode: bool,
     password: Option<&[u8]>,
-    check: &mut impl FnMut() -> Result<()>,
+    check: &mut impl crate::resources::Monitor,
 ) -> Result<Vec<Member>> {
     if input.len() < 22 {
         return Err(ErrorCode::Integrity);
@@ -432,7 +436,7 @@ fn zip(
     let mut total = 0u64;
     let mut metadata = MetadataBudget::default();
     for id in 0..count {
-        check()?;
+        check.check()?;
         let h = part(input, at, 46)?;
         if &h[..4] != b"PK\x01\x02" {
             return Err(ErrorCode::Integrity);
@@ -604,7 +608,7 @@ pub fn parse(
     input: &[u8],
     limits: Limits,
     decode: bool,
-    check: &mut impl FnMut() -> Result<()>,
+    check: &mut impl crate::resources::Monitor,
 ) -> Result<Catalog> {
     parse_with_password(input, limits, decode, None, check)
 }
@@ -613,7 +617,7 @@ pub fn parse_with_password(
     limits: Limits,
     decode: bool,
     password: Option<&[u8]>,
-    check: &mut impl FnMut() -> Result<()>,
+    check: &mut impl crate::resources::Monitor,
 ) -> Result<Catalog> {
     if !limits.valid() {
         return Err(ErrorCode::Limit);
@@ -666,12 +670,16 @@ pub fn parse_with_password(
     }
     Err(ErrorCode::UnsupportedFormat)
 }
-fn deflate(input: &[u8], limit: u64, check: &mut impl FnMut() -> Result<()>) -> Result<Vec<u8>> {
+fn deflate(
+    input: &[u8],
+    limit: u64,
+    check: &mut impl crate::resources::Monitor,
+) -> Result<Vec<u8>> {
     let mut stream = Deflate::new(6, false, 15);
     let mut output = Vec::new();
     let mut buffer = [0; 65536];
     loop {
-        check()?;
+        check.check()?;
         let a = stream.total_in();
         let b = stream.total_out();
         let status = stream
@@ -700,7 +708,7 @@ pub fn create_zip(
     members: &[Member],
     method: Method,
     limits: Limits,
-    check: &mut impl FnMut() -> Result<()>,
+    check: &mut impl crate::resources::Monitor,
 ) -> Result<Vec<u8>> {
     create_zip_with_password(members, method, limits, None, check)
 }
@@ -709,7 +717,7 @@ pub fn create_zip_with_password(
     method: Method,
     limits: Limits,
     password: Option<&[u8]>,
-    check: &mut impl FnMut() -> Result<()>,
+    check: &mut impl crate::resources::Monitor,
 ) -> Result<Vec<u8>> {
     if !limits.valid() {
         return Err(ErrorCode::Limit);
@@ -723,7 +731,7 @@ pub fn create_zip_with_password(
     let mut cd = Vec::new();
     let mut total = 0u64;
     for m in members {
-        check()?;
+        check.check()?;
         total = total
             .checked_add(m.data.len() as u64)
             .filter(|n| *n <= limits.output)

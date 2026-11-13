@@ -114,11 +114,11 @@ impl Snapshot {
     pub(crate) fn capture(
         source: &mut File,
         limit: u64,
-        check: &mut impl FnMut() -> Result<()>,
+        check: &mut impl crate::resources::Monitor,
     ) -> Result<Self> {
         Self::capture_reporting(source, limit, &mut |step| match step {
-            Step::Check => check(),
-            Step::Read { .. } => Ok(()),
+            Step::Check => check.check(),
+            Step::Read { .. } => check.activity(),
         })
     }
     fn capture_reporting(

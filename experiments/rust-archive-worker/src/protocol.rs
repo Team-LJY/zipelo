@@ -82,6 +82,44 @@ impl Limits {
             && self.entries <= hard.entries
     }
 }
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GuardedStart {
+    pub start: Start,
+    pub ceiling: Limits,
+    pub interactive: bool,
+}
+impl GuardedStart {
+    pub fn valid(&self) -> bool {
+        self.start.limits.valid()
+            && self.ceiling.input == self.start.limits.input
+            && self.ceiling.output >= self.start.limits.output
+            && self.ceiling.output <= 64 * 1024 * 1024 * 1024
+            && self.ceiling.entries >= self.start.limits.entries
+            && self.ceiling.entries <= 200_000
+            && (!self.interactive || matches!(self.start.action, Action::Extract { .. }))
+    }
+}
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct ResourceScope {
+    pub output: bool,
+    pub entries: bool,
+    pub ratio: bool,
+}
+impl ResourceScope {
+    pub fn any(self) -> bool {
+        self.output || self.entries || self.ratio
+    }
+}
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct ResourceUsage {
+    pub estimated_bytes: Option<u64>,
+    pub actual_bytes: Option<u64>,
+    pub estimated_entries: Option<u32>,
+    pub actual_entries: Option<u32>,
+    pub compressed_bytes: Option<u64>,
+    pub ratio_output_bytes: Option<u64>,
+    pub available_bytes: Option<u64>,
+}
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Format {
     Zip,
@@ -292,6 +330,20 @@ pub enum Message {
     },
     Cancel,
     StartInteractive(Start),
+    StartGuarded(GuardedStart),
+    ResourceReply {
+        challenge_id: u64,
+        scope: ResourceScope,
+        allow: bool,
+    },
+    ResourceRequired {
+        challenge_id: u64,
+        action: ActionKind,
+        scope: ResourceScope,
+        usage: ResourceUsage,
+        soft_limits: Limits,
+        ceiling: Limits,
+    },
     ConflictReply {
         challenge_id: u64,
         choice: ConflictChoice,
