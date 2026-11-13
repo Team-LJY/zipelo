@@ -598,3 +598,105 @@ fn unanswered_close_confirmation_does_not_close_when_work_finishes() {
     policy_render(&ctx, &mut app, vec![]);
     assert_eq!(app.model.close, Close::Allowed);
 }
+
+#[test]
+fn resource_prompt_is_not_covered_by_separate_work_window() {
+    let factory = FakeFactory::manual();
+    let mut app = ArchiveApp::new(Box::new(factory.clone()), None, false);
+    assert!(app.model.begin(
+        Start::List {
+            archive: std::env::current_dir().unwrap().join("large.zip")
+        },
+        &mut factory.clone()
+    ));
+    {
+        let mut worker = factory.state.borrow_mut();
+        worker.frame(Event::Accepted { encryption: true });
+        worker.frame(Event::ResourceRequired(ResourceChallenge {
+            id: 17,
+            action: ActionKind::List,
+            scope: ResourceScope {
+                ratio: true,
+                ..Default::default()
+            },
+            usage: ResourceUsage::default(),
+            soft_limits: Limits::default(),
+            ceiling: Limits::default(),
+        }));
+    }
+    let ctx = egui::Context::default();
+    ctx.set_embed_viewports(false);
+    install_work_child_renderer();
+    for _ in 0..12 {
+        policy_render(&ctx, &mut app, vec![]);
+    }
+    assert!(app.model.resource.is_some());
+    WORK_CHILD.with(|child| child.borrow_mut().rendered = 0);
+    for _ in 0..3 {
+        policy_render(&ctx, &mut app, vec![]);
+    }
+    assert_eq!(work_rendered(), 0);
+}
+
+#[test]
+fn expanded_retry_action_fits_native_work_window_and_starts_a_new_job() {
+    let factory = FakeFactory::manual();
+    let mut app = ArchiveApp::new(Box::new(factory.clone()), None, false);
+    app.open_path(std::env::current_dir().unwrap().join("large.zip"));
+    let old_job = app.model.job_id().unwrap();
+    {
+        let mut worker = factory.state.borrow_mut();
+        worker.frame(Event::Accepted { encryption: true });
+        worker.frame(Event::Terminal(Terminal {
+            outcome: Outcome::Failed,
+            error: Some(ErrorCode::Limit),
+            publication: Publication::None,
+            created_count: 0,
+            retained_partial_count: 0,
+            durability: Durability::NotApplicable,
+            cleanup: Cleanup::Complete,
+        }));
+        worker.queue.extend([
+            HostEvent::StdoutEof,
+            HostEvent::StderrEof,
+            HostEvent::Exited { success: true },
+        ]);
+    }
+    let ctx = egui::Context::default();
+    ctx.set_embed_viewports(false);
+    install_work_child_renderer();
+    for _ in 0..12 {
+        policy_render(&ctx, &mut app, vec![]);
+    }
+    assert!(app.model.can_retry_expanded());
+    let point = work_child_label("한도를 늘려 다시 시도").unwrap();
+    let width = WORK_CHILD.with(|child| {
+        child
+            .borrow()
+            .builders
+            .last()
+            .unwrap()
+            .1
+            .inner_size
+            .unwrap()
+            .x
+    });
+    let text_width = ctx.fonts_mut(|fonts| {
+        fonts
+            .layout_no_wrap(
+                "한도를 늘려 다시 시도".into(),
+                egui::FontId::proportional(16.0),
+                egui::Color32::BLACK,
+            )
+            .size()
+            .x
+    });
+    assert!(
+        point.x + text_width / 2.0 <= width - 16.0,
+        "버튼 글자가 창을 벗어남: {point:?} / {text_width} / {width}"
+    );
+    work_child_click(&ctx, &mut app, point);
+    assert!(app.model.busy());
+    assert_ne!(app.model.job_id(), Some(old_job));
+    assert!(factory.state.borrow().expanded);
+}

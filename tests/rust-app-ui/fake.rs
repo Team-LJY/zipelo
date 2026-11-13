@@ -6,6 +6,8 @@ pub struct State {
     pub requests: Vec<(u64, &'static str)>,
     pub starts: Vec<Start>,
     pub password_seen: bool,
+    pub expanded: bool,
+    pub resources: Vec<(u64, ResourceScope, bool)>,
     /// 마지막으로 받은 암호 원문. 화면에서 입력한 암호가 그대로 전달됐는지 확인할 때 씀.
     pub password: Vec<u8>,
     pub job: u64,
@@ -130,8 +132,11 @@ impl Connection for FakeConnection {
     fn send(&mut self, request: Request) -> Result<(), String> {
         let mut s = self.state.borrow_mut();
         assert_eq!(s.job, request.job_id);
+        if matches!(&request.command, Command::StartExpanded(_)) {
+            s.expanded = true;
+        }
         match request.command {
-            Command::Start(start) => {
+            Command::Start(start) | Command::StartExpanded(start) => {
                 if let Start::Extract {
                     list_id,
                     gzip_output_name,
@@ -183,6 +188,13 @@ impl Connection for FakeConnection {
                 if !s.manual {
                     s.complete_action();
                 }
+            }
+            Command::ResourceReply {
+                challenge_id,
+                scope,
+                allow,
+            } => {
+                s.resources.push((challenge_id, scope, allow));
             }
             Command::Cancel => {
                 s.requests.push((request.sequence, "cancel"));

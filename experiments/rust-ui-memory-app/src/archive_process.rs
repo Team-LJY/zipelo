@@ -228,6 +228,21 @@ fn event_to_ui(
         wire::Message::Accepted { action, encryption } if expected == Some(action) => {
             ui::Event::Accepted { encryption }
         }
+        wire::Message::ResourceRequired {
+            challenge_id,
+            action,
+            scope,
+            usage,
+            soft_limits,
+            ceiling,
+        } if expected == Some(action) => ui::Event::ResourceRequired(ui::ResourceChallenge {
+            id: challenge_id,
+            action,
+            scope,
+            usage,
+            soft_limits,
+            ceiling,
+        }),
         wire::Message::Entry(entry) => ui::Event::Entry(ui::Entry {
             id: entry.entry_id,
             name: entry.name,
@@ -451,15 +466,38 @@ impl ui::Connection for ProcessConnection {
             return Err("작업자 요청 채널이 닫혔거나 순서가 올바르지 않습니다".into());
         }
         let is_cancel = matches!(request.command, ui::Command::Cancel);
+        let expanded = matches!(&request.command, ui::Command::StartExpanded(_));
         let message = match request.command {
-            ui::Command::Start(start) => {
+            ui::Command::Start(start) | ui::Command::StartExpanded(start) => {
                 let start = start_to_wire(start);
                 *self.expected.lock().map_err(|_| {
                     self.stop.store(true, Ordering::Release);
                     "작업자 요청 상태 오류"
                 })? = Some(start.action.kind());
-                wire::Message::Start(start)
+                let ceiling = if expanded {
+                    wire::Limits {
+                        input: u64::MAX,
+                        output: 64 * 1024 * 1024 * 1024,
+                        entries: 200_000,
+                    }
+                } else {
+                    wire::Limits::default()
+                };
+                wire::Message::StartGuarded(wire::GuardedStart {
+                    start,
+                    ceiling,
+                    interactive: false,
+                })
             }
+            ui::Command::ResourceReply {
+                challenge_id,
+                scope,
+                allow,
+            } => wire::Message::ResourceReply {
+                challenge_id,
+                scope,
+                allow,
+            },
             ui::Command::Cancel => wire::Message::Cancel,
             ui::Command::Password {
                 challenge_id,

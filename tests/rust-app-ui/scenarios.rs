@@ -21,6 +21,10 @@ macro_rules! catalog {
 }
 
 catalog! {
+    "resource-approval" => "처리 전 큰 작업 승인",
+    "resource-ratio" => "고압축 작업 경고와 미확인 값",
+    "resource-retry" => "출력 없는 한도 실패 후 확대 재시도",
+    "resource-partial" => "일부 출력 후 한도 중단",
     "empty" => "빈 첫 화면",
     "archive" => "폴더와 파일이 있는 압축파일",
     "tar-bz2" => "TAR.BZ2 목록과 자동 해제 폴더",
@@ -285,11 +289,71 @@ impl Scenario {
                 "사진/풍경.jpg".into(),
             ])
         });
+        if self.name == "resource-approval" {
+            app.model.entries[1].bytes = Some(17 * 1024 * 1024 * 1024);
+        }
         assert!(app.start(request));
         {
             let mut state = state.borrow_mut();
             state.frame(Event::Accepted { encryption: true });
             match self.name {
+                "resource-approval" | "resource-ratio" => {
+                    let expanded = self.name == "resource-approval";
+                    state.frame(Event::ResourceRequired(ResourceChallenge {
+                        id: 1,
+                        action: ActionKind::Extract,
+                        scope: ResourceScope {
+                            output: expanded,
+                            entries: expanded,
+                            ratio: !expanded,
+                        },
+                        usage: ResourceUsage {
+                            available_bytes: Some(90 * 1024 * 1024 * 1024),
+                            actual_bytes: (!expanded).then_some(300 * 1024 * 1024),
+                            ratio_output_bytes: (!expanded).then_some(300 * 1024 * 1024),
+                            compressed_bytes: (!expanded).then_some(4096),
+                            ..ResourceUsage::default()
+                        },
+                        soft_limits: Limits::default(),
+                        ceiling: if expanded {
+                            Limits {
+                                input: u64::MAX,
+                                output: 64 * 1024 * 1024 * 1024,
+                                entries: 200_000,
+                            }
+                        } else {
+                            Limits::default()
+                        },
+                    }));
+                }
+                "resource-retry" | "resource-partial" => {
+                    let partial = self.name == "resource-partial";
+                    if partial {
+                        state.frame(Event::Output {
+                            entry_id: Some(1),
+                            relative_name: "읽어주세요.txt".into(),
+                            disposition: Disposition::Created,
+                        });
+                    }
+                    state.frame(Event::Terminal(Terminal {
+                        outcome: Outcome::Failed,
+                        error: Some(ErrorCode::Limit),
+                        publication: if partial {
+                            Publication::Partial
+                        } else {
+                            Publication::None
+                        },
+                        created_count: u64::from(partial),
+                        retained_partial_count: 0,
+                        durability: Durability::Synced,
+                        cleanup: Cleanup::Complete,
+                    }));
+                    state.queue.extend([
+                        HostEvent::StdoutEof,
+                        HostEvent::StderrEof,
+                        HostEvent::Exited { success: true },
+                    ]);
+                }
                 "password" | "password-retry" | "password-create" => {
                     state.frame(Event::PasswordRequired {
                         challenge_id: 17,

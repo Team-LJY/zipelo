@@ -870,3 +870,5 @@ fn password_validation_and_retry_do_not_erase_transport_failure() {
 mod presentation;
 
 mod windows_paths;
+
+mod guarded;

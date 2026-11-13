@@ -181,7 +181,7 @@ impl Factory for CaptureFactory {
 impl Connection for CaptureConnection {
     fn send(&mut self, request: Request) -> Result<(), String> {
         match request.command {
-            Command::Start(start) => {
+            Command::Start(start) | Command::StartExpanded(start) => {
                 self.event(Event::Accepted { encryption: true });
                 match start {
                     Start::List { .. } => {
@@ -247,6 +247,7 @@ impl Connection for CaptureConnection {
                 }
             }
             Command::Password { .. } => self.finish(false),
+            Command::ResourceReply { .. } => {}
             Command::Cancel => {
                 self.event(Event::CancelAck {
                     request_sequence: request.sequence,
