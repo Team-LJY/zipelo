@@ -215,8 +215,9 @@ fn entries_over_one_hundred_thousand_are_accepted_only_after_entry_approval() {
 }
 
 #[test]
-fn output_history_ceiling_expands_only_after_entry_permission() {
-    for approved in [false, true] {
+fn output_history_ceiling_matches_approved_metadata_nodes() {
+    for permission in 0..4 {
+        let approved = permission != 0;
         let mut m = Model::default();
         let mut f = FakeFactory::manual();
         assert!(m.begin(
@@ -236,9 +237,9 @@ fn output_history_ceiling_expands_only_after_entry_permission() {
             let mut q = question(1);
             q.action = ActionKind::CreateZip;
             q.scope = ResourceScope {
-                output: true,
-                entries: true,
-                ratio: false,
+                output: permission == 1,
+                entries: permission == 2,
+                ratio: permission == 3,
             };
             q.ceiling = Limits {
                 input: u64::MAX,
@@ -248,7 +249,7 @@ fn output_history_ceiling_expands_only_after_entry_permission() {
             receive(&mut m, &f, Event::ResourceRequired(q));
             assert!(m.resource_reply(m.job_id().unwrap(), 1, true));
         }
-        let cap = if approved { 200_000 } else { 100_000 };
+        let cap = if approved { 262_144 } else { 100_000 };
         for n in 0..=cap {
             assert!(m.error.is_none(), "{n}");
             receive(
@@ -264,4 +265,65 @@ fn output_history_ceiling_expands_only_after_entry_permission() {
         assert_eq!(m.outputs.len(), cap);
         assert!(m.error.is_some());
     }
+}
+
+#[test]
+fn approved_implicit_directories_do_not_fail_valid_extraction() {
+    let mut m = Model::default();
+    let mut f = FakeFactory::default();
+    list(&mut m, &mut f);
+    m.entries[0].bytes = Some(Limits::default().output + 1);
+    f.state.borrow_mut().manual = true;
+    assert!(m.extract(path("out"), false, None, &mut f));
+    receive(&mut m, &f, Event::Accepted { encryption: true });
+    let mut q = question(1);
+    q.action = ActionKind::Extract;
+    q.scope = ResourceScope {
+        output: true,
+        entries: true,
+        ratio: false,
+    };
+    q.ceiling = Limits {
+        input: u64::MAX,
+        output: 64 * 1024 * 1024 * 1024,
+        entries: 200_000,
+    };
+    receive(&mut m, &f, Event::ResourceRequired(q));
+    assert!(m.resource_reply(m.job_id().unwrap(), 1, true));
+    for id in 0..100_001 {
+        for name in [format!("d{id}"), format!("d{id}/f")] {
+            receive(
+                &mut m,
+                &f,
+                Event::Output {
+                    entry_id: None,
+                    relative_name: name,
+                    disposition: Disposition::Created,
+                },
+            );
+        }
+    }
+    receive(
+        &mut m,
+        &f,
+        Event::Terminal(Terminal {
+            outcome: Outcome::Completed,
+            error: None,
+            publication: Publication::Complete,
+            created_count: 200_002,
+            retained_partial_count: 0,
+            durability: Durability::Synced,
+            cleanup: Cleanup::Complete,
+        }),
+    );
+    f.state.borrow_mut().queue.extend([
+        HostEvent::StdoutEof,
+        HostEvent::StderrEof,
+        HostEvent::Exited { success: true },
+    ]);
+    pump(&mut m);
+    assert!(m.error.is_none(), "{:?}", m.error);
+    assert!(m.confirmed);
+    assert_eq!(m.outputs.len(), 200_002);
+    assert!(!m.can_retry_expanded());
 }

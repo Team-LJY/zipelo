@@ -110,3 +110,59 @@ fn model_retry_uses_real_guarded_codec_and_requires_a_new_job_approval() {
         assert!(model.resource.is_none());
     }
 }
+
+#[test]
+fn approved_extraction_reports_implicit_parents_separately_from_entries() {
+    let scratch = Scratch::new();
+    let archive = scratch.path("implicit.zip");
+    let generated = std::process::Command::new("python3")
+        .arg("-c")
+        .arg("import sys, zipfile; z = zipfile.ZipFile(sys.argv[1], 'w'); [z.writestr(p, b'') for p in ['a/b/one', 'a/b/two', 'c/d/three']]; z.close()")
+        .arg(&archive)
+        .output()
+        .unwrap();
+    assert!(generated.status.success());
+    let mut factory = ProcessFactory::new(binary("zipelo-archive-worker"));
+    let mut model = Model::default();
+    assert!(model.begin(Start::List { archive }, &mut factory));
+    wait(&mut model);
+    assert!(model.confirmed, "{:?}", model.error);
+    assert_eq!(model.entries.len(), 3);
+    model.entries[0].bytes = Some(Limits::default().output + 1);
+    let destination = make_directory(&scratch.path("output"));
+    assert!(model.extract(destination.clone(), false, None, &mut factory));
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while model.resource.is_none() {
+        model.poll();
+        assert!(model.error.is_none(), "{:?}", model.error);
+        assert!(Instant::now() < deadline);
+        std::thread::sleep(Duration::from_millis(1));
+    }
+    let question = model.resource.clone().unwrap();
+    assert!(question.scope.output && question.scope.entries);
+    assert!(model.outputs.is_empty());
+    assert!(model.resource_reply(model.job_id().unwrap(), question.id, true));
+    wait(&mut model);
+    assert!(model.confirmed, "{:?}", model.error);
+    assert_eq!(model.terminal.as_ref().unwrap().outcome, Outcome::Completed);
+    assert_eq!(model.terminal.as_ref().unwrap().created_count, 7);
+    assert_eq!(model.outputs.len(), 7);
+    for name in ["a", "a/b", "c", "c/d"] {
+        assert!(destination.join(name).is_dir());
+        assert!(
+            model
+                .outputs
+                .iter()
+                .any(|(p, d)| p == name && *d == Disposition::Created)
+        );
+    }
+    for name in ["a/b/one", "a/b/two", "c/d/three"] {
+        assert_eq!(fs::read(destination.join(name)).unwrap(), b"");
+        assert!(
+            model
+                .outputs
+                .iter()
+                .any(|(p, d)| p == name && *d == Disposition::Created)
+        );
+    }
+}

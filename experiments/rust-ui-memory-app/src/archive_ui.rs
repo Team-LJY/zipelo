@@ -867,8 +867,9 @@ impl Model {
                         ..
                     } => {
                         if self.outputs.len()
-                            < if run.granted.entries {
-                                200_000
+                            < if run.granted.any() {
+                                // 암묵적 상위 폴더도 출력되므로 작업자 노드 예산과 맞춤
+                                262_144
                             } else {
                                 100_000
                             }
