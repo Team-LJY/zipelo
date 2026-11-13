@@ -3,11 +3,13 @@
 #[derive(Default)]
 struct WorkChild {
     events: Vec<egui::Event>,
+    focus: Option<egui::Id>,
     labels: Vec<(String, egui::Pos2)>,
     rendered: usize,
     cursor: Option<egui::CursorIcon>,
     rects: Vec<(egui::Rect, egui::Color32)>,
     commands: Vec<egui::ViewportCommand>,
+    builders: Vec<(egui::ViewportId, egui::ViewportBuilder)>,
     /// 다음에 그리는 별도 창에 운영체제의 닫기(X) 요청을 보냄.
     close: bool,
 }
@@ -23,6 +25,9 @@ fn install_work_child_renderer() {
     egui::Context::set_immediate_viewport_renderer(|ctx, mut viewport| {
         let (events, close) = WORK_CHILD.with(|child| {
             let mut child = child.borrow_mut();
+            child
+                .builders
+                .push((viewport.ids.this, viewport.builder.clone()));
             (
                 std::mem::take(&mut child.events),
                 std::mem::take(&mut child.close),
@@ -54,7 +59,12 @@ fn install_work_child_renderer() {
                 ..Default::default()
             },
         );
-        let mut output = ctx.run_ui(raw, |ui| (viewport.viewport_ui_cb)(ui));
+        let mut output = ctx.run_ui(raw, |ui| {
+            if let Some(id) = WORK_CHILD.with(|child| child.borrow_mut().focus.take()) {
+                ui.ctx().memory_mut(|memory| memory.request_focus(id));
+            }
+            (viewport.viewport_ui_cb)(ui);
+        });
         output.textures_delta.clear();
         WORK_CHILD.with(|child| {
             let mut child = child.borrow_mut();

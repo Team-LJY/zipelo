@@ -75,8 +75,8 @@ impl Dialogs for NativeDialogs {
         .unwrap_or_else(|_| Err(DIALOG_UNAVAILABLE.into()))
     }
 
-    // 포털 응답을 화면 스레드에서 기다리면 창이 이벤트를 처리하지 못해 "응답 없음"으로 표시됨.
-    #[cfg(target_os = "linux")]
+    // 파일 창을 기다리는 동안에도 자식 창의 우선순위와 입력 차단을 갱신함.
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
     fn start(&mut self, request: DialogRequest) -> PendingDialog {
         let (sender, receiver) = std::sync::mpsc::channel();
         match std::thread::Builder::new()
