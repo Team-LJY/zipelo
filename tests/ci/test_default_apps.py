@@ -62,6 +62,64 @@ elif sys.argv[1] == "default":
         self.assertEqual(self.choice(), "before.desktop")
         self.assertFalse(self.state.exists())
 
+    def test_nodisplay_previous_app_is_restored(self):
+        with (self.data / "before.desktop").open("a") as desktop:
+            desktop.write("NoDisplay=true\n")
+        self.run_helper("install")
+        self.run_helper("remove")
+        self.assertEqual(self.choice(), "before.desktop")
+        self.assertFalse(self.state.exists())
+
+    def test_nodisplay_failed_restore_keeps_record_for_retry(self):
+        with (self.data / "before.desktop").open("a") as desktop:
+            desktop.write("NoDisplay=true\n")
+        self.run_helper("install")
+        self.env["FAIL_RESTORE"] = "1"
+        self.run_helper("remove")
+        self.assertEqual((self.state / "zip").read_text(), "before.desktop\n")
+        self.assertEqual(self.choice(), "zipelo.desktop")
+        del self.env["FAIL_RESTORE"]
+        self.run_helper("remove")
+        self.assertEqual(self.choice(), "before.desktop")
+        self.assertFalse(self.state.exists())
+
+    def test_nodisplay_restore_with_real_xdg_mime(self):
+        (self.bin / "xdg-mime").unlink()
+        (self.data / "before.desktop").write_text(
+            "[Desktop Entry]\nType=Application\nName=Archive\n"
+            "Exec=/usr/bin/true %f\nNoDisplay=true\nMimeType=application/zip;\n"
+        )
+        (self.data / "zipelo.desktop").write_text(
+            "[Desktop Entry]\nType=Application\nName=Zipelo\n"
+            "Exec=/usr/bin/true %f\nMimeType=application/zip;\n"
+        )
+        (self.root / "config").mkdir()
+        self.env.update(
+            XDG_CONFIG_HOME=str(self.root / "config"),
+            XDG_CONFIG_DIRS=str(self.root / "system-config"),
+            XDG_CURRENT_DESKTOP="X-Generic",
+            DE="generic",
+        )
+        for key in ("DISPLAY", "WAYLAND_DISPLAY", "DBUS_SESSION_BUS_ADDRESS"):
+            self.env.pop(key, None)
+        subprocess.run(
+            ["xdg-mime", "default", "before.desktop", "application/zip"],
+            env=self.env, check=True,
+        )
+
+        def selected():
+            return subprocess.check_output(
+                ["xdg-mime", "query", "default", "application/zip"],
+                env=self.env, text=True,
+            ).strip()
+
+        self.assertEqual(selected(), "before.desktop")
+        self.run_helper("install")
+        self.assertEqual(selected(), "zipelo.desktop")
+        self.run_helper("remove")
+        self.assertEqual(selected(), "before.desktop")
+        self.assertFalse(self.state.exists())
+
     def test_changed_choice_is_preserved(self):
         self.run_helper("install")
         self.db.write_text(json.dumps({"application/zip": "changed.desktop"}))

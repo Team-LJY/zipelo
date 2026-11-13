@@ -33,7 +33,7 @@ available() {
     for directory in "${XDG_DATA_HOME:-$HOME/.local/share}" ${XDG_DATA_DIRS:-/usr/local/share:/usr/share}; do
         if [ -f "$directory/applications/$1" ]; then
             IFS=$old_ifs
-            if grep -Eq '^(Hidden|NoDisplay)=true[[:space:]]*$' "$directory/applications/$1"; then
+            if grep -Eq '^Hidden=true[[:space:]]*$' "$directory/applications/$1"; then
                 return 1
             fi
             return 0
