@@ -50,7 +50,7 @@ XZ의 헤더, 인덱스, 푸터 CRC와 역방향 크기 및 전체 선언 해제
 - [bzip2 0.6.1](https://docs.rs/crate/bzip2/0.6.1/source/Cargo.toml)은 MIT OR Apache-2.0이며 기본 백엔드가 Rust 구현인 libbz2-rs-sys입니다. 고정 lockfile은 libbz2-rs-sys 0.2.6(bzip2-1.0.6 자유 라이선스)을 선택하고 Rust 할당자를 사용합니다. C 구현인 bzip2-sys 기능과 stdio/C 할당자는 활성화하지 않습니다.
 - [lzma-rust2 0.25.0](https://docs.rs/lzma-rust2/latest/lzma_rust2/struct.XzReader.html)은 Apache-2.0의 Rust 구현입니다. std와 xz만 활성화해 인코더와 다중 스레드 구현을 제외하고 사전 할당 전 메모리 제한을 적용합니다. CRC와 인덱스 레코드 개수를 검증하며 연결 스트림을 끝까지 읽습니다. 레코드별 크기는 작업자가 별도로 대조합니다.
 - 두 라이브러리와 새 전이 의존성의 원문은 Cargo 체크섬을 대조하는 기존 packaging/licenses.py가 고지에 자동 포함합니다. tests/release-packages/test_compressed_tar_licenses.py는 실제 고지에 세 압축 라이브러리의 원문과 해시가 포함되고 C 압축 백엔드가 없는지 확인합니다.
-- 2026-11-13 [RustSec 공개 목록](https://rustsec.org/advisories/)에서 bzip2, libbz2-rs-sys, lzma-rust2 이름의 항목은 찾지 못했습니다. 새 전이 sha2 0.11.1은 RUSTSEC-2021-0100의 수정 범위(>=0.9.8)에 해당합니다. 전체 최신 DB 자동 감사와 취약점 부재를 보장하는 확인은 수행하지 않았습니다.
+- 2026-11-13 [RUSTSEC-2023-0004](https://rustsec.org/advisories/RUSTSEC-2023-0004.html)의 bzip2 DoS 권고와 수정 범위(>=0.4.4)를 확인했습니다. 고정 lockfile의 bzip2 0.6.1은 수정 범위에 해당하므로 이 권고의 영향을 받지 않습니다. 새 전이 sha2 0.11.1은 RUSTSEC-2021-0100의 수정 범위(>=0.9.8)에 해당합니다. 전체 최신 DB 자동 감사와 취약점 부재를 보장하는 확인은 수행하지 않았습니다.
 
 Python 표준 bz2, lzma와 tarfile로 독립 생성 및 해제한 결과의 SHA256과 실제 작업자 결과를 비교합니다. tests/rust-archive-worker/compressed_tar.rs는 정상, 빈 TAR, 연결 스트림, XZ 필터와 체크 방식, 잘림과 손상, 푸터/인덱스 크기, 큰 사전, 작은 출력 한도의 압축 폭탄, 한도 경계, 경로 이탈, 링크, 목록 식별자와 선택, 취소 및 디코더 임시 공간 실패를 검증합니다.
 
