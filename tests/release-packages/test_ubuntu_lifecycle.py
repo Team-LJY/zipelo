@@ -34,6 +34,7 @@ class LifecycleTests(unittest.TestCase):
         log = self.directory / "calls"
         scripts = {
             "update-desktop-database": "#!/bin/sh\nexit 0\n",
+            "gtk-update-icon-cache": "#!/bin/sh\nexit 0\n",
             "getent": '#!/bin/sh\nprintf "tester:x:1000:1000::%s:/bin/sh\\n" "$TEST_HOME"\n',
             "runuser": '#!/bin/sh\nprintf "%s\\n" "$*" >> "$TEST_LOG"\n',
         }
