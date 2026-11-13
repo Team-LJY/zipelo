@@ -23,8 +23,8 @@ macro_rules! catalog {
 catalog! {
     "resource-approval" => "처리 전 큰 작업 승인",
     "resource-ratio" => "고압축 작업 경고와 미확인 값",
-    "resource-retry" => "출력 없는 한도 실패 후 확대 재시도",
-    "resource-partial" => "일부 출력 후 한도 중단",
+    "resource-retry" => "주 창 모달에서 출력 없는 한도 실패 후 확대 재시도",
+    "resource-partial" => "주 창 모달에서 일부 출력 후 한도 중단",
     "empty" => "빈 첫 화면",
     "archive" => "폴더와 파일이 있는 압축파일",
     "tar-bz2" => "TAR.BZ2 목록과 자동 해제 폴더",

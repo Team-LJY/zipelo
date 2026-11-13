@@ -639,7 +639,7 @@ fn resource_prompt_is_not_covered_by_separate_work_window() {
 }
 
 #[test]
-fn expanded_retry_action_fits_native_work_window_and_starts_a_new_job() {
+fn limit_result_uses_main_modal_and_retry_starts_a_new_job() {
     let factory = FakeFactory::manual();
     let mut app = ArchiveApp::new(Box::new(factory.clone()), None, false);
     app.open_path(std::env::current_dir().unwrap().join("large.zip"));
@@ -669,34 +669,28 @@ fn expanded_retry_action_fits_native_work_window_and_starts_a_new_job() {
         policy_render(&ctx, &mut app, vec![]);
     }
     assert!(app.model.can_retry_expanded());
-    let point = work_child_label("한도를 늘려 다시 시도").unwrap();
-    let width = WORK_CHILD.with(|child| {
-        child
-            .borrow()
-            .builders
-            .last()
-            .unwrap()
-            .1
-            .inner_size
-            .unwrap()
-            .x
-    });
-    let text_width = ctx.fonts_mut(|fonts| {
-        fonts
-            .layout_no_wrap(
-                "한도를 늘려 다시 시도".into(),
-                egui::FontId::proportional(16.0),
-                egui::Color32::BLACK,
-            )
-            .size()
-            .x
-    });
-    assert!(
-        point.x + text_width / 2.0 <= width - 16.0,
-        "버튼 글자가 창을 벗어남: {point:?} / {text_width} / {width}"
-    );
-    work_child_click(&ctx, &mut app, point);
+    let rendered = WORK_CHILD.with(|child| child.borrow().rendered);
+    let shown = policy_render(&ctx, &mut app, vec![]);
+    assert!(shown.iter().any(|(text, _)| text == "한도를 늘려 다시 시도"));
+    assert_eq!(WORK_CHILD.with(|child| child.borrow().rendered), rendered);
+    policy_click(&ctx, &mut app, "한도를 늘려 다시 시도");
     assert!(app.model.busy());
     assert_ne!(app.model.job_id(), Some(old_job));
     assert!(factory.state.borrow().expanded);
+}
+
+
+#[test]
+fn partial_limit_result_is_visible_in_main_modal_without_native_child() {
+    let ctx = egui::Context::default();
+    ctx.set_embed_viewports(false);
+    install_work_child_renderer();
+    let mut app = zipelo_ui_memory_app::archive_screen::scenarios::parse("resource-partial").unwrap().build();
+    let mut shown = Vec::new();
+    for _ in 0..3 {
+        shown = policy_render(&ctx, &mut app, vec![]);
+    }
+    assert!(shown.iter().any(|(text, _)| text.contains("저장 위치를 확인하세요")));
+    assert!(!shown.iter().any(|(text, _)| text == "한도를 늘려 다시 시도"));
+    assert_eq!(WORK_CHILD.with(|child| child.borrow().rendered), 0);
 }

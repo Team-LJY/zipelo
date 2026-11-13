@@ -987,7 +987,7 @@ impl ArchiveApp {
                 );
                 theme::status_text(ui, rect, &format!("선택 {selected}개"), half, Align::Max);
             });
-        if ctx.embed_viewports() && self.work_visible() {
+        if ctx.embed_viewports() && self.work_visible() && !self.limit_result_visible() {
             // 별도 창을 만들 수 없을 때만 쓰는 대체 배치. 목록을 가리지 않도록 하단에 둠.
             egui::Panel::bottom("archive-work")
                 .frame(theme::panel(theme::PANEL).corner_radius(0))
@@ -1008,6 +1008,7 @@ impl ArchiveApp {
             });
         self.forget_password_history(&ctx);
         self.work_window(&ctx);
+        self.limit_result_dialog(&ctx);
         self.create_window(&ctx);
         if self.model.challenge.is_some() {
             self.password_dialog(&ctx, new_challenge);
@@ -1571,6 +1572,26 @@ impl ArchiveApp {
             })
     }
 
+    fn limit_result_visible(&self) -> bool {
+        self.result_visible()
+            && self
+                .model
+                .terminal
+                .as_ref()
+                .is_some_and(|terminal| terminal.error == Some(ErrorCode::Limit))
+    }
+
+    fn limit_result_dialog(&mut self, ctx: &egui::Context) {
+        if !self.limit_result_visible() || self.main_modal_open() {
+            return;
+        }
+        egui::Modal::new(egui::Id::new("archive-limit-result")).show(ctx, |ui| {
+            ui.set_width((ctx.content_rect().width() - 64.0).min(WORK_WIDTH));
+            ui.heading("작업 결과");
+            self.work_area(ui);
+        });
+    }
+
     fn error_notice(ui: &mut egui::Ui, error: &str) {
         let response = theme::panel(theme::ERROR_BG)
             .show(ui, |ui| {
@@ -1601,6 +1622,10 @@ impl ArchiveApp {
     fn work_window(&mut self, ctx: &egui::Context) {
         if !self.work_visible() {
             self.work = WorkWindow::default();
+            return;
+        }
+        if self.limit_result_visible() {
+            self.work.open = false;
             return;
         }
         if ctx.embed_viewports() {
