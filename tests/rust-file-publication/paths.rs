@@ -5,7 +5,7 @@ use std::{
     fs,
     os::unix::{
         ffi::{OsStrExt, OsStringExt},
-        fs::{MetadataExt, symlink},
+        fs::{FileTypeExt, MetadataExt, symlink},
         net::UnixListener,
     },
     path::{Path, PathBuf},
@@ -171,6 +171,42 @@ enum Existing {
     Socket,
 }
 
+fn bind_socket(output: &Path) -> UnixListener {
+    // Cargo 시험의 현재 디렉터리 기준으로 소켓 주소만 짧게 지정함.
+    let current = std::env::current_dir().unwrap();
+    let relative = output.strip_prefix(&current).unwrap();
+    UnixListener::bind(relative).unwrap()
+}
+
+#[test]
+fn socket_conflict_preserves_output_beyond_absolute_address_limit() {
+    let sandbox = Sandbox::new();
+    let padding = 108usize
+        .saturating_sub(sandbox.root.as_os_str().as_bytes().len() + "/output".len())
+        .max(1);
+    let parent = sandbox.dir("p".repeat(padding));
+    let output = parent.join("output");
+    assert!(output.as_os_str().as_bytes().len() >= 108);
+    let listener = bind_socket(&output);
+    let before = fs::symlink_metadata(&output).unwrap();
+    assert!(before.file_type().is_socket());
+    conflict(
+        publish(
+            &parent,
+            OsStr::new("output"),
+            b"replacement",
+            Limits::default(),
+        ),
+        11,
+    );
+    let after = fs::symlink_metadata(&output).unwrap();
+    assert!(after.file_type().is_socket());
+    assert_eq!((before.dev(), before.ino()), (after.dev(), after.ino()));
+    assert_eq!(names(&parent), vec![OsString::from("output")]);
+    drop(listener);
+    sandbox.finish();
+}
+
 fn existing(kind: Existing) {
     let sandbox = Sandbox::new();
     let parent = sandbox.parent();
@@ -195,7 +231,7 @@ fn existing(kind: Existing) {
             assert_eq!(unsafe { libc::mkfifo(raw.as_ptr(), 0o600) }, 0);
         }
         Existing::Socket => {
-            listener = Some(UnixListener::bind(&output).unwrap());
+            listener = Some(bind_socket(&output));
         }
     }
     let before = fs::symlink_metadata(&output).unwrap();

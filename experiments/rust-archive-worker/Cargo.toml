@@ -7,6 +7,8 @@ publish = false
 autotests = false
 
 [dependencies]
+bzip2 = "=0.6.1"
+lzma-rust2 = { version = "=0.25.0", default-features = false, features = ["std", "xz"] }
 aes = { version = "=0.8.4", features = ["zeroize"] }
 hmac = "=0.12.1"
 pbkdf2 = { version = "=0.12.2", default-features = false, features = ["hmac"] }
@@ -24,4 +26,10 @@ path = "../../tests/rust-archive-worker/main.rs"
 
 # 대용량 시험의 CRC와 Deflate에도 배포판의 최적화를 적용함.
 [profile.dev.package.zlib-rs]
+opt-level = 3
+
+[profile.dev.package.libbz2-rs-sys]
+opt-level = 3
+
+[profile.dev.package.lzma-rust2]
 opt-level = 3

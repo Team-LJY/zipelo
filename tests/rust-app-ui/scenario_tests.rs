@@ -100,7 +100,8 @@ fn every_listed_scenario_draws_and_keeps_its_expected_screen() {
                 "uninstall-settings-error" => "Windows 설정을 열지 못했습니다",
                 "uninstall-ubuntu-missing" => "이전 앱을 복원할 수 없습니다",
                 "uninstall-ubuntu-unknown-user" => "사용자 기본 앱 설정은 변경하지 않습니다",
-                "empty" => "압축파일",
+                "empty" => "TAR.BZ2, TAR.XZ",
+                "tar-bz2" | "tar-xz" => "읽어주세요.txt",
                 "folder-empty" => "이 폴더는 비어 있습니다",
                 "dialog-error" => "파일 선택 창을 열 수 없습니다",
                 "extract-partial" => "일부 파일만 풀렸습니다",
@@ -123,6 +124,13 @@ fn every_listed_scenario_draws_and_keeps_its_expected_screen() {
                 _ => "읽어주세요.txt",
             };
             assert!(labels.contains(expected), "{}: {labels}", scenario.name);
+            if matches!(scenario.name, "tar-bz2" | "tar-xz") {
+                assert!(app.model.entries.iter().all(|entry| !entry.encrypted));
+                assert_eq!(
+                    app.model.list_id.as_ref().unwrap().format,
+                    zipelo_ui_memory_app::archive_ui::Format::Tar
+                );
+            }
             if scenario.name == "many-items" {
                 assert_eq!(app.model.entries.len(), 505);
             }

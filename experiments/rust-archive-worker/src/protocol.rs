@@ -255,6 +255,12 @@ pub enum PasswordPurpose {
     Decrypt,
     Encrypt,
 }
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ConflictChoice {
+    Overwrite,
+    Skip,
+    Rename,
+}
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Terminal {
     pub outcome: Outcome,
@@ -285,6 +291,12 @@ pub enum Message {
         secret: Secret,
     },
     Cancel,
+    StartInteractive(Start),
+    ConflictReply {
+        challenge_id: u64,
+        choice: ConflictChoice,
+        apply_to_remaining: bool,
+    },
     Accepted {
         action: ActionKind,
         encryption: bool,
@@ -314,5 +326,17 @@ pub enum Message {
     CancelAck {
         request_sequence: u64,
         status: CancelStatus,
+    },
+    ConflictRequired {
+        challenge_id: u64,
+        entry_id: u32,
+        relative_name: String,
+        incoming_size: u64,
+        existing_size: u64,
+    },
+    ConflictResolved {
+        entry_id: u32,
+        relative_name: String,
+        choice: ConflictChoice,
     },
 }

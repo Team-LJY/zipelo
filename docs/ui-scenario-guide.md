@@ -42,6 +42,8 @@ cargo +1.99.1 build --locked --manifest-path experiments/rust-ui-memory-app/Carg
 ## 상황과 확인할 점
 
 - empty: 빈 첫 화면. 파일 열기 안내와 툴바 배치를 확인한다.
+- tar-bz2: TAR.BZ2 목록. 제목표시줄의 파일 이름과 목록을 확인한다.
+- tar-xz: TAR.XZ 목록. 제목표시줄의 대소문자가 섞인 복합 확장자와 목록을 확인한다.
 - archive: 파일과 폴더가 있는 압축파일. 이름, 크기, 잠금 아이콘과 상태 줄을 확인한다.
 - folder: 사진 폴더 내부. 상위 폴더 이동과 경로 줄을 확인한다.
 - many-items: 기본 5개 외에 500개 파일을 추가한 목록. 스크롤바와 행 배치를 확인한다.
@@ -97,6 +99,8 @@ python3 tests/ci/run_rust.py local
 
 화면에 새 창, 버튼, 메시지, 상태 또는 오류를 추가하거나 바꾸면 같은 PR에서 상황, 시험과 이 가이드를 갱신한다. 화면 변화가 없으면 PR 본문에 "UI 변경 없음"이라고 적는다. 사용자가 직접 올린 UI 변경에서 빠진 상황은 병합 뒤 프론트엔드 담당이 보완한다.
 
+
+TAR.BZ2와 TAR.XZ의 자동 해제 폴더 이름은 미리보기에 표시되지 않는다. tests/rust-app-ui/presentation.rs의 이름 시험과 tests/rust-app-real-worker/compressed_tar_flows.rs의 실제 작업자 시험에서 복합 확장자 제거와 해제 결과를 확인한다.
 
 ## 설치 프로그램의 제거 안내
 

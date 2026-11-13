@@ -58,7 +58,7 @@ Architecture: amd64
 Maintainer: Zipelo contributors <hoshinohinata.dev@gmail.com>
 Section: utils
 Priority: optional
-Depends: libc6 (>= 2.39), libgcc-s1, libx11-6, libxkbcommon0, libwayland-client0, libegl1, libgl1, libfontconfig1, fonts-noto-cjk, xdg-utils, desktop-file-utils
+Depends: libc6 (>= 2.39), libgcc-s1, libx11-6, libxkbcommon0, libxkbcommon-x11-0, libwayland-client0, libegl1, libgl1, libfontconfig1, fonts-noto-cjk, xdg-utils, desktop-file-utils
 Description: Lightweight Rust archive application
  ZIP, 7z, TAR, GZ and TAR.GZ archive application with a separate worker.
 """)

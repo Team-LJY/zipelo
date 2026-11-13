@@ -139,6 +139,7 @@ enumeration!(Durability{NotApplicable=0,Synced=1,Unconfirmed=2,Failed=3});
 enumeration!(Cleanup{Complete=0,Failed=1,Unconfirmed=2});
 enumeration!(CancelStatus{Requested=0,AlreadyRequested=1,TooLate=2,Finished=3});
 enumeration!(PasswordPurpose{Decrypt=0,Encrypt=1});
+enumeration!(ConflictChoice{Overwrite=0,Skip=1,Rename=2});
 macro_rules! structure {($t:ident {$($f:ident),*})=>{impl Wire for $t {
     fn enc(&self,e:&mut Encoder)->io::Result<()> {$(self.$f.enc(e)?;)*Ok(())}
     fn dec(d:&mut Decoder<'_>)->io::Result<Self> {Ok(Self {$($f:Wire::dec(d)?,)*})}
@@ -323,6 +324,23 @@ impl Message {
                 2
             }
             Self::Cancel => 3,
+            Self::StartInteractive(v) => {
+                if !matches!(&v.action, Action::Extract { .. }) {
+                    return Err(invalid());
+                }
+                v.enc(&mut e)?;
+                4
+            }
+            Self::ConflictReply {
+                challenge_id,
+                choice,
+                apply_to_remaining,
+            } => {
+                challenge_id.enc(&mut e)?;
+                choice.enc(&mut e)?;
+                apply_to_remaining.enc(&mut e)?;
+                5
+            }
             Self::Accepted { action, encryption } => {
                 action.enc(&mut e)?;
                 encryption.enc(&mut e)?;
@@ -387,6 +405,30 @@ impl Message {
                 status.enc(&mut e)?;
                 107
             }
+            Self::ConflictRequired {
+                challenge_id,
+                entry_id,
+                relative_name,
+                incoming_size,
+                existing_size,
+            } => {
+                challenge_id.enc(&mut e)?;
+                entry_id.enc(&mut e)?;
+                relative_name.enc(&mut e)?;
+                incoming_size.enc(&mut e)?;
+                existing_size.enc(&mut e)?;
+                108
+            }
+            Self::ConflictResolved {
+                entry_id,
+                relative_name,
+                choice,
+            } => {
+                entry_id.enc(&mut e)?;
+                relative_name.enc(&mut e)?;
+                choice.enc(&mut e)?;
+                109
+            }
         };
         Ok((kind, e.bytes))
     }
@@ -406,6 +448,18 @@ impl Message {
                 }
             }
             3 => Self::Cancel,
+            4 => {
+                let start = Start::dec(&mut d)?;
+                if !matches!(&start.action, Action::Extract { .. }) {
+                    return Err(invalid());
+                }
+                Self::StartInteractive(start)
+            }
+            5 => Self::ConflictReply {
+                challenge_id: Wire::dec(&mut d)?,
+                choice: Wire::dec(&mut d)?,
+                apply_to_remaining: Wire::dec(&mut d)?,
+            },
             100 => Self::Accepted {
                 action: Wire::dec(&mut d)?,
                 encryption: Wire::dec(&mut d)?,
@@ -441,6 +495,18 @@ impl Message {
             107 => Self::CancelAck {
                 request_sequence: Wire::dec(&mut d)?,
                 status: Wire::dec(&mut d)?,
+            },
+            108 => Self::ConflictRequired {
+                challenge_id: Wire::dec(&mut d)?,
+                entry_id: Wire::dec(&mut d)?,
+                relative_name: Wire::dec(&mut d)?,
+                incoming_size: Wire::dec(&mut d)?,
+                existing_size: Wire::dec(&mut d)?,
+            },
+            109 => Self::ConflictResolved {
+                entry_id: Wire::dec(&mut d)?,
+                relative_name: Wire::dec(&mut d)?,
+                choice: Wire::dec(&mut d)?,
             },
             _ => return Err(invalid()),
         };
