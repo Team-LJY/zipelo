@@ -414,7 +414,7 @@ impl Model {
             if out.len() >= next_check {
                 check.check()?;
                 if out.len() > next_check.saturating_sub(65536) {
-                    check.activity()?;
+                    crate::resources::completed(Ok(()), check)?;
                 }
                 check.observe(
                     crate::protocol::ResourceUsage {
@@ -507,7 +507,7 @@ pub(crate) fn decode_stream(
     loop {
         check.check()?;
         let control = byte(&mut reader)?;
-        check.activity()?;
+        crate::resources::completed(Ok(()), check)?;
         if control == 0 {
             let mut extra = [0];
             if reader.read(&mut extra).map_err(crate::space::io_error)? != 0 || out.len() != size {

@@ -57,11 +57,12 @@ fn pack(
             if n == 0 {
                 break;
             }
-            check.activity()?;
+            crate::resources::completed(Ok(()), check)?;
             crate::space::ensure(output, n as u64)?;
             crc = crc32(crc, &buffer[..n]);
             io(output.write_all(&buffer[..n]))?;
             size += n as u64;
+            crate::resources::completed(Ok(()), check)?;
         }
         if size != length {
             return Err(ErrorCode::SourceChanged);
@@ -94,7 +95,7 @@ fn pack(
             crate::space::ensure(output, written as u64)?;
             io(output.write_all(&encoded[..written]))?;
             if used != 0 || written != 0 {
-                check.activity()?;
+                crate::resources::completed(Ok(()), check)?;
             }
             size = size.checked_add(written as u64).ok_or(ErrorCode::Limit)?;
             if status == Status::StreamEnd {
@@ -142,7 +143,7 @@ pub(crate) fn zip(
             .min(limits.output)
             .checked_sub(total)
             .ok_or(ErrorCode::Limit)?;
-        let mut input = source.open()?;
+        let mut input = crate::resources::completed(source.open(), check)?;
         let mut snapshot = if directory {
             None
         } else {
@@ -223,7 +224,7 @@ pub(crate) fn zip(
         header.extend(name);
         header.extend(extra);
         io(output.write_all(&header))?;
-        check.activity()?;
+        crate::resources::completed(Ok(()), check)?;
         io(packed.rewind())?;
         if let Some(password) = password {
             crate::crypto::aes_encrypt_file(
@@ -243,7 +244,7 @@ pub(crate) fn zip(
                 }
                 crate::space::ensure(&output, n as u64)?;
                 io(output.write_all(&buffer[..n]))?;
-                check.activity()?;
+                crate::resources::completed(Ok(()), check)?;
             }
         }
         let mut extra = zip64_extra(length, packed_size, Some(offset));
@@ -285,11 +286,14 @@ pub(crate) fn zip(
         );
         central.extend(name);
         central.extend(extra);
+        crate::resources::completed(Ok(()), check)?;
     }
     check.check()?;
     let at = io(output.stream_position())?;
     crate::space::ensure(&output, central.len() as u64 + 98)?;
-    io(output.write_all(&central))?;
+    if !central.is_empty() {
+        crate::resources::completed(io(output.write_all(&central)), check)?;
+    }
     let large_at = io(output.stream_position())?;
     let mut end = Vec::new();
     if have_zip64
@@ -329,7 +333,7 @@ pub(crate) fn zip(
         put32(&mut end, at as u32);
         put16(&mut end, 0);
     }
-    io(output.write_all(&end))?;
+    crate::resources::completed(io(output.write_all(&end)), check)?;
     plan.verify(check)?;
     let size = io(output.stream_position())?;
     io(output.rewind())?;

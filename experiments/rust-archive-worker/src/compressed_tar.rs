@@ -47,9 +47,7 @@ impl<F: crate::resources::Monitor> Read for CheckedInput<'_, F> {
             .read(&mut buffer[..count])
             .map_err(|_| io::Error::other(InputError(ErrorCode::Io)))?;
         if n != 0 {
-            self.check
-                .borrow_mut()
-                .activity()
+            crate::resources::completed(Ok(()), &mut **self.check.borrow_mut())
                 .map_err(|e| io::Error::other(InputError(e)))?;
         }
         Ok(n)
@@ -132,12 +130,13 @@ pub(crate) fn decode(
             },
             Some(&output),
         )?;
-        check.borrow_mut().activity()?;
+        crate::resources::completed(Ok(()), &mut **check.borrow_mut())?;
         // 전체 검증 전에는 비공개 임시 파일에만 기록함.
         space::ensure(&output, count as u64)?;
-        output
-            .write_all(&buffer[..count])
-            .map_err(space::io_error)?;
+        crate::resources::completed(
+            output.write_all(&buffer[..count]).map_err(space::io_error),
+            &mut **check.borrow_mut(),
+        )?;
     }
     check.borrow_mut().check()?;
     if expected.is_some_and(|expected| expected != total) {
@@ -163,7 +162,7 @@ fn read_at(
             ErrorCode::Io
         }
     })?;
-    check.activity()
+    crate::resources::completed(Ok(()), check)
 }
 
 fn vli(bytes: &[u8], cursor: &mut usize) -> Result<u64> {
@@ -371,6 +370,7 @@ fn xz_layout(
                 .filter(|total| *total <= limit)
                 .ok_or(ErrorCode::Limit)?;
             records.push((unpadded, size));
+            crate::resources::completed(Ok(()), check)?;
         }
         if data_end - cursor > 3 || index[cursor..data_end].iter().any(|byte| *byte != 0) {
             return Err(ErrorCode::Integrity);
@@ -398,6 +398,7 @@ fn xz_layout(
         for (unpadded, size) in records {
             xz_block(source, block_at, unpadded, size, check_size, check)?;
             block_at += (unpadded + 3) & !3;
+            crate::resources::completed(Ok(()), check)?;
         }
         end = start;
     }

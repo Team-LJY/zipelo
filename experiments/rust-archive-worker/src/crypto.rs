@@ -218,7 +218,7 @@ impl Decryptor {
                     .map_err(|_| ErrorCode::Integrity)?;
                 mac.update(&buffer[..n]);
                 remaining -= n as u64;
-                check.activity()?;
+                crate::resources::completed(Ok(()), check)?;
             }
             let mut tag = [0; 10];
             file.read_exact(&mut tag)
@@ -336,7 +336,7 @@ pub(crate) fn aes_encrypt_file(
             .write_all(&buffer[..n])
             .map_err(crate::space::io_error)?;
         remaining -= n as u64;
-        check.activity()?;
+        crate::resources::completed(Ok(()), check)?;
     }
     output
         .write_all(&mac.finalize().into_bytes()[..10])

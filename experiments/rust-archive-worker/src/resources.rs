@@ -21,6 +21,12 @@ impl<F: FnMut() -> Result<()>> Monitor for F {
     }
 }
 
+pub(crate) fn completed<T>(result: Result<T>, check: &mut impl Monitor) -> Result<T> {
+    let value = result?;
+    check.activity()?;
+    Ok(value)
+}
+
 pub(crate) struct Budget {
     pub soft: Limits,
     pub ceiling: Limits,

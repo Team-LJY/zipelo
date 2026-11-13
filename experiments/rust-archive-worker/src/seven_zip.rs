@@ -96,13 +96,17 @@ struct Streams {
     folders: Vec<Folder>,
 }
 impl Streams {
-    fn read(r: &mut Reader<'_>, limits: Limits) -> Result<Self> {
+    fn read(
+        r: &mut Reader<'_>,
+        limits: Limits,
+        check: &mut impl crate::resources::Monitor,
+    ) -> Result<Self> {
         r.expect(6)?;
         let position = r.number(limits.input as usize)?;
         let count = r.number(limits.entries as usize)?;
         r.expect(9)?;
         let packed = (0..count)
-            .map(|_| r.number(limits.input as usize))
+            .map(|_| crate::resources::completed(r.number(limits.input as usize), check))
             .collect::<Result<Vec<_>>>()?;
         let mut tag = r.byte()?;
         let packed_crcs = if tag == 10 {
@@ -157,6 +161,7 @@ impl Streams {
                 sizes: Vec::new(),
                 crcs: Vec::new(),
             });
+            crate::resources::completed(Ok(()), check)?;
         }
         r.expect(12)?;
         let mut total = 0usize;
@@ -166,11 +171,13 @@ impl Streams {
                 .checked_add(folder.size)
                 .filter(|n| *n <= limits.output as usize)
                 .ok_or(ErrorCode::Limit)?;
+            crate::resources::completed(Ok(()), check)?;
         }
         let mut tag = r.byte()?;
         if tag == 10 {
             for (f, crc) in folders.iter_mut().zip(r.digests(num)?) {
                 f.crc = crc;
+                crate::resources::completed(Ok(()), check)?;
             }
             tag = r.byte()?;
         }
@@ -190,6 +197,7 @@ impl Streams {
                         .checked_add(*n)
                         .filter(|n| *n <= limits.entries as usize)
                         .ok_or(ErrorCode::Limit)?;
+                    crate::resources::completed(Ok(()), check)?;
                 }
                 tag = r.byte()?;
             }
@@ -204,6 +212,7 @@ impl Streams {
                             .filter(|n| *n <= folder.size)
                             .ok_or(ErrorCode::Integrity)?;
                         folder.sizes.push(n);
+                        crate::resources::completed(Ok(()), check)?;
                     }
                     if *count > 0 {
                         folder.sizes.push(folder.size - total);
@@ -229,6 +238,7 @@ impl Streams {
                 } else {
                     (0..*n).map(|_| digests.next().unwrap()).collect()
                 };
+                crate::resources::completed(Ok(()), check)?;
             }
             if tag != 0 {
                 return Err(ErrorCode::Integrity);
@@ -237,6 +247,7 @@ impl Streams {
         } else {
             for f in &mut folders {
                 f.crcs.push(f.crc);
+                crate::resources::completed(Ok(()), check)?;
             }
         }
         if tag != 0 {
@@ -254,6 +265,7 @@ impl Streams {
             if *n == 0 && f.size != 0 {
                 return Err(ErrorCode::Integrity);
             }
+            crate::resources::completed(Ok(()), check)?;
         }
         Ok(Self {
             position,
@@ -285,6 +297,7 @@ impl Streams {
             }
             ranges.push((at, size));
             at = end;
+            crate::resources::completed(Ok(()), check)?;
         }
         Ok(ranges)
     }
@@ -297,7 +310,10 @@ impl Streams {
     ) -> Result<()> {
         use std::io::{Read, Seek, SeekFrom, Write};
         let total = self.folders.iter().try_fold(0u64, |sum, f| {
-            sum.checked_add(f.size as u64).ok_or(ErrorCode::Limit)
+            crate::resources::completed(
+                sum.checked_add(f.size as u64).ok_or(ErrorCode::Limit),
+                check,
+            )
         })?;
         crate::space::ensure(output, total)?;
         for (f, (start, size)) in self.folders.iter().zip(ranges) {
@@ -332,7 +348,7 @@ impl Streams {
                             .write_all(&buffer[..n])
                             .map_err(crate::space::io_error)?;
                         remaining -= n as u64;
-                        check.activity()?;
+                        crate::resources::completed(Ok(()), check)?;
                     }
                 }
                 [3, 1, 1] | [0x21] => crate::lzma::decode_stream(
@@ -368,10 +384,14 @@ impl Streams {
                     }
                 }
                 at = at.checked_add(*size as u64).ok_or(ErrorCode::Integrity)?;
+                crate::resources::completed(Ok(()), check)?;
             }
-            output
-                .seek(SeekFrom::Start(base + f.size as u64))
-                .map_err(crate::space::io_error)?;
+            crate::resources::completed(
+                output
+                    .seek(SeekFrom::Start(base + f.size as u64))
+                    .map_err(crate::space::io_error),
+                check,
+            )?;
         }
         Ok(())
     }
@@ -395,7 +415,7 @@ fn digest(
             .map_err(crate::space::io_error)?;
         crc = crc32(crc, &buffer[..n]);
         remaining -= n as u64;
-        check.activity()?;
+        crate::resources::completed(Ok(()), check)?;
     }
     Ok(crc)
 }
@@ -444,7 +464,7 @@ fn files(
                 let mut decoded = Vec::new();
                 let mut budget = MetadataBudget::default();
                 for _ in 0..count {
-                    check.activity()?;
+                    check.check()?;
                     let mut units = Vec::new();
                     loop {
                         let n = u16::from_le_bytes(value.take(2)?.try_into().unwrap());
@@ -459,6 +479,7 @@ fn files(
                     let name = String::from_utf16(&units).map_err(|_| ErrorCode::Integrity)?;
                     budget.charge_with(&name, check.metadata_limits())?;
                     decoded.push(name);
+                    crate::resources::completed(Ok(()), check)?;
                 }
                 names = Some(decoded);
             }
@@ -471,6 +492,7 @@ fn files(
                     if set {
                         *attr = Some(u32::from_le_bytes(value.take(4)?.try_into().unwrap()));
                     }
+                    crate::resources::completed(Ok(()), check)?;
                 }
             }
             18..=20 => {
@@ -501,6 +523,7 @@ fn files(
         for (folder, compressed) in streams.folders.iter().zip(&streams.packed) {
             for (i, size) in folder.sizes.iter().enumerate() {
                 descriptions.push((*size, if i == 0 { *compressed } else { 0 }));
+                crate::resources::completed(Ok(()), check)?;
             }
         }
     }
@@ -547,6 +570,7 @@ fn files(
             },
             data: Vec::new(),
         });
+        crate::resources::completed(Ok(()), check)?;
     }
     if descriptions.next().is_some() {
         return Err(ErrorCode::Integrity);
@@ -618,7 +642,7 @@ pub(crate) fn open(
             output: check.metadata_limits().bytes as u64,
             ..limits
         };
-        let streams = Streams::read(&mut r, header_limits)?;
+        let streams = Streams::read(&mut r, header_limits, check)?;
         r.end()?;
         if streams.folders.len() != 1 || streams.folders[0].sizes.len() != 1 {
             return Err(ErrorCode::UnsupportedFeature);
@@ -649,7 +673,7 @@ pub(crate) fn open(
         return Err(ErrorCode::UnsupportedFeature);
     }
     if tag == 4 {
-        streams = Some(Streams::read(&mut r, limits)?);
+        streams = Some(Streams::read(&mut r, limits, check)?);
         tag = r.byte()?;
     }
     let (members, stream_indices) = if tag == 5 {
@@ -664,13 +688,16 @@ pub(crate) fn open(
     }
     r.end()?;
     let total = members.iter().try_fold(0u64, |n, m| {
-        n.checked_add(m.entry.size).ok_or(ErrorCode::Limit)
+        crate::resources::completed(n.checked_add(m.entry.size).ok_or(ErrorCode::Limit), check)
     })?;
     let packed = streams
         .as_ref()
         .map(|s| {
             s.packed.iter().try_fold(0u64, |sum, size| {
-                sum.checked_add(*size as u64).ok_or(ErrorCode::Integrity)
+                crate::resources::completed(
+                    sum.checked_add(*size as u64).ok_or(ErrorCode::Integrity),
+                    check,
+                )
             })
         })
         .transpose()?;
@@ -684,7 +711,7 @@ pub(crate) fn open(
         },
         Some(&data),
     )?;
-    check.activity()?;
+    crate::resources::completed(Ok(()), check)?;
     let mut offsets = vec![0; members.len()];
     if let Some(streams) = streams {
         if streams.folders.iter().map(|f| f.sizes.len()).sum::<usize>() != stream_indices.len() {
@@ -697,6 +724,7 @@ pub(crate) fn open(
             for size in &f.sizes {
                 offsets[ids.next().ok_or(ErrorCode::Integrity)?] = at;
                 at = at.checked_add(*size as u64).ok_or(ErrorCode::Limit)?;
+                crate::resources::completed(Ok(()), check)?;
             }
         }
         if at > limits.output {
@@ -738,6 +766,7 @@ pub(crate) fn parse(
                 .take(member.entry.size)
                 .read_to_end(&mut member.data)
                 .map_err(crate::space::io_error)?;
+            crate::resources::completed(Ok(()), check)?;
         }
     }
     Ok(catalog.members)

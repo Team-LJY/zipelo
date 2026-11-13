@@ -21,6 +21,13 @@ elif case == "many-entries":
     with zipfile.ZipFile(root / "input", "w") as archive:
         for entry_id in range(200_000):
             archive.writestr(f"e{entry_id}", b"")
+elif case in {"phase-directories", "phase-files"}:
+    with zipfile.ZipFile(root / "input", "w") as archive:
+        for entry_id in range(8):
+            archive.writestr(
+                f"entry-{entry_id}/" if case == "phase-directories" else f"entry-{entry_id}",
+                b"" if case == "phase-directories" else b"x",
+            )
 elif case == "selection-entries":
     with zipfile.ZipFile(root / "input", "w") as archive:
         for entry_id in range(32_770):

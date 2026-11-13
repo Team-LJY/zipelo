@@ -178,3 +178,94 @@ fn granted_entry_policy_keeps_independent_metadata_budget() {
     }
     assert_eq!(metadata.charge(""), Err(ErrorCode::Limit));
 }
+
+#[test]
+fn successful_item_completion_refreshes_only_live_work() {
+    struct Clock {
+        now: Duration,
+        watchdog: Watchdog,
+    }
+    impl Monitor for Clock {
+        fn check(&mut self) -> Result<()> {
+            self.watchdog.check(self.now)
+        }
+        fn activity(&mut self) -> Result<()> {
+            self.watchdog.activity(self.now)
+        }
+    }
+    let mut clock = Clock {
+        now: Duration::ZERO,
+        watchdog: Watchdog::new(),
+    };
+    clock.watchdog.resume(Duration::ZERO, true);
+    for item in 1..=100 {
+        clock.now += Duration::from_secs(10);
+        assert_eq!(completed(Ok(item), &mut clock), Ok(item));
+    }
+    clock.now += Duration::from_secs(30);
+    assert_eq!(
+        completed::<()>(Err(ErrorCode::Io), &mut clock),
+        Err(ErrorCode::Io)
+    );
+    for _ in 0..29 {
+        clock.now += Duration::from_secs(1);
+        clock.check().unwrap();
+    }
+    clock.now += Duration::from_secs(1);
+    assert_eq!(clock.check(), Err(ErrorCode::Limit));
+    assert_eq!(completed(Ok(()), &mut clock), Err(ErrorCode::Limit));
+    assert_eq!(
+        completed::<()>(Err(ErrorCode::Io), &mut clock),
+        Err(ErrorCode::Io)
+    );
+}
+
+#[test]
+fn empty_gzip_members_count_consumed_input_as_decode_progress() {
+    use std::io::Write;
+    struct DecodeClock {
+        now: Duration,
+        steps: usize,
+        watchdog: Watchdog,
+    }
+    impl Monitor for DecodeClock {
+        fn check(&mut self) -> Result<()> {
+            self.watchdog.check(self.now)
+        }
+        fn activity(&mut self) -> Result<()> {
+            self.watchdog.activity(self.now)
+        }
+        fn observe(&mut self, _: ResourceUsage, _: Option<&std::fs::File>) -> Result<()> {
+            self.steps += 1;
+            self.now += Duration::from_secs(10);
+            self.check()
+        }
+    }
+    let mut clock = DecodeClock {
+        now: Duration::ZERO,
+        steps: 0,
+        watchdog: Watchdog::new(),
+    };
+    clock.watchdog.resume(Duration::ZERO, true);
+    let member = [
+        31, 139, 8, 0, 0, 0, 0, 0, 0, 3, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    ];
+    let mut input = crate::spool::temporary().unwrap();
+    for _ in 0..8 {
+        input.write_all(&member).unwrap();
+    }
+    let catalog = crate::streaming::Catalog::open(
+        &mut input,
+        8 * member.len() as u64,
+        Limits::default(),
+        true,
+        None,
+        &mut clock,
+    )
+    .unwrap();
+    assert_eq!(catalog.format, Format::Gzip);
+    assert_eq!(catalog.members.len(), 1);
+    assert_eq!(catalog.members[0].entry.size, 0);
+    assert!(clock.steps >= 8);
+    clock.check().unwrap();
+}

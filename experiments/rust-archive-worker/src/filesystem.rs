@@ -1,5 +1,6 @@
 use crate::archive::valid_name;
 use crate::protocol::*;
+use crate::resources::{Monitor, completed};
 use sha2::{Digest, Sha256};
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
@@ -128,6 +129,7 @@ pub fn snapshot(
         bytes.try_reserve(n).map_err(|_| ErrorCode::Limit)?;
         bytes.extend_from_slice(&buffer[..n]);
         hash.update(&buffer[..n]);
+        completed(Ok(()), check)?;
     }
     let after = file.metadata().map_err(|_| ErrorCode::Io)?;
     let named = options.open(path).map_err(|_| ErrorCode::SourceChanged)?;
@@ -493,12 +495,17 @@ mod platform {
 #[cfg(not(any(target_os = "linux", windows)))]
 compile_error!("Archive worker supports Linux and Windows only");
 pub use platform::Dir;
-fn parent(root: &Dir, name: &str, create: bool) -> Result<Option<(Dir, String)>> {
+fn parent_with(
+    root: &Dir,
+    name: &str,
+    create: bool,
+    check: &mut impl Monitor,
+) -> Result<Option<(Dir, String)>> {
     let mut parts = name.split('/').collect::<Vec<_>>();
     let leaf = parts.pop().ok_or(ErrorCode::UnsafePath)?;
     let mut d = root.duplicate()?;
     for p in parts {
-        match d.child(p, create)? {
+        match completed(d.child(p, create), check)? {
             Some(child) => d = child,
             None => return Ok(None),
         }
@@ -506,25 +513,46 @@ fn parent(root: &Dir, name: &str, create: bool) -> Result<Option<(Dir, String)>>
     Ok(Some((d, leaf.to_owned())))
 }
 pub fn existing(root: &Dir, name: &str) -> Result<Option<Existing>> {
+    existing_with(root, name, &mut || Ok(()))
+}
+pub(crate) fn existing_with(
+    root: &Dir,
+    name: &str,
+    check: &mut impl Monitor,
+) -> Result<Option<Existing>> {
     valid_name(name, false)?;
-    match parent(root, name, false)? {
+    let result = match parent_with(root, name, false, check)? {
         Some((dir, leaf)) => dir.existing(&leaf),
         None => Ok(None),
-    }
+    };
+    completed(result, check)
 }
 pub fn unused(root: &Dir, name: &str) -> Result<bool> {
+    unused_with(root, name, &mut || Ok(()))
+}
+pub(crate) fn unused_with(root: &Dir, name: &str, check: &mut impl Monitor) -> Result<bool> {
     valid_name(name, false)?;
-    match parent(root, name, false)? {
+    let result = match parent_with(root, name, false, check)? {
         Some((dir, leaf)) => dir.absent(&leaf),
         None => Ok(true),
-    }
+    };
+    completed(result, check)
 }
 pub fn preflight(root: &Dir, names: &[(String, EntryKind)]) -> Result<()> {
     preflight_mode(root, names, false)
 }
 pub fn preflight_mode(root: &Dir, names: &[(String, EntryKind)], interactive: bool) -> Result<()> {
+    preflight_mode_with(root, names, interactive, &mut || Ok(()))
+}
+pub(crate) fn preflight_mode_with(
+    root: &Dir,
+    names: &[(String, EntryKind)],
+    interactive: bool,
+    check: &mut impl Monitor,
+) -> Result<()> {
     for (name, kind) in names {
-        if let Some((d, leaf)) = parent(root, name, false)? {
+        check.check()?;
+        if let Some((d, leaf)) = parent_with(root, name, false, check)? {
             if *kind == EntryKind::Directory {
                 let _ = d.child(&leaf, false)?;
             } else if interactive {
@@ -533,13 +561,15 @@ pub fn preflight_mode(root: &Dir, names: &[(String, EntryKind)], interactive: bo
                 return Err(ErrorCode::Conflict);
             }
         }
+        completed(Ok(()), check)?;
     }
     Ok(())
 }
-pub(crate) fn preflight_space(
+pub(crate) fn preflight_space_with(
     root: &Dir,
     files: &[(String, u64)],
     staging: Option<(&File, u64)>,
+    check: &mut impl Monitor,
 ) -> Result<()> {
     let mut volumes = std::collections::BTreeMap::<u64, (File, u64)>::new();
     let mut charge = |file: &File, bytes: u64| -> Result<()> {
@@ -556,7 +586,7 @@ pub(crate) fn preflight_space(
         Ok(())
     };
     if let Some((file, bytes)) = staging {
-        charge(file, bytes)?;
+        completed(charge(file, bytes), check)?;
     }
     for (name, size) in files {
         valid_name(name, false)?;
@@ -564,26 +594,38 @@ pub(crate) fn preflight_space(
         let mut parts = name.split('/').collect::<Vec<_>>();
         parts.pop();
         for part in parts {
-            match parent.child(part, false)? {
+            match completed(parent.child(part, false), check)? {
                 Some(child) => parent = child,
                 None => break,
             }
         }
-        charge(parent.handle(), *size)?;
+        completed(charge(parent.handle(), *size), check)?;
     }
     for (file, bytes) in volumes.values() {
-        crate::space::ensure(file, *bytes)?;
+        completed(crate::space::ensure(file, *bytes), check)?;
     }
     Ok(())
 }
 pub fn directory(root: &Dir, name: &str) -> Result<(bool, Durability, Option<ErrorCode>)> {
-    let (d, leaf) = parent(root, name, false)?.ok_or(ErrorCode::Io)?;
-    if d.child(&leaf, false)?.is_some() {
+    directory_with(root, name, &mut || Ok(()))
+}
+pub(crate) fn directory_with(
+    root: &Dir,
+    name: &str,
+    check: &mut impl Monitor,
+) -> Result<(bool, Durability, Option<ErrorCode>)> {
+    let (d, leaf) = parent_with(root, name, false, check)?.ok_or(ErrorCode::Io)?;
+    if completed(d.child(&leaf, false), check)?.is_some() {
         return Ok((false, Durability::NotApplicable, None));
     }
     d.child(&leaf, true)?.ok_or(ErrorCode::Io)?;
+    let progress_error = completed(Ok(()), check).err();
     Ok(match d.sync_checked() {
-        Ok(durability) => (true, durability, None),
+        Ok(durability) => (
+            true,
+            durability,
+            progress_error.or_else(|| completed(Ok(()), check).err()),
+        ),
         Err(error) => (true, Durability::Failed, Some(error)),
     })
 }
@@ -628,6 +670,43 @@ pub fn publish_reader_mode(
     replace: Option<&Existing>,
     check: &mut impl FnMut(bool) -> Result<()>,
 ) -> Published {
+    publish_reader_steps(root, name, data, length, replace, &mut |step| match step {
+        PublishStep::Check => check(false),
+        PublishStep::Commit => check(true),
+        PublishStep::Activity => Ok(()),
+    })
+}
+pub(crate) enum PublishStep {
+    Check,
+    Activity,
+    Commit,
+}
+struct PublicationMonitor<'a, F>(&'a mut F);
+impl<F: FnMut(PublishStep) -> Result<()>> Monitor for PublicationMonitor<'_, F> {
+    fn check(&mut self) -> Result<()> {
+        self.0(PublishStep::Check)
+    }
+    fn activity(&mut self) -> Result<()> {
+        self.0(PublishStep::Activity)
+    }
+}
+fn publication_activity(
+    finish: &mut Result<()>,
+    check: &mut impl FnMut(PublishStep) -> Result<()>,
+) {
+    let progress = completed(Ok(()), &mut PublicationMonitor(check));
+    if finish.is_ok() {
+        *finish = progress;
+    }
+}
+pub(crate) fn publish_reader_steps(
+    root: &Dir,
+    name: &str,
+    data: &mut impl Read,
+    length: u64,
+    replace: Option<&Existing>,
+    check: &mut impl FnMut(PublishStep) -> Result<()>,
+) -> Published {
     let mut result = Published {
         created: false,
         uncertain: false,
@@ -639,7 +718,8 @@ pub fn publish_reader_mode(
     };
     let prepared = (|| {
         valid_name(name, false)?;
-        let (dir, leaf) = parent(root, name, true)?.ok_or(ErrorCode::Io)?;
+        let (dir, leaf) =
+            parent_with(root, name, true, &mut PublicationMonitor(check))?.ok_or(ErrorCode::Io)?;
         let temp = format!(
             ".zipelo-{}-{}.tmp",
             std::process::id(),
@@ -653,31 +733,49 @@ pub fn publish_reader_mode(
             }
         })?;
         let written = (|| {
-            crate::space::ensure(&file, length)?;
+            completed(Ok(()), &mut PublicationMonitor(check))?;
+            completed(
+                crate::space::ensure(&file, length),
+                &mut PublicationMonitor(check),
+            )?;
             let mut buffer = zeroize::Zeroizing::new([0; 65536]);
             let mut remaining = length;
             while remaining != 0 {
-                check(false)?;
+                check(PublishStep::Check)?;
                 let count = remaining.min(buffer.len() as u64) as usize;
                 let n = data.read(&mut buffer[..count]).map_err(|_| ErrorCode::Io)?;
                 if n == 0 {
                     return Err(ErrorCode::Io);
                 }
-                crate::space::ensure(&file, n as u64)?;
-                file.write_all(&buffer[..n])
-                    .map_err(crate::space::io_error)?;
+                completed(Ok(()), &mut PublicationMonitor(check))?;
+                completed(
+                    crate::space::ensure(&file, n as u64),
+                    &mut PublicationMonitor(check),
+                )?;
+                completed(
+                    file.write_all(&buffer[..n]).map_err(crate::space::io_error),
+                    &mut PublicationMonitor(check),
+                )?;
                 remaining -= n as u64;
             }
-            file.sync_all().map_err(crate::space::io_error)
+            completed(
+                file.sync_all().map_err(crate::space::io_error),
+                &mut PublicationMonitor(check),
+            )
         })();
-        let closed = close(file).map_err(crate::space::io_error);
+        let closed = completed(
+            close(file).map_err(crate::space::io_error),
+            &mut PublicationMonitor(check),
+        );
         let mut finish = written.and(closed).and_then(|_| {
             if let Some(expected) = replace {
-                if dir.existing(&leaf)?.as_ref() != Some(expected) {
+                if completed(dir.existing(&leaf), &mut PublicationMonitor(check))?.as_ref()
+                    != Some(expected)
+                {
                     return Err(ErrorCode::Conflict);
                 }
             }
-            check(true)
+            check(PublishStep::Commit)
         });
         let mut temp_consumed = false;
         if finish.is_ok() {
@@ -690,8 +788,12 @@ pub fn publish_reader_mode(
                 Ok(()) => {
                     temp_consumed = replace.is_some();
                     result.created = true;
+                    publication_activity(&mut finish, check);
                     match dir.sync_checked() {
-                        Ok(durability) => result.durability = durability,
+                        Ok(durability) => {
+                            result.durability = durability;
+                            publication_activity(&mut finish, check);
+                        }
                         Err(error) => {
                             result.durability = Durability::Failed;
                             finish = Err(error);
@@ -708,21 +810,27 @@ pub fn publish_reader_mode(
                 }
             }
         }
-        if !temp_consumed && !dir.remove(&temp) {
-            result.cleanup = Cleanup::Failed;
-            result.retained = 1;
-            result.retained_name = Some(match name.rsplit_once('/') {
-                Some((prefix, _)) => format!("{prefix}/{temp}"),
-                None => temp.clone(),
-            });
-            if finish.is_ok() {
-                finish = Err(ErrorCode::Io);
+        if !temp_consumed {
+            if dir.remove(&temp) {
+                publication_activity(&mut finish, check);
+            } else {
+                result.cleanup = Cleanup::Failed;
+                result.retained = 1;
+                result.retained_name = Some(match name.rsplit_once('/') {
+                    Some((prefix, _)) => format!("{prefix}/{temp}"),
+                    None => temp.clone(),
+                });
+                if finish.is_ok() {
+                    finish = Err(ErrorCode::Io);
+                }
             }
         }
         if result.created {
             if let Err(error) = dir.sync_checked() {
                 result.durability = Durability::Failed;
                 finish = Err(error);
+            } else {
+                publication_activity(&mut finish, check);
             }
         }
         finish

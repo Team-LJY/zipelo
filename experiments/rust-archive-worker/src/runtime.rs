@@ -2,7 +2,7 @@ use crate::{
     archive,
     filesystem::{self, Dir},
     protocol::*,
-    resources::{Budget, Monitor, Watchdog},
+    resources::{Budget, Monitor, Watchdog, completed},
     wire::{Reader, Writer},
 };
 use std::{
@@ -233,9 +233,10 @@ impl<W: Write> Job<W> {
                 format!("{prefix}/{leaf}")
             };
             archive::valid_name(&candidate, false)?;
-            if !reserved.contains(&candidate.to_lowercase())
-                && filesystem::unused(root, &candidate)?
-            {
+            let unused = !reserved.contains(&candidate.to_lowercase())
+                && filesystem::unused_with(root, &candidate, self)?;
+            completed(Ok(()), self)?;
+            if unused {
                 return Ok(candidate);
             }
         }
@@ -299,16 +300,12 @@ impl<W: Write> Job<W> {
             Some(length),
             self.terminal.created_count as u32,
         )?;
-        let mut first_chunk = true;
-        let p = filesystem::publish_reader_mode(root, name, data, length, replace, &mut |commit| {
-            if !first_chunk {
-                self.activity()?;
-            }
-            first_chunk = false;
-            if commit && last {
-                self.cutoff()
-            } else {
-                self.check()
+        let p = filesystem::publish_reader_steps(root, name, data, length, replace, &mut |step| {
+            match step {
+                filesystem::PublishStep::Check => self.check(),
+                filesystem::PublishStep::Activity => completed(Ok(()), self),
+                filesystem::PublishStep::Commit if last => self.cutoff(),
+                filesystem::PublishStep::Commit => self.check(),
             }
         });
         self.terminal.retained_partial_count += p.retained;
@@ -351,7 +348,7 @@ impl<W: Write> Job<W> {
             return Err(error);
         }
         if p.created {
-            self.activity()?;
+            completed(Ok(()), self)?;
         }
         Ok(())
     }
@@ -391,8 +388,8 @@ impl<W: Write> Job<W> {
                     crate::spool::Snapshot::open_reporting(&path, limits.input, &mut |step| {
                         match step {
                             crate::spool::Step::Check => self.check(),
+                            crate::spool::Step::Activity => completed(Ok(()), self),
                             crate::spool::Step::Read { bytes, total } => {
-                                self.activity()?;
                                 self.progress(Stage::Read, bytes, Some(total), 0)
                             }
                         }
@@ -429,13 +426,15 @@ impl<W: Write> Job<W> {
                 if !extract {
                     for member in &catalog.members {
                         self.check()?;
-                        self.event(Message::Entry(member.entry.clone()))?;
-                        self.activity()?;
+                        completed(self.event(Message::Entry(member.entry.clone())), self)?;
                     }
-                    self.event(Message::ListEnd {
-                        entry_count: catalog.members.len() as u32,
-                        list_id,
-                    })?;
+                    completed(
+                        self.event(Message::ListEnd {
+                            entry_count: catalog.members.len() as u32,
+                            list_id,
+                        }),
+                        self,
+                    )?;
                 } else if let Action::Extract {
                     destination,
                     selection,
@@ -453,24 +452,24 @@ impl<W: Write> Job<W> {
                     let selected = match selection {
                         Selection::All => None,
                         Selection::EntryIds(ids) => {
-                            let n = ids.len();
-                            let set = ids.into_iter().collect::<BTreeSet<_>>();
-                            if expected.is_none()
-                                || set.is_empty()
-                                || n != set.len()
-                                || set.iter().any(|id| *id as usize >= catalog.members.len())
-                            {
+                            if expected.is_none() || ids.is_empty() {
                                 return Err(ErrorCode::InvalidRequest);
+                            }
+                            let mut set = BTreeSet::new();
+                            for id in ids {
+                                if id as usize >= catalog.members.len() || !set.insert(id) {
+                                    return Err(ErrorCode::InvalidRequest);
+                                }
+                                completed(Ok(()), self)?;
                             }
                             Some(set)
                         }
                     };
-                    if catalog
-                        .members
-                        .iter()
-                        .any(|m| !matches!(m.entry.kind, EntryKind::File | EntryKind::Directory))
-                    {
-                        return Err(ErrorCode::UnsafePath);
+                    for member in &catalog.members {
+                        if !matches!(member.entry.kind, EntryKind::File | EntryKind::Directory) {
+                            return Err(ErrorCode::UnsafePath);
+                        }
+                        completed(Ok(()), self)?;
                     }
                     if catalog.format == Format::Gzip {
                         let name = gzip_output_name.ok_or(ErrorCode::InvalidRequest)?;
@@ -483,36 +482,33 @@ impl<W: Write> Job<W> {
                     } else if gzip_output_name.is_some() {
                         return Err(ErrorCode::InvalidRequest);
                     }
-                    let root = Dir::root(&destination.to_path()?)?;
-                    let output_sizes = catalog
-                        .members
-                        .iter()
-                        .filter(|m| {
-                            m.entry.kind == EntryKind::File
-                                && selected
-                                    .as_ref()
-                                    .is_none_or(|s| s.contains(&m.entry.entry_id))
-                        })
-                        .map(|m| (m.entry.name.clone(), m.entry.size))
-                        .collect::<Vec<_>>();
-                    let staged = if matches!(catalog.format, Format::Zip | Format::SevenZip) {
-                        Some((
-                            &catalog.data,
-                            catalog.members.iter().try_fold(0u64, |sum, m| {
-                                sum.checked_add(m.entry.size).ok_or(ErrorCode::Limit)
-                            })?,
-                        ))
-                    } else {
-                        None
-                    };
+                    let root = completed(Dir::root(&destination.to_path()?), self)?;
+                    let mut output_sizes = Vec::new();
+                    let mut staged_total = 0u64;
+                    let mut encrypted = false;
+                    for member in &catalog.members {
+                        if member.entry.kind == EntryKind::File
+                            && selected
+                                .as_ref()
+                                .is_none_or(|s| s.contains(&member.entry.entry_id))
+                        {
+                            output_sizes.push((member.entry.name.clone(), member.entry.size));
+                        }
+                        staged_total = staged_total
+                            .checked_add(member.entry.size)
+                            .ok_or(ErrorCode::Limit)?;
+                        encrypted |= member.entry.encrypted;
+                        completed(Ok(()), self)?;
+                    }
+                    let staged = matches!(catalog.format, Format::Zip | Format::SevenZip)
+                        .then_some((&catalog.data, staged_total));
                     // 선택 전에는 검증에 필요한 스테이징 공간만 계산함.
                     let initial_outputs = if self.interactive {
                         &[][..]
                     } else {
                         &output_sizes[..]
                     };
-                    filesystem::preflight_space(&root, initial_outputs, staged)?;
-                    let encrypted = catalog.members.iter().any(|m| m.entry.encrypted);
+                    filesystem::preflight_space_with(&root, initial_outputs, staged, self)?;
                     if matches!(catalog.format, Format::Zip | Format::SevenZip) {
                         for attempt in 1..=3 {
                             let secret = if encrypted {
@@ -539,41 +535,46 @@ impl<W: Write> Job<W> {
                     }
                     let offsets = catalog.offsets;
                     let mut data = catalog.data;
-                    let members = catalog
-                        .members
-                        .into_iter()
-                        .filter(|m| {
-                            selected
-                                .as_ref()
-                                .is_none_or(|s| s.contains(&m.entry.entry_id))
-                        })
-                        .collect::<Vec<_>>();
+                    let mut members = Vec::new();
+                    for member in catalog.members {
+                        if selected
+                            .as_ref()
+                            .is_none_or(|s| s.contains(&member.entry.entry_id))
+                        {
+                            members.push(member);
+                        }
+                        completed(Ok(()), self)?;
+                    }
                     let dirs = archive::output_directories(&members, self)?;
                     let files = members
                         .iter()
                         .filter(|m| m.entry.kind == EntryKind::File)
-                        .collect::<Vec<_>>();
+                        .map(|member| completed(Ok(member), self))
+                        .collect::<Result<Vec<_>>>()?;
                     let mut names = dirs
                         .iter()
-                        .map(|n| (n.clone(), EntryKind::Directory))
-                        .collect::<Vec<_>>();
+                        .map(|name| completed(Ok((name.clone(), EntryKind::Directory)), self))
+                        .collect::<Result<Vec<_>>>()?;
                     names.extend(
                         files
                             .iter()
-                            .map(|m| (m.entry.name.clone(), EntryKind::File)),
+                            .map(|member| {
+                                completed(Ok((member.entry.name.clone(), EntryKind::File)), self)
+                            })
+                            .collect::<Result<Vec<_>>>()?,
                     );
-                    filesystem::preflight_mode(&root, &names, self.interactive)?;
+                    filesystem::preflight_mode_with(&root, &names, self.interactive, self)?;
                     if !self.interactive {
-                        filesystem::preflight_space(&root, &output_sizes, None)?;
+                        filesystem::preflight_space_with(&root, &output_sizes, None, self)?;
                     }
                     let mut reserved = names
                         .iter()
-                        .map(|(name, _)| name.to_lowercase())
-                        .collect::<BTreeSet<_>>();
+                        .map(|(name, _)| completed(Ok(name.to_lowercase()), self))
+                        .collect::<Result<BTreeSet<_>>>()?;
                     for name in dirs {
                         self.check()?;
                         let (created, durability, sync_error) =
-                            filesystem::directory(&root, &name)?;
+                            filesystem::directory_with(&root, &name, self)?;
                         if created {
                             self.terminal.created_count += 1;
                             self.terminal.publication = Publication::Partial;
@@ -586,15 +587,18 @@ impl<W: Write> Job<W> {
                             if let Some(error) = sync_error {
                                 return Err(error);
                             }
-                            self.activity()?;
+                            completed(Ok(()), self)?;
                         }
                     }
                     for (index, m) in files.iter().enumerate() {
-                        data.seek(SeekFrom::Start(offsets[m.entry.entry_id as usize]))
-                            .map_err(|_| ErrorCode::Io)?;
+                        completed(
+                            data.seek(SeekFrom::Start(offsets[m.entry.entry_id as usize]))
+                                .map_err(|_| ErrorCode::Io),
+                            self,
+                        )?;
                         self.check()?;
                         let existing = if self.interactive {
-                            filesystem::existing(&root, &m.entry.name)?
+                            filesystem::existing_with(&root, &m.entry.name, self)?
                         } else {
                             None
                         };
@@ -609,21 +613,25 @@ impl<W: Write> Job<W> {
                             } else if choice == ConflictChoice::Overwrite {
                                 replace = Some(existing);
                             }
-                            self.event(Message::ConflictResolved {
-                                entry_id: m.entry.entry_id,
-                                relative_name: name.clone(),
-                                choice,
-                            })?;
+                            completed(
+                                self.event(Message::ConflictResolved {
+                                    entry_id: m.entry.entry_id,
+                                    relative_name: name.clone(),
+                                    choice,
+                                }),
+                                self,
+                            )?;
                             if choice == ConflictChoice::Skip {
                                 continue;
                             }
                         }
                         if self.interactive {
                             // 건너뛴 파일을 제외하고 이번에 게시할 파일의 공간을 확인함.
-                            filesystem::preflight_space(
+                            filesystem::preflight_space_with(
                                 &root,
                                 &[(name.clone(), m.entry.size)],
                                 None,
+                                self,
                             )?;
                         }
                         self.output_reader(
@@ -653,8 +661,16 @@ impl<W: Write> Job<W> {
                     .and_then(|n| n.to_str())
                     .ok_or(ErrorCode::InvalidRequest)?;
                 let name = archive::valid_name(leaf, false)?;
-                let root = Dir::root(output.parent().ok_or(ErrorCode::InvalidRequest)?)?;
-                filesystem::preflight(&root, &[(name.clone(), EntryKind::File)])?;
+                let root = completed(
+                    Dir::root(output.parent().ok_or(ErrorCode::InvalidRequest)?),
+                    self,
+                )?;
+                filesystem::preflight_mode_with(
+                    &root,
+                    &[(name.clone(), EntryKind::File)],
+                    false,
+                    self,
+                )?;
                 let members = crate::create::plan(&sources, limits, self)?;
                 let secret = if encryption == Encryption::Aes256 {
                     let secret = self.password(PasswordPurpose::Encrypt, 1)?;
@@ -672,7 +688,7 @@ impl<W: Write> Job<W> {
                     secret.as_ref().map(|s| s.0.as_slice()),
                     self,
                 )?;
-                filesystem::preflight_space(&root, &[(name.clone(), length)], None)?;
+                filesystem::preflight_space_with(&root, &[(name.clone(), length)], None, self)?;
                 self.output_reader(&root, &name, &mut data, length, None, true, None)?;
                 self.terminal.publication = Publication::Complete;
             }

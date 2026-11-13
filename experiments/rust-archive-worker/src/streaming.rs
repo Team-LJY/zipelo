@@ -134,7 +134,7 @@ fn tar(
         if add(cursor, 512)? > len {
             return Err(ErrorCode::Integrity);
         }
-        at(&mut data, cursor, &mut header)?;
+        crate::resources::completed(at(&mut data, cursor, &mut header), check)?;
         if header.iter().all(|b| *b == 0) {
             if add(cursor, 1024)? > len || len % 512 != 0 {
                 return Err(ErrorCode::Integrity);
@@ -149,7 +149,7 @@ fn tar(
                     return Err(ErrorCode::Integrity);
                 }
                 remaining -= n as u64;
-                check.activity()?;
+                crate::resources::completed(Ok(()), check)?;
             }
             break;
         }
@@ -202,7 +202,7 @@ fn tar(
             },
             Some(&data),
         )?;
-        check.activity()?;
+        crate::resources::completed(Ok(()), check)?;
         let start = add(cursor, 512)?;
         cursor = add(
             start,
@@ -225,6 +225,7 @@ fn tar(
             },
             data: Vec::new(),
         });
+        crate::resources::completed(Ok(()), check)?;
     }
     archive::validate_members_with(&members, check)?;
     Ok(Catalog {
@@ -265,6 +266,7 @@ fn inflate(
                 }
                 remaining -= have as u64;
                 used = 0;
+                crate::resources::completed(Ok(()), check)?;
             }
             let a = stream.total_in();
             let b = stream.total_out();
@@ -286,12 +288,14 @@ fn inflate(
                 },
                 Some(output),
             )?;
-            if n != 0 {
-                check.activity()?;
+            if n != 0 || stream.total_in() != a {
+                crate::resources::completed(Ok(()), check)?;
             }
             crc = crc32(crc, &plain[..n]);
             crate::space::ensure(output, n as u64)?;
-            io(output.write_all(&plain[..n]))?;
+            if n != 0 {
+                crate::resources::completed(io(output.write_all(&plain[..n])), check)?;
+            }
             if status == Status::StreamEnd {
                 break;
             }
@@ -509,6 +513,7 @@ fn zip(
             return Err(ErrorCode::Integrity);
         }
         let h = bytes(source, cursor, 46)?;
+        crate::resources::completed(Ok(()), check)?;
         if &h[..4] != b"PK\x01\x02" {
             return Err(ErrorCode::Integrity);
         }
@@ -574,7 +579,7 @@ fn zip(
             },
             Some(source),
         )?;
-        check.activity()?;
+        crate::resources::completed(Ok(()), check)?;
         let mode = u32at(&h, 38) >> 16;
         let kind = match mode & 0xf000 {
             0xa000 => EntryKind::Link,
@@ -597,6 +602,7 @@ fn zip(
             return Err(ErrorCode::Integrity);
         }
         let lh = bytes(source, local, 30)?;
+        crate::resources::completed(Ok(()), check)?;
         if &lh[..4] != b"PK\x03\x04"
             || u16at(&lh, 6) != flags
             || u16at(&lh, 8) != method
@@ -675,6 +681,7 @@ fn zip(
             data: Vec::new(),
         });
         cursor = next;
+        crate::resources::completed(Ok(()), check)?;
     }
     if cursor != central_end {
         return Err(ErrorCode::Integrity);
@@ -686,6 +693,7 @@ fn zip(
             return Err(ErrorCode::Integrity);
         }
         next = b;
+        crate::resources::completed(Ok(()), check)?;
     }
     if next != central {
         return Err(ErrorCode::Integrity);
@@ -711,6 +719,7 @@ fn zip(
         check.check()?;
         offsets.push(io(data.stream_position())?);
         if !decode {
+            crate::resources::completed(Ok(()), check)?;
             continue;
         }
         let (decoder, start, length) = if packed.flags & 1 != 0 {
@@ -754,16 +763,17 @@ fn zip(
                     .checked_add(n as u64)
                     .filter(|n| *n <= member.entry.size)
                     .ok_or(ErrorCode::Integrity)?;
-                check.activity()?;
+                crate::resources::completed(Ok(()), check)?;
                 crate::space::ensure(&data, n as u64)?;
                 crc = crc32(crc, &buffer[..n]);
-                io(data.write_all(&buffer[..n]))?;
+                crate::resources::completed(io(data.write_all(&buffer[..n])), check)?;
             }
             (total, crc)
         };
         if size != member.entry.size || packed.crc.is_some_and(|c| c != crc) {
             return Err(ErrorCode::Integrity);
         }
+        crate::resources::completed(Ok(()), check)?;
     }
     Ok(Catalog {
         format: Format::Zip,

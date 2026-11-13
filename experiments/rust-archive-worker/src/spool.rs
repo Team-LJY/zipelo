@@ -73,7 +73,21 @@ pub(crate) fn temporary() -> Result<File> {
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum Step {
     Check,
+    Activity,
     Read { bytes: u64, total: u64 },
+}
+
+struct Progress<'a, F>(&'a mut F);
+impl<F: FnMut(Step) -> Result<()>> crate::resources::Monitor for Progress<'_, F> {
+    fn check(&mut self) -> Result<()> {
+        self.0(Step::Check)
+    }
+    fn activity(&mut self) -> Result<()> {
+        self.0(Step::Activity)
+    }
+}
+fn completed<T>(result: Result<T>, step: &mut impl FnMut(Step) -> Result<()>) -> Result<T> {
+    crate::resources::completed(result, &mut Progress(step))
 }
 
 pub(crate) struct Snapshot {
@@ -101,15 +115,18 @@ impl Snapshot {
             use std::os::windows::fs::OpenOptionsExt;
             options.share_mode(1);
         }
-        let mut source = options.open(path).map_err(|_| ErrorCode::Io)?;
+        let mut source = completed(options.open(path).map_err(|_| ErrorCode::Io), step)?;
         let snapshot = Self::capture_reporting(&mut source, limit, step)?;
-        let named = options.open(path).map_err(|_| ErrorCode::SourceChanged)?;
+        let named = completed(
+            options.open(path).map_err(|_| ErrorCode::SourceChanged),
+            step,
+        )?;
         if filesystem::object(&named)? != snapshot.object
             || !named.metadata().map_err(|_| ErrorCode::Io)?.is_file()
         {
             return Err(ErrorCode::SourceChanged);
         }
-        Ok(snapshot)
+        completed(Ok(snapshot), step)
     }
     pub(crate) fn capture(
         source: &mut File,
@@ -118,7 +135,8 @@ impl Snapshot {
     ) -> Result<Self> {
         Self::capture_reporting(source, limit, &mut |step| match step {
             Step::Check => check.check(),
-            Step::Read { .. } => check.activity(),
+            Step::Activity => crate::resources::completed(Ok(()), check),
+            Step::Read { .. } => check.check(),
         })
     }
     fn capture_reporting(
@@ -126,7 +144,7 @@ impl Snapshot {
         limit: u64,
         step: &mut impl FnMut(Step) -> Result<()>,
     ) -> Result<Self> {
-        let before = source.metadata().map_err(|_| ErrorCode::Io)?;
+        let before = completed(source.metadata().map_err(|_| ErrorCode::Io), step)?;
         if !before.is_file() {
             return Err(ErrorCode::InvalidRequest);
         }
@@ -135,8 +153,8 @@ impl Snapshot {
         }
         source.rewind().map_err(|_| ErrorCode::Io)?;
         let object = filesystem::object(&source)?;
-        let mut file = temporary()?;
-        crate::space::ensure(&file, before.len())?;
+        let mut file = completed(temporary(), step)?;
+        completed(crate::space::ensure(&file, before.len()), step)?;
         let mut buffer = zeroize::Zeroizing::new([0; 65536]);
         let mut hash = Sha256::new();
         let mut len = 0u64;
@@ -144,7 +162,10 @@ impl Snapshot {
         let mut reported = std::time::Instant::now();
         loop {
             step(Step::Check)?;
-            let n = source.read(&mut buffer[..]).map_err(|_| ErrorCode::Io)?;
+            let n = completed(
+                source.read(&mut buffer[..]).map_err(|_| ErrorCode::Io),
+                step,
+            )?;
             if n == 0 {
                 break;
             }
@@ -152,8 +173,10 @@ impl Snapshot {
                 .checked_add(n as u64)
                 .filter(|n| *n <= limit)
                 .ok_or(ErrorCode::Limit)?;
-            file.write_all(&buffer[..n])
-                .map_err(crate::space::io_error)?;
+            completed(
+                file.write_all(&buffer[..n]).map_err(crate::space::io_error),
+                step,
+            )?;
             hash.update(&buffer[..n]);
             // 큰 파일에서도 진행이 보이도록 일정 간격으로만 알림.
             if reported.elapsed() >= std::time::Duration::from_millis(200) {
@@ -170,7 +193,10 @@ impl Snapshot {
         {
             return Err(ErrorCode::SourceChanged);
         }
-        file.seek(SeekFrom::Start(0)).map_err(|_| ErrorCode::Io)?;
+        completed(
+            file.seek(SeekFrom::Start(0)).map_err(|_| ErrorCode::Io),
+            step,
+        )?;
         Ok(Self {
             file,
             len,

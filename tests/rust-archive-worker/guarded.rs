@@ -38,7 +38,9 @@ fn run_record(
             Command::new("cc")
                 .args(["-shared", "-fPIC", "-O2", "-Wall", "-Wextra", "-Werror"])
                 .arg(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(
-                    if fault.starts_with("clock-") {
+                    if fault.starts_with("phase-") {
+                        "../../tests/rust-archive-worker/phase_clock.c"
+                    } else if fault.starts_with("clock-") {
                         "../../tests/rust-archive-worker/progress_clock.c"
                     } else {
                         "../../tests/rust-archive-worker/io_fault.c"
@@ -938,3 +940,7 @@ fn large_selection_reaches_worker_permission_and_destination_checks() {
         assert_eq!(fs::read_dir(s.0.join("output")).unwrap().count(), 0);
     }
 }
+
+#[cfg(target_os = "linux")]
+#[path = "item_progress.rs"]
+mod item_progress;

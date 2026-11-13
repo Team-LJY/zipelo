@@ -219,20 +219,26 @@ impl Plan {
             if !roots.insert(name.to_lowercase()) {
                 return Err(ErrorCode::Conflict);
             }
+            crate::resources::completed(Ok(()), check)?;
         }
         for source in sources {
             let path = source.path.to_path()?;
-            let input = Input::open(&path)?;
+            let input = crate::resources::completed(Input::open(&path), check)?;
             plan.visit(path, source.archive_name.clone(), input, check)?;
         }
         let members = plan
             .items
             .iter()
-            .map(|p| Member {
-                entry: p.member.entry.clone(),
-                data: Vec::new(),
+            .map(|p| {
+                crate::resources::completed(
+                    Ok(Member {
+                        entry: p.member.entry.clone(),
+                        data: Vec::new(),
+                    }),
+                    check,
+                )
             })
-            .collect::<Vec<_>>();
+            .collect::<Result<Vec<_>>>()?;
         archive::validate_members_with(&members, check)?;
         Ok(plan)
     }
@@ -247,7 +253,10 @@ impl Plan {
         if self.items.len() >= self.limits.entries as usize {
             return Err(ErrorCode::Limit);
         }
-        let metadata: Metadata = input.file.metadata().map_err(crate::space::io_error)?;
+        let metadata: Metadata = crate::resources::completed(
+            input.file.metadata().map_err(crate::space::io_error),
+            check,
+        )?;
         let directory = metadata.is_dir();
         let name = archive::valid_name(&name, directory)?;
         self.budget.charge_with(&name, check.metadata_limits())?;
@@ -267,7 +276,7 @@ impl Plan {
             },
             None,
         )?;
-        check.activity()?;
+        crate::resources::completed(Ok(()), check)?;
         self.items.push(Planned {
             member: Member {
                 entry: Entry {
@@ -285,7 +294,7 @@ impl Plan {
                 data: Vec::new(),
             },
             path: path.clone(),
-            object: filesystem::object(&input.file)?,
+            object: crate::resources::completed(filesystem::object(&input.file), check)?,
             modified: metadata.modified().ok(),
         });
         if directory {
@@ -310,11 +319,11 @@ impl Plan {
                     },
                     None,
                 )?;
-                check.activity()?;
+                crate::resources::completed(Ok(()), check)?;
             }
             children.sort();
             for leaf in children {
-                let child = input.open_child(&path, &leaf)?;
+                let child = crate::resources::completed(input.open_child(&path, &leaf), check)?;
                 self.visit(path.join(&leaf), format!("{name}/{leaf}"), child, check)?;
             }
         }
@@ -324,7 +333,7 @@ impl Plan {
         for item in &self.items {
             check.check()?;
             item.open()?;
-            check.activity()?;
+            crate::resources::completed(Ok(()), check)?;
         }
         Ok(())
     }

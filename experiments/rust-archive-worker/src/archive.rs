@@ -152,23 +152,26 @@ pub(crate) fn validate_members_with(
     let mut names = BTreeMap::<String, bool>::new();
     let mut budget = MetadataBudget::default();
     for member in members {
-        check.activity()?;
+        check.check()?;
         budget.charge_with(&member.entry.name, check.metadata_limits())?;
         let directory = member.entry.kind == EntryKind::Directory;
         let name = valid_name(&member.entry.name, directory)?.to_lowercase();
         if names.insert(name, directory).is_some() {
             return Err(ErrorCode::Conflict);
         }
+        crate::resources::completed(Ok(()), check)?;
     }
     for name in names.keys() {
-        check.activity()?;
+        check.check()?;
         let mut parent = name.as_str();
         while let Some((p, _)) = parent.rsplit_once('/') {
             if names.get(p) == Some(&false) {
                 return Err(ErrorCode::Conflict);
             }
             parent = p;
+            crate::resources::completed(Ok(()), check)?;
         }
+        crate::resources::completed(Ok(()), check)?;
     }
     Ok(())
 }
@@ -180,7 +183,7 @@ pub(crate) fn output_directories(
     let mut budget = MetadataBudget::default();
     let mut dirs = BTreeSet::new();
     for member in members {
-        check.activity()?;
+        check.check()?;
         budget.charge_with(&member.entry.name, check.metadata_limits())?;
         if member.entry.kind == EntryKind::Directory && !dirs.contains(member.entry.name.as_str()) {
             dirs.insert(member.entry.name.clone());
@@ -192,7 +195,9 @@ pub(crate) fn output_directories(
                 dirs.insert(parent.to_owned());
             }
             name = parent;
+            crate::resources::completed(Ok(()), check)?;
         }
+        crate::resources::completed(Ok(()), check)?;
     }
     Ok(dirs)
 }
