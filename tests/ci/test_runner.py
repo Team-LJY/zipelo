@@ -210,6 +210,21 @@ class RunnerTests(unittest.TestCase):
                 self.assertTrue(all(row["status"] == "passed" for row in results))
                 self.assertEqual(cargo.call_count, 4)
 
+    @unittest.skipUnless(sys.platform == "linux", "Linux 소켓 경로 회귀 시험임")
+    def test_long_checkout_does_not_block_file_fixtures(self):
+        work = run_rust.ROOT / "tests/work"
+        work.mkdir(exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=work) as directory:
+            root = Path(directory) / ("long-checkout-" * 10)
+            for name in run_rust.FILE_FIXTURES:
+                (root / "tests" / name).mkdir(parents=True)
+            socket = root / "tests/rust-file-publication/runs/case-1-1/parent/output"
+            self.assertGreaterEqual(len(run_rust.os.fsencode(socket)), 108)
+            with patch.object(run_rust.subprocess, "check_output", return_value="ef53\n"):
+                self.assertEqual(run_rust.prepare_fixtures(root), {})
+            for name in run_rust.FILE_FIXTURES:
+                self.assertEqual(list((root / "tests" / name / "runs").iterdir()), [])
+
     def test_unknown_filesystem_probe_error_is_failure(self):
         with (
             patch.object(run_rust, "prepare_fixtures", side_effect=subprocess.CalledProcessError(1, "stat")),
