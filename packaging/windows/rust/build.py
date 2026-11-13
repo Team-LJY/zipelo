@@ -84,13 +84,13 @@ def build(args):
         source, records[name] = build_binary(manifest, binary, target_dir, args.profile, features)
         shutil.copyfile(source, payload / name)
     shutil.copyfile(ROOT / "LICENSE", payload / "LICENSE")
-    records = {"development_only": True, "windows_execution_verified": False,
+    records = {"development_only": False, "windows_execution_verified": False,
                "profile": args.profile, "target": TARGET, "files": records}
     (payload / "BUILD-INFO.json").write_text(json.dumps(records, indent=4) + "\n", encoding="utf-8")
     shutil.copyfile(Path(__file__).with_name("installer.nsi"), output / "installer.nsi")
     shutil.copyfile(ROOT / "experiments/rust-ui-memory-app/src/assets/icons/zipelo.ico", output / "zipelo.ico")
     subprocess.run(["makensis", "-WX", "installer.nsi"], cwd=output, check=True)
-    installer = output / "Zipelo-0.1.0-dev-windows-x64-setup.exe"
+    installer = output / "Zipelo-0.1.0-windows-x64-setup.exe"
     if pe_machine(installer) not in (0x14C, 0x8664):
         raise ValueError("NSIS 설치 실행 파일이 아님")
     print(installer)

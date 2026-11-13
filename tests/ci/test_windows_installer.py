@@ -64,7 +64,7 @@ class InstallerInputTests(unittest.TestCase):
         completed = subprocess.run(["makensis", "-WX", "installer.nsi"], cwd=self.root,
                                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
         self.assertEqual(completed.returncode, 0, completed.stdout)
-        installer = self.root / "Zipelo-0.1.0-dev-windows-x64-setup.exe"
+        installer = self.root / "Zipelo-0.1.0-windows-x64-setup.exe"
         self.assertIn(MODULE.pe_machine(installer), (0x14C, 0x8664))
         self.assertGreater(installer.stat().st_size, 100000)
 
@@ -76,7 +76,7 @@ class InstallerInputTests(unittest.TestCase):
         self.assertEqual(commands[0], 'StrCpy $INSTDIR "${INSTALLROOT}"')
         root = re.search(r'^!define INSTALLROOT "([^"\n]+)"$', source, re.MULTILINE)
         self.assertIsNotNone(root)
-        self.assertEqual(root.group(1), "$LOCALAPPDATA\\Programs\\Zipelo-Dev")
+        self.assertEqual(root.group(1), "$LOCALAPPDATA\\Programs\\Zipelo")
         self.assertIn('InstallDir "${INSTALLROOT}"', source)
         uninstaller = source.split("Function un.onInit", 1)[1].split("FunctionEnd", 1)[0]
         self.assertIn('StrCmp $INSTDIR "${INSTALLROOT}" 0 invalid', uninstaller)
