@@ -112,7 +112,8 @@ fn run() -> eframe::Result {
                         zipelo_ui_memory_app::archive_screen::scenarios::Preview::new(
                             app,
                             &cc.egui_ctx,
-                        ),
+                        )
+                        .with_scenario(scenario),
                     ) as Box<dyn eframe::App>);
                 }
                 let factory: Box<dyn zipelo_ui_memory_app::archive_ui::Factory> = if fixture {

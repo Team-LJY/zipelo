@@ -52,6 +52,10 @@ catalog! {
     "create-error" => "ZIP 만들기 중 디스크 공간 부족",
     "password-create" => "암호 ZIP 생성의 작업자 암호 요청",
     "close-confirm" => "진행 중 창 닫기 확인",
+    "uninstall-windows" => "Windows 제거 전 기본 앱 선택 안내",
+    "uninstall-settings-error" => "Windows 기본 앱 설정 실행 실패",
+    "uninstall-ubuntu-missing" => "Ubuntu 이전 기본 앱 복원 불가 안내",
+    "uninstall-ubuntu-unknown-user" => "Ubuntu 제거 사용자 확인 불가 안내",
 }
 
 pub fn listing() -> String {
@@ -149,6 +153,60 @@ fn entries(many: bool) -> Vec<Entry> {
 }
 
 impl Scenario {
+    /// 제거 안내는 외부 설치 화면의 문구만 재현하며 OS 동작은 실행하지 않음.
+    pub fn show(self, app: &mut ArchiveApp, ui: &mut egui::Ui) {
+        let (title, messages, button): (&str, Vec<&str>, Option<&str>) = match self.name {
+            "uninstall-windows" => (
+                "제거 전 기본 앱 선택",
+                vec![
+                    "Zipelo를 기본 앱으로 사용했다면 제거 전에 다른 앱을 선택하세요. [기본 앱 설정 열기]에서 .zip, .7z, .tar, .gz, .tgz를 검색해 사용할 앱을 고를 수 있습니다. 다른 앱이 없으면 먼저 설치하세요.",
+                    "직접 고른 기본 앱은 자동으로 바꾸지 않습니다. 제거 후 파일이 열리지 않으면 파일을 오른쪽 클릭하고 [연결 프로그램]에서 다른 앱을 선택하세요.",
+                ],
+                Some("기본 앱 설정 열기"),
+            ),
+            "uninstall-settings-error" => (
+                "기본 앱 설정 실행 실패",
+                vec![
+                    "Windows 설정을 열지 못했습니다. 설정 > 앱 > 기본 앱에서 확장자를 검색해 다른 앱을 선택하세요.",
+                ],
+                Some("확인"),
+            ),
+            "uninstall-ubuntu-missing" => (
+                "Ubuntu 제거 안내",
+                vec![
+                    "Zipelo를 제거합니다. 파일이 열리지 않으면 파일을 오른쪽 클릭하고 [다른 프로그램으로 열기]에서 다른 앱을 선택하세요.",
+                    "이전 앱을 복원할 수 없습니다: application/zip. 파일을 오른쪽 클릭해 [다른 프로그램으로 열기]에서 앱을 선택하세요.",
+                ],
+                None,
+            ),
+            "uninstall-ubuntu-unknown-user" => (
+                "Ubuntu 제거 안내",
+                vec![
+                    "Zipelo를 제거합니다. 파일이 열리지 않으면 파일을 오른쪽 클릭하고 [다른 프로그램으로 열기]에서 다른 앱을 선택하세요.",
+                    "제거를 요청한 사용자를 확인할 수 없어 사용자 기본 앱 설정은 변경하지 않습니다.",
+                ],
+                None,
+            ),
+            _ => {
+                app.show(ui);
+                return;
+            }
+        };
+        egui::CentralPanel::default().show_inside(ui, |ui| {
+            ui.add_space(16.0);
+            ui.heading(title);
+            ui.add_space(16.0);
+            for message in messages {
+                ui.label(message);
+                ui.add_space(16.0);
+            }
+            if let Some(button) = button {
+                // 미리보기에서는 설정 열기와 제거를 실행하지 않음.
+                let _ = ui.button(button);
+            }
+        });
+    }
+
     /// 실제 파일과 작업자를 사용하지 않고 기존 화면 상태를 준비함.
     pub fn build(self) -> ArchiveApp {
         let factory = FakeFactory::manual();
@@ -159,7 +217,7 @@ impl Scenario {
         app.automatic_destination = false;
         app.zip_folder = base.clone();
         app.zip_name = "여행 자료.zip".into();
-        if self.name == "empty" {
+        if self.name == "empty" || self.name.starts_with("uninstall-") {
             return app;
         }
         let archive = base.join(if self.name == "gzip-conflict" {
@@ -394,8 +452,21 @@ impl Scenario {
 }
 
 /// 화면을 고정하고 실제 파일 조작을 막는 미리보기임.
-pub struct Preview(pub ArchiveApp);
+pub struct Preview(pub ArchiveApp, Option<Scenario>);
 impl Preview {
+    pub fn with_scenario(mut self, scenario: Scenario) -> Self {
+        self.1 = Some(scenario);
+        self
+    }
+
+    pub fn show(&mut self, ui: &mut egui::Ui) {
+        if let Some(scenario) = self.1 {
+            scenario.show(&mut self.0, ui);
+        } else {
+            self.0.show(ui);
+        }
+    }
+
     pub fn new(app: ArchiveApp, ctx: &egui::Context) -> Self {
         ctx.on_begin_pass(
             "ui-scenario-readonly",
@@ -410,7 +481,7 @@ impl Preview {
                 });
             }),
         );
-        Self(app)
+        Self(app, None)
     }
 }
 impl eframe::App for Preview {
@@ -419,6 +490,6 @@ impl eframe::App for Preview {
             root.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
             return;
         }
-        self.0.show(root);
+        self.show(root);
     }
 }

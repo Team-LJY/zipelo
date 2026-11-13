@@ -72,6 +72,10 @@ cargo +1.99.1 build --locked --manifest-path experiments/rust-ui-memory-app/Carg
 - create-error: ZIP 만들기 실패. 디스크 여유 공간 안내를 확인한다.
 - password-create: 암호 ZIP 생성 중 작업자 암호 요청. 암호와 암호 확인 입력 배치를 확인한다.
 - close-confirm: 진행 중 창 닫기 확인. 작업 취소와 유지 선택지를 확인한다.
+- uninstall-windows: Windows 제거 전 다른 기본 앱 선택 안내와 설정 열기 버튼 문구를 확인한다.
+- uninstall-settings-error: Windows 설정 실행 실패 시 수동 설정 경로를 확인한다.
+- uninstall-ubuntu-missing: 이전 앱이 없어 복원하지 못한 경우의 터미널 안내 문구를 확인한다.
+- uninstall-ubuntu-unknown-user: 제거 사용자를 확인하지 못해 설정을 유지하는 안내 문구를 확인한다.
 
 --ui-scenario에는 이름 하나만 지정한다. 없는 이름, 누락된 이름, 다른 옵션이나 경로와의 혼합은 사용 가능한 목록을 출력하고 실패로 끝난다. --list-ui-scenarios도 단독으로 사용한다. 기존 파일 연결 실행과 --ui-fixture의 인자 해석은 유지한다.
 
@@ -96,7 +100,7 @@ python3 tests/ci/run_rust.py local
 
 ## 설치 프로그램의 제거 안내
 
-Windows NSIS 제거 프로그램은 앱과 별도의 실행 파일입니다. 이번 제거 안내는 Uninstall.exe 실행 후 확인 화면 앞에 표시되며 [기본 앱 설정 열기]로 Windows 설정을 엽니다. 아직 앱의 --ui-scenario 목록에 이 안내의 미리보기는 추가하지 않았습니다. frontend 담당의 상황 목록과 시험 보완 전까지 해당 변경은 초안으로 유지합니다.
+Windows NSIS 제거 프로그램은 앱과 별도의 실행 파일입니다. 이번 제거 안내는 Uninstall.exe 실행 후 확인 화면 앞에 표시되며 [기본 앱 설정 열기]로 Windows 설정을 엽니다. --ui-scenario uninstall-windows와 uninstall-settings-error로 안내 문구를 확인합니다. Ubuntu 터미널 안내는 uninstall-ubuntu-missing과 uninstall-ubuntu-unknown-user로 확인합니다. 이 네 상황은 외부 설치 프로그램과 터미널의 문구를 egui에 재현한 읽기 전용 미리보기이며, NSIS의 실제 배치나 운영체제 창 모양을 재현하지 않습니다. 버튼은 설정을 열거나 제거를 실행하지 않습니다. 다른 운영체제에서도 같은 안내를 확인할 수 있습니다.
 
 실제 검증은 전용 Windows VM에서 설치와 기본 앱 지정 후 Uninstall.exe를 실행합니다. 설정에서 ZIP의 다른 기본 앱을 선택하고 제거한 뒤 ZIP을 열어야 합니다. 설정을 열지 않고 제거한 경우의 [연결 프로그램] 경로, 취소 시 앱 유지, /S 무인 제거의 창 생략, 사용자가 바꾼 등록 값 보존도 확인합니다. NSIS 컴파일 시험은 이 운영체제 화면 검증을 대신하지 않습니다.
 
