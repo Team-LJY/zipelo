@@ -384,7 +384,6 @@ settings_failed:
     MessageBox MB_OK "Windows 설정을 열지 못했습니다. 설정에서 앱 > 기본 앱을 직접 열어주세요."
 FunctionEnd
 
-
 ; 현재 값이 설치 시 기록한 값과 같은 경우에만 지움.
 !macro RemoveOwnedValue KEY NAME EXPECTED
     ReadRegStr $0 HKCU "${KEY}" "${NAME}"

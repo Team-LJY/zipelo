@@ -27,3 +27,5 @@ sudo로 처음 설치하면 postinst가 SUDO_USER의 ZIP, 7z, TAR.GZ, GZ, TAR �
 로컬 crate에 원문이 없으면 packaging/license-supplements.json의 해당 버전 공식 upstream 원문을 사용합니다. 보충 파일에는 고정 출처 URL, crate 버전과 VCS 커밋, Cargo SPDX 식, UTF-8 원문과 SHA-256이 들어 있습니다. 생성기는 SPDX와 게시된 crate 커밋 및 원문 해시를 오프라인으로 검증합니다. 승인된 표준 보충도 없는 항목은 링크 설명만으로 대체하지 않고 계속 빌드를 차단합니다.
 
 upstream에도 원문이 없는 승인된 12개 항목은 SPDX의 MIT 표준 원문과 해당 버전 Cargo.toml의 저자 고지로 보충합니다. 고지에 표준 원문 보충 사유, 선택한 라이선스, 원문과 저자 고지의 출처 및 SHA-256을 표시합니다. Cargo 메타데이터의 전체 라이선스 식은 그대로 보존합니다.
+
+제거 회귀 시험은 python3 -m unittest discover -s tests/ci -p test_default_apps.py와 python3 -m unittest discover -s tests/release-packages -p test_ubuntu_lifecycle.py로 실행합니다. 실제 패키지 검증은 python3 tests/release-packages/uninstall_defaults_smoke.py <deb 경로>입니다. 기존 Zipelo 설치가 있으면 중단하며, 호스트 기본 앱은 바꾸지 않고 별도 설정 공간에서 이전 앱 복원과 xdg-open을 통한 unzip 실행을 확인합니다. 그래픽 데스크톱 창 조작이나 실제 SUDO_USER 홈의 복원까지 검증하는 명령은 아닙니다.
