@@ -23,3 +23,6 @@ pub mod archive_theme;
 pub mod window_frame;
 
 pub mod archive_path;
+
+#[cfg(feature = "ui")]
+pub mod app_icon;

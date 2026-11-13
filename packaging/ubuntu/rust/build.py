@@ -43,6 +43,9 @@ def build(args):
     desktop = stage / "usr/share/applications"
     desktop.mkdir(parents=True)
     shutil.copyfile(Path(__file__).with_name("zipelo.desktop"), desktop / "zipelo.desktop")
+    icons = stage / "usr/share/icons/hicolor/256x256/apps"
+    icons.mkdir(parents=True)
+    shutil.copyfile(ROOT / "experiments/rust-ui-memory-app/src/assets/icons/zipelo-256.png", icons / "zipelo.png")
     subprocess.run(["desktop-file-validate", str(desktop / "zipelo.desktop")], check=True)
     shutil.copyfile(ROOT / "LICENSE", docs / "copyright")
     control = stage / "DEBIAN"

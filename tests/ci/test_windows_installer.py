@@ -60,6 +60,7 @@ class InstallerInputTests(unittest.TestCase):
         for name in ("Zipelo.exe", "zipelo-archive-worker.exe", "LICENSE", "BUILD-INFO.json", "THIRD-PARTY-LICENSES.txt"):
             (payload / name).write_bytes(b"compile-only test fixture")
         shutil.copyfile(ROOT / "packaging/windows/rust/installer.nsi", self.root / "installer.nsi")
+        shutil.copyfile(ROOT / "experiments/rust-ui-memory-app/src/assets/icons/zipelo.ico", self.root / "zipelo.ico")
         completed = subprocess.run(["makensis", "-WX", "installer.nsi"], cwd=self.root,
                                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
         self.assertEqual(completed.returncode, 0, completed.stdout)
