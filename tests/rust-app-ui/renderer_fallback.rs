@@ -79,3 +79,14 @@ fn options_keep_event_loop_available_for_retry() {
     assert!(options.run_and_return);
     assert!(matches!(options.renderer, eframe::Renderer::Glow));
 }
+
+#[test]
+fn application_windows_use_the_shared_transparent_icon() {
+    let icon = zipelo_ui_memory_app::app_icon::load();
+    assert_eq!((icon.width, icon.height), (256, 256));
+    assert_eq!(icon.rgba[3], 0);
+    assert!(icon.rgba.chunks_exact(4).any(|pixel| pixel[3] == 255));
+    let options = renderer::options(Backend::Glow, eframe::NativeOptions::default());
+    assert_eq!(options.viewport.app_id.as_deref(), Some("zipelo"));
+    assert_eq!(options.viewport.icon.unwrap().rgba, icon.rgba);
+}

@@ -153,6 +153,7 @@ impl WorkWindow {
         }
         let mut builder = egui::ViewportBuilder::default()
             .with_title(title)
+            .with_icon(crate::app_icon::load())
             .with_decorations(decorations)
             .with_inner_size(size)
             .with_resizable(false)

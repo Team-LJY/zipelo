@@ -30,6 +30,10 @@ pub fn try_backends<E>(
 }
 
 pub fn options(backend: Backend, mut options: eframe::NativeOptions) -> eframe::NativeOptions {
+    options.viewport = options
+        .viewport
+        .with_app_id("zipelo")
+        .with_icon(zipelo_ui_memory_app::app_icon::load());
     options.renderer = eframe::Renderer::Glow;
     options.run_and_return = true;
     #[cfg(target_os = "windows")]

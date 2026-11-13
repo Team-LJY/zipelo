@@ -13,6 +13,8 @@ SetCompressor /SOLID lzma
 SetOverwrite off
 AllowSkipFiles off
 ShowInstDetails show
+!define MUI_ICON "zipelo.ico"
+!define MUI_UNICON "zipelo.ico"
 !define MUI_ABORTWARNING
 !define MUI_CUSTOMFUNCTION_ABORT Rollback
 !insertmacro MUI_PAGE_WELCOME
@@ -111,6 +113,7 @@ Section "Zipelo"
     IfErrors failed
     StrCpy $UninstallOwned 1
     WriteRegStr HKCU "${UNKEY}" "DisplayName" "Zipelo 개발판"
+    WriteRegStr HKCU "${UNKEY}" "DisplayIcon" '$\"$INSTDIR\Zipelo.exe$\",0'
     WriteRegStr HKCU "${UNKEY}" "DisplayVersion" "0.1.0-dev"
     WriteRegStr HKCU "${UNKEY}" "UninstallString" '$\"$INSTDIR\Uninstall.exe$\"'
     IfErrors failed
@@ -134,6 +137,7 @@ Function Rollback
         Delete "$SMPROGRAMS\Zipelo 개발판.lnk"
     ${EndIf}
     ${If} $UninstallOwned == 1
+        DeleteRegValue HKCU "${UNKEY}" "DisplayIcon"
         DeleteRegValue HKCU "${UNKEY}" "DisplayName"
         DeleteRegValue HKCU "${UNKEY}" "DisplayVersion"
         DeleteRegValue HKCU "${UNKEY}" "UninstallString"
@@ -179,6 +183,7 @@ Function ApplyAssociations
     Pop $0
     ClearErrors
     WriteRegStr HKCU "${PROGKEY}" "" "Zipelo 압축파일"
+    WriteRegStr HKCU "${PROGKEY}\DefaultIcon" "" '$\"$INSTDIR\Zipelo.exe$\",0'
     WriteRegStr HKCU "${PROGKEY}\shell\open\command" "" '$\"$INSTDIR\Zipelo.exe$\" $\"%1$\"'
     WriteRegStr HKCU "${APPKEY}\Capabilities" "ApplicationName" "Zipelo 개발판"
     WriteRegStr HKCU "${APPKEY}\Capabilities" "ApplicationDescription" "압축파일 열기와 풀기"
@@ -247,11 +252,14 @@ Section "Uninstall"
     DeleteRegKey /ifempty HKCU "${APPKEY}\Capabilities"
     DeleteRegKey /ifempty HKCU "${APPKEY}"
     DeleteRegValue HKCU "${PROGKEY}\shell\open\command" ""
+    DeleteRegValue HKCU "${PROGKEY}\DefaultIcon" ""
+    DeleteRegKey /ifempty HKCU "${PROGKEY}\DefaultIcon"
     DeleteRegValue HKCU "${PROGKEY}" ""
     DeleteRegKey /ifempty HKCU "${PROGKEY}\shell\open\command"
     DeleteRegKey /ifempty HKCU "${PROGKEY}\shell\open"
     DeleteRegKey /ifempty HKCU "${PROGKEY}\shell"
     DeleteRegKey /ifempty HKCU "${PROGKEY}"
+    DeleteRegValue HKCU "${UNKEY}" "DisplayIcon"
     DeleteRegValue HKCU "${UNKEY}" "DisplayName"
     DeleteRegValue HKCU "${UNKEY}" "DisplayVersion"
     DeleteRegValue HKCU "${UNKEY}" "UninstallString"
