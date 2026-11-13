@@ -166,3 +166,143 @@ fn approved_extraction_reports_implicit_parents_separately_from_entries() {
         );
     }
 }
+
+#[cfg(target_os = "linux")]
+#[test]
+fn approved_password_wait_is_not_killed_by_app_deadline() {
+    const MODE: &str = "ZIPELO_SUPERVISOR_CLOCK_CASE";
+    if let Ok(mode) = std::env::var(MODE) {
+        let approved = mode != "unapproved";
+        let scratch = Scratch::new();
+        let output = scratch.path("output.zip");
+        let mut factory = ProcessFactory::new(binary("zipelo-archive-worker"));
+        let mut connection = factory.connect(1).unwrap();
+        let start = Start::CreateZip {
+            sources: vec![(scratch.path("source.txt"), "source.txt".into())],
+            output_file: output.clone(),
+            method: Method::Store,
+            aes256: true,
+        };
+        fs::write(scratch.path("source.txt"), b"source").unwrap();
+        connection
+            .send(Request {
+                job_id: 1,
+                sequence: 0,
+                command: if approved {
+                    Command::StartExpanded(start)
+                } else {
+                    Command::Start(start)
+                },
+            })
+            .unwrap();
+        let started = Instant::now();
+        let mut sequence = 1;
+        let mut granted = false;
+        let mut password = false;
+        let mut cancelled = false;
+        let mut terminal = None;
+        let mut fault = None;
+        loop {
+            if let Some(event) = connection.poll() {
+                match event {
+                    HostEvent::Frame {
+                        event: Event::ResourceRequired(q),
+                        ..
+                    } => {
+                        assert!(approved);
+                        connection
+                            .send(Request {
+                                job_id: 1,
+                                sequence,
+                                command: Command::ResourceReply {
+                                    challenge_id: q.id,
+                                    scope: q.scope,
+                                    allow: true,
+                                },
+                            })
+                            .unwrap();
+                        sequence += 1;
+                        granted = true;
+                    }
+                    HostEvent::Frame {
+                        event: Event::PasswordRequired { .. },
+                        ..
+                    } => password = true,
+                    HostEvent::Frame {
+                        event: Event::Terminal(value),
+                        ..
+                    } => terminal = Some(value),
+                    HostEvent::Fault(message) => fault = Some(message),
+                    HostEvent::Exited { success } => {
+                        assert!(password);
+                        assert_eq!(granted, approved);
+                        assert!(!output.exists());
+                        if approved {
+                            assert!(success);
+                            assert!(
+                                fault.is_none(),
+                                "승인 뒤 암호 대기를 강제 종료함: {fault:?}"
+                            );
+                            assert_eq!(terminal.unwrap().outcome, Outcome::Cancelled);
+                        } else {
+                            assert!(!success);
+                            assert!(fault.unwrap().contains("제한 시간"));
+                        }
+                        return;
+                    }
+                    _ => {}
+                }
+            }
+            if approved && started.elapsed() > Duration::from_secs(4) && !cancelled {
+                connection
+                    .send(Request {
+                        job_id: 1,
+                        sequence,
+                        command: Command::Cancel,
+                    })
+                    .unwrap();
+                cancelled = true;
+            }
+            assert!(started.elapsed() < Duration::from_secs(8));
+            std::thread::sleep(Duration::from_millis(1));
+        }
+    }
+    let scratch = Scratch::new();
+    let clock = scratch.path("supervisor-clock.so");
+    assert!(
+        std::process::Command::new("cc")
+            .args(["-shared", "-fPIC", "-pthread"])
+            .arg(
+                Path::new(env!("CARGO_MANIFEST_DIR"))
+                    .join("../../tests/rust-app-real-worker/supervisor_clock.c")
+            )
+            .args(["-o"])
+            .arg(&clock)
+            .arg("-ldl")
+            .status()
+            .unwrap()
+            .success()
+    );
+    for mode in ["control", "approved", "unapproved"] {
+        let mut command = std::process::Command::new(std::env::current_exe().unwrap());
+        command
+            .args([
+                "--exact",
+                "guarded_flows::approved_password_wait_is_not_killed_by_app_deadline",
+                "--nocapture",
+            ])
+            .env(MODE, mode);
+        if mode == "control" {
+            command.env_remove("LD_PRELOAD");
+        } else {
+            command.env("LD_PRELOAD", &clock);
+        }
+        let output = command.output().unwrap();
+        assert!(
+            output.status.success(),
+            "{mode}: {}\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+}

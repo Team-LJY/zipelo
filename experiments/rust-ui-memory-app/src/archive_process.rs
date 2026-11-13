@@ -337,6 +337,12 @@ fn fault(events: &SyncSender<ui::HostEvent>, stop: &AtomicBool, message: &str) {
     notify(events, ui::HostEvent::Fault(message.into()));
 }
 
+#[derive(Default)]
+struct ResourceDeadline {
+    pending: Option<(u64, wire::ResourceScope)>,
+    approved: bool,
+}
+
 pub struct ProcessFactory {
     worker: PathBuf,
 }
@@ -366,10 +372,12 @@ impl ui::Factory for ProcessFactory {
         let stop = Arc::new(AtomicBool::new(false));
         let done = Arc::new(AtomicBool::new(false));
         let expected = Arc::new(Mutex::new(None));
+        let resources = Arc::new(Mutex::new(ResourceDeadline::default()));
         let worker = self.worker.clone();
         let worker_stop = stop.clone();
         let worker_done = done.clone();
         let worker_expected = expected.clone();
+        let worker_resources = resources.clone();
         let supervisor = thread::Builder::new()
             .name("zipelo-worker-owner".into())
             .spawn(move || {
@@ -407,6 +415,7 @@ impl ui::Factory for ProcessFactory {
                     worker_stop,
                     worker_done,
                     worker_expected,
+                    worker_resources,
                 );
             })
             .map_err(|_| "작업자 관리 스레드를 시작하지 못했습니다")?;
@@ -423,6 +432,7 @@ impl ui::Factory for ProcessFactory {
                     stop,
                     supervisor: Some(supervisor),
                     expected,
+                    resources,
                     done,
                     disconnected: false,
                     reaped: false,
@@ -451,6 +461,7 @@ struct ProcessConnection {
     stop: Arc<AtomicBool>,
     supervisor: Option<JoinHandle<()>>,
     expected: Arc<Mutex<Option<wire::ActionKind>>>,
+    resources: Arc<Mutex<ResourceDeadline>>,
     done: Arc<AtomicBool>,
     disconnected: bool,
     reaped: bool,
@@ -513,6 +524,10 @@ impl ui::Connection for ProcessConnection {
             self.stop.store(true, Ordering::Release);
             return Err("작업자 요청을 직렬화하지 못했습니다".into());
         }
+        let mut resources = self.resources.lock().map_err(|_| {
+            self.stop.store(true, Ordering::Release);
+            "작업자 승인 상태 오류"
+        })?;
         let bytes = Frame(std::mem::take(&mut *self.buffer.0.borrow_mut()), is_cancel);
         if self.send.as_ref().unwrap().try_send(bytes).is_err() {
             if is_cancel && self.done.load(Ordering::Acquire) {
@@ -521,6 +536,16 @@ impl ui::Connection for ProcessConnection {
             }
             self.stop.store(true, Ordering::Release);
             return Err("작업자 요청 대기열이 닫혔거나 가득 찼습니다".into());
+        }
+        if let wire::Message::ResourceReply {
+            challenge_id,
+            scope,
+            allow,
+        } = message
+            && resources.pending == Some((challenge_id, scope))
+        {
+            resources.approved |= allow;
+            resources.pending = None;
         }
         self.next += 1;
         Ok(())
@@ -563,6 +588,7 @@ fn supervise(
     stop: Arc<AtomicBool>,
     done: Arc<AtomicBool>,
     expected: Arc<Mutex<Option<wire::ActionKind>>>,
+    resources: Arc<Mutex<ResourceDeadline>>,
 ) {
     let mut input = child.stdin.take().unwrap();
     let mut output = child.stdout.take().unwrap();
@@ -604,6 +630,7 @@ fn supervise(
     let tx = events.clone();
     let abort = stop.clone();
     let received_terminal = terminal_received.clone();
+    let pending_resource = resources.clone();
     threads.push(
         thread::Builder::new()
             .name("zipelo-worker-output".into())
@@ -619,6 +646,14 @@ fn supervise(
                                 if job != job_id || event.is_err() {
                                     fault(&tx, &abort, "작업자 응답이 요청과 일치하지 않습니다");
                                     break false;
+                                }
+                                if let Ok(ui::Event::ResourceRequired(question)) = &event {
+                                    if let Ok(mut state) = pending_resource.lock() {
+                                        state.pending = Some((question.id, question.scope));
+                                    } else {
+                                        fault(&tx, &abort, "작업자 승인 상태 오류");
+                                        break false;
+                                    }
                                 }
                                 if matches!(event, Ok(ui::Event::Terminal(_))) {
                                     received_terminal.store(true, Ordering::Release);
@@ -679,7 +714,13 @@ fn supervise(
     }
     let started = Instant::now();
     let status = loop {
-        if started.elapsed() >= Duration::from_secs(310) {
+        // 승인 뒤 실제 진행과 질문 대기 시간은 작업자의 60초 정체 감시로 판단함.
+        // 응답 프레임 간격을 실제 파일 처리 진행으로 간주하지 않음.
+        let approved = resources
+            .lock()
+            .map(|state| state.approved)
+            .unwrap_or(false);
+        if !approved && started.elapsed() >= Duration::from_secs(310) {
             fault(&events, &stop, "작업자 처리 제한 시간을 초과했습니다");
         }
         if stop.load(Ordering::Acquire) {
