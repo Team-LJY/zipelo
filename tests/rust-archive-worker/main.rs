@@ -1609,3 +1609,5 @@ fn disk_full_error_tag_preserves_previous_tags_and_rejects_unknown() {
 mod folder_inputs;
 
 mod zip_names;
+
+mod conflict_wire;
