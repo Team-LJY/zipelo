@@ -3,6 +3,7 @@ use std::{env, path::PathBuf, process::Command};
 fn main() {
     println!("cargo:rerun-if-changed=src/assets/icons/zipelo.ico");
     println!("cargo:rerun-if-env-changed=RC");
+    println!("cargo:rerun-if-env-changed=CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER");
     if env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("windows")
         || env::var_os("CARGO_FEATURE_UI").is_none()
     {
@@ -37,6 +38,13 @@ fn main() {
             .arg(format!("/fo{}", compiled.display()))
             .arg(&resource);
     } else {
+        if let Ok(preprocessor) = env::var("CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER") {
+            command.arg(format!("--preprocessor={preprocessor}")).args([
+                "--preprocessor-arg=-E",
+                "--preprocessor-arg=-xc",
+                "--preprocessor-arg=-DRC_INVOKED",
+            ]);
+        }
         command
             .arg("-i")
             .arg(&resource)
