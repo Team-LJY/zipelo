@@ -2,7 +2,7 @@
 
 별도 프로세스의 stdin/stdout으로 revision 3 요청을 처리합니다. 제품 앱이 공유 codec으로 연결하며 프로세스 분리는 OS sandbox를 뜻하지 않습니다. 암호 기능은 capability=true이며 ZipCrypto 해제, WinZip AES-256 AE-1/AE-2 해제와 AE-2 생성을 지원합니다.
 
-- ZIP32/ZIP64 Store/Deflate 목록과 해제, ZIP32/ZIP64 생성, 기본 TAR/USTAR, GZ, TAR.GZ, 비암호화 7z 해제를 지원합니다. GZ 연결 멤버는 하나의 논리 스트림으로 합칩니다. 다중 볼륨, UTF-8로 해석할 수 없는 ZIP 이름, PAX/GNU 확장과 특수 항목 해제는 미지원입니다.
+- ZIP32/ZIP64 Store/Deflate 목록과 해제, ZIP32/ZIP64 생성, 기본 TAR/USTAR, GZ, TAR.GZ, TAR.BZ2, TAR.XZ, 비암호화 7z 해제를 지원합니다. GZ 연결 멤버는 하나의 논리 스트림으로 합칩니다. 다중 볼륨, UTF-8로 해석할 수 없는 ZIP 이름, PAX/GNU 확장과 특수 항목 해제는 미지원입니다.
 - ZIP 이름: UTF-8 플래그(비트 11)가 있으면 이름이 UTF-8이어야 하며 아니면 Integrity입니다. 플래그가 없으면 CRC가 원래 이름과 맞는 Info-ZIP Unicode Path 확장 필드(0x7075, 버전 1)를 우선 쓰고, 다음으로 UTF-8로 유효한 이름 바이트를 그대로 씁니다(Linux/macOS 도구의 기본 동작). CRC가 다르거나 버전이 다른 확장 필드는 무시합니다. 그 밖의 CP437/CP949 등 레거시 이름은 코드 페이지를 추측하지 않고 UnsupportedFeature로 거부합니다. 어느 경로로 얻은 이름이든 같은 경로 안전성 검사와 충돌 검사를 거칩니다.
 - ZIP/TAR/GZ/TAR.GZ/7z 목록과 해제는 입력 기본 한도 u64::MAX, 해제 총량 16 GiB, 항목 10,000개입니다. 요청 limits는 이 값을 낮출 수 있습니다. 64 KiB 버퍼와 임시 파일로 입력과 검증 완료 payload를 처리해 모든 출력의 CRC, 크기와 경로를 게시 전에 검사합니다. checkpoint마다 취소, 부모 프로세스 생존과 300초 한도를 확인합니다. ZIP 생성은 원본을 하나씩 스냅샷으로 읽어 스트리밍으로 압축하며 원본 크기 합계에 16 GiB 한도를 적용합니다. ZIP64 크기와 오프셋은 필요한 항목에만 기록합니다. slice 기반 archive parser는 입력 64 MiB/출력 128 MiB, slice ZIP builder는 원본 및 결과 128 MiB 한도를 유지합니다.
 - 경로 깊이는 64개 구성 요소, 이름/출력 계획 메타데이터 예산은 8 MiB, 출력 계획 노드는 32,768개로 제한합니다. 이름 복제와 인덱스 비용을 보수적으로 계산해 할당 전에 Limit으로 거부합니다.
@@ -34,6 +34,25 @@ revision 2의 기존 필드와 오류 tag 0~12 및 입력/출력 기본 한도�
 - solid 그룹의 압축 크기는 첫 substream에만 기록하고 나머지는 0으로 표시합니다. 각 파일의 정확한 비압축 크기는 유지합니다.
 - 합성 표본은 Python 표준 lzma로 생성합니다. 별도로 시스템 libarchive가 만든 LZMA1/LZMA2 표본을 해제하고, 합성 표본도 libarchive 읽기 API로 검사합니다. libarchive는 Linux 시험의 독립 참조 도구이며 제품 의존성이 아닙니다. 시험 도구와 표본은 tests/rust-archive-worker 아래에 있습니다.
 - 형식 확장은 히나타 님과 합의한 Format::SevenZip=4입니다. 기존 값 0~3과 필드, 메시지 tag, 프레임 version은 유지합니다. 구버전 앱은 값 4를 거부하므로 앱 Format과 양방향 변환도 갱신해야 합니다. 이 백엔드 변경은 frontend 코드를 수정하지 않습니다.
+
+## 압축 TAR 해제
+
+TAR.BZ2와 TAR.XZ는 확장자가 아닌 BZh 및 XZ 매직으로 판별하고 비공개 임시 파일로 먼저 해제합니다. 연결된 BZip2/XZ 스트림은 하나의 TAR로 합치며 XZ의 4바이트 정렬 스트림 패딩도 허용합니다. 빈 TAR, USTAR 이름과 빈 폴더를 지원하지만 독립 BZ2/XZ 데이터 파일은 TAR가 아니면 거부합니다.
+
+해제 총량은 TAR 헤더와 패딩을 포함해 기존 16 GiB 이하이며 요청으로 낮출 수 있습니다. 64 KiB씩 실제 해제량을 확인하고 기록 전에 임시 저장소의 공간을 검사합니다. XZ는 블록별 LZMA2 디코더 메모리 32 MiB, 인덱스 8 MiB, 스트림 수와 스트림당 블록 수 각각 32,768을 상한으로 둡니다. 이 상한을 넘는 정상 파일도 Limit로 거부합니다. 해제 전체와 TAR 경로, 항목 종류 및 이름 충돌을 검증하기 전에는 목적지에 게시하지 않습니다. 출력 공간 검사, 안전한 충돌 처리, 취소와 300초 시간 제한도 기존 흐름을 사용합니다.
+
+XZ의 헤더, 인덱스, 푸터 CRC와 역방향 크기 및 전체 선언 해제량을 확인하고 실제 해제량과 비교합니다. 라이브러리는 데이터 블록의 지원되는 CRC32/CRC64/SHA256 검사를 수행합니다. XZ의 Check=None도 형식대로 허용하므로 데이터 체크섬이 없는 파일의 내용 무결성을 보장하지 않습니다. TAR의 PAX/GNU 확장, 링크와 특수 항목의 기존 제한도 유지합니다.
+
+통신에는 기존 Format::Tar=1을 사용합니다. 압축 방식별 새 형식 값이나 메시지 변경은 없으며 목록 식별자는 원본 객체, 길이와 SHA256을 계속 포함합니다. 화면의 파일 선택 필터와 지원 안내, 새 형식의 UI 상황 추가는 frontend 연동 범위입니다.
+
+의존성 선택 근거는 다음과 같습니다.
+
+- [bzip2 0.6.1](https://docs.rs/crate/bzip2/0.6.1/source/Cargo.toml)은 MIT OR Apache-2.0이며 기본 백엔드가 Rust 구현인 libbz2-rs-sys입니다. 고정 lockfile은 libbz2-rs-sys 0.2.6(bzip2-1.0.6 자유 라이선스)을 선택하고 Rust 할당자를 사용합니다. C 구현인 bzip2-sys 기능과 stdio/C 할당자는 활성화하지 않습니다.
+- [lzma-rust2 0.25.0](https://docs.rs/lzma-rust2/latest/lzma_rust2/struct.XzReader.html)은 Apache-2.0의 Rust 구현입니다. std와 xz만 활성화해 인코더와 다중 스레드 구현을 제외하고 사전 할당 전 메모리 제한을 적용합니다. CRC와 인덱스를 검증하며 연결 스트림을 끝까지 읽습니다.
+- 두 라이브러리와 새 전이 의존성의 원문은 Cargo 체크섬을 대조하는 기존 packaging/licenses.py가 고지에 자동 포함합니다. tests/release-packages/test_compressed_tar_licenses.py는 실제 고지에 세 압축 라이브러리의 원문과 해시가 포함되고 C 압축 백엔드가 없는지 확인합니다.
+- 2026-11-13 [RustSec 공개 목록](https://rustsec.org/advisories/)에서 bzip2, libbz2-rs-sys, lzma-rust2 이름의 항목은 찾지 못했습니다. 새 전이 sha2 0.11.1은 RUSTSEC-2021-0100의 수정 범위(>=0.9.8)에 해당합니다. 전체 최신 DB 자동 감사와 취약점 부재를 보장하는 확인은 수행하지 않았습니다.
+
+Python 표준 bz2, lzma와 tarfile로 독립 생성 및 해제한 결과의 SHA256과 실제 작업자 결과를 비교합니다. tests/rust-archive-worker/compressed_tar.rs는 정상, 빈 TAR, 연결 스트림, XZ 필터와 체크 방식, 잘림과 손상, 푸터/인덱스 크기, 큰 사전, 작은 출력 한도의 압축 폭탄, 한도 경계, 경로 이탈, 링크, 목록 식별자와 선택, 취소 및 디코더 임시 공간 실패를 검증합니다.
 
 ## 암호 ZIP
 

@@ -1,4 +1,5 @@
 pub mod archive;
+mod compressed_tar;
 mod create;
 mod create_sources;
 mod crypto;
