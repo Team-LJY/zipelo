@@ -1,10 +1,16 @@
 # Ubuntu UI 선택과 연결 상태
 
+> 과거 C# 구현 기록: C#은 v0.1에서 중단하고 Rust로 대체했다. PR103(f1d9fa5)에서 C# 소스와 전용 시험 및 .NET 설정을 제거했다. 아래 본문의 "현재", 미구현 상태, API와 검증 결과는 작성 당시 C# 스냅샷에 관한 내용이며, 현재 Rust 제품의 지원 범위나 검증 상태를 뜻하지 않는다. 삭제된 경로와 실행 명령은 현재 main에서 사용할 수 없다.
+>
+> 현재 기준은 [기획서](PLANS.md), [UI 설계](ui-design-v0.1.md), [릴리스 노트](release-notes-v0.1.md)다. 앱은 [Rust UI](../experiments/rust-ui-memory-app/), 압축 처리는 [Rust 작업자](../experiments/rust-archive-worker/README.md)를 사용한다. 과거 검사 재현과 소스 보존 안내는 [기획서의 과거 기록](PLANS.md#7-c-중단과-과거-검증-기록)을 따른다.
+
+## 보존된 당시 기록
+
 ## 대상과 현재 상태
 
 Ubuntu 24.04 LTS와 26.04 LTS x64를 개발 및 정식 지원 목표로 준비한다. 각 환경에서 설치와 UI, 공통 기능을 검증하기 전 지원 완료로 표시하지 않는다. Windows WPF는 src/Zipelo.Desktop에 보존했고 이번 변경에서 수정하지 않았다. WPF를 Ubuntu에서 실행하는 구성이 아니다.
 
-이번 추가 범위는 [src/Zipelo.Ubuntu](../src/Zipelo.Ubuntu/Zipelo.Ubuntu.csproj)의 UI 뼈대와 이 문서다. Core, Runtime, Worker와 tests/는 수정하지 않았다. 실제로 실행한 것은 소스 및 공식 자료 열람과 정적 XML, 이벤트 연결, 프로젝트 참조와 서식 검사뿐이다. OS나 SDK, NuGet 패키지와 시스템 라이브러리를 설치하지 않았고 restore, build, publish 및 UI 실행도 하지 않았다.
+이번 추가 범위는 [src/Zipelo.Ubuntu](https://github.com/Team-LJY/zipelo/blob/ae91536/src/Zipelo.Ubuntu/Zipelo.Ubuntu.csproj)의 UI 뼈대와 이 문서다. Core, Runtime, Worker와 tests/는 수정하지 않았다. 실제로 실행한 것은 소스 및 공식 자료 열람과 정적 XML, 이벤트 연결, 프로젝트 참조와 서식 검사뿐이다. OS나 SDK, NuGet 패키지와 시스템 라이브러리를 설치하지 않았고 restore, build, publish 및 UI 실행도 하지 않았다.
 
 로컬 /etc/os-release는 Ubuntu 26.04.1 LTS를 나타내고 XDG_SESSION_TYPE은 wayland다. DISPLAY와 WAYLAND_DISPLAY 환경변수는 있지만 이것만으로 화면 접근이나 XWayland 동작을 입증하지 않는다. dotnet은 PATH에 없다. Ubuntu 24.04 실행 환경은 이번 세션에서 확인하지 않았다.
 
@@ -26,7 +32,7 @@ Ubuntu 24.04 LTS와 26.04 LTS x64를 개발 및 정식 지원 목표로 준비�
 
 ## 프로젝트와 공통 계약 연결
 
-Program은 Avalonia AppBuilder로 별도 UI를 시작한다. App과 MainWindow는 WPF를 참조하지 않는다. [UbuntuWorkspace](../src/Zipelo.Ubuntu/UbuntuWorkspace.cs)는 Core의 EngineCapability, JobLimits, JobResult와 Runtime의 ZipWorkerClient.ListAsync를 사용한다. UI 프로세스에서 ZIP 파서를 직접 호출하지 않는다.
+Program은 Avalonia AppBuilder로 별도 UI를 시작한다. App과 MainWindow는 WPF를 참조하지 않는다. [UbuntuWorkspace](https://github.com/Team-LJY/zipelo/blob/ae91536/src/Zipelo.Ubuntu/UbuntuWorkspace.cs)는 Core의 EngineCapability, JobLimits, JobResult와 Runtime의 ZipWorkerClient.ListAsync를 사용한다. UI 프로세스에서 ZIP 파서를 직접 호출하지 않는다.
 
 실제 목록 연결은 다음 순서다.
 
@@ -98,7 +104,7 @@ dotnet publish src/Zipelo.Ubuntu/Zipelo.Ubuntu.csproj -c Release -r linux-x64 --
 
 ### 같은 라운드에서 확인한 새 게시 API
 
-문서 작성 중 [NewZipPublisher](../src/Zipelo.Runtime/NewZipPublisher.cs)가 추가된 것을 확인했다. 실제 진입점은 다음과 같다. 소스 시그니처를 읽은 결과이며 실행 검증 결과가 아니다.
+문서 작성 중 [NewZipPublisher](https://github.com/Team-LJY/zipelo/blob/ae91536/src/Zipelo.Runtime/NewZipPublisher.cs)가 추가된 것을 확인했다. 실제 진입점은 다음과 같다. 소스 시그니처를 읽은 결과이며 실행 검증 결과가 아니다.
 
 ```csharp
 Task<ZipPublicationResult> NewZipPublisher.PublishAsync(
@@ -121,7 +127,7 @@ Windows Create의 후속 호출 순서는 새 저장 위치 선택 → 입력별
 ## ZIP 생성 UI 연결 후속 상태
 
 이 절은 앞 절의 생성 미연결 상태를 갱신한다. Windows와 Ubuntu는 공유 UI 소스
-[ZipCreationWorkflow](../src/Zipelo.Desktop/ZipCreationWorkflow.cs)를 사용한다.
+[ZipCreationWorkflow](https://github.com/Team-LJY/zipelo/blob/ae91536/src/Zipelo.Desktop/ZipCreationWorkflow.cs)를 사용한다.
 Ubuntu 프로젝트가 이 소스만 링크하며 WPF 프로젝트를 참조하지 않는다.
 파일 선택, 읽기 전용 입력 스냅샷, CreateAsync, NewZipPublisher.PublishAsync,
 Published/Error/CleanupFailed 결과 표시를 연결했다. 실행 검증 완료를 뜻하지 않는다.

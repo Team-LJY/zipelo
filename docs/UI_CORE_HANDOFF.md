@@ -1,13 +1,19 @@
 # Desktop과 Core 연결 계획
 
+> 과거 C# 구현 기록: C#은 v0.1에서 중단하고 Rust로 대체했다. PR103(f1d9fa5)에서 C# 소스와 전용 시험 및 .NET 설정을 제거했다. 아래 본문의 "현재", 미구현 상태, API와 검증 결과는 작성 당시 C# 스냅샷에 관한 내용이며, 현재 Rust 제품의 지원 범위나 검증 상태를 뜻하지 않는다. 삭제된 경로와 실행 명령은 현재 main에서 사용할 수 없다.
+>
+> 현재 기준은 [기획서](PLANS.md), [UI 설계](ui-design-v0.1.md), [릴리스 노트](release-notes-v0.1.md)다. 앱은 [Rust UI](../experiments/rust-ui-memory-app/), 압축 처리는 [Rust 작업자](../experiments/rust-archive-worker/README.md)를 사용한다. 과거 검사 재현과 소스 보존 안내는 [기획서의 과거 기록](PLANS.md#7-c-중단과-과거-검증-기록)을 따른다.
+
+## 보존된 당시 기록
+
 1~10장은 2026-11-09 초기 연결 전 소스의 정적 검토 기록이다. 이후 구현 상태는 11장을 기준으로 확인한다. 초기 기록의 행 번호와 미구현 표현은 당시 스냅샷에 해당한다. 이번 변경은 이 문서에 한정하며 실제 연결, 빌드, 테스트 실행이나 Windows 동작 검증을 의미하지 않는다. 저장소는 Team-LJY/zipelo, 확인 브랜치는 docs/initial-project-plan이다. 공유 작업 지침에 따라 브랜치를 전환하지 않는다.
 
 ## 1. 현재 연결 상태와 근거
 
-- [Desktop 시작점](../src/Zipelo.Desktop/App.xaml.cs) 10행은 UnavailableWorkspace를 사용한다. [UI 계약](../src/Zipelo.Desktop/WorkspacePort.cs) 37행의 IArchiveWorkspace를 구현하는 실제 어댑터는 없다.
-- [Desktop 프로젝트](../src/Zipelo.Desktop/Zipelo.Desktop.csproj)는 net10.0-windows WPF이며 Core 프로젝트 참조가 없다. [Core 프로젝트](../src/Zipelo.Core/Zipelo.Core.csproj)는 net10.0이다. 대상 프레임워크 방향은 연결 가능하지만 컴파일로 확인한 결과는 아니다.
-- [Core 작업](../src/Zipelo.Core/ArchiveJob.cs) 17행은 작업 종류, 형식, 엔진, 읽기 전용 입력 스트림, 출력 트랜잭션, 암호 제공자와 진행 관찰자를 요구한다. UI의 경로 기반 요청을 그대로 전달할 수 없다.
-- [Core 계약](../src/Zipelo.Core/ArchiveContracts.cs) 54행과 71행에는 미연결 엔진과 출력 구현만 있다. 엔진이나 저장 계층을 UI 코드에 임시로 구현해 연결된 것처럼 표시하지 않는다.
+- [Desktop 시작점](https://github.com/Team-LJY/zipelo/blob/ae91536/src/Zipelo.Desktop/App.xaml.cs) 10행은 UnavailableWorkspace를 사용한다. [UI 계약](https://github.com/Team-LJY/zipelo/blob/ae91536/src/Zipelo.Desktop/WorkspacePort.cs) 37행의 IArchiveWorkspace를 구현하는 실제 어댑터는 없다.
+- [Desktop 프로젝트](https://github.com/Team-LJY/zipelo/blob/ae91536/src/Zipelo.Desktop/Zipelo.Desktop.csproj)는 net10.0-windows WPF이며 Core 프로젝트 참조가 없다. [Core 프로젝트](https://github.com/Team-LJY/zipelo/blob/ae91536/src/Zipelo.Core/Zipelo.Core.csproj)는 net10.0이다. 대상 프레임워크 방향은 연결 가능하지만 컴파일로 확인한 결과는 아니다.
+- [Core 작업](https://github.com/Team-LJY/zipelo/blob/ae91536/src/Zipelo.Core/ArchiveJob.cs) 17행은 작업 종류, 형식, 엔진, 읽기 전용 입력 스트림, 출력 트랜잭션, 암호 제공자와 진행 관찰자를 요구한다. UI의 경로 기반 요청을 그대로 전달할 수 없다.
+- [Core 계약](https://github.com/Team-LJY/zipelo/blob/ae91536/src/Zipelo.Core/ArchiveContracts.cs) 54행과 71행에는 미연결 엔진과 출력 구현만 있다. 엔진이나 저장 계층을 UI 코드에 임시로 구현해 연결된 것처럼 표시하지 않는다.
 
 ## 2. 타입과 데이터 변환
 
@@ -45,9 +51,9 @@ JobEvent는 JobId, Sequence, State, ProcessedBytes를 제공하지만 WorkspaceP
 
 Core PasswordChallenge에는 Attempt가 추가되어 있고 PasswordProvider는 ValueTask를 반환한다. UI의 Task 콜백을 await하여 변환하고 작업 ID, 요청 ID와 시도 횟수를 보존한다. 두 네임스페이스의 PasswordChallenge 이름이 같으므로 어댑터에서 별칭 또는 전체 이름을 사용한다.
 
-[UI 암호 처리](../src/Zipelo.Desktop/MainWindow.xaml.cs) 199행은 작업 ID만 검사하며 RequestId를 소비하지 않는다. 요청 ID별 한 번의 응답, 중복 요청 처리와 오래된 창의 응답 폐기를 추가해야 한다. 다른 작업이나 중복 요청에 단순 null을 반환하면 Core가 실제 사용자 취소와 구분하지 못하므로 요청 연결 오류와 사용자 취소의 구분도 합의한다.
+[UI 암호 처리](https://github.com/Team-LJY/zipelo/blob/ae91536/src/Zipelo.Desktop/MainWindow.xaml.cs) 199행은 작업 ID만 검사하며 RequestId를 소비하지 않는다. 요청 ID별 한 번의 응답, 중복 요청 처리와 오래된 창의 응답 폐기를 추가해야 한다. 다른 작업이나 중복 요청에 단순 null을 반환하면 Core가 실제 사용자 취소와 구분하지 못하므로 요청 연결 오류와 사용자 취소의 구분도 합의한다.
 
-[PasswordWindow](../src/Zipelo.Desktop/PasswordWindow.xaml.cs) 19행은 SecurePassword를 얻고 입력칸을 지운다. [EngineContext](../src/Zipelo.Core/EngineContext.cs) 154행은 전달받은 SecureString을 소비 콜백이 끝나면 폐기한다. UI는 성공적으로 소유권을 넘긴 암호를 동시에 폐기하면 안 되고, 인계 실패나 취소로 남은 사본만 폐기한다. 평문 문자열, 로그, 인자, 환경변수나 영구 설정으로 변환하지 않는다.
+[PasswordWindow](https://github.com/Team-LJY/zipelo/blob/ae91536/src/Zipelo.Desktop/PasswordWindow.xaml.cs) 19행은 SecurePassword를 얻고 입력칸을 지운다. [EngineContext](https://github.com/Team-LJY/zipelo/blob/ae91536/src/Zipelo.Core/EngineContext.cs) 154행은 전달받은 SecureString을 소비 콜백이 끝나면 폐기한다. UI는 성공적으로 소유권을 넘긴 암호를 동시에 폐기하면 안 되고, 인계 실패나 취소로 남은 사본만 폐기한다. 평문 문자열, 로그, 인자, 환경변수나 영구 설정으로 변환하지 않는다.
 
 사용자 취소는 null 응답과 작업 취소로 연결하며 암호 오류로 표시하지 않는다. Core의 내부 연결 토큰과 UI의 외부 토큰은 다르므로 최종 JobState.Cancelled도 반드시 해석한다. 엔진이 지원하지 않는 암호화 방식에는 반복 암호창을 띄우지 않는다. 현재 오류 코드에는 확정된 오입력과 암호화 방식 미지원의 상세 구분이 부족하므로 추측 안내를 피한다.
 
@@ -55,7 +61,7 @@ Core의 MaxDuration은 암호 대기 시간도 포함한다. 대기 시간을 �
 
 ## 5. 오류, 종료와 UI 복구
 
-[MainWindow](../src/Zipelo.Desktop/MainWindow.xaml.cs) 160행은 성공 여부만 표시하고 오류 코드는 전달받지 못한다. EngineUnavailable, UnsupportedOperation, OutputConflict, BudgetExceeded, IntegrityFailure, OutputUnavailable을 허용된 코드 기반 문구와 다음 행동으로 변환하는 계약이 필요하다. 예외 원문과 민감한 경로를 노출하지 않는 현재 원칙은 유지한다.
+[MainWindow](https://github.com/Team-LJY/zipelo/blob/ae91536/src/Zipelo.Desktop/MainWindow.xaml.cs) 160행은 성공 여부만 표시하고 오류 코드는 전달받지 못한다. EngineUnavailable, UnsupportedOperation, OutputConflict, BudgetExceeded, IntegrityFailure, OutputUnavailable을 허용된 코드 기반 문구와 다음 행동으로 변환하는 계약이 필요하다. 예외 원문과 민감한 경로를 노출하지 않는 현재 원칙은 유지한다.
 
 같은 파일의 다른 위치 저장, 암호 재입력과 단순 재시도는 서로 다르므로 상태별로 행동을 선택한다. 암호와 손상을 구분할 근거가 없으면 한쪽으로 단정하지 않는다. 생성과 해제 결과의 항목별 실패는 현재 목록 화면에 반영되지 않으므로 별도 결과 화면 또는 목록 갱신이 필요하다.
 
@@ -117,7 +123,7 @@ ZipFile.ExtractToDirectory를 UI에서 직접 호출하면 Core의 누적 예산
 
 ### 연결 지점
 
-Desktop 프로젝트에 Core 프로젝트 참조를 추가했다. 새 [CoreWorkspace](../src/Zipelo.Desktop/CoreWorkspace.cs)는 IArchiveWorkspace와 선택적 IWorkspaceCapabilities를 구현한다. CoreJobRunner 델리게이트를 받으며 정확한 형태는 다음과 같다.
+Desktop 프로젝트에 Core 프로젝트 참조를 추가했다. 새 [CoreWorkspace](https://github.com/Team-LJY/zipelo/blob/ae91536/src/Zipelo.Desktop/CoreWorkspace.cs)는 IArchiveWorkspace와 선택적 IWorkspaceCapabilities를 구현한다. CoreJobRunner 델리게이트를 받으며 정확한 형태는 다음과 같다.
 
 ```csharp
 Task<JobResult> Run(
@@ -147,7 +153,7 @@ Core 공개 타입과 IArchiveWorkspace.ExecuteAsync 시그니처는 변경하�
 - Core 전체 크기는 알 수 없으므로 진행 이벤트의 TotalBytes는 null로 전달한다. WaitingForPassword, Cancelling과 종료 확인 상태를 별도로 안내한다.
 - 반환 결과는 취소 토큰이 켜져 있다는 이유로 버리지 않는다. 실제 Completed 결과와 게시 확인 항목 수를 보존한다. Failed/Cancelled는 정상 중지와 구분해 정리 실패 가능성을 안내한다.
 - 항목 ID, 종류, 추출 및 검증 상태와 오류 코드를 보존한다. 목록 검증 전과 검증 통과를 구분하며, 결과 요약은 항목 수, 게시 확인 수와 실패 수를 표시한다. 상세 항목 오류 화면은 후속 범위다.
-- 오류는 [WorkspaceMessages](../src/Zipelo.Desktop/WorkspaceMessages.cs)의 허용된 코드별 문구로 표시하고 엔진 예외 원문은 출력하지 않는다. 실패 후 진행률을 0으로 복구한다.
+- 오류는 [WorkspaceMessages](https://github.com/Team-LJY/zipelo/blob/ae91536/src/Zipelo.Desktop/WorkspaceMessages.cs)의 허용된 코드별 문구로 표시하고 엔진 예외 원문은 출력하지 않는다. 실패 후 진행률을 0으로 복구한다.
 - 창 닫기와 중지는 실제 종료를 기다린다. 취소 요청만으로 작업을 끝난 것처럼 표시하지 않는다. 비협력 엔진의 강제 종료는 여전히 호스트의 책임이며 이번 UI 작업으로 구현하지 않았다.
 
 ### 암호 소유권
@@ -164,7 +170,7 @@ PasswordWindow.TakePassword는 SecureString 소유권을 한 번만 인계하며
 
 ### 같은 라운드에서 추가된 런타임 목록 진입점 연결
 
-[ZipWorkerWorkspace](../src/Zipelo.Desktop/ZipWorkerWorkspace.cs)는 새 [ZipWorkerClient](../src/Zipelo.Runtime/ZipWorkerClient.cs)의 `ListAsync(Guid, Stream, JobLimits, CancellationToken)`을 사용한다. Desktop에 Runtime 프로젝트 참조를 추가했으며 Core와 Runtime의 공개 API는 변경하지 않았다. App은 `ZipWorkerWorkspace.TryCreate() ?? new UnavailableWorkspace()`와 같은 선택을 수행한다.
+[ZipWorkerWorkspace](https://github.com/Team-LJY/zipelo/blob/ae91536/src/Zipelo.Desktop/ZipWorkerWorkspace.cs)는 새 [ZipWorkerClient](https://github.com/Team-LJY/zipelo/blob/ae91536/src/Zipelo.Runtime/ZipWorkerClient.cs)의 `ListAsync(Guid, Stream, JobLimits, CancellationToken)`을 사용한다. Desktop에 Runtime 프로젝트 참조를 추가했으며 Core와 Runtime의 공개 API는 변경하지 않았다. App은 `ZipWorkerWorkspace.TryCreate() ?? new UnavailableWorkspace()`와 같은 선택을 수행한다.
 
 실행 경로는 앱 배포 폴더 아래 `worker/Zipelo.Worker.exe`로 고정한다. 압축파일 경로나 PATH로 작업자를 탐색하지 않고 dotnet 호스트를 추측하지 않는다. 실제 작업자 실행 파일이 없으면 목록 버튼도 켜지 않는다. 당시 미구현이었던 작업자 배치는 12장의 Desktop 배포 설정으로 추가했다. 실제 산출물 검증은 아직 남아 있다. 이 문서 작성 중 VM 복사나 실행은 하지 않았다.
 
@@ -182,7 +188,7 @@ Desktop은 선택 파일을 FileAccess.Read, FileShare.Read로 열어 런타임�
 
 Worker 프로젝트의 실제 AssemblyName 기본값은 Zipelo.Worker이고 OutputType은 Exe, 대상은 net10.0이다. Windows에서 일반 SDK 빌드는 apphost exe, 관리 DLL, runtimeconfig/deps JSON과 참조된 Runtime 및 Core DLL을 출력한다. Desktop은 net10.0-windows이므로 Worker를 관리 코드 참조로 추가하지 않고 ReferenceOutputAssembly=false, Private=false인 빌드 의존성으로 추가했다. Worker 소스는 변경하지 않는다.
 
-Desktop의 [WorkerDeployment.targets](../src/Zipelo.Desktop/WorkerDeployment.targets)는 Windows의 일반 Build 이후 Worker의 GetTargetPath로 실제 출력 폴더를 얻는다. Configuration과 RuntimeIdentifier를 맞추고 UseAppHost=true를 사용한다. 작업자 필수 파일 6개가 존재하는지 확인한 뒤 작업자 출력과 하위 의존 파일을 Desktop TargetDir/worker로 복사한다. 이전 기본 publish 하위 폴더는 개발 빌드 복사 대상에서 제외한다. 개발 실행은 이 배치가 끝난 Desktop 빌드 결과를 사용한다. DesignTimeBuild에서는 배치 타깃을 실행하지 않는다.
+Desktop의 [WorkerDeployment.targets](https://github.com/Team-LJY/zipelo/blob/ae91536/src/Zipelo.Desktop/WorkerDeployment.targets)는 Windows의 일반 Build 이후 Worker의 GetTargetPath로 실제 출력 폴더를 얻는다. Configuration과 RuntimeIdentifier를 맞추고 UseAppHost=true를 사용한다. 작업자 필수 파일 6개가 존재하는지 확인한 뒤 작업자 출력과 하위 의존 파일을 Desktop TargetDir/worker로 복사한다. 이전 기본 publish 하위 폴더는 개발 빌드 복사 대상에서 제외한다. 개발 실행은 이 배치가 끝난 Desktop 빌드 결과를 사용한다. DesignTimeBuild에서는 배치 타깃을 실행하지 않는다.
 
 Windows 개발 환경의 명령 예시는 다음과 같다. 이번 라운드에서 실행한 명령은 아니다.
 
@@ -243,7 +249,7 @@ ZIP 생성은 메모리 생성과 디스크 게시가 구분되므로 계속 비
 ## ZIP 생성 UI 연결 후속 상태
 
 이 절은 앞 절의 생성 미연결 상태를 갱신한다. Windows와 Ubuntu는 공유 UI 소스
-[ZipCreationWorkflow](../src/Zipelo.Desktop/ZipCreationWorkflow.cs)를 사용한다.
+[ZipCreationWorkflow](https://github.com/Team-LJY/zipelo/blob/ae91536/src/Zipelo.Desktop/ZipCreationWorkflow.cs)를 사용한다.
 Ubuntu 프로젝트가 이 소스만 링크하며 WPF 프로젝트를 참조하지 않는다.
 파일 선택, 읽기 전용 입력 스냅샷, CreateAsync, NewZipPublisher.PublishAsync,
 Published/Error/CleanupFailed 결과 표시를 연결했다. 실행 검증 완료를 뜻하지 않는다.

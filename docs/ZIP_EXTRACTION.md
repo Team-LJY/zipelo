@@ -1,5 +1,11 @@
 # 비암호화 ZIP 해제와 새 폴더 게시
 
+> 과거 C# 구현 기록: C#은 v0.1에서 중단하고 Rust로 대체했다. PR103(f1d9fa5)에서 C# 소스와 전용 시험 및 .NET 설정을 제거했다. 아래 본문의 "현재", 미구현 상태, API와 검증 결과는 작성 당시 C# 스냅샷에 관한 내용이며, 현재 Rust 제품의 지원 범위나 검증 상태를 뜻하지 않는다. 삭제된 경로와 실행 명령은 현재 main에서 사용할 수 없다.
+>
+> 현재 기준은 [기획서](PLANS.md), [UI 설계](ui-design-v0.1.md), [릴리스 노트](release-notes-v0.1.md)다. 앱은 [Rust UI](../experiments/rust-ui-memory-app/), 압축 처리는 [Rust 작업자](../experiments/rust-archive-worker/README.md)를 사용한다. 과거 검사 재현과 소스 보존 안내는 [기획서의 과거 기록](PLANS.md#7-c-중단과-과거-검증-기록)을 따른다.
+
+## 보존된 당시 기록
+
 ## 상태
 
 메모리 해제와 Windows/Linux x64 새 폴더 게시 소스를 작성함. NewFolderPublisher의 구현 진입점은 연결했지만 일반 UI의 SupportsSafeExtraction=false와 Extract capability 미노출은 유지함. 로컬 .NET SDK가 없어 이번 C# 컴파일과 실제 게시 실행은 미검증임. 이전 Windows 62개 통과는 단일 ZIP 파일 게시에 관한 보고이며 새 폴더 게시의 증거가 아님.
