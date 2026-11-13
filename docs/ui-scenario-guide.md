@@ -42,6 +42,8 @@ cargo +1.99.1 build --locked --manifest-path experiments/rust-ui-memory-app/Carg
 ## 상황과 확인할 점
 
 - empty: 빈 첫 화면. 파일 열기 안내와 툴바 배치를 확인한다.
+- tar-bz2: TAR.BZ2 목록. 제목표시줄의 파일 이름과 목록을 확인한다.
+- tar-xz: TAR.XZ 목록. 제목표시줄의 대소문자가 섞인 복합 확장자와 목록을 확인한다.
 - archive: 파일과 폴더가 있는 압축파일. 이름, 크기, 잠금 아이콘과 상태 줄을 확인한다.
 - folder: 사진 폴더 내부. 상위 폴더 이동과 경로 줄을 확인한다.
 - many-items: 기본 5개 외에 500개 파일을 추가한 목록. 스크롤바와 행 배치를 확인한다.
@@ -104,3 +106,5 @@ python3 tests/ci/run_rust.py local
 - extract-rename-failed: 새 이름을 정한 뒤 실제 생성 보고 없이 I/O 오류가 난 결과입니다. 실패 원인과 "아무 파일도 풀지 않았습니다"를 표시하고 "이름 바꿔 저장" 완료 안내는 표시하지 않아야 합니다. 일부 파일이 저장된 뒤 실패한 경우에도 생성 보고가 있는 이름만 저장 완료로 표시합니다.
 
 실제 추출은 revision 3의 StartInteractive를 보내며 ZIP, 7z, TAR 계열과 단일 GZ의 파일 충돌에 같은 선택 창을 사용합니다. 목록 읽기와 ZIP 만들기는 기존 Start를 유지합니다. 위 명령은 실제 파일을 쓰지 않는 개발용 화면 미리보기입니다. 파일 기반 버튼 연동은 tests/rust-app-real-worker/conflict_flows.rs에서 확인하며, 운영체제별 실제 창 확인은 별도입니다.
+
+TAR.BZ2와 TAR.XZ의 자동 해제 폴더 이름은 미리보기에 표시되지 않는다. tests/rust-app-ui/presentation.rs의 이름 시험과 tests/rust-app-real-worker/compressed_tar_flows.rs의 실제 작업자 시험에서 복합 확장자 제거와 해제 결과를 확인한다.

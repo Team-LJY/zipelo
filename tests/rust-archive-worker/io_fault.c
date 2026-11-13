@@ -116,11 +116,16 @@ int fstatvfs(int fd, struct statvfs *value) {
     if (fstat(fd, &st)) return -1;
     int affected = !strcmp(fault, "space-error") || !strcmp(fault, "space-combined")
         || (!strcmp(fault, "space-stage") && S_ISREG(st.st_mode))
-        || (!strcmp(fault, "space-destination") && S_ISDIR(st.st_mode));
+        || ((!strcmp(fault, "space-destination") || !strcmp(fault, "space-one-output")) && S_ISDIR(st.st_mode));
     if (!affected) return result;
     int marker = real_openat(AT_FDCWD, getenv("ZIPELO_TEST_MARKER"), O_CREAT | O_WRONLY, 0600);
     if (marker >= 0) close(marker);
     if (!strcmp(fault, "space-error")) { errno = EIO; return -1; }
+    if (!strcmp(fault, "space-one-output")) {
+        value->f_frsize = 1;
+        value->f_bavail = 64;
+        return 0;
+    }
     value->f_bavail = !strcmp(fault, "space-combined") ? (1536 * 1024) / value->f_frsize : 0;
     return 0;
 }

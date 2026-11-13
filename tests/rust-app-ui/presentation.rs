@@ -320,7 +320,18 @@ fn duplicate_names_prevent_file_completion_assumptions() {
 }
 #[test]
 fn default_names_and_middle_truncation_preserve_unicode() {
-    assert_eq!(default_destination(&path("자료.tar.gz")), path("자료"));
+    for name in [
+        "자료.tar.gz",
+        "자료.tar.bz2",
+        "자료.TAR.BZ2",
+        "자료.TaR.xZ",
+        "자료.tar.xz",
+    ] {
+        assert_eq!(default_destination(&path(name)), path("자료"));
+    }
+    for name in [".tar.bz2", ".TAR.XZ"] {
+        assert_eq!(default_destination(&path(name)), path("압축 해제"));
+    }
     assert_eq!(default_destination(&path("자료.zip")), path("자료"));
     assert_eq!(middle_text("가나다라마바사아자차", 7), "가나다…아자차");
     assert_eq!(bytes_text(21), "21 B");

@@ -66,6 +66,21 @@ impl Catalog {
         {
             return zip(source, len, limits, decode, password, check);
         }
+        let compression = if magic.starts_with(b"BZh") {
+            Some(crate::compressed_tar::Compression::Bzip2)
+        } else if &magic == b"\xfd7zXZ\0" {
+            Some(crate::compressed_tar::Compression::Xz)
+        } else {
+            None
+        };
+        if let Some(compression) = compression {
+            let (data, expanded) =
+                crate::compressed_tar::decode(source, compression, limits.output, check)?;
+            if expanded < 1024 {
+                return Err(ErrorCode::Integrity);
+            }
+            return tar(data, expanded, limits, Format::Tar, check);
+        }
         if magic.starts_with(&[31, 139]) {
             let mut data = spool::temporary()?;
             io(source.rewind())?;

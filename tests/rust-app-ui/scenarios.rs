@@ -29,6 +29,8 @@ catalog! {
     "extract-rename-failed" => "새 이름을 정한 뒤 저장 전 I/O 실패",
     "empty" => "빈 첫 화면",
     "archive" => "폴더와 파일이 있는 압축파일",
+    "tar-bz2" => "TAR.BZ2 목록과 자동 해제 폴더",
+    "tar-xz" => "TAR.XZ 목록과 자동 해제 폴더",
     "folder" => "사진 하위 폴더",
     "many-items" => "500개 항목과 세로 스크롤",
     "selection" => "여러 파일과 폴더 선택",
@@ -168,13 +170,12 @@ impl Scenario {
         if self.name == "empty" {
             return app;
         }
-        let archive = base.join(
-            if matches!(self.name, "gzip-conflict" | "gzip-conflict-choice") {
-                "여행 자료.gz"
-            } else {
-                "여행 자료.zip"
-            },
-        );
+        let archive = base.join(match self.name {
+            "gzip-conflict" | "gzip-conflict-choice" => "여행 자료.gz",
+            "tar-bz2" => "여행 자료.TAR.BZ2",
+            "tar-xz" => "여행 자료.TaR.Xz",
+            _ => "여행 자료.zip",
+        });
         app.model.archive = Some(archive.clone());
         app.model.entries = entries(self.name == "many-items");
         app.model.list_id = Some(ListId {
@@ -189,6 +190,15 @@ impl Scenario {
         });
         app.model.confirmed = true;
         match self.name {
+            "tar-bz2" | "tar-xz" => {
+                app.model.list_id.as_mut().unwrap().format = Format::Tar;
+                for entry in &mut app.model.entries {
+                    entry.encrypted = false;
+                }
+                app.destination = present::default_destination(&archive);
+                app.automatic_destination = true;
+                return app;
+            }
             "archive" | "many-items" => return app,
             "folder-empty" => {
                 app.browse_folder("빈 폴더");

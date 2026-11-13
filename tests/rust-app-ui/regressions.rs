@@ -1,7 +1,7 @@
+mod conflicts;
 #[cfg(feature = "ui")]
 mod dialogs;
 mod fake;
-mod conflicts;
 #[cfg(feature = "ui")]
 mod native_dialogs;
 use fake::*;

@@ -102,7 +102,8 @@ fn every_listed_scenario_draws_and_keeps_its_expected_screen() {
                 "extract-skipped" => "모든 파일을 건너뛰었습니다",
                 "extract-rename-failed" => "아무 파일도 풀지 않았습니다",
                 "extract-renamed" => "이름 바꿔 저장: 읽어주세요 (1).txt",
-                "empty" => "압축파일",
+                "empty" => "TAR.BZ2, TAR.XZ",
+                "tar-bz2" | "tar-xz" => "읽어주세요.txt",
                 "folder-empty" => "이 폴더는 비어 있습니다",
                 "dialog-error" => "파일 선택 창을 열 수 없습니다",
                 "extract-partial" => "일부 파일만 풀렸습니다",
@@ -128,6 +129,13 @@ fn every_listed_scenario_draws_and_keeps_its_expected_screen() {
             if scenario.name == "extract-rename-failed" {
                 assert!(labels.contains("파일을 읽거나 쓰지 못했습니다"), "{labels}");
                 assert!(!labels.contains("이름 바꿔 저장:"), "{labels}");
+            }
+            if matches!(scenario.name, "tar-bz2" | "tar-xz") {
+                assert!(app.model.entries.iter().all(|entry| !entry.encrypted));
+                assert_eq!(
+                    app.model.list_id.as_ref().unwrap().format,
+                    zipelo_ui_memory_app::archive_ui::Format::Tar
+                );
             }
             if scenario.name == "many-items" {
                 assert_eq!(app.model.entries.len(), 505);

@@ -75,10 +75,6 @@ def prepare_fixtures(root):
                     " (tmpfs 포함 다른 파일시스템은 제품 코드에서 지원하지 않음)"
                 )
                 continue
-        if name == "rust-file-publication":
-            socket = path / "case-2147483647-99/parent/output"
-            if len(os.fsencode(socket)) >= 108:
-                raise ValueError("Unix 소켓 시험을 위해 더 짧은 checkout 경로가 필요함")
     return skipped
 
 

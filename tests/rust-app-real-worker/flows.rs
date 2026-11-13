@@ -316,6 +316,7 @@ mod screen {
     include!("selection_flows.rs");
     include!("conflict_flows.rs");
     include!("native_dialog_flows.rs");
+    include!("compressed_tar_flows.rs");
 
     fn archive_flow(name: &str, format: Format) {
         let scratch = Scratch::new();
