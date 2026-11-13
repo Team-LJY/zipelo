@@ -700,3 +700,231 @@ fn overwrite_does_not_modify_other_hard_links() {
     assert_eq!(fs::read(s.0.join("output/a")).unwrap(), PAYLOAD);
     assert_eq!(fs::read(s.0.join("outside")).unwrap(), b"original");
 }
+
+#[cfg(target_os = "linux")]
+#[test]
+fn skip_all_ignores_destination_space_for_zip_tar_and_gzip() {
+    for format in ["zip", "tar", "gzip"] {
+        for apply in [false, true] {
+            let s = Scratch::new();
+            let names = match format {
+                "zip" => vec!["a", "b"],
+                "tar" => vec!["folder/hello.txt"],
+                _ => vec!["chosen.txt"],
+            };
+            fixture(&s, &names);
+            let mut start = request(&s);
+            if format == "tar" {
+                fs::write(s.0.join("input"), include_bytes!("fixtures/sample.tar")).unwrap();
+            } else if format == "gzip" {
+                fs::write(s.0.join("input"), include_bytes!("fixtures/sample.gz")).unwrap();
+                if let Action::Extract {
+                    gzip_output_name, ..
+                } = &mut start.action
+                {
+                    *gzip_output_name = Some("chosen.txt".into());
+                }
+            }
+            let before = names
+                .iter()
+                .map(|name| hash(&s.0.join("output").join(name)))
+                .collect::<Vec<_>>();
+            let events = run(
+                &s,
+                start,
+                Some("space-destination"),
+                vec![],
+                |event| match event {
+                    Message::ConflictRequired { challenge_id, .. } => {
+                        Some(vec![reply(*challenge_id, ConflictChoice::Skip, apply)])
+                    }
+                    _ => None,
+                },
+            );
+            assert_eq!(
+                terminal(&events).outcome,
+                Outcome::Completed,
+                "{format}/{apply}: {events:?}"
+            );
+            assert_eq!(terminal(&events).error, ErrorCode::None);
+            assert_eq!(terminal(&events).publication, Publication::None);
+            assert_eq!(terminal(&events).created_count, 0);
+            assert_eq!(terminal(&events).durability, Durability::NotApplicable);
+            assert_eq!(terminal(&events).cleanup, Cleanup::Complete);
+            assert_eq!(created(&events), 0);
+            let conflicts = if format == "zip" { 2 } else { 1 };
+            assert_eq!(questions(&events), if apply { 1 } else { conflicts });
+            assert_eq!(
+                count(&events, |event| matches!(
+                    event,
+                    Message::ConflictResolved {
+                        choice: ConflictChoice::Skip,
+                        ..
+                    }
+                )),
+                conflicts
+            );
+            for (name, before) in names.iter().zip(before) {
+                assert_eq!(hash(&s.0.join("output").join(name)), before);
+            }
+            if format == "gzip" {
+                assert_eq!(
+                    fs::read(s.0.join("output/chosen.txt")).unwrap(),
+                    b"original"
+                );
+            }
+            assert!(
+                !s.0.join("paused").exists(),
+                "skipped files must not charge destination space"
+            );
+        }
+    }
+}
+#[cfg(target_os = "linux")]
+#[test]
+fn destination_space_is_checked_after_overwrite_or_rename_choice() {
+    for choice in [ConflictChoice::Overwrite, ConflictChoice::Rename] {
+        let s = Scratch::new();
+        fixture(&s, &["a", "b"]);
+        let before = hash(&s.0.join("output/a"));
+        let events = run(
+            &s,
+            request(&s),
+            Some("space-destination"),
+            vec![],
+            |event| match event {
+                Message::ConflictRequired { challenge_id, .. } => {
+                    Some(vec![reply(*challenge_id, choice, true)])
+                }
+                _ => None,
+            },
+        );
+        assert_eq!(questions(&events), 1, "{events:?}");
+        assert_eq!(
+            count(&events, |event| matches!(
+                event,
+                Message::ConflictResolved { .. }
+            )),
+            1
+        );
+        assert_eq!(terminal(&events).error, ErrorCode::DiskFull, "{events:?}");
+        assert_eq!(terminal(&events).publication, Publication::None);
+        assert_eq!(terminal(&events).created_count, 0);
+        assert_eq!(terminal(&events).cleanup, Cleanup::Complete);
+        assert_eq!(hash(&s.0.join("output/a")), before);
+        assert_eq!(hash(&s.0.join("output/b")), before);
+        assert_eq!(fs::read_dir(s.0.join("output")).unwrap().count(), 2);
+        assert!(s.0.join("paused").exists());
+    }
+}
+#[cfg(target_os = "linux")]
+#[test]
+fn skipped_files_do_not_charge_space_for_remaining_publication() {
+    for choice in [
+        Some(ConflictChoice::Overwrite),
+        Some(ConflictChoice::Rename),
+        None,
+    ] {
+        let s = Scratch::new();
+        fixture(&s, &["a", "b", "c"]);
+        assert!(PAYLOAD.len() <= 64 && PAYLOAD.len() * 3 > 64);
+        if choice.is_none() {
+            fs::remove_file(s.0.join("output/c")).unwrap();
+        }
+        let events = run(
+            &s,
+            request(&s),
+            Some("space-one-output"),
+            vec![],
+            |event| match event {
+                Message::ConflictRequired {
+                    challenge_id,
+                    entry_id,
+                    ..
+                } => {
+                    let choice = if *entry_id < 2 {
+                        ConflictChoice::Skip
+                    } else {
+                        choice.unwrap()
+                    };
+                    Some(vec![reply(*challenge_id, choice, false)])
+                }
+                _ => None,
+            },
+        );
+        assert_eq!(
+            terminal(&events).outcome,
+            Outcome::Completed,
+            "{choice:?}: {events:?}"
+        );
+        assert_eq!(terminal(&events).publication, Publication::Complete);
+        assert_eq!(terminal(&events).created_count, 1);
+        assert_eq!(created(&events), 1);
+        assert_eq!(questions(&events), if choice.is_some() { 3 } else { 2 });
+        assert_eq!(fs::read(s.0.join("output/a")).unwrap(), b"original");
+        assert_eq!(fs::read(s.0.join("output/b")).unwrap(), b"original");
+        let output = if choice == Some(ConflictChoice::Rename) {
+            "c (1)"
+        } else {
+            "c"
+        };
+        assert_eq!(fs::read(s.0.join("output").join(output)).unwrap(), PAYLOAD);
+        if choice == Some(ConflictChoice::Rename) {
+            assert_eq!(fs::read(s.0.join("output/c")).unwrap(), b"original");
+        }
+        assert!(s.0.join("paused").exists());
+    }
+}
+#[cfg(target_os = "linux")]
+#[test]
+fn insufficient_destination_space_does_not_prevent_cancellation() {
+    let s = Scratch::new();
+    fixture(&s, &["a"]);
+    let events = run(
+        &s,
+        request(&s),
+        Some("space-destination"),
+        vec![],
+        |event| matches!(event, Message::ConflictRequired { .. }).then(|| vec![Message::Cancel]),
+    );
+    assert_eq!(questions(&events), 1, "{events:?}");
+    assert_eq!(terminal(&events).outcome, Outcome::Cancelled, "{events:?}");
+    assert_eq!(terminal(&events).publication, Publication::None);
+    assert_eq!(fs::read(s.0.join("output/a")).unwrap(), b"original");
+}
+#[cfg(target_os = "linux")]
+#[test]
+fn interactive_staging_space_and_integrity_checks_remain_before_questions() {
+    for corrupt in [false, true] {
+        let s = Scratch::new();
+        fixture(&s, &["a"]);
+        if corrupt {
+            let mut bytes = fs::read(s.0.join("input")).unwrap();
+            let at = bytes
+                .windows(PAYLOAD.len())
+                .position(|bytes| bytes == PAYLOAD)
+                .unwrap();
+            bytes[at] ^= 1;
+            fs::write(s.0.join("input"), bytes).unwrap();
+        }
+        let fault = if corrupt {
+            "space-destination"
+        } else {
+            "space-stage"
+        };
+        let events = run(&s, request(&s), Some(fault), vec![], |_| None);
+        assert_eq!(
+            terminal(&events).error,
+            if corrupt {
+                ErrorCode::Integrity
+            } else {
+                ErrorCode::DiskFull
+            },
+            "{events:?}"
+        );
+        assert_eq!(questions(&events), 0);
+        assert_eq!(created(&events), 0);
+        assert_eq!(terminal(&events).publication, Publication::None);
+        assert_eq!(fs::read(s.0.join("output/a")).unwrap(), b"original");
+    }
+}

@@ -405,7 +405,13 @@ impl<W: Write> Job<W> {
                     } else {
                         None
                     };
-                    filesystem::preflight_space(&root, &output_sizes, staged)?;
+                    // 선택 전에는 검증에 필요한 스테이징 공간만 계산함.
+                    let initial_outputs = if self.interactive {
+                        &[][..]
+                    } else {
+                        &output_sizes[..]
+                    };
+                    filesystem::preflight_space(&root, initial_outputs, staged)?;
                     let encrypted = catalog.members.iter().any(|m| m.entry.encrypted);
                     if matches!(catalog.format, Format::Zip | Format::SevenZip) {
                         for attempt in 1..=3 {
@@ -457,7 +463,9 @@ impl<W: Write> Job<W> {
                             .map(|m| (m.entry.name.clone(), EntryKind::File)),
                     );
                     filesystem::preflight_mode(&root, &names, self.interactive)?;
-                    filesystem::preflight_space(&root, &output_sizes, None)?;
+                    if !self.interactive {
+                        filesystem::preflight_space(&root, &output_sizes, None)?;
+                    }
                     let mut reserved = names
                         .iter()
                         .map(|(name, _)| name.to_lowercase())
@@ -508,6 +516,14 @@ impl<W: Write> Job<W> {
                             if choice == ConflictChoice::Skip {
                                 continue;
                             }
+                        }
+                        if self.interactive {
+                            // 건너뛴 파일을 제외하고 이번에 게시할 파일의 공간을 확인함.
+                            filesystem::preflight_space(
+                                &root,
+                                &[(name.clone(), m.entry.size)],
+                                None,
+                            )?;
                         }
                         self.output_reader(
                             &root,
