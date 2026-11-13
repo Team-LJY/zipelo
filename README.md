@@ -2,11 +2,9 @@
 
 쉽고 빠른 압축과 압축 해제를 목표로 만드는 MIT 오픈소스 프로그램입니다.
 
-[![Zipelo 다운로드](assets/download-pending.svg)](https://github.com/Team-LJY/zipelo/releases/latest)
+[![Windows용 Zipelo 다운로드](assets/download-windows.svg)](https://github.com/Team-LJY/zipelo/releases/download/v0.1.0/Zipelo-0.1.0-windows-x64-setup.exe)
 
-**[다운로드 (최신 릴리스)](https://github.com/Team-LJY/zipelo/releases/latest)**
-
-설치 파일은 아직 게시되지 않았습니다. 첫 릴리스가 올라오면 위 버튼에서 받을 수 있습니다.
+버튼을 누르면 Windows 설치 파일(v0.1.0)을 바로 받습니다. Ubuntu용은 [.deb 설치 파일](https://github.com/Team-LJY/zipelo/releases/download/v0.1.0/zipelo_0.1.0_amd64.deb)을 받으세요. 모든 버전은 [릴리스 페이지](https://github.com/Team-LJY/zipelo/releases/latest)에 있습니다.
 
 ![Windows에서 샘플 ZIP을 연 Zipelo 화면](assets/screenshots/windows-archive-open.png)
 
@@ -20,14 +18,14 @@
 
 ## 설치 방법
 
-첫 릴리스가 게시되면 아래 순서로 설치할 수 있습니다. 다음은 Windows 설치 방법입니다.
+Windows에서는 아래 순서로 설치합니다.
 
-1. 위 다운로드 버튼을 누르고, 릴리스 페이지의 첨부 파일(Assets)에서 Windows 설치 파일(`.exe`)을 받으세요.
-2. 받은 설치 파일을 더블클릭하고 화면 안내에 따라 설치하세요.
+1. 위 다운로드 버튼을 눌러 Windows 설치 파일(`.exe`)을 받으세요.
+2. 받은 설치 파일을 더블클릭하고 화면 안내에 따라 설치하세요. "Windows의 PC 보호" 창이 뜨면 [추가 정보]를 누른 뒤 [실행]을 누르세요. 아직 코드 서명이 없는 설치 파일이라 이 창이 나올 수 있습니다.
 3. 기본 압축 프로그램으로 쓰려면 마지막 화면에서 [적용]을 누르고 Windows 설정에서 Zipelo를 선택하세요. 설정을 바꾸지 않으려면 [마침]을 누르세요.
 4. Zipelo를 실행하고 [열기]에서 압축 파일을 고르세요. 기본 앱으로 설정했다면 압축 파일을 더블클릭해 열 수도 있습니다.
 
-Ubuntu도 지원하며, 첫 릴리스에서 `.deb` 설치 파일을 받을 수 있습니다.
+Ubuntu에서는 [.deb 설치 파일](https://github.com/Team-LJY/zipelo/releases/download/v0.1.0/zipelo_0.1.0_amd64.deb)을 받아 `sudo apt install ./zipelo_0.1.0_amd64.deb`로 설치하세요. 처음 설치할 때 ZIP, 7z, TAR, GZ, TAR.GZ의 기본 앱이 Zipelo로 바뀝니다.
 
 ## 아직 안 되는 것과 사용 전 알아둘 점
 

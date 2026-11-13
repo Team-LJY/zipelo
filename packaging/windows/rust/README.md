@@ -1,4 +1,4 @@
-# Rust Windows 개발판 설치 파일
+# Rust Windows 설치 파일
 
 NSIS를 사용해 Linux에서 Windows x64 설치 EXE를 생성합니다. Rust 앱과 별도 작업자를
 교차 빌드하며 가짜 작업자 기능은 활성화하지 않습니다.
@@ -17,14 +17,14 @@ Cargo 1.99.1, Windows GNU Rust target, MinGW-w64와 makensis가 필요합니다.
 앱과 작업자 PR이 병합되기 전에는 각 PR의 별도 소스 경로를 인자로 지정합니다.
 빌드 정보에는 소스 커밋, 실행 파일 SHA-256, target, profile, 기능 목록을 기록합니다.
 
-설치 파일을 더블클릭하면 현재 사용자의 LocalAppData/Programs/Zipelo-Dev에
+설치 파일을 더블클릭하면 현재 사용자의 LocalAppData/Programs/Zipelo에
 Zipelo.exe, zipelo-archive-worker.exe, MIT LICENSE, BUILD-INFO.json과 제거 프로그램을 설치합니다.
 설치 경로는 위 위치로 고정되며 명령행 /D로 다른 위치를 지정해도 파일 쓰기 전에 고정 위치를 적용합니다.
 설치와 제거는 같은 경로 상수를 사용합니다.
 기존 폴더나 등록이 있으면 중단하며 덮어쓰기 업데이트는 지원하지 않습니다.
-시작 메뉴에 Zipelo 개발판 바로가기를 추가합니다.
+시작 메뉴에 Zipelo 바로가기를 추가합니다.
 
-마지막 화면의 [적용]을 누르면 HKCU의 ZipeloDev.Archive ProgID와 RegisteredApplications에
+마지막 화면의 [적용]을 누르면 HKCU의 Zipelo.Archive ProgID와 RegisteredApplications에
 .zip, .tar, .gz, .tgz 연결 후보를 등록하고 ms-settings:defaultapps를 엽니다.
 .tar.gz는 마지막 확장자 .gz로 연결됩니다. 기본 앱은 사용자가 Windows 설정에서 직접 선택합니다.
 7z도 연결 후보에 포함하며 JAR와 RAR는 등록하지 않습니다. [마침]만 누르면 연결 후보를 등록하지 않습니다.
