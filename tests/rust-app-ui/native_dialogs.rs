@@ -17,11 +17,21 @@ fn archive_filter_contains_every_case_variant_and_all_files_option() {
     .into_iter()
     .map(str::to_owned)
     .collect::<BTreeSet<_>>();
-    assert_eq!(
-        filters[0].1.iter().cloned().collect::<BTreeSet<_>>(),
-        expected
-    );
-    assert_eq!(filters[0].1.len(), expected.len());
+    let actual = filters[0].1.iter().cloned().collect::<BTreeSet<_>>();
+    assert!(expected.is_subset(&actual));
+    for extension in [
+        "tar.bz2", "TAR.BZ2", "TaR.bZ2", "tar.xz", "TAR.XZ", "tAr.Xz",
+    ] {
+        assert!(actual.contains(extension), "{extension}");
+    }
+    assert_eq!(actual.len(), expected.len() + 64);
+    assert_eq!(filters[0].1.len(), actual.len());
+    for extension in actual.difference(&expected) {
+        assert!(matches!(
+            extension.to_ascii_lowercase().as_str(),
+            "tar.bz2" | "tar.xz"
+        ));
+    }
     assert_eq!(filters[1], ("모든 파일", vec!["*".to_owned()]));
 }
 

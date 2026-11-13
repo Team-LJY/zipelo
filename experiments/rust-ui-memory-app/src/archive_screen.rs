@@ -1103,7 +1103,7 @@ impl ArchiveApp {
             ui.add_space(theme::PAD as f32);
             ui.colored_label(
                 theme::MUTED,
-                "ZIP, 7z, TAR, GZ, TAR.GZ 파일을 열 수 있습니다",
+                "ZIP, 7z, TAR, GZ, TAR.GZ, TAR.BZ2, TAR.XZ 파일을 열 수 있습니다",
             );
         });
     }
