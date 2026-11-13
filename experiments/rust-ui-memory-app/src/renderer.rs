@@ -1,3 +1,6 @@
+#[path = "app_icon.rs"]
+mod app_icon;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Backend {
     Dx12Hardware,
@@ -33,7 +36,7 @@ pub fn options(backend: Backend, mut options: eframe::NativeOptions) -> eframe::
     options.viewport = options
         .viewport
         .with_app_id("zipelo")
-        .with_icon(zipelo_ui_memory_app::app_icon::load());
+        .with_icon(app_icon::load());
     options.renderer = eframe::Renderer::Glow;
     options.run_and_return = true;
     #[cfg(target_os = "windows")]
