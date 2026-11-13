@@ -201,7 +201,7 @@ impl Plan {
     pub fn new(
         sources: &[Source],
         limits: Limits,
-        check: &mut impl FnMut() -> Result<()>,
+        check: &mut impl crate::resources::Monitor,
     ) -> Result<Self> {
         if sources.len() > limits.entries as usize {
             return Err(ErrorCode::Limit);
@@ -214,26 +214,32 @@ impl Plan {
         };
         let mut roots = std::collections::BTreeSet::new();
         for source in sources {
-            check()?;
+            check.check()?;
             let name = archive::valid_name(&source.archive_name, false)?;
             if !roots.insert(name.to_lowercase()) {
                 return Err(ErrorCode::Conflict);
             }
+            crate::resources::completed(Ok(()), check)?;
         }
         for source in sources {
             let path = source.path.to_path()?;
-            let input = Input::open(&path)?;
+            let input = crate::resources::completed(Input::open(&path), check)?;
             plan.visit(path, source.archive_name.clone(), input, check)?;
         }
         let members = plan
             .items
             .iter()
-            .map(|p| Member {
-                entry: p.member.entry.clone(),
-                data: Vec::new(),
+            .map(|p| {
+                crate::resources::completed(
+                    Ok(Member {
+                        entry: p.member.entry.clone(),
+                        data: Vec::new(),
+                    }),
+                    check,
+                )
             })
-            .collect::<Vec<_>>();
-        archive::validate_members(&members)?;
+            .collect::<Result<Vec<_>>>()?;
+        archive::validate_members_with(&members, check)?;
         Ok(plan)
     }
     fn visit(
@@ -241,23 +247,36 @@ impl Plan {
         path: PathBuf,
         name: String,
         input: Input,
-        check: &mut impl FnMut() -> Result<()>,
+        check: &mut impl crate::resources::Monitor,
     ) -> Result<()> {
-        check()?;
+        check.check()?;
         if self.items.len() >= self.limits.entries as usize {
             return Err(ErrorCode::Limit);
         }
-        let metadata: Metadata = input.file.metadata().map_err(crate::space::io_error)?;
+        let metadata: Metadata = crate::resources::completed(
+            input.file.metadata().map_err(crate::space::io_error),
+            check,
+        )?;
         let directory = metadata.is_dir();
         let name = archive::valid_name(&name, directory)?;
-        self.budget.charge(&name)?;
-        self.budget.charge(&path.to_string_lossy())?;
+        self.budget.charge_with(&name, check.metadata_limits())?;
+        self.budget
+            .charge_copy(&path.to_string_lossy(), check.metadata_limits())?;
         let size = if directory { 0 } else { metadata.len() };
         self.total = self
             .total
             .checked_add(size)
             .filter(|n| *n <= self.limits.input.min(self.limits.output))
             .ok_or(ErrorCode::Limit)?;
+        check.observe(
+            ResourceUsage {
+                estimated_bytes: Some(self.total),
+                actual_entries: Some(self.items.len() as u32 + 1),
+                ..ResourceUsage::default()
+            },
+            None,
+        )?;
+        crate::resources::completed(Ok(()), check)?;
         self.items.push(Planned {
             member: Member {
                 entry: Entry {
@@ -275,13 +294,13 @@ impl Plan {
                 data: Vec::new(),
             },
             path: path.clone(),
-            object: filesystem::object(&input.file)?,
+            object: crate::resources::completed(filesystem::object(&input.file), check)?,
             modified: metadata.modified().ok(),
         });
         if directory {
             let mut children = Vec::new();
             for entry in input.children(&path)? {
-                check()?;
+                check.check()?;
                 if self.items.len() + children.len() >= self.limits.entries as usize {
                     return Err(ErrorCode::Limit);
                 }
@@ -290,21 +309,31 @@ impl Plan {
                     .file_name()
                     .into_string()
                     .map_err(|_| ErrorCode::UnsafePath)?;
-                self.budget.charge(&leaf)?;
+                self.budget.charge_copy(&leaf, check.metadata_limits())?;
                 children.push(leaf);
+                check.observe(
+                    ResourceUsage {
+                        estimated_bytes: Some(self.total),
+                        estimated_entries: Some((self.items.len() + children.len()) as u32),
+                        ..ResourceUsage::default()
+                    },
+                    None,
+                )?;
+                crate::resources::completed(Ok(()), check)?;
             }
             children.sort();
             for leaf in children {
-                let child = input.open_child(&path, &leaf)?;
+                let child = crate::resources::completed(input.open_child(&path, &leaf), check)?;
                 self.visit(path.join(&leaf), format!("{name}/{leaf}"), child, check)?;
             }
         }
         Ok(())
     }
-    pub fn verify(&self, check: &mut impl FnMut() -> Result<()>) -> Result<()> {
+    pub fn verify(&self, check: &mut impl crate::resources::Monitor) -> Result<()> {
         for item in &self.items {
-            check()?;
+            check.check()?;
             item.open()?;
+            crate::resources::completed(Ok(()), check)?;
         }
         Ok(())
     }

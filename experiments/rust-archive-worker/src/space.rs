@@ -19,7 +19,7 @@ pub(crate) fn ensure(file: &File, bytes: u64) -> Result<()> {
 }
 
 #[cfg(all(target_os = "linux", target_pointer_width = "64"))]
-fn available(file: &File) -> Result<u128> {
+pub(crate) fn available(file: &File) -> Result<u128> {
     use std::os::fd::AsRawFd;
     #[repr(C)]
     #[derive(Default)]
@@ -48,12 +48,12 @@ fn available(file: &File) -> Result<u128> {
 }
 
 #[cfg(all(target_os = "linux", not(target_pointer_width = "64")))]
-fn available(_: &File) -> Result<u128> {
+pub(crate) fn available(_: &File) -> Result<u128> {
     Err(ErrorCode::UnsupportedFeature)
 }
 
 #[cfg(windows)]
-fn available(file: &File) -> Result<u128> {
+pub(crate) fn available(file: &File) -> Result<u128> {
     use std::{
         ffi::OsString,
         os::windows::{

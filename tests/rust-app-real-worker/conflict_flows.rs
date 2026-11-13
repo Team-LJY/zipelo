@@ -229,3 +229,36 @@ fn target_changed_during_real_question_fails_without_saved_name_notice() {
     assert!(!shown.contains("이름 바꿔 저장:"), "{shown}");
     assert_reaped(&observed);
 }
+
+#[test]
+fn approved_extract_continues_to_conflict_choices() {
+    let scratch = Scratch::new();
+    let (archive, output) = conflict_fixture(&scratch);
+    let (factory, observed) = observed_factory();
+    let mut screen = Screen::new(factory);
+    screen.open(&archive);
+    screen.app.model.entries[0].bytes = Some(17 * 1024 * 1024 * 1024);
+    screen.start_conflicting_extract(&output);
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while screen.app.model.resource.is_none() {
+        screen.render(vec![]);
+        assert!(screen.app.model.busy(), "{:?}", screen.app.model.error);
+        assert!(Instant::now() < deadline, "승인 질문 시간 초과");
+        std::thread::sleep(Duration::from_millis(2));
+    }
+    let approval = screen.app.model.resource.clone().unwrap();
+    assert!(screen.app.model.conflict.is_none());
+    screen.click("이 작업 허용");
+    let conflict = screen.await_conflict();
+    assert!(conflict.challenge_id > approval.id);
+    assert!(screen.app.model.resource.is_none());
+    screen.click("나머지 파일에도 같게 적용");
+    screen.click("덮어쓰기");
+    screen.settle_conflict_result();
+    completed(&screen.app.model);
+    assert_eq!(screen.app.model.resolutions.len(), 2);
+    for name in ["기록.txt", "사진.txt"] {
+        assert_eq!(fs::read(output.join(name)).unwrap(), b"new");
+    }
+    assert_reaped(&observed);
+}

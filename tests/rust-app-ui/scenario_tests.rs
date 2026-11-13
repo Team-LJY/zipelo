@@ -96,6 +96,10 @@ fn every_listed_scenario_draws_and_keeps_its_expected_screen() {
             );
             assert!(app.model.input_error.is_none(), "{}", scenario.name);
             let expected = match scenario.name {
+                "resource-approval" => "큰 작업을 허용할까요?",
+                "resource-ratio" => "압축률이 매우 높습니다",
+                "resource-retry" => "한도를 늘려 다시 시도",
+                "resource-partial" => "저장 위치를 확인하세요",
                 "uninstall-windows" => "제거 전에 다른 앱을 선택하세요",
                 "uninstall-settings-error" => "Windows 설정을 열지 못했습니다",
                 "uninstall-ubuntu-missing" => "이전 앱을 복원할 수 없습니다",
@@ -353,4 +357,112 @@ fn rename_saved_before_later_failure_remains_reported() {
         );
         assert!(labels.contains("파일을 읽거나 쓰지 못했습니다"), "{labels}");
     }
+}
+
+fn resource_frame(
+    app: &mut zipelo_ui_memory_app::archive_screen::ArchiveApp,
+    ctx: &egui::Context,
+    events: Vec<egui::Event>,
+) -> Vec<egui::epaint::ClippedShape> {
+    let mut out = ctx.run_ui(
+        egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(
+                egui::Pos2::ZERO,
+                egui::vec2(760.0, 540.0),
+            )),
+            events,
+            ..Default::default()
+        },
+        |ui| app.show(ui),
+    );
+    out.textures_delta.clear();
+    out.shapes
+}
+fn find_resource_action(shapes: &[egui::epaint::ClippedShape], label: &str) -> egui::Pos2 {
+    fn find(s: &egui::Shape, label: &str) -> Option<egui::Pos2> {
+        match s {
+            egui::Shape::Text(t) if t.galley.text() == label => {
+                Some(t.pos + t.galley.rect.size() / 2.0)
+            }
+            egui::Shape::Vec(shapes) => shapes.iter().find_map(|s| find(s, label)),
+            _ => None,
+        }
+    }
+    shapes.iter().find_map(|s| find(&s.shape, label)).unwrap()
+}
+#[test]
+fn resource_dialog_requires_explicit_click_and_escape_cancels() {
+    for allow in [false, true] {
+        let ctx = egui::Context::default();
+        let mut app = scenarios::parse("resource-ratio").unwrap().build();
+        let mut shapes = Vec::new();
+        for _ in 0..3 {
+            shapes = resource_frame(&mut app, &ctx, vec![]);
+        }
+        assert!(text(&shapes).contains("미확인"));
+        resource_frame(
+            &mut app,
+            &ctx,
+            vec![egui::Event::Key {
+                key: egui::Key::Enter,
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers: Default::default(),
+            }],
+        );
+        assert!(app.model.resource.is_some());
+        if allow {
+            let point = find_resource_action(&shapes, "이 작업 허용");
+            resource_frame(
+                &mut app,
+                &ctx,
+                vec![
+                    egui::Event::PointerMoved(point),
+                    egui::Event::PointerButton {
+                        pos: point,
+                        button: egui::PointerButton::Primary,
+                        pressed: true,
+                        modifiers: Default::default(),
+                    },
+                ],
+            );
+            resource_frame(
+                &mut app,
+                &ctx,
+                vec![egui::Event::PointerButton {
+                    pos: point,
+                    button: egui::PointerButton::Primary,
+                    pressed: false,
+                    modifiers: Default::default(),
+                }],
+            );
+            assert!(!app.model.cancellation_requested());
+        } else {
+            resource_frame(
+                &mut app,
+                &ctx,
+                vec![egui::Event::Key {
+                    key: egui::Key::Escape,
+                    physical_key: None,
+                    pressed: true,
+                    repeat: false,
+                    modifiers: Default::default(),
+                }],
+            );
+            assert!(app.model.cancellation_requested());
+        }
+        assert!(app.model.resource.is_none());
+    }
+}
+#[test]
+fn partial_limit_result_never_offers_expanded_retry() {
+    let ctx = egui::Context::default();
+    let mut app = scenarios::parse("resource-partial").unwrap().build();
+    let mut shapes = Vec::new();
+    for _ in 0..3 {
+        shapes = resource_frame(&mut app, &ctx, vec![]);
+    }
+    assert!(!text(&shapes).contains("한도를 늘려 다시 시도"));
+    assert!(text(&shapes).contains("풀린 자료"));
 }

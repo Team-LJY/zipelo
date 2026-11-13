@@ -16,11 +16,11 @@ fn keys(password: &[u8], salt: &[u8]) -> Zeroizing<[u8; 66]> {
     pbkdf2::pbkdf2_hmac::<Sha1>(password, salt, 1000, result.as_mut());
     result
 }
-fn ctr(bytes: &mut [u8], key: &[u8], check: &mut impl FnMut() -> Result<()>) -> Result<()> {
+fn ctr(bytes: &mut [u8], key: &[u8], check: &mut impl crate::resources::Monitor) -> Result<()> {
     let cipher = Aes256::new_from_slice(key).map_err(|_| ErrorCode::Internal)?;
     for (index, chunk) in bytes.chunks_mut(16).enumerate() {
         if index % 4096 == 0 {
-            check()?;
+            check.check()?;
         }
         // WinZip은 1부터 시작하는 리틀엔디언 카운터를 사용함.
         let mut block = ((index as u128) + 1).to_le_bytes().into();
@@ -35,11 +35,11 @@ fn ctr(bytes: &mut [u8], key: &[u8], check: &mut impl FnMut() -> Result<()>) -> 
 fn authenticate(
     key: &[u8],
     bytes: &[u8],
-    check: &mut impl FnMut() -> Result<()>,
+    check: &mut impl crate::resources::Monitor,
 ) -> Result<Sha1Mac> {
     let mut mac = <Sha1Mac as Mac>::new_from_slice(key).map_err(|_| ErrorCode::Internal)?;
     for chunk in bytes.chunks(65536) {
-        check()?;
+        check.check()?;
         mac.update(chunk);
     }
     Ok(mac)
@@ -47,12 +47,12 @@ fn authenticate(
 pub(crate) fn aes_decrypt(
     packed: &[u8],
     password: &[u8],
-    check: &mut impl FnMut() -> Result<()>,
+    check: &mut impl crate::resources::Monitor,
 ) -> Result<Zeroizing<Vec<u8>>> {
     if packed.len() < 28 {
         return Err(ErrorCode::Integrity);
     }
-    check()?;
+    check.check()?;
     let key = keys(password, &packed[..16]);
     if !bool::from(key[64..].ct_eq(&packed[16..18])) {
         return Err(ErrorCode::WrongPassword);
@@ -69,9 +69,9 @@ pub(crate) fn aes_decrypt(
 pub(crate) fn aes_encrypt(
     packed: &[u8],
     password: &[u8],
-    check: &mut impl FnMut() -> Result<()>,
+    check: &mut impl crate::resources::Monitor,
 ) -> Result<Vec<u8>> {
-    check()?;
+    check.check()?;
     let mut salt = [0; 16];
     random(&mut salt)?;
     let key = keys(password, &salt);
@@ -138,7 +138,7 @@ pub(crate) fn zipcrypto_decrypt(
     packed: &[u8],
     password: &[u8],
     verifier: u8,
-    check: &mut impl FnMut() -> Result<()>,
+    check: &mut impl crate::resources::Monitor,
 ) -> Result<Zeroizing<Vec<u8>>> {
     if packed.len() < 12 {
         return Err(ErrorCode::Integrity);
@@ -150,7 +150,7 @@ pub(crate) fn zipcrypto_decrypt(
     let mut out = Zeroizing::new(Vec::with_capacity(packed.len() - 12));
     for (index, &byte) in packed.iter().enumerate() {
         if index % 65536 == 0 {
-            check()?;
+            check.check()?;
         }
         let temp = key[2] | 2;
         let plain = byte ^ ((temp.wrapping_mul(temp ^ 1) >> 8) as u8);
@@ -191,7 +191,7 @@ impl Decryptor {
         password: &[u8],
         aes: bool,
         verifier: u8,
-        check: &mut impl FnMut() -> Result<()>,
+        check: &mut impl crate::resources::Monitor,
     ) -> Result<(Self, u64, u64)> {
         use std::io::{Read, Seek, SeekFrom};
         file.seek(SeekFrom::Start(offset))
@@ -212,12 +212,13 @@ impl Decryptor {
             let mut remaining = length - 28;
             let mut buffer = [0; 65536];
             while remaining != 0 {
-                check()?;
+                check.check()?;
                 let n = remaining.min(buffer.len() as u64) as usize;
                 file.read_exact(&mut buffer[..n])
                     .map_err(|_| ErrorCode::Integrity)?;
                 mac.update(&buffer[..n]);
                 remaining -= n as u64;
+                crate::resources::completed(Ok(()), check)?;
             }
             let mut tag = [0; 10];
             file.read_exact(&mut tag)
@@ -301,10 +302,10 @@ pub(crate) fn aes_encrypt_file(
     length: u64,
     output: &mut std::fs::File,
     password: &[u8],
-    check: &mut impl FnMut() -> Result<()>,
+    check: &mut impl crate::resources::Monitor,
 ) -> Result<()> {
     use std::io::{Read, Write};
-    check()?;
+    check.check()?;
     let mut salt = [0; 16];
     random(&mut salt)?;
     let key = keys(password, &salt);
@@ -323,17 +324,19 @@ pub(crate) fn aes_encrypt_file(
     let mut remaining = length;
     let mut buffer = Zeroizing::new([0; 65536]);
     while remaining != 0 {
-        check()?;
+        check.check()?;
         let n = remaining.min(buffer.len() as u64) as usize;
         input
             .read_exact(&mut buffer[..n])
             .map_err(crate::space::io_error)?;
         cipher.apply(&mut buffer[..n]);
         mac.update(&buffer[..n]);
+        crate::space::ensure(output, n as u64)?;
         output
             .write_all(&buffer[..n])
             .map_err(crate::space::io_error)?;
         remaining -= n as u64;
+        crate::resources::completed(Ok(()), check)?;
     }
     output
         .write_all(&mac.finalize().into_bytes()[..10])

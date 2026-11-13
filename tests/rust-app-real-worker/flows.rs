@@ -695,3 +695,5 @@ fn cancel_racing_exit_without_terminal_remains_unconfirmed() {
     assert!(model.error.is_some());
     assert_eq!(model.close, Close::Review);
 }
+
+mod guarded_flows;

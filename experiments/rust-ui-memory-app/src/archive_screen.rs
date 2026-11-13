@@ -991,7 +991,7 @@ impl ArchiveApp {
                 );
                 theme::status_text(ui, rect, &format!("선택 {selected}개"), half, Align::Max);
             });
-        if ctx.embed_viewports() && self.work_visible() {
+        if ctx.embed_viewports() && self.work_visible() && !self.limit_result_visible() {
             // 별도 창을 만들 수 없을 때만 쓰는 대체 배치. 목록을 가리지 않도록 하단에 둠.
             egui::Panel::bottom("archive-work")
                 .frame(theme::panel(theme::PANEL).corner_radius(0))
@@ -1012,10 +1012,12 @@ impl ArchiveApp {
             });
         self.forget_password_history(&ctx);
         self.work_window(&ctx);
+        self.limit_result_dialog(&ctx);
         self.create_window(&ctx);
         if self.model.challenge.is_some() {
             self.password_dialog(&ctx, new_challenge);
         }
+        self.resource_dialog(&ctx);
         if self.model.conflict.is_some() && self.model.close == Close::Open {
             self.conflict_dialog(&ctx);
         }
@@ -1577,6 +1579,26 @@ impl ArchiveApp {
             })
     }
 
+    fn limit_result_visible(&self) -> bool {
+        self.result_visible()
+            && self
+                .model
+                .terminal
+                .as_ref()
+                .is_some_and(|terminal| terminal.error == Some(ErrorCode::Limit))
+    }
+
+    fn limit_result_dialog(&mut self, ctx: &egui::Context) {
+        if !self.limit_result_visible() || self.main_modal_open() {
+            return;
+        }
+        egui::Modal::new(egui::Id::new("archive-limit-result")).show(ctx, |ui| {
+            ui.set_width((ctx.content_rect().width() - 64.0).min(WORK_WIDTH));
+            ui.heading("작업 결과");
+            self.work_area(ui);
+        });
+    }
+
     fn error_notice(ui: &mut egui::Ui, error: &str) {
         let response = theme::panel(theme::ERROR_BG)
             .show(ui, |ui| {
@@ -1600,6 +1622,7 @@ impl ArchiveApp {
         (self.create && !self.model.busy())
             || self.picker.is_some()
             || self.model.challenge.is_some()
+            || self.model.resource.is_some()
             || self.model.conflict.is_some()
             || self.model.close != Close::Open
     }
@@ -1607,6 +1630,10 @@ impl ArchiveApp {
     fn work_window(&mut self, ctx: &egui::Context) {
         if !self.work_visible() {
             self.work = WorkWindow::default();
+            return;
+        }
+        if self.limit_result_visible() {
+            self.work.open = false;
             return;
         }
         if ctx.embed_viewports() {
@@ -1726,6 +1753,13 @@ impl ArchiveApp {
     }
 
     fn progress(&mut self, ui: &mut egui::Ui) {
+        if self.model.resource.is_some() {
+            ui.horizontal(|ui| {
+                ui.label("사용자 허용을 기다리고 있습니다");
+                self.cancel_action(ui, false);
+            });
+            return;
+        }
         let creating = matches!(self.last_request, Some(Start::CreateZip { .. }));
         let cancelling = self.model.cancellation_requested() || self.model.cancel.is_some();
         let title = present::activity_text(&self.model, creating);
@@ -1860,6 +1894,7 @@ impl ArchiveApp {
         };
         let mut choose = false;
         let mut retry = false;
+        let mut expand = false;
         let mut reopen = false;
         let mut folder = false;
         theme::panel(fill).show(ui, |ui| {
@@ -1942,6 +1977,22 @@ impl ArchiveApp {
                             "아무 파일도 풀지 않았습니다"
                         });
                     }
+                    if t.as_ref().is_some_and(|t| {
+                        t.error == Some(ErrorCode::Limit)
+                            && (t.created_count > 0
+                                || t.retained_partial_count > 0
+                                || t.publication != Publication::None)
+                    }) {
+                        ui.label(format!(
+                            "{}개 파일이 저장되었거나 일부 남아 있습니다. 저장 위치를 확인하세요.",
+                            t.as_ref().unwrap().created_count
+                        ));
+                        theme::bounded_text(
+                            ui,
+                            &self.destination.display().to_string(),
+                            ui.available_width(),
+                        );
+                    }
                     if self.details {
                         theme::panel(theme::STRIPE).show(ui, |ui| {
                             if durability_in_details {
@@ -2023,6 +2074,13 @@ impl ArchiveApp {
                         },
                         true,
                     ))
+                } else if self.model.can_retry_expanded() {
+                    None
+                } else if t
+                    .as_ref()
+                    .is_some_and(|t| t.error == Some(ErrorCode::Limit))
+                {
+                    None
                 } else if !cancelled && (!uncertain || listing) {
                     Some(("다시 시도", true))
                 } else {
@@ -2046,12 +2104,38 @@ impl ArchiveApp {
                     }
                 }
             });
+            if self.model.can_retry_expanded() {
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    expand = theme::action(ui, "한도를 늘려 다시 시도", true, true).clicked();
+                });
+            }
         });
         if choose {
             self.open_picker(Purpose::Retry);
         }
         if retry {
             self.retry();
+        }
+        if expand {
+            let ready = if matches!(self.last_request, Some(Start::Extract { .. })) {
+                match present::prepare_destination(&self.destination, self.automatic_destination) {
+                    Ok(created) => {
+                        self.owned_destination = created.then(|| self.destination.clone());
+                        true
+                    }
+                    Err(_) => {
+                        self.ui_error = Some(present::FOLDER_ERROR.into());
+                        false
+                    }
+                }
+            } else {
+                true
+            };
+            if ready && self.model.retry_expanded(self.factory.as_mut()) {
+                self.dismissed = false;
+                self.details = false;
+                self.ui_error = None;
+            }
         }
         if reopen {
             if let Some(path) = self.model.archive.clone() {
@@ -2430,6 +2514,98 @@ impl ArchiveApp {
             self.open_picker(Purpose::SaveZip);
         }
         cancel
+    }
+
+    fn resource_dialog(&mut self, ctx: &egui::Context) {
+        let Some(question) = self.model.resource.clone() else {
+            return;
+        };
+        let Some(job) = self.model.job_id() else {
+            return;
+        };
+        let mut allow = false;
+        let mut cancel = false;
+        let modal = egui::Modal::new(egui::Id::unique(("archive-resource", job, question.id)))
+            .show(ctx, |ui| {
+                ui.set_width((ctx.content_rect().width() - 64.0).min(460.0));
+                ui.heading(if question.scope.ratio {
+                    "압축률이 매우 높습니다"
+                } else {
+                    "큰 작업을 허용할까요?"
+                });
+                ui.label(match question.action {
+                    ActionKind::List => "압축파일 목록 열기",
+                    ActionKind::Extract => "압축 해제",
+                    ActionKind::CreateZip => "ZIP 만들기",
+                });
+                if question.scope.ratio {
+                    ui.label("작은 압축파일도 많은 저장 공간을 사용할 수 있습니다.");
+                }
+                if question.scope.output {
+                    ui.label(format!(
+                        "총량 한도: {}에서 {}로",
+                        present::bytes_text(question.soft_limits.output),
+                        present::bytes_text(question.ceiling.output)
+                    ));
+                }
+                if question.scope.entries {
+                    ui.label(format!(
+                        "항목 한도: {}개에서 {}개로",
+                        question.soft_limits.entries, question.ceiling.entries
+                    ));
+                }
+                let mut u = question.usage;
+                let estimated = self.model.estimated_usage();
+                u.estimated_bytes = u.estimated_bytes.or(estimated.estimated_bytes);
+                u.estimated_entries = u.estimated_entries.or(estimated.estimated_entries);
+                let bytes = |value: Option<u64>| {
+                    value
+                        .map(present::bytes_text)
+                        .unwrap_or_else(|| "미확인".into())
+                };
+                let entries = |value: Option<u32>| {
+                    value
+                        .map(|n| format!("{n}개"))
+                        .unwrap_or_else(|| "미확인".into())
+                };
+                ui.label(format!(
+                    "예상 총량: {} / 실제 총량: {}",
+                    bytes(u.estimated_bytes),
+                    bytes(u.actual_bytes)
+                ));
+                ui.label(format!(
+                    "예상 항목: {} / 실제 항목: {}",
+                    entries(u.estimated_entries),
+                    entries(u.actual_entries)
+                ));
+                if question.scope.ratio {
+                    ui.label(format!(
+                        "압축 크기: {} / 풀린 크기: {}",
+                        bytes(u.compressed_bytes),
+                        bytes(u.ratio_output_bytes)
+                    ));
+                }
+                ui.label(format!(
+                    "확인한 저장 볼륨의 여유 공간: {}",
+                    bytes(u.available_bytes)
+                ));
+                ui.label(format!(
+                    "이 작업의 상한: {} / {}개",
+                    present::bytes_text(question.ceiling.output),
+                    question.ceiling.entries
+                ));
+                ui.label("이 작업에만 적용합니다. 공간 부족이나 자원 상한에 도달하면 중단합니다.");
+                ui.horizontal(|ui| {
+                    cancel = theme::action(ui, "취소", false, true).clicked();
+                    allow = theme::action(ui, "이 작업 허용", true, true).clicked();
+                });
+            });
+        if cancel || modal.should_close() {
+            self.clear_password();
+            self.model.cancel();
+        } else if allow {
+            self.model.resource_reply(job, question.id, true);
+        }
     }
 
     fn conflict_dialog(&mut self, ctx: &egui::Context) {

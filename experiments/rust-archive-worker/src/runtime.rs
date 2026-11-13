@@ -2,6 +2,7 @@ use crate::{
     archive,
     filesystem::{self, Dir},
     protocol::*,
+    resources::{Budget, Monitor, Watchdog, completed},
     wire::{Reader, Writer},
 };
 use std::{
@@ -16,6 +17,7 @@ type Result<T> = std::result::Result<T, ErrorCode>;
 enum Challenge {
     Password(u64),
     Conflict(u64),
+    Resource(u64, ResourceScope),
 }
 struct State<W> {
     writer: Writer<W>,
@@ -25,6 +27,7 @@ struct State<W> {
     challenge: Option<Challenge>,
     conflict_reply: Option<(ConflictChoice, bool)>,
     password: Option<Secret>,
+    resource_reply: Option<bool>,
     input_closed: bool,
 }
 struct Job<W> {
@@ -32,12 +35,79 @@ struct Job<W> {
     wake: Arc<Condvar>,
     next_challenge: u64,
     interactive: bool,
+    action: ActionKind,
+    budget: Option<Budget>,
+    watchdog: Watchdog,
     remaining_choice: Option<ConflictChoice>,
     started: Instant,
     terminal: Terminal,
     parent: crate::parent::Parent,
 }
 impl<W: Write> Job<W> {
+    fn request_resource(
+        &mut self,
+        scope: ResourceScope,
+        mut usage: ResourceUsage,
+        storage: Option<&std::fs::File>,
+    ) -> Result<()> {
+        let budget = self.budget.as_ref().ok_or(ErrorCode::Internal)?;
+        let (soft_limits, ceiling) = (budget.soft, budget.ceiling);
+        if let Some(file) = storage {
+            usage.available_bytes =
+                Some(crate::space::available(file)?.min(u64::MAX as u128) as u64);
+        }
+        self.next_challenge = self.next_challenge.checked_add(1).ok_or(ErrorCode::Limit)?;
+        let id = self.next_challenge;
+        let state_ref = Arc::clone(&self.state);
+        let mut state = state_ref.lock().map_err(|_| ErrorCode::Internal)?;
+        if state.challenge.is_some() {
+            return Err(ErrorCode::Internal);
+        }
+        state.challenge = Some(Challenge::Resource(id, scope));
+        state
+            .writer
+            .send(&Message::ResourceRequired {
+                challenge_id: id,
+                action: self.action,
+                scope,
+                usage,
+                soft_limits,
+                ceiling,
+            })
+            .map_err(|_| ErrorCode::Io)?;
+        let waiting = Instant::now();
+        loop {
+            self.parent.check()?;
+            if let Some(error) = state.fault {
+                return Err(error);
+            }
+            if state.cancelled {
+                return Err(ErrorCode::None);
+            }
+            if let Some(allow) = state.resource_reply.take() {
+                if !allow {
+                    return Err(ErrorCode::None);
+                }
+                self.budget
+                    .as_mut()
+                    .ok_or(ErrorCode::Internal)?
+                    .grant(scope);
+                self.watchdog.resume(self.started.elapsed(), true);
+                return Ok(());
+            }
+            if state.input_closed {
+                return Err(ErrorCode::Protocol);
+            }
+            if waiting.elapsed() >= Duration::from_secs(300) {
+                return Err(ErrorCode::Limit);
+            }
+            state = self
+                .wake
+                .wait_timeout(state, Duration::from_millis(50))
+                .map_err(|_| ErrorCode::Internal)?
+                .0;
+        }
+    }
     fn password(&mut self, purpose: PasswordPurpose, attempt: u32) -> Result<Secret> {
         self.check()?;
         self.next_challenge = self.next_challenge.checked_add(1).ok_or(ErrorCode::Limit)?;
@@ -53,6 +123,7 @@ impl<W: Write> Job<W> {
                 purpose,
             })
             .map_err(|_| ErrorCode::Io)?;
+        let waiting = Instant::now();
         loop {
             self.parent.check()?;
             if let Some(error) = state.fault {
@@ -62,12 +133,17 @@ impl<W: Write> Job<W> {
                 return Err(ErrorCode::None);
             }
             if let Some(secret) = state.password.take() {
+                self.watchdog.resume(self.started.elapsed(), false);
                 return Ok(secret);
             }
             if state.input_closed {
                 return Err(ErrorCode::Protocol);
             }
-            if self.started.elapsed() > Duration::from_secs(300) {
+            if if self.budget.is_some() {
+                waiting.elapsed() >= Duration::from_secs(300)
+            } else {
+                self.started.elapsed() > Duration::from_secs(300)
+            } {
                 return Err(ErrorCode::Limit);
             }
             state = self
@@ -98,6 +174,7 @@ impl<W: Write> Job<W> {
                 existing_size,
             })
             .map_err(|_| ErrorCode::Io)?;
+        let waiting = Instant::now();
         loop {
             self.parent.check()?;
             if let Some(error) = state.fault {
@@ -110,12 +187,17 @@ impl<W: Write> Job<W> {
                 if apply {
                     self.remaining_choice = Some(choice);
                 }
+                self.watchdog.resume(self.started.elapsed(), false);
                 return Ok(choice);
             }
             if state.input_closed {
                 return Err(ErrorCode::Protocol);
             }
-            if self.started.elapsed() > Duration::from_secs(300) {
+            if if self.budget.is_some() {
+                waiting.elapsed() >= Duration::from_secs(300)
+            } else {
+                self.started.elapsed() > Duration::from_secs(300)
+            } {
                 return Err(ErrorCode::Limit);
             }
             state = self
@@ -151,9 +233,10 @@ impl<W: Write> Job<W> {
                 format!("{prefix}/{leaf}")
             };
             archive::valid_name(&candidate, false)?;
-            if !reserved.contains(&candidate.to_lowercase())
-                && filesystem::unused(root, &candidate)?
-            {
+            let unused = !reserved.contains(&candidate.to_lowercase())
+                && filesystem::unused_with(root, &candidate, self)?;
+            completed(Ok(()), self)?;
+            if unused {
                 return Ok(candidate);
             }
         }
@@ -168,9 +251,6 @@ impl<W: Write> Job<W> {
     }
     fn check(&mut self) -> Result<()> {
         self.parent.check()?;
-        if self.started.elapsed() > Duration::from_secs(300) {
-            return Err(ErrorCode::Limit);
-        }
         let state = self.state.lock().map_err(|_| ErrorCode::Internal)?;
         if let Some(error) = state.fault {
             return Err(error);
@@ -178,7 +258,7 @@ impl<W: Write> Job<W> {
         if state.cancelled && state.phase == 0 {
             return Err(ErrorCode::None);
         }
-        Ok(())
+        self.watchdog.check(self.started.elapsed())
     }
     fn cutoff(&mut self) -> Result<()> {
         self.check()?;
@@ -220,11 +300,12 @@ impl<W: Write> Job<W> {
             Some(length),
             self.terminal.created_count as u32,
         )?;
-        let p = filesystem::publish_reader_mode(root, name, data, length, replace, &mut |commit| {
-            if commit && last {
-                self.cutoff()
-            } else {
-                self.check()
+        let p = filesystem::publish_reader_steps(root, name, data, length, replace, &mut |step| {
+            match step {
+                filesystem::PublishStep::Check => self.check(),
+                filesystem::PublishStep::Activity => completed(Ok(()), self),
+                filesystem::PublishStep::Commit if last => self.cutoff(),
+                filesystem::PublishStep::Commit => self.check(),
             }
         });
         self.terminal.retained_partial_count += p.retained;
@@ -266,17 +347,32 @@ impl<W: Write> Job<W> {
         if let Some(error) = p.error {
             return Err(error);
         }
+        if p.created {
+            completed(Ok(()), self)?;
+        }
         Ok(())
     }
     fn run(&mut self, start: Start) -> Result<()> {
         if !start.limits.valid() {
             return Err(ErrorCode::InvalidRequest);
         }
+        let limits = self.budget.as_ref().map_or(start.limits, |b| b.ceiling);
         self.event(Message::Accepted {
             action: start.action.kind(),
             encryption: true,
         })?;
         self.check()?;
+        if let Some(budget) = &self.budget {
+            let scope = ResourceScope {
+                output: budget.ceiling.output > budget.soft.output,
+                entries: budget.ceiling.entries > budget.soft.entries,
+                ratio: false,
+            };
+            if scope.any() {
+                let temporary = crate::spool::temporary()?;
+                self.request_resource(scope, ResourceUsage::default(), Some(&temporary))?;
+            }
+        }
         match start.action {
             Action::List {
                 archive: ref source,
@@ -288,16 +384,16 @@ impl<W: Write> Job<W> {
                 let extract = matches!(start.action, Action::Extract { .. });
                 let path = source.to_path()?;
                 self.progress(Stage::Read, 0, None, 0)?;
-                let mut snapshot = crate::spool::Snapshot::open_reporting(
-                    &path,
-                    start.limits.input,
-                    &mut |step| match step {
-                        crate::spool::Step::Check => self.check(),
-                        crate::spool::Step::Read { bytes, total } => {
-                            self.progress(Stage::Read, bytes, Some(total), 0)
+                let mut snapshot =
+                    crate::spool::Snapshot::open_reporting(&path, limits.input, &mut |step| {
+                        match step {
+                            crate::spool::Step::Check => self.check(),
+                            crate::spool::Step::Activity => completed(Ok(()), self),
+                            crate::spool::Step::Read { bytes, total } => {
+                                self.progress(Stage::Read, bytes, Some(total), 0)
+                            }
                         }
-                    },
-                )?;
+                    })?;
                 if let Action::Extract {
                     list_id: Some(expected),
                     ..
@@ -315,10 +411,10 @@ impl<W: Write> Job<W> {
                 let mut catalog = crate::streaming::Catalog::open(
                     &mut snapshot.file,
                     snapshot.len,
-                    start.limits,
+                    limits,
                     false,
                     None,
-                    &mut || self.check(),
+                    self,
                 )?;
                 let list_id = ListId {
                     catalog_version: 1,
@@ -330,12 +426,15 @@ impl<W: Write> Job<W> {
                 if !extract {
                     for member in &catalog.members {
                         self.check()?;
-                        self.event(Message::Entry(member.entry.clone()))?;
+                        completed(self.event(Message::Entry(member.entry.clone())), self)?;
                     }
-                    self.event(Message::ListEnd {
-                        entry_count: catalog.members.len() as u32,
-                        list_id,
-                    })?;
+                    completed(
+                        self.event(Message::ListEnd {
+                            entry_count: catalog.members.len() as u32,
+                            list_id,
+                        }),
+                        self,
+                    )?;
                 } else if let Action::Extract {
                     destination,
                     selection,
@@ -353,24 +452,24 @@ impl<W: Write> Job<W> {
                     let selected = match selection {
                         Selection::All => None,
                         Selection::EntryIds(ids) => {
-                            let n = ids.len();
-                            let set = ids.into_iter().collect::<BTreeSet<_>>();
-                            if expected.is_none()
-                                || set.is_empty()
-                                || n != set.len()
-                                || set.iter().any(|id| *id as usize >= catalog.members.len())
-                            {
+                            if expected.is_none() || ids.is_empty() {
                                 return Err(ErrorCode::InvalidRequest);
+                            }
+                            let mut set = BTreeSet::new();
+                            for id in ids {
+                                if id as usize >= catalog.members.len() || !set.insert(id) {
+                                    return Err(ErrorCode::InvalidRequest);
+                                }
+                                completed(Ok(()), self)?;
                             }
                             Some(set)
                         }
                     };
-                    if catalog
-                        .members
-                        .iter()
-                        .any(|m| !matches!(m.entry.kind, EntryKind::File | EntryKind::Directory))
-                    {
-                        return Err(ErrorCode::UnsafePath);
+                    for member in &catalog.members {
+                        if !matches!(member.entry.kind, EntryKind::File | EntryKind::Directory) {
+                            return Err(ErrorCode::UnsafePath);
+                        }
+                        completed(Ok(()), self)?;
                     }
                     if catalog.format == Format::Gzip {
                         let name = gzip_output_name.ok_or(ErrorCode::InvalidRequest)?;
@@ -383,36 +482,33 @@ impl<W: Write> Job<W> {
                     } else if gzip_output_name.is_some() {
                         return Err(ErrorCode::InvalidRequest);
                     }
-                    let root = Dir::root(&destination.to_path()?)?;
-                    let output_sizes = catalog
-                        .members
-                        .iter()
-                        .filter(|m| {
-                            m.entry.kind == EntryKind::File
-                                && selected
-                                    .as_ref()
-                                    .is_none_or(|s| s.contains(&m.entry.entry_id))
-                        })
-                        .map(|m| (m.entry.name.clone(), m.entry.size))
-                        .collect::<Vec<_>>();
-                    let staged = if matches!(catalog.format, Format::Zip | Format::SevenZip) {
-                        Some((
-                            &catalog.data,
-                            catalog.members.iter().try_fold(0u64, |sum, m| {
-                                sum.checked_add(m.entry.size).ok_or(ErrorCode::Limit)
-                            })?,
-                        ))
-                    } else {
-                        None
-                    };
+                    let root = completed(Dir::root(&destination.to_path()?), self)?;
+                    let mut output_sizes = Vec::new();
+                    let mut staged_total = 0u64;
+                    let mut encrypted = false;
+                    for member in &catalog.members {
+                        if member.entry.kind == EntryKind::File
+                            && selected
+                                .as_ref()
+                                .is_none_or(|s| s.contains(&member.entry.entry_id))
+                        {
+                            output_sizes.push((member.entry.name.clone(), member.entry.size));
+                        }
+                        staged_total = staged_total
+                            .checked_add(member.entry.size)
+                            .ok_or(ErrorCode::Limit)?;
+                        encrypted |= member.entry.encrypted;
+                        completed(Ok(()), self)?;
+                    }
+                    let staged = matches!(catalog.format, Format::Zip | Format::SevenZip)
+                        .then_some((&catalog.data, staged_total));
                     // 선택 전에는 검증에 필요한 스테이징 공간만 계산함.
                     let initial_outputs = if self.interactive {
                         &[][..]
                     } else {
                         &output_sizes[..]
                     };
-                    filesystem::preflight_space(&root, initial_outputs, staged)?;
-                    let encrypted = catalog.members.iter().any(|m| m.entry.encrypted);
+                    filesystem::preflight_space_with(&root, initial_outputs, staged, self)?;
                     if matches!(catalog.format, Format::Zip | Format::SevenZip) {
                         for attempt in 1..=3 {
                             let secret = if encrypted {
@@ -423,10 +519,10 @@ impl<W: Write> Job<W> {
                             match crate::streaming::Catalog::open(
                                 &mut snapshot.file,
                                 snapshot.len,
-                                start.limits,
+                                limits,
                                 true,
                                 secret.as_ref().map(|s| s.0.as_slice()),
-                                &mut || self.check(),
+                                self,
                             ) {
                                 Ok(decoded) => {
                                     catalog = decoded;
@@ -439,41 +535,46 @@ impl<W: Write> Job<W> {
                     }
                     let offsets = catalog.offsets;
                     let mut data = catalog.data;
-                    let members = catalog
-                        .members
-                        .into_iter()
-                        .filter(|m| {
-                            selected
-                                .as_ref()
-                                .is_none_or(|s| s.contains(&m.entry.entry_id))
-                        })
-                        .collect::<Vec<_>>();
-                    let dirs = archive::output_directories(&members)?;
+                    let mut members = Vec::new();
+                    for member in catalog.members {
+                        if selected
+                            .as_ref()
+                            .is_none_or(|s| s.contains(&member.entry.entry_id))
+                        {
+                            members.push(member);
+                        }
+                        completed(Ok(()), self)?;
+                    }
+                    let dirs = archive::output_directories(&members, self)?;
                     let files = members
                         .iter()
                         .filter(|m| m.entry.kind == EntryKind::File)
-                        .collect::<Vec<_>>();
+                        .map(|member| completed(Ok(member), self))
+                        .collect::<Result<Vec<_>>>()?;
                     let mut names = dirs
                         .iter()
-                        .map(|n| (n.clone(), EntryKind::Directory))
-                        .collect::<Vec<_>>();
+                        .map(|name| completed(Ok((name.clone(), EntryKind::Directory)), self))
+                        .collect::<Result<Vec<_>>>()?;
                     names.extend(
                         files
                             .iter()
-                            .map(|m| (m.entry.name.clone(), EntryKind::File)),
+                            .map(|member| {
+                                completed(Ok((member.entry.name.clone(), EntryKind::File)), self)
+                            })
+                            .collect::<Result<Vec<_>>>()?,
                     );
-                    filesystem::preflight_mode(&root, &names, self.interactive)?;
+                    filesystem::preflight_mode_with(&root, &names, self.interactive, self)?;
                     if !self.interactive {
-                        filesystem::preflight_space(&root, &output_sizes, None)?;
+                        filesystem::preflight_space_with(&root, &output_sizes, None, self)?;
                     }
                     let mut reserved = names
                         .iter()
-                        .map(|(name, _)| name.to_lowercase())
-                        .collect::<BTreeSet<_>>();
+                        .map(|(name, _)| completed(Ok(name.to_lowercase()), self))
+                        .collect::<Result<BTreeSet<_>>>()?;
                     for name in dirs {
                         self.check()?;
                         let (created, durability, sync_error) =
-                            filesystem::directory(&root, &name)?;
+                            filesystem::directory_with(&root, &name, self)?;
                         if created {
                             self.terminal.created_count += 1;
                             self.terminal.publication = Publication::Partial;
@@ -486,14 +587,18 @@ impl<W: Write> Job<W> {
                             if let Some(error) = sync_error {
                                 return Err(error);
                             }
+                            completed(Ok(()), self)?;
                         }
                     }
                     for (index, m) in files.iter().enumerate() {
-                        data.seek(SeekFrom::Start(offsets[m.entry.entry_id as usize]))
-                            .map_err(|_| ErrorCode::Io)?;
+                        completed(
+                            data.seek(SeekFrom::Start(offsets[m.entry.entry_id as usize]))
+                                .map_err(|_| ErrorCode::Io),
+                            self,
+                        )?;
                         self.check()?;
                         let existing = if self.interactive {
-                            filesystem::existing(&root, &m.entry.name)?
+                            filesystem::existing_with(&root, &m.entry.name, self)?
                         } else {
                             None
                         };
@@ -508,21 +613,25 @@ impl<W: Write> Job<W> {
                             } else if choice == ConflictChoice::Overwrite {
                                 replace = Some(existing);
                             }
-                            self.event(Message::ConflictResolved {
-                                entry_id: m.entry.entry_id,
-                                relative_name: name.clone(),
-                                choice,
-                            })?;
+                            completed(
+                                self.event(Message::ConflictResolved {
+                                    entry_id: m.entry.entry_id,
+                                    relative_name: name.clone(),
+                                    choice,
+                                }),
+                                self,
+                            )?;
                             if choice == ConflictChoice::Skip {
                                 continue;
                             }
                         }
                         if self.interactive {
                             // 건너뛴 파일을 제외하고 이번에 게시할 파일의 공간을 확인함.
-                            filesystem::preflight_space(
+                            filesystem::preflight_space_with(
                                 &root,
                                 &[(name.clone(), m.entry.size)],
                                 None,
+                                self,
                             )?;
                         }
                         self.output_reader(
@@ -552,9 +661,17 @@ impl<W: Write> Job<W> {
                     .and_then(|n| n.to_str())
                     .ok_or(ErrorCode::InvalidRequest)?;
                 let name = archive::valid_name(leaf, false)?;
-                let root = Dir::root(output.parent().ok_or(ErrorCode::InvalidRequest)?)?;
-                filesystem::preflight(&root, &[(name.clone(), EntryKind::File)])?;
-                let members = crate::create::plan(&sources, start.limits, &mut || self.check())?;
+                let root = completed(
+                    Dir::root(output.parent().ok_or(ErrorCode::InvalidRequest)?),
+                    self,
+                )?;
+                filesystem::preflight_mode_with(
+                    &root,
+                    &[(name.clone(), EntryKind::File)],
+                    false,
+                    self,
+                )?;
+                let members = crate::create::plan(&sources, limits, self)?;
                 let secret = if encryption == Encryption::Aes256 {
                     let secret = self.password(PasswordPurpose::Encrypt, 1)?;
                     if secret.0.is_empty() {
@@ -567,11 +684,11 @@ impl<W: Write> Job<W> {
                 let (mut data, length) = crate::create::zip(
                     &members,
                     method,
-                    start.limits,
+                    limits,
                     secret.as_ref().map(|s| s.0.as_slice()),
-                    &mut || self.check(),
+                    self,
                 )?;
-                filesystem::preflight_space(&root, &[(name.clone(), length)], None)?;
+                filesystem::preflight_space_with(&root, &[(name.clone(), length)], None, self)?;
                 self.output_reader(&root, &name, &mut data, length, None, true, None)?;
                 self.terminal.publication = Publication::Complete;
             }
@@ -580,6 +697,32 @@ impl<W: Write> Job<W> {
         Ok(())
     }
 }
+impl<W: Write> Monitor for Job<W> {
+    fn metadata_limits(&self) -> archive::MetadataLimits {
+        self.budget
+            .as_ref()
+            .map_or_else(archive::MetadataLimits::default, |b| b.metadata_limits())
+    }
+    fn check(&mut self) -> Result<()> {
+        Job::check(self)
+    }
+    fn activity(&mut self) -> Result<()> {
+        self.check()?;
+        self.watchdog.activity(self.started.elapsed())
+    }
+    fn observe(&mut self, usage: ResourceUsage, storage: Option<&std::fs::File>) -> Result<()> {
+        self.check()?;
+        let Some(budget) = &self.budget else {
+            return Ok(());
+        };
+        let scope = budget.required(usage)?;
+        if !scope.any() {
+            return Ok(());
+        }
+        self.request_resource(scope, usage, storage)
+    }
+}
+
 pub fn serve<R: Read + Send + 'static, W: Write + Send + 'static>(
     input: R,
     output: W,
@@ -590,9 +733,17 @@ pub fn serve<R: Read + Send + 'static, W: Write + Send + 'static>(
     let (job, _, message) = reader
         .read()?
         .ok_or_else(|| std::io::Error::from(std::io::ErrorKind::UnexpectedEof))?;
-    let (start, interactive) = match message {
-        Message::Start(start) => (start, false),
-        Message::StartInteractive(start) => (start, true),
+    let (start, interactive, budget) = match message {
+        Message::Start(start) => (start, false, None),
+        Message::StartInteractive(start) => (start, true, None),
+        Message::StartGuarded(guarded) if guarded.valid() => {
+            let budget = Budget {
+                soft: guarded.start.limits,
+                ceiling: guarded.ceiling,
+                granted: ResourceScope::default(),
+            };
+            (guarded.start, guarded.interactive, Some(budget))
+        }
         _ => {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
@@ -608,6 +759,7 @@ pub fn serve<R: Read + Send + 'static, W: Write + Send + 'static>(
         challenge: None,
         conflict_reply: None,
         password: None,
+        resource_reply: None,
         input_closed: false,
     }));
     let wake = Arc::new(Condvar::new());
@@ -668,6 +820,24 @@ pub fn serve<R: Read + Send + 'static, W: Write + Send + 'static>(
                     }
                     control_wake.notify_all();
                 }
+                Message::ResourceReply {
+                    challenge_id,
+                    scope,
+                    allow,
+                } => {
+                    if state.phase != 0
+                        || state.challenge != Some(Challenge::Resource(challenge_id, scope))
+                        || state.resource_reply.is_some()
+                    {
+                        state.fault = Some(ErrorCode::Protocol);
+                    } else {
+                        state.challenge = None;
+                        if !state.cancelled {
+                            state.resource_reply = Some(allow);
+                        }
+                    }
+                    control_wake.notify_all();
+                }
                 Message::Cancel => {
                     let status = match state.phase {
                         2 => CancelStatus::Finished,
@@ -703,6 +873,9 @@ pub fn serve<R: Read + Send + 'static, W: Write + Send + 'static>(
         wake,
         next_challenge: 0,
         interactive,
+        action: start.action.kind(),
+        budget,
+        watchdog: Watchdog::new(),
         remaining_choice: None,
         parent,
         started: Instant::now(),
@@ -733,6 +906,7 @@ pub fn serve<R: Read + Send + 'static, W: Write + Send + 'static>(
     state.challenge = None;
     state.password = None;
     state.conflict_reply = None;
+    state.resource_reply = None;
     if let Some(error) = state.fault.or(error) {
         context.terminal.error = error;
         context.terminal.outcome = if error == ErrorCode::None {

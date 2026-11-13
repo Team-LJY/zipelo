@@ -7,6 +7,7 @@ pub mod filesystem;
 mod lzma;
 mod parent;
 pub mod protocol;
+pub mod resources;
 pub mod runtime;
 mod seven_zip;
 mod space;

@@ -1615,3 +1615,5 @@ mod conflict_wire;
 mod conflicts;
 
 mod compressed_tar;
+
+mod guarded;

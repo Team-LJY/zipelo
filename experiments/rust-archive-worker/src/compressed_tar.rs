@@ -1,4 +1,7 @@
-use crate::{protocol::ErrorCode, space, spool};
+use crate::{
+    protocol::{ErrorCode, ResourceUsage},
+    space, spool,
+};
 use std::{
     cell::RefCell,
     fs::File,
@@ -32,13 +35,22 @@ struct CheckedInput<'a, F> {
     check: &'a RefCell<&'a mut F>,
 }
 
-impl<F: FnMut() -> Result<()>> Read for CheckedInput<'_, F> {
+impl<F: crate::resources::Monitor> Read for CheckedInput<'_, F> {
     fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
-        (self.check.borrow_mut())().map_err(|error| io::Error::other(InputError(error)))?;
+        self.check
+            .borrow_mut()
+            .check()
+            .map_err(|error| io::Error::other(InputError(error)))?;
         let count = buffer.len().min(CHUNK);
-        self.file
+        let n = self
+            .file
             .read(&mut buffer[..count])
-            .map_err(|_| io::Error::other(InputError(ErrorCode::Io)))
+            .map_err(|_| io::Error::other(InputError(ErrorCode::Io)))?;
+        if n != 0 {
+            crate::resources::completed(Ok(()), &mut **self.check.borrow_mut())
+                .map_err(|e| io::Error::other(InputError(e)))?;
+        }
+        Ok(n)
     }
 }
 
@@ -60,14 +72,26 @@ pub(crate) fn decode(
     source: &mut File,
     compression: Compression,
     limit: u64,
-    check: &mut impl FnMut() -> Result<()>,
+    check: &mut impl crate::resources::Monitor,
 ) -> Result<(File, u64)> {
-    check()?;
+    check.check()?;
     let expected = if matches!(compression, Compression::Xz) {
         Some(xz_layout(source, limit, check)?)
     } else {
         None
     };
+    let packed_length = source.metadata().map_err(space::io_error)?.len();
+    if let Some(expected) = expected {
+        check.observe(
+            ResourceUsage {
+                estimated_bytes: Some(expected),
+                compressed_bytes: Some(packed_length),
+                ratio_output_bytes: Some(expected),
+                ..ResourceUsage::default()
+            },
+            Some(source),
+        )?;
+    }
     source.rewind().map_err(space::io_error)?;
     let mut output = spool::temporary()?;
     let check = RefCell::new(check);
@@ -88,7 +112,7 @@ pub(crate) fn decode(
     let mut buffer = Zeroizing::new([0; CHUNK]);
     let mut total = 0u64;
     loop {
-        (check.borrow_mut())()?;
+        check.borrow_mut().check()?;
         let count = reader.read(&mut buffer[..]).map_err(decode_error)?;
         if count == 0 {
             break;
@@ -97,13 +121,24 @@ pub(crate) fn decode(
             .checked_add(count as u64)
             .filter(|total| *total <= limit)
             .ok_or(ErrorCode::Limit)?;
+        check.borrow_mut().observe(
+            ResourceUsage {
+                actual_bytes: Some(total),
+                compressed_bytes: Some(packed_length),
+                ratio_output_bytes: Some(total),
+                ..ResourceUsage::default()
+            },
+            Some(&output),
+        )?;
+        crate::resources::completed(Ok(()), &mut **check.borrow_mut())?;
         // 전체 검증 전에는 비공개 임시 파일에만 기록함.
         space::ensure(&output, count as u64)?;
-        output
-            .write_all(&buffer[..count])
-            .map_err(space::io_error)?;
+        crate::resources::completed(
+            output.write_all(&buffer[..count]).map_err(space::io_error),
+            &mut **check.borrow_mut(),
+        )?;
     }
-    (check.borrow_mut())()?;
+    check.borrow_mut().check()?;
     if expected.is_some_and(|expected| expected != total) {
         return Err(ErrorCode::Integrity);
     }
@@ -114,9 +149,9 @@ fn read_at(
     source: &mut File,
     offset: u64,
     bytes: &mut [u8],
-    check: &mut impl FnMut() -> Result<()>,
+    check: &mut impl crate::resources::Monitor,
 ) -> Result<()> {
-    check()?;
+    check.check()?;
     source
         .seek(std::io::SeekFrom::Start(offset))
         .map_err(space::io_error)?;
@@ -126,7 +161,8 @@ fn read_at(
         } else {
             ErrorCode::Io
         }
-    })
+    })?;
+    crate::resources::completed(Ok(()), check)
 }
 
 fn vli(bytes: &[u8], cursor: &mut usize) -> Result<u64> {
@@ -150,7 +186,7 @@ fn lzma2_size(
     mut at: u64,
     end: u64,
     expected: u64,
-    check: &mut impl FnMut() -> Result<()>,
+    check: &mut impl crate::resources::Monitor,
 ) -> Result<()> {
     let mut size = 0u64;
     while at < end {
@@ -202,7 +238,7 @@ fn xz_block(
     unpadded: u64,
     size: u64,
     check_size: u64,
-    check: &mut impl FnMut() -> Result<()>,
+    check: &mut impl crate::resources::Monitor,
 ) -> Result<()> {
     let mut header = [0; 1024];
     read_at(source, start, &mut header[..1], check)?;
@@ -262,7 +298,11 @@ fn xz_block(
 }
 
 // 역방향 인덱스 검사는 디코더의 할당과 실제 해제량 검사보다 먼저 수행함.
-fn xz_layout(source: &mut File, limit: u64, check: &mut impl FnMut() -> Result<()>) -> Result<u64> {
+fn xz_layout(
+    source: &mut File,
+    limit: u64,
+    check: &mut impl crate::resources::Monitor,
+) -> Result<u64> {
     use zlib_rs::crc32::crc32;
     let mut end = source.metadata().map_err(space::io_error)?.len();
     let mut total = 0u64;
@@ -278,7 +318,7 @@ fn xz_layout(source: &mut File, limit: u64, check: &mut impl FnMut() -> Result<(
             end = at;
         }
         streams += 1;
-        if streams > crate::archive::MAX_OUTPUT_NODES {
+        if streams > check.metadata_limits().nodes {
             return Err(ErrorCode::Limit);
         }
         let footer_at = end.checked_sub(12).ok_or(ErrorCode::Integrity)?;
@@ -290,7 +330,7 @@ fn xz_layout(source: &mut File, limit: u64, check: &mut impl FnMut() -> Result<(
             return Err(ErrorCode::Integrity);
         }
         let index_len = (u64::from(u32::from_le_bytes(footer[4..8].try_into().unwrap())) + 1) * 4;
-        if index_len > crate::archive::MAX_METADATA_BYTES as u64 {
+        if index_len > check.metadata_limits().bytes as u64 {
             return Err(ErrorCode::Limit);
         }
         if index_len < 8 {
@@ -310,13 +350,13 @@ fn xz_layout(source: &mut File, limit: u64, check: &mut impl FnMut() -> Result<(
         }
         let mut cursor = 1;
         let count = vli(&index[..data_end], &mut cursor)?;
-        if count > crate::archive::MAX_OUTPUT_NODES as u64 {
+        if count > check.metadata_limits().nodes as u64 {
             return Err(ErrorCode::Limit);
         }
         let mut blocks = 0u64;
         let mut records = Vec::new();
         for _ in 0..count {
-            check()?;
+            check.check()?;
             let unpadded = vli(&index[..data_end], &mut cursor)?;
             let size = vli(&index[..data_end], &mut cursor)?;
             if unpadded == 0 {
@@ -330,6 +370,7 @@ fn xz_layout(source: &mut File, limit: u64, check: &mut impl FnMut() -> Result<(
                 .filter(|total| *total <= limit)
                 .ok_or(ErrorCode::Limit)?;
             records.push((unpadded, size));
+            crate::resources::completed(Ok(()), check)?;
         }
         if data_end - cursor > 3 || index[cursor..data_end].iter().any(|byte| *byte != 0) {
             return Err(ErrorCode::Integrity);
@@ -357,6 +398,7 @@ fn xz_layout(source: &mut File, limit: u64, check: &mut impl FnMut() -> Result<(
         for (unpadded, size) in records {
             xz_block(source, block_at, unpadded, size, check_size, check)?;
             block_at += (unpadded + 3) & !3;
+            crate::resources::completed(Ok(()), check)?;
         }
         end = start;
     }

@@ -92,6 +92,12 @@ pub struct Resolution {
 }
 pub enum Command {
     Start(Start),
+    StartExpanded(Start),
+    ResourceReply {
+        challenge_id: u64,
+        scope: ResourceScope,
+        allow: bool,
+    },
     Password {
         challenge_id: u64,
         secret: Secret,
@@ -199,8 +205,20 @@ pub struct Terminal {
     pub durability: Durability,
     pub cleanup: Cleanup,
 }
+pub use worker_protocol::protocol::{ActionKind, Limits, ResourceScope, ResourceUsage};
+#[derive(Clone, Debug)]
+pub struct ResourceChallenge {
+    pub id: u64,
+    pub action: ActionKind,
+    pub scope: ResourceScope,
+    pub usage: ResourceUsage,
+    pub soft_limits: Limits,
+    pub ceiling: Limits,
+}
+
 #[derive(Clone, Debug)]
 pub enum Event {
+    ResourceRequired(ResourceChallenge),
     Accepted {
         encryption: bool,
     },
@@ -277,6 +295,10 @@ struct Running {
     stderr_eof: bool,
     exit: Option<bool>,
     cancel_sequence: Option<u64>,
+    expanded: bool,
+    granted: ResourceScope,
+    last_challenge: u64,
+    estimated: ResourceUsage,
     conflict_ids: BTreeSet<u64>,
     resolved_ids: BTreeSet<u32>,
     file_ids: BTreeSet<u32>,
@@ -300,6 +322,8 @@ pub struct Model {
     pub selected: BTreeSet<u32>,
     pub terminal: Option<Terminal>,
     pub challenge: Option<(u64, u32, bool)>,
+    pub resource: Option<ResourceChallenge>,
+    retry_start: Option<Start>,
     pub conflict: Option<Conflict>,
     pub resolutions: Vec<Resolution>,
     pub progress: Option<(Stage, u64, Option<u64>, u64)>,
@@ -330,9 +354,121 @@ impl Model {
             && self.close == Close::Open
     }
     pub fn begin(&mut self, start: Start, factory: &mut dyn Factory) -> bool {
+        let expanded = self.needs_expansion(&start);
+        self.begin_with_limits(start, factory, expanded)
+    }
+    pub fn estimated_usage(&self) -> ResourceUsage {
+        self.running
+            .as_ref()
+            .map(|run| run.estimated)
+            .unwrap_or_default()
+    }
+    fn estimate(&self, start: &Start) -> ResourceUsage {
+        let mut usage = ResourceUsage::default();
+        match start {
+            Start::Extract { selection, .. } => {
+                let selected_ids: BTreeSet<_> = match selection {
+                    Selection::All => BTreeSet::new(),
+                    Selection::EntryIds(ids) => ids.iter().copied().collect(),
+                };
+                let directories: BTreeSet<_> = self
+                    .entries
+                    .iter()
+                    .filter(|e| selected_ids.contains(&e.id) && e.kind == Kind::Directory)
+                    .map(|e| e.name.trim_end_matches('/'))
+                    .collect();
+                let selected = |entry: &&Entry| {
+                    matches!(selection, Selection::All)
+                        || selected_ids.contains(&entry.id)
+                        || entry
+                            .name
+                            .match_indices('/')
+                            .any(|(n, _)| directories.contains(&entry.name[..n]))
+                };
+                let entries: Vec<_> = self.entries.iter().filter(selected).collect();
+                usage.estimated_entries = u32::try_from(entries.len()).ok();
+                usage.estimated_bytes = entries
+                    .iter()
+                    .try_fold(0u64, |sum, e| sum.checked_add(e.bytes?));
+            }
+            Start::CreateZip { sources, .. } => {
+                usage.estimated_bytes = sources.iter().try_fold(0u64, |sum, (path, _)| {
+                    let m = std::fs::symlink_metadata(path).ok()?;
+                    if !m.is_file() {
+                        return None;
+                    }
+                    sum.checked_add(m.len())
+                });
+                usage.estimated_entries = sources
+                    .iter()
+                    .all(|(path, _)| std::fs::symlink_metadata(path).is_ok_and(|m| m.is_file()))
+                    .then(|| u32::try_from(sources.len()).ok())
+                    .flatten();
+            }
+            Start::List { .. } => {}
+        }
+        usage
+    }
+    fn needs_expansion(&self, start: &Start) -> bool {
+        let usage = self.estimate(start);
+        usage
+            .estimated_bytes
+            .is_some_and(|n| n > Limits::default().output)
+            || usage
+                .estimated_entries
+                .is_some_and(|n| n > Limits::default().entries)
+    }
+    pub fn can_retry_expanded(&self) -> bool {
+        !self.busy() && self.retry_start.is_some() && self.close == Close::Open
+    }
+    pub fn retry_expanded(&mut self, factory: &mut dyn Factory) -> bool {
+        if !self.can_retry_expanded() {
+            return false;
+        }
+        let start = self.retry_start.clone().unwrap();
+        self.begin_with_limits(start, factory, true)
+    }
+    pub fn resource_reply(&mut self, job_id: u64, challenge_id: u64, allow: bool) -> bool {
+        if self.job_id() != Some(job_id) || self.cancellation_requested() {
+            return false;
+        }
+        let Some(question) = self.resource.clone().filter(|q| q.id == challenge_id) else {
+            return false;
+        };
+        if self
+            .send(Command::ResourceReply {
+                challenge_id,
+                scope: question.scope,
+                allow,
+            })
+            .is_none()
+        {
+            return false;
+        }
+        if allow {
+            let granted = &mut self.running.as_mut().unwrap().granted;
+            granted.output |= question.scope.output;
+            granted.entries |= question.scope.entries;
+            granted.ratio |= question.scope.ratio;
+        }
+        self.resource = None;
+        true
+    }
+    fn begin_with_limits(
+        &mut self,
+        start: Start,
+        factory: &mut dyn Factory,
+        expanded: bool,
+    ) -> bool {
         if self.busy() || self.close != Close::Open {
             return false;
         }
+        let selectable: BTreeSet<_> = self
+            .entries
+            .iter()
+            .filter(|e| matches!(e.kind, Kind::File | Kind::Directory))
+            .map(|e| e.id)
+            .collect();
         let validation = match &start {
             Start::List { archive } => archive.is_absolute(),
             Start::Extract {
@@ -355,12 +491,7 @@ impl Model {
                         Selection::EntryIds(ids) => {
                             !ids.is_empty()
                                 && ids.iter().collect::<BTreeSet<_>>().len() == ids.len()
-                                && ids.iter().all(|id| {
-                                    self.entries.iter().any(|e| {
-                                        e.id == *id
-                                            && matches!(e.kind, Kind::File | Kind::Directory)
-                                    })
-                                })
+                                && ids.iter().all(|id| selectable.contains(id))
                         }
                     }
             }
@@ -384,6 +515,7 @@ impl Model {
             self.error = Some("작업 ID 한도에 도달했습니다".into());
             return false;
         };
+        let estimated = self.estimate(&start);
         let mut connection = match factory.connect(id) {
             Ok(c) => c,
             Err(e) => {
@@ -395,7 +527,11 @@ impl Model {
             .send(Request {
                 job_id: id,
                 sequence: 0,
-                command: Command::Start(start.clone()),
+                command: if expanded {
+                    Command::StartExpanded(start.clone())
+                } else {
+                    Command::Start(start.clone())
+                },
             })
             .err();
         let started = send_error.is_none();
@@ -409,6 +545,8 @@ impl Model {
         }
         self.next_id = id;
         self.terminal = None;
+        self.retry_start = None;
+        self.resource = None;
         self.challenge = None;
         self.conflict = None;
         self.resolutions.clear();
@@ -433,6 +571,10 @@ impl Model {
             stderr_eof: false,
             exit: None,
             cancel_sequence: None,
+            expanded,
+            granted: ResourceScope::default(),
+            last_challenge: 0,
+            estimated,
             conflict_ids: BTreeSet::new(),
             resolved_ids: BTreeSet::new(),
             file_ids: self
@@ -488,6 +630,7 @@ impl Model {
             .is_some()
         {
             self.challenge = None;
+            self.resource = None;
             self.conflict = None;
             self.input_error = None;
             true
@@ -551,6 +694,7 @@ impl Model {
             if let Some(seq) = self.send(Command::Cancel) {
                 self.running.as_mut().unwrap().cancel_sequence = Some(seq);
                 self.challenge = None;
+                self.resource = None;
                 self.conflict = None;
                 self.input_error = None;
             }
@@ -633,7 +777,25 @@ impl Model {
                 self.list_id = None;
                 self.selected.clear();
             }
+            self.retry_start = if !run.expanded
+                && run.cancel_sequence.is_none()
+                && self.confirmed
+                && self.terminal.as_ref().is_some_and(|t| {
+                    t.outcome == Outcome::Failed
+                        && t.error == Some(ErrorCode::Limit)
+                        && t.publication == Publication::None
+                        && t.created_count == 0
+                        && t.retained_partial_count == 0
+                        && t.cleanup == Cleanup::Complete
+                })
+                && self.outputs.iter().all(|(_, d)| *d == Disposition::Removed)
+            {
+                Some(run.start.clone())
+            } else {
+                None
+            };
             self.challenge = None;
+            self.resource = None;
             self.conflict = None;
             self.input_error = None;
             if matches!(self.close, Close::Waiting | Close::Confirm) {
@@ -681,7 +843,12 @@ impl Model {
                             || run.list_end.is_some()
                             || entry.id as usize != run.entries.len()
                             || entry.name.len() > 4096
-                            || run.entries.len() >= 100_000
+                            || run.entries.len()
+                                >= if run.granted.entries {
+                                    200_000
+                                } else {
+                                    100_000
+                                }
                         {
                             self.error = Some("목록 응답이 유효하지 않습니다".into());
                         } else {
@@ -706,11 +873,55 @@ impl Model {
                         attempt,
                         encrypt,
                     } => {
-                        if self.challenge.is_some() || self.conflict.is_some() || challenge_id == 0
+                        if run.cancel_sequence.is_some() {
+                            return;
+                        }
+                        if self.challenge.is_some()
+                            || self.resource.is_some()
+                            || challenge_id <= run.last_challenge
+                            || self.conflict.is_some()
                         {
                             self.error = Some("암호 요청이 유효하지 않습니다".into());
                         } else {
+                            run.last_challenge = challenge_id;
                             self.challenge = Some((challenge_id, attempt, encrypt));
+                        }
+                    }
+                    Event::ResourceRequired(question) => {
+                        if run.cancel_sequence.is_some() {
+                            return;
+                        }
+                        let expected = match run.start {
+                            Start::List { .. } => ActionKind::List,
+                            Start::Extract { .. } => ActionKind::Extract,
+                            Start::CreateZip { .. } => ActionKind::CreateZip,
+                        };
+                        let hard = Limits {
+                            input: u64::MAX,
+                            output: 64 * 1024 * 1024 * 1024,
+                            entries: 200_000,
+                        };
+                        let ceiling = if run.expanded {
+                            hard
+                        } else {
+                            Limits::default()
+                        };
+                        if self.challenge.is_some()
+                            || self.resource.is_some()
+                            || self.conflict.is_some()
+                            || question.id <= run.last_challenge
+                            || question.action != expected
+                            || !question.scope.any()
+                            || question.soft_limits != Limits::default()
+                            || question.ceiling != ceiling
+                            || (question.scope.output && (!run.expanded || run.granted.output))
+                            || (question.scope.entries && (!run.expanded || run.granted.entries))
+                            || (question.scope.ratio && run.granted.ratio)
+                        {
+                            self.error = Some("자원 승인 요청이 유효하지 않습니다".into());
+                        } else {
+                            run.last_challenge = question.id;
+                            self.resource = Some(question);
                         }
                     }
                     Event::ConflictRequired(conflict) => {
@@ -720,23 +931,35 @@ impl Model {
                             .any(|entry| entry.id == conflict.entry_id && entry.kind == Kind::File);
                         if !matches!(run.start, Start::Extract { .. })
                             || !valid_entry
-                            || conflict.challenge_id == 0
+                            || self.resource.is_some()
+                            || conflict.challenge_id <= run.last_challenge
                             || self.challenge.is_some()
                             || self.conflict.is_some()
-                            || run.conflict_ids.len() >= 100_000
+                            || run.conflict_ids.len()
+                                >= if run.granted.entries {
+                                    200_000
+                                } else {
+                                    100_000
+                                }
                             || !valid_relative(&conflict.relative_name)
                             || conflict.relative_name.len() > 4096
                             || !run.conflict_ids.insert(conflict.challenge_id)
                         {
                             self.error = Some("파일 충돌 요청이 유효하지 않습니다".into());
                         } else if run.cancel_sequence.is_none() {
+                            run.last_challenge = conflict.challenge_id;
                             self.conflict = Some(conflict);
                         }
                     }
                     Event::ConflictResolved(resolution) => {
                         if !matches!(run.start, Start::Extract { .. })
                             || !run.file_ids.contains(&resolution.entry_id)
-                            || self.resolutions.len() >= 100_000
+                            || self.resolutions.len()
+                                >= if run.granted.entries {
+                                    200_000
+                                } else {
+                                    100_000
+                                }
                             || !valid_relative(&resolution.relative_name)
                             || resolution.relative_name.len() > 4096
                             || !run.resolved_ids.insert(resolution.entry_id)
@@ -757,7 +980,15 @@ impl Model {
                         disposition,
                         ..
                     } => {
-                        if self.outputs.len() < 100_000 && relative_name.len() <= 4096 {
+                        if self.outputs.len()
+                            < if run.granted.any() {
+                                // 암묵적 상위 폴더도 출력되므로 작업자 노드 예산과 맞춤
+                                262_144
+                            } else {
+                                100_000
+                            }
+                            && relative_name.len() <= 4096
+                        {
                             self.outputs.push((relative_name, disposition));
                         } else {
                             self.error = Some("출력 보고 한도 초과".into());
@@ -789,6 +1020,9 @@ impl Model {
         if self.busy() {
             if self.terminal.is_some() {
                 return "작업 결과 수신 / 프로세스 종료 확인 중".into();
+            }
+            if self.resource.is_some() {
+                return "사용자 허용 대기".into();
             }
             if self.conflict.is_some() {
                 return "같은 이름의 파일을 처리할 방법을 선택하세요".into();

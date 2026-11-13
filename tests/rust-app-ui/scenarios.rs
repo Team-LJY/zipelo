@@ -21,6 +21,10 @@ macro_rules! catalog {
 }
 
 catalog! {
+    "resource-approval" => "처리 전 큰 작업 승인",
+    "resource-ratio" => "고압축 작업 경고와 미확인 값",
+    "resource-retry" => "주 창 모달에서 출력 없는 한도 실패 후 확대 재시도",
+    "resource-partial" => "주 창 모달에서 일부 출력 후 한도 중단",
     "gzip-conflict-choice" => "단일 GZ 파일의 충돌 선택",
     "conflict-choice" => "같은 이름 파일의 세 가지 처리 선택",
     "conflict-apply" => "남은 충돌에 같은 선택 적용",
@@ -357,11 +361,71 @@ impl Scenario {
             app.targets = Some(["읽어주세요.txt".into()].into_iter().collect());
             app.directories.clear();
         }
+        if self.name == "resource-approval" {
+            app.model.entries[1].bytes = Some(17 * 1024 * 1024 * 1024);
+        }
         assert!(app.start(request));
         {
             let mut state = state.borrow_mut();
             state.frame(Event::Accepted { encryption: true });
             match self.name {
+                "resource-approval" | "resource-ratio" => {
+                    let expanded = self.name == "resource-approval";
+                    state.frame(Event::ResourceRequired(ResourceChallenge {
+                        id: 1,
+                        action: ActionKind::Extract,
+                        scope: ResourceScope {
+                            output: expanded,
+                            entries: expanded,
+                            ratio: !expanded,
+                        },
+                        usage: ResourceUsage {
+                            available_bytes: Some(90 * 1024 * 1024 * 1024),
+                            actual_bytes: (!expanded).then_some(300 * 1024 * 1024),
+                            ratio_output_bytes: (!expanded).then_some(300 * 1024 * 1024),
+                            compressed_bytes: (!expanded).then_some(4096),
+                            ..ResourceUsage::default()
+                        },
+                        soft_limits: Limits::default(),
+                        ceiling: if expanded {
+                            Limits {
+                                input: u64::MAX,
+                                output: 64 * 1024 * 1024 * 1024,
+                                entries: 200_000,
+                            }
+                        } else {
+                            Limits::default()
+                        },
+                    }));
+                }
+                "resource-retry" | "resource-partial" => {
+                    let partial = self.name == "resource-partial";
+                    if partial {
+                        state.frame(Event::Output {
+                            entry_id: Some(1),
+                            relative_name: "읽어주세요.txt".into(),
+                            disposition: Disposition::Created,
+                        });
+                    }
+                    state.frame(Event::Terminal(Terminal {
+                        outcome: Outcome::Failed,
+                        error: Some(ErrorCode::Limit),
+                        publication: if partial {
+                            Publication::Partial
+                        } else {
+                            Publication::None
+                        },
+                        created_count: u64::from(partial),
+                        retained_partial_count: 0,
+                        durability: Durability::Synced,
+                        cleanup: Cleanup::Complete,
+                    }));
+                    state.queue.extend([
+                        HostEvent::StdoutEof,
+                        HostEvent::StderrEof,
+                        HostEvent::Exited { success: true },
+                    ]);
+                }
                 "conflict-choice" | "conflict-apply" | "gzip-conflict-choice" => {
                     state.frame(Event::ConflictRequired(Conflict {
                         challenge_id: 29,
