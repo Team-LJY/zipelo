@@ -132,6 +132,59 @@ elif sys.argv[1] == "default":
         result = self.run_helper("remove")
         self.assertEqual(self.choice(), "zipelo.desktop")
         self.assertIn("다른 프로그램으로 열기", result.stderr)
+        self.assertEqual((self.state / "zip").read_text(), "before.desktop\n")
+
+    def assert_unavailable_keeps_record(self):
+        result = self.run_helper("remove")
+        self.assertEqual(self.choice(), "zipelo.desktop")
+        self.assertEqual((self.state / "zip").read_text(), "before.desktop\n")
+        self.assertIn("다른 프로그램으로 열기", result.stderr)
+
+    def test_hidden_with_whitespace_keeps_record(self):
+        self.run_helper("install")
+        with (self.data / "before.desktop").open("a") as desktop:
+            desktop.write("Hidden = true\n")
+        self.assert_unavailable_keeps_record()
+
+    def test_deleted_tryexec_keeps_record(self):
+        executable = self.bin / "previous-app"
+        executable.write_text("#!/bin/sh\nexit 0\n")
+        executable.chmod(0o755)
+        with (self.data / "before.desktop").open("a") as desktop:
+            desktop.write(f"TryExec = {executable}\n")
+        self.run_helper("install")
+        executable.unlink()
+        self.assert_unavailable_keeps_record()
+
+    def test_tryexec_requires_executable_file_and_keeps_record_until_fixed(self):
+        executable = self.bin / "previous-app"
+        executable.write_text("#!/bin/sh\nexit 0\n")
+        with (self.data / "before.desktop").open("a") as desktop:
+            desktop.write("TryExec=previous-app\n")
+        self.run_helper("install")
+        self.assert_unavailable_keeps_record()
+        executable.chmod(0o755)
+        self.run_helper("remove")
+        self.assertEqual(self.choice(), "before.desktop")
+        self.assertFalse((self.state / "zip").exists())
+
+    def test_tryexec_absolute_escaped_space_is_available(self):
+        executable = self.bin / "previous app"
+        executable.write_text("#!/bin/sh\nexit 0\n")
+        executable.chmod(0o755)
+        value = str(executable).replace(" ", r"\s")
+        with (self.data / "before.desktop").open("a") as desktop:
+            desktop.write(f"TryExec={value}\n")
+        self.run_helper("install")
+        self.run_helper("remove")
+        self.assertEqual(self.choice(), "before.desktop")
+
+    def test_action_group_does_not_override_application_availability(self):
+        with (self.data / "before.desktop").open("a") as desktop:
+            desktop.write("[Desktop Action Other]\nHidden=true\nTryExec=missing-app\n")
+        self.run_helper("install")
+        self.run_helper("remove")
+        self.assertEqual(self.choice(), "before.desktop")
 
     def test_missing_record_does_not_change_defaults(self):
         before = self.db.read_bytes()
@@ -171,14 +224,12 @@ elif sys.argv[1] == "default":
         system.mkdir(parents=True)
         (system / "before.desktop").write_text("[Desktop Entry]\nType=Application\n")
         self.env["XDG_DATA_DIRS"] = str(system.parent)
-        self.run_helper("remove")
-        self.assertEqual(self.choice(), "zipelo.desktop")
+        self.assert_unavailable_keeps_record()
 
     def test_hidden_previous_app_is_not_restored(self):
         self.run_helper("install")
         (self.data / "before.desktop").write_text("[Desktop Entry]\nHidden=true\n")
-        self.run_helper("remove")
-        self.assertEqual(self.choice(), "zipelo.desktop")
+        self.assert_unavailable_keeps_record()
 
 
 if __name__ == "__main__":
