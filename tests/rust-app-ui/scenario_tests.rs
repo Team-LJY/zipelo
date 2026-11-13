@@ -96,6 +96,9 @@ fn every_listed_scenario_draws_and_keeps_its_expected_screen() {
             );
             assert!(app.model.input_error.is_none(), "{}", scenario.name);
             let expected = match scenario.name {
+                "conflict-choice" | "conflict-apply" => "나머지 파일에도 같게 적용",
+                "extract-skipped" => "모든 파일을 건너뛰었습니다",
+                "extract-renamed" => "이름 바꿔 저장: 읽어주세요 (1).txt",
                 "empty" => "압축파일",
                 "folder-empty" => "이 폴더는 비어 있습니다",
                 "dialog-error" => "파일 선택 창을 열 수 없습니다",

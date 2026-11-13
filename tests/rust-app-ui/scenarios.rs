@@ -21,6 +21,10 @@ macro_rules! catalog {
 }
 
 catalog! {
+    "conflict-choice" => "같은 이름 파일의 세 가지 처리 선택",
+    "conflict-apply" => "남은 충돌에 같은 선택 적용",
+    "extract-skipped" => "모든 파일을 건너뛴 정상 완료",
+    "extract-renamed" => "이름을 바꿔 저장한 완료 결과",
     "empty" => "빈 첫 화면",
     "archive" => "폴더와 파일이 있는 압축파일",
     "folder" => "사진 하위 폴더",
@@ -273,11 +277,70 @@ impl Scenario {
                 "사진/풍경.jpg".into(),
             ])
         });
+        if matches!(self.name, "extract-skipped" | "extract-renamed") {
+            app.targets = Some(["읽어주세요.txt".into()].into_iter().collect());
+            app.directories.clear();
+        }
         assert!(app.start(request));
         {
             let mut state = state.borrow_mut();
             state.frame(Event::Accepted { encryption: true });
             match self.name {
+                "conflict-choice" | "conflict-apply" => {
+                    state.frame(Event::ConflictRequired(Conflict {
+                        challenge_id: 29,
+                        entry_id: 1,
+                        relative_name: "읽어주세요.txt".into(),
+                        incoming_size: 1_287_952,
+                        existing_size: 2048,
+                    }));
+                }
+                "extract-skipped" | "extract-renamed" => {
+                    let skip = self.name == "extract-skipped";
+                    let name = if skip {
+                        "읽어주세요.txt"
+                    } else {
+                        "읽어주세요 (1).txt"
+                    };
+                    state.frame(Event::ConflictResolved(Resolution {
+                        entry_id: 1,
+                        relative_name: name.into(),
+                        choice: if skip {
+                            ConflictChoice::Skip
+                        } else {
+                            ConflictChoice::Rename
+                        },
+                    }));
+                    if !skip {
+                        state.frame(Event::Output {
+                            entry_id: Some(1),
+                            relative_name: name.into(),
+                            disposition: Disposition::Created,
+                        });
+                    }
+                    state.frame(Event::Terminal(Terminal {
+                        outcome: Outcome::Completed,
+                        error: None,
+                        publication: if skip {
+                            Publication::None
+                        } else {
+                            Publication::Complete
+                        },
+                        created_count: u64::from(!skip),
+                        retained_partial_count: 0,
+                        durability: if skip {
+                            Durability::NotApplicable
+                        } else {
+                            Durability::Synced
+                        },
+                        cleanup: Cleanup::Complete,
+                    }));
+                    state.queue.extend([
+                        HostEvent::StdoutEof,
+                        HostEvent::StderrEof,
+                        HostEvent::Exited { success: true },
+                    ]);
+                }
                 "password" | "password-retry" | "password-create" => {
                     state.frame(Event::PasswordRequired {
                         challenge_id: 17,
@@ -379,6 +442,10 @@ impl Scenario {
         }
         for _ in 0..64 {
             app.model.poll();
+        }
+        if self.name == "conflict-apply" {
+            app.conflict_challenge = Some((app.model.job_id().unwrap(), 29));
+            app.conflict_apply = true;
         }
         if self.name == "extract-unsynced" {
             app.details = true;

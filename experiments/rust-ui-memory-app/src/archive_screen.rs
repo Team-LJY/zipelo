@@ -202,6 +202,8 @@ pub struct ArchiveApp {
     password_confirm: String,
     password_visible: bool,
     password_challenge: Option<u64>,
+    conflict_challenge: Option<(u64, u64)>,
+    conflict_apply: bool,
     aes256: bool,
     create: bool,
     selected_only: bool,
@@ -263,6 +265,8 @@ impl ArchiveApp {
             password_confirm: String::new(),
             password_visible: false,
             password_challenge: None,
+            conflict_challenge: None,
+            conflict_apply: false,
             aes256: false,
             create: false,
             selected_only: false,
@@ -1012,6 +1016,9 @@ impl ArchiveApp {
         if self.model.challenge.is_some() {
             self.password_dialog(&ctx, new_challenge);
         }
+        if self.model.conflict.is_some() && self.model.close == Close::Open {
+            self.conflict_dialog(&ctx);
+        }
         self.close_dialog(&ctx);
         self.picker_notice(&ctx);
         if self.custom_frame {
@@ -1593,6 +1600,7 @@ impl ArchiveApp {
         (self.create && !self.model.busy())
             || self.picker.is_some()
             || self.model.challenge.is_some()
+            || self.model.conflict.is_some()
             || self.model.close != Close::Open
     }
 
@@ -1776,13 +1784,32 @@ impl ArchiveApp {
         let t = self.model.terminal.clone();
         let listing = matches!(self.last_request, Some(Start::List { .. }));
         let creating = matches!(self.last_request, Some(Start::CreateZip { .. }));
+        let resolved_targets = present::resolved_targets(
+            self.targets.as_ref(),
+            &self.model.entries,
+            matches!(
+                self.last_request,
+                Some(Start::Extract {
+                    gzip_output_name: Some(_),
+                    ..
+                })
+            )
+            .then_some(self.gzip_name.as_str()),
+            &self.model.resolutions,
+        );
+        let skipped = self
+            .model
+            .resolutions
+            .iter()
+            .filter(|r| r.choice == ConflictChoice::Skip)
+            .count();
         let warnings = if listing {
             Vec::new()
         } else {
             present::publication_warnings(
                 t.as_ref(),
                 self.model.confirmed,
-                self.targets.as_ref(),
+                resolved_targets.as_ref(),
                 &self.directories,
                 &self.model.outputs,
             )
@@ -1803,6 +1830,8 @@ impl ArchiveApp {
         let title = if success {
             if creating {
                 "ZIP 파일을 만들었습니다"
+            } else if skipped > 0 && t.as_ref().is_some_and(|t| t.created_count == 0) {
+                "모든 파일을 건너뛰었습니다"
             } else {
                 "압축을 풀었습니다"
             }
@@ -1846,7 +1875,7 @@ impl ArchiveApp {
                 .id_salt("result-message")
                 .max_height(max_height)
                 .show(ui, |ui| {
-                    if success {
+                    if success && t.as_ref().is_some_and(|t| t.created_count > 0) {
                         let path = match self.last_request.as_ref() {
                             Some(Start::CreateZip { output_file, .. }) => {
                                 output_file.display().to_string()
@@ -1865,6 +1894,21 @@ impl ArchiveApp {
                             present::client_error_text(error),
                             creating,
                         ));
+                    }
+                    if skipped > 0 {
+                        ui.label(format!("건너뛴 파일 {skipped}개"));
+                    }
+                    for resolution in self
+                        .model
+                        .resolutions
+                        .iter()
+                        .filter(|r| r.choice == ConflictChoice::Rename)
+                    {
+                        theme::bounded_text(
+                            ui,
+                            &format!("이름 바꿔 저장: {}", resolution.relative_name),
+                            ui.available_width(),
+                        );
                     }
                     for warning in warnings
                         .iter()
@@ -2381,6 +2425,57 @@ impl ArchiveApp {
             self.open_picker(Purpose::SaveZip);
         }
         cancel
+    }
+
+    fn conflict_dialog(&mut self, ctx: &egui::Context) {
+        let conflict = self.model.conflict.clone().unwrap();
+        let question = (self.model.job_id().unwrap_or(0), conflict.challenge_id);
+        if self.conflict_challenge != Some(question) {
+            self.conflict_challenge = Some(question);
+            self.conflict_apply = false;
+        }
+        let mut choice = None;
+        let mut cancel = false;
+        let modal = egui::Modal::new(egui::Id::unique("archive-conflict")).show(ctx, |ui| {
+            ui.set_width((ctx.content_rect().width() - 64.0).min(460.0));
+            ui.heading("같은 이름의 파일이 있습니다");
+            theme::bounded_text(ui, &conflict.relative_name, ui.available_width());
+            ui.add_space(theme::SPACE);
+            egui::Grid::new("conflict-sizes")
+                .spacing([24.0, 8.0])
+                .show(ui, |ui| {
+                    ui.label("기존 파일");
+                    ui.label(present::bytes_text(conflict.existing_size));
+                    ui.end_row();
+                    ui.label("압축파일 안의 파일");
+                    ui.label(present::bytes_text(conflict.incoming_size));
+                    ui.end_row();
+                });
+            ui.add_space(theme::SPACE);
+            ui.checkbox(&mut self.conflict_apply, "나머지 파일에도 같게 적용");
+            ui.add_space(theme::SPACE);
+            ui.horizontal_wrapped(|ui| {
+                for (label, value) in [
+                    ("덮어쓰기", ConflictChoice::Overwrite),
+                    ("건너뛰기", ConflictChoice::Skip),
+                    ("이름 바꿔 저장", ConflictChoice::Rename),
+                ] {
+                    if theme::action(ui, label, false, self.model.error.is_none()).clicked() {
+                        choice = Some(value);
+                    }
+                }
+            });
+            ui.label("이름 바꿔 저장하면 같은 폴더에 번호를 붙입니다.");
+            if let Some(error) = &self.model.error {
+                Self::error_notice(ui, present::client_error_text(error));
+            }
+            cancel = theme::action(ui, "작업 취소", false, true).clicked();
+        });
+        if modal.should_close() || cancel {
+            self.model.cancel();
+        } else if let Some(choice) = choice {
+            self.model.resolve_conflict(choice, self.conflict_apply);
+        }
     }
 
     fn password_dialog(&mut self, ctx: &egui::Context, new_challenge: bool) {

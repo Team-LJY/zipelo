@@ -130,6 +130,32 @@ pub fn target_files(
     Some(names)
 }
 
+pub fn resolved_targets(
+    targets: Option<&BTreeSet<String>>,
+    entries: &[Entry],
+    gzip: Option<&str>,
+    resolutions: &[Resolution],
+) -> Option<BTreeSet<String>> {
+    let mut names = targets?.clone();
+    for resolution in resolutions {
+        let entry = entries
+            .iter()
+            .find(|entry| entry.id == resolution.entry_id)?;
+        let original = gzip.unwrap_or(&entry.name).replace('\\', "/");
+        if !names.remove(&original) {
+            return None;
+        }
+    }
+    for resolution in resolutions {
+        if resolution.choice != ConflictChoice::Skip
+            && !names.insert(resolution.relative_name.replace('\\', "/"))
+        {
+            return None;
+        }
+    }
+    Some(names)
+}
+
 pub fn target_directories(entries: &[Entry], selection: &Selection) -> BTreeSet<String> {
     let mut directories = BTreeSet::new();
     for entry in entries.iter().filter(|entry| {
@@ -352,6 +378,8 @@ pub fn activity_text(model: &Model, creating: bool) -> &'static str {
         "마무리하는 중"
     } else if model.cancellation_requested() || model.cancel.is_some() {
         "취소하는 중..."
+    } else if model.conflict.is_some() {
+        "파일 충돌 선택 대기 중"
     } else if model.challenge.is_some() {
         "암호를 입력하세요"
     } else {
