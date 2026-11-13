@@ -1,3 +1,7 @@
+#[cfg(all(feature = "ui-fixture", debug_assertions))]
+#[path = "../../../tests/rust-app-ui/scenarios.rs"]
+pub mod scenarios;
+
 use crate::{
     archive_browser as browser,
     archive_dialog::{
@@ -237,6 +241,10 @@ pub struct ArchiveApp {
     checked_destination: bool,
     ui_error: Option<String>,
     initialized: bool,
+    #[cfg(all(feature = "ui-fixture", debug_assertions))]
+    scenario_marquee: Option<egui::Rect>,
+    #[cfg(all(feature = "ui-fixture", debug_assertions))]
+    scenario_sources: Option<std::rc::Rc<Vec<SourceRow>>>,
 }
 
 impl ArchiveApp {
@@ -289,6 +297,10 @@ impl ArchiveApp {
             checked_destination: false,
             ui_error: None,
             initialized: false,
+            #[cfg(all(feature = "ui-fixture", debug_assertions))]
+            scenario_marquee: None,
+            #[cfg(all(feature = "ui-fixture", debug_assertions))]
+            scenario_sources: None,
         };
         if let Some(path) = startup {
             app.open_path(path);
@@ -388,6 +400,10 @@ impl ArchiveApp {
     }
 
     fn create_rows(&mut self) -> Option<std::rc::Rc<Vec<SourceRow>>> {
+        #[cfg(all(feature = "ui-fixture", debug_assertions))]
+        if let Some(rows) = &self.scenario_sources {
+            return Some(rows.clone());
+        }
         let Some(root) = self.create_root() else {
             return Some(std::rc::Rc::new(
                 self.sources.iter().map(|path| source_row(path)).collect(),
@@ -1394,6 +1410,16 @@ impl ArchiveApp {
                             })
                         });
                     });
+                }
+                #[cfg(all(feature = "ui-fixture", debug_assertions))]
+                if let Some(rect) = self.scenario_marquee {
+                    ui.painter().with_clip_rect(clip).rect(
+                        rect.translate(origin.to_vec2()),
+                        0,
+                        theme::BLUE.gamma_multiply(0.16),
+                        egui::Stroke::new(1.0, theme::BLUE),
+                        egui::StrokeKind::Inside,
+                    );
                 }
                 if let Some(drag) = &self.marquee
                     && drag.moved

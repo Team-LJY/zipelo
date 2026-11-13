@@ -1,4 +1,10 @@
-#![cfg_attr(target_os = "windows", windows_subsystem = "windows")]
+#![cfg_attr(
+    all(
+        target_os = "windows",
+        not(all(feature = "ui-fixture", debug_assertions))
+    ),
+    windows_subsystem = "windows"
+)]
 
 #[cfg(feature = "ui-fixture")]
 #[path = "../../../tests/rust-app-ui/fake.rs"]
@@ -10,7 +16,10 @@ mod system_font;
 use eframe::egui;
 fn main() -> eframe::Result {
     let result = run();
-    #[cfg(target_os = "windows")]
+    #[cfg(all(
+        target_os = "windows",
+        not(all(feature = "ui-fixture", debug_assertions))
+    ))]
     if let Err(error) = &result {
         let message = if matches!(error, eframe::Error::AppCreation(_)) {
             "앱을 시작하지 못했습니다. 설치 파일을 다시 설치한 뒤 시도해 주세요."
@@ -22,7 +31,10 @@ fn main() -> eframe::Result {
     result
 }
 
-#[cfg(target_os = "windows")]
+#[cfg(all(
+    target_os = "windows",
+    not(all(feature = "ui-fixture", debug_assertions))
+))]
 fn show_startup_error(message: &str) {
     #[link(name = "user32")]
     unsafe extern "system" {
@@ -42,6 +54,35 @@ fn show_startup_error(message: &str) {
 }
 
 fn run() -> eframe::Result {
+    let args: Vec<_> = std::env::args_os().skip(1).collect();
+    #[cfg(all(feature = "ui-fixture", debug_assertions))]
+    let (args, scenario) = {
+        use zipelo_ui_memory_app::archive_screen::scenarios::{self, Launch};
+        match scenarios::launch(args)
+            .map_err(|e| eframe::Error::AppCreation(Box::new(std::io::Error::other(e))))?
+        {
+            Launch::List => {
+                print!("{}", scenarios::listing());
+                return Ok(());
+            }
+            Launch::Scenario(scenario) => (Vec::new(), Some(scenario)),
+            Launch::Normal(args) => (args, None),
+        }
+    };
+    #[cfg(not(all(feature = "ui-fixture", debug_assertions)))]
+    if args
+        .iter()
+        .any(|arg| arg == "--ui-scenario" || arg == "--list-ui-scenarios")
+    {
+        return Err(eframe::Error::AppCreation(Box::new(std::io::Error::other(
+            "지원하지 않는 명령줄 옵션입니다",
+        ))));
+    }
+    let (fixture, startup) = zipelo_ui_memory_app::archive_ui::launch_args(
+        args,
+        std::env::current_dir().map_err(|e| eframe::Error::AppCreation(Box::new(e)))?,
+    )
+    .map_err(|e| eframe::Error::AppCreation(Box::new(std::io::Error::other(e))))?;
     let custom_frame = zipelo_ui_memory_app::window_frame::custom_frame_needed();
     // 운영체제 한글 글꼴은 Pretendard에 없는 글자를 위한 대체 글꼴로만 씀.
     let fallback = system_font::load()
@@ -58,15 +99,22 @@ fn run() -> eframe::Result {
         },
         || {
             let fallback = fallback.clone();
+            let startup = startup.clone();
             Box::new(move |cc| {
                 cc.egui_ctx
                     .set_fonts(zipelo_ui_memory_app::archive_theme::fonts(fallback));
                 zipelo_ui_memory_app::archive_theme::apply(&cc.egui_ctx);
-                let (fixture, startup) = zipelo_ui_memory_app::archive_ui::launch_args(
-                    std::env::args_os().skip(1).collect(),
-                    std::env::current_dir()?,
-                )
-                .map_err(std::io::Error::other)?;
+                #[cfg(all(feature = "ui-fixture", debug_assertions))]
+                if let Some(scenario) = scenario {
+                    let mut app = scenario.build();
+                    app.set_custom_frame(custom_frame);
+                    return Ok(Box::new(
+                        zipelo_ui_memory_app::archive_screen::scenarios::Preview::new(
+                            app,
+                            &cc.egui_ctx,
+                        ),
+                    ) as Box<dyn eframe::App>);
+                }
                 let factory: Box<dyn zipelo_ui_memory_app::archive_ui::Factory> = if fixture {
                     #[cfg(feature = "ui-fixture")]
                     {
@@ -85,7 +133,9 @@ fn run() -> eframe::Result {
                     )
                 };
                 let mut app = zipelo_ui_memory_app::archive_screen::ArchiveApp::new(
-                    factory, startup, fixture,
+                    factory,
+                    startup.clone(),
+                    fixture,
                 );
                 app.set_custom_frame(custom_frame);
                 Ok(Box::new(app))
