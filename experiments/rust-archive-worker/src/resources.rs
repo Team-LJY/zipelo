@@ -27,6 +27,32 @@ pub(crate) fn completed<T>(result: Result<T>, check: &mut impl Monitor) -> Resul
     Ok(value)
 }
 
+pub(crate) struct MetadataMonitor<'a, M>(pub &'a mut M);
+impl<M: Monitor> Monitor for MetadataMonitor<'_, M> {
+    fn metadata_limits(&self) -> crate::archive::MetadataLimits {
+        self.0.metadata_limits()
+    }
+    fn check(&mut self) -> Result<()> {
+        self.0.check()
+    }
+    fn activity(&mut self) -> Result<()> {
+        self.0.activity()
+    }
+    fn observe(&mut self, usage: ResourceUsage, _storage: Option<&std::fs::File>) -> Result<()> {
+        self.check()?;
+        // 압축 헤더는 메타데이터 상한만 적용하며 파일 출력량에 합치지 않음.
+        if usage
+            .estimated_bytes
+            .into_iter()
+            .chain(usage.actual_bytes)
+            .any(|bytes| bytes > self.metadata_limits().bytes as u64)
+        {
+            return Err(ErrorCode::Limit);
+        }
+        Ok(())
+    }
+}
+
 pub(crate) struct Budget {
     pub soft: Limits,
     pub ceiling: Limits,

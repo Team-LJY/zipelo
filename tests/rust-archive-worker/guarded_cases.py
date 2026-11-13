@@ -13,6 +13,26 @@ if case == "bomb":
         block = bytes(1024 * 1024)
         for _ in range(257):
             output.write(block)
+elif case in {"header-budget-zip", "header-budget-tar"}:
+    names = [f"{entry_id:04}-" + "x" * 45 for entry_id in range(1000)]
+    if case.endswith("-zip"):
+        with zipfile.ZipFile(root / "input", "w") as output:
+            for name in names:
+                output.writestr(name, b"")
+    else:
+        import tarfile
+
+        with tarfile.open(root / "input", "w", format=tarfile.USTAR_FORMAT) as output:
+            for name in names:
+                output.addfile(tarfile.TarInfo(name))
+elif case.startswith("header-budget-"):
+    from seven_zip_fixtures import archive
+
+    entries = [(f"{entry_id:04}-" + "x" * 45, b"", 0x20) for entry_id in range(1000)]
+    size = int(case.rsplit("-", 1)[1])
+    if size:
+        entries.append(("payload", b"x" * size, 0x20))
+    (root / "input").write_bytes(archive(entries, encoded="encoded" in case))
 elif case == "wide-names":
     with zipfile.ZipFile(root / "input", "w") as archive:
         for entry_id in range(9000):

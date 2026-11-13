@@ -269,3 +269,82 @@ fn empty_gzip_members_count_consumed_input_as_decode_progress() {
     assert!(clock.steps >= 8);
     clock.check().unwrap();
 }
+
+#[test]
+fn metadata_monitor_keeps_its_budget_and_parent_cancellation() {
+    struct Parent {
+        observed: usize,
+        active: usize,
+        cancelled: bool,
+    }
+    impl Monitor for Parent {
+        fn metadata_limits(&self) -> crate::archive::MetadataLimits {
+            crate::archive::MetadataLimits {
+                bytes: 16,
+                nodes: 4,
+                enlarged: false,
+            }
+        }
+        fn check(&mut self) -> Result<()> {
+            if self.cancelled {
+                Err(ErrorCode::None)
+            } else {
+                Ok(())
+            }
+        }
+        fn activity(&mut self) -> Result<()> {
+            self.check()?;
+            self.active += 1;
+            Ok(())
+        }
+        fn observe(&mut self, _: ResourceUsage, _: Option<&std::fs::File>) -> Result<()> {
+            self.observed += 1;
+            Err(ErrorCode::Limit)
+        }
+    }
+    let mut parent = Parent {
+        observed: 0,
+        active: 0,
+        cancelled: false,
+    };
+    {
+        let mut metadata = MetadataMonitor(&mut parent);
+        assert_eq!(metadata.metadata_limits().bytes, 16);
+        metadata
+            .observe(
+                ResourceUsage {
+                    estimated_bytes: Some(16),
+                    actual_bytes: Some(16),
+                    compressed_bytes: Some(1),
+                    ratio_output_bytes: Some(16),
+                    ..ResourceUsage::default()
+                },
+                None,
+            )
+            .unwrap();
+        completed(Ok(()), &mut metadata).unwrap();
+        for estimated in [false, true] {
+            assert_eq!(
+                metadata.observe(
+                    ResourceUsage {
+                        estimated_bytes: estimated.then_some(17),
+                        actual_bytes: (!estimated).then_some(17),
+                        ..ResourceUsage::default()
+                    },
+                    None
+                ),
+                Err(ErrorCode::Limit)
+            );
+        }
+    }
+    assert_eq!(parent.observed, 0);
+    assert_eq!(parent.active, 1);
+    parent.cancelled = true;
+    let mut metadata = MetadataMonitor(&mut parent);
+    assert_eq!(metadata.check(), Err(ErrorCode::None));
+    assert_eq!(
+        metadata.observe(ResourceUsage::default(), None),
+        Err(ErrorCode::None)
+    );
+    assert_eq!(completed(Ok(()), &mut metadata), Err(ErrorCode::None));
+}

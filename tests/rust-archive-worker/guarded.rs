@@ -944,3 +944,6 @@ fn large_selection_reaches_worker_permission_and_destination_checks() {
 #[cfg(target_os = "linux")]
 #[path = "item_progress.rs"]
 mod item_progress;
+
+#[path = "header_budget.rs"]
+mod header_budget;

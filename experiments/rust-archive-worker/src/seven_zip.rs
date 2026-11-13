@@ -648,7 +648,12 @@ pub(crate) fn open(
             return Err(ErrorCode::UnsupportedFeature);
         }
         let ranges = streams.ranges(input, data_end, check)?;
-        streams.decode_file(input, &ranges, &mut data, check)?;
+        streams.decode_file(
+            input,
+            &ranges,
+            &mut data,
+            &mut crate::resources::MetadataMonitor(check),
+        )?;
         data_end = 32u64
             .checked_add(streams.position as u64)
             .ok_or(ErrorCode::Integrity)?;
