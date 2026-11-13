@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[2]
 class IconBuildTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        (ROOT / "tests/work").mkdir(parents=True, exist_ok=True)
         cls.scratch = tempfile.TemporaryDirectory(dir=ROOT / "tests/work")
         cls.addClassCleanup(cls.scratch.cleanup)
         cls.root = Path(cls.scratch.name)
@@ -28,7 +29,7 @@ class IconBuildTests(unittest.TestCase):
         for source, output in ((ROOT / "experiments/rust-ui-memory-app/build.rs", cls.builder),
                                (fake, cls.compiler)):
             subprocess.run(["rustc", "+1.99.1", "--edition=2024", str(source), "-o", str(output)],
-                           check=True, capture_output=True, text=True)
+                           check=True, capture_output=True, text=True, encoding="utf-8")
 
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory(dir=self.root)
@@ -45,15 +46,14 @@ class IconBuildTests(unittest.TestCase):
         return path
 
     def run_build(self, target="msvc", **overrides):
-        environment = dict(os.environ)
-        for key in ("RC", "ProgramFiles", "ProgramFiles(x86)", "FAKE_RC_FAIL"):
-            environment.pop(key, None)
+        excluded = {key.casefold() for key in ("RC", "ProgramFiles", "ProgramFiles(x86)", "FAKE_RC_FAIL", "PATH")}
+        environment = {key: value for key, value in os.environ.items() if key.casefold() not in excluded}
         environment.update({"CARGO_CFG_TARGET_OS": "windows", "CARGO_CFG_TARGET_ENV": target,
                             "CARGO_FEATURE_UI": "1", "OUT_DIR": str(self.output),
                             "CARGO_MANIFEST_DIR": str(ROOT / "experiments/rust-ui-memory-app"),
                             "ProgramFiles(x86)": str(self.programs), "PATH": ""})
         environment.update(overrides)
-        return subprocess.run([str(self.builder)], env=environment, capture_output=True, text=True)
+        return subprocess.run([str(self.builder)], env=environment, capture_output=True, text=True, encoding="utf-8")
 
     def test_sdk_uses_highest_numeric_version_with_x64_compiler(self):
         self.sdk("10.0.9.0")
@@ -62,13 +62,13 @@ class IconBuildTests(unittest.TestCase):
         result = self.run_build()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("cargo:rustc-link-arg-bin=", result.stdout)
-        self.assertEqual((self.output / "zipelo.res").read_text(), str(latest))
+        self.assertTrue(Path((self.output / "zipelo.res").read_text()).samefile(latest))
 
     def test_explicit_rc_overrides_sdk(self):
         self.sdk("10.0.99.0")
         result = self.run_build(RC=str(self.compiler))
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual((self.output / "zipelo.res").read_text(), str(self.compiler))
+        self.assertTrue(Path((self.output / "zipelo.res").read_text()).samefile(self.compiler))
 
     def test_path_compiler_remains_available_without_sdk(self):
         path = self.work / "bin/rc.exe"
@@ -76,7 +76,7 @@ class IconBuildTests(unittest.TestCase):
         shutil.copy2(self.compiler, path)
         result = self.run_build(PATH=str(path.parent))
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual((self.output / "zipelo.res").read_text(), str(path))
+        self.assertTrue(Path((self.output / "zipelo.res").read_text()).samefile(path))
 
     def test_missing_msvc_compiler_warns_without_linking(self):
         result = self.run_build()
