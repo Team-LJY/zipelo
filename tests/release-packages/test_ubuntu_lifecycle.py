@@ -49,7 +49,7 @@ class LifecycleTests(unittest.TestCase):
             "TEST_HOME": str(self.directory),
             "TEST_LOG": str(log),
         }
-        for arguments, count in ((["configure"], 5), (["configure", "0.1.0"], 0),
+        for arguments, count in ((["configure"], 1), (["configure", "0.1.0"], 0),
                                  (["triggered", "desktop"], 0)):
             with self.subTest(arguments=arguments):
                 log.write_text("")

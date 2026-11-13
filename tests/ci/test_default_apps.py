@@ -1,0 +1,127 @@
+"""제거 시 기존 기본 앱과 사용자의 새 선택 보존을 검증함."""
+
+import json
+import os
+from pathlib import Path
+import subprocess
+import tempfile
+import unittest
+
+ROOT = Path(__file__).resolve().parents[2]
+HELPER = ROOT / "packaging/ubuntu/rust/default-apps"
+
+
+class DefaultAppsTests(unittest.TestCase):
+    def setUp(self):
+        work = ROOT / "tests/work"
+        work.mkdir(exist_ok=True)
+        self.temporary = tempfile.TemporaryDirectory(dir=work)
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name)
+        self.bin = self.root / "bin"
+        self.bin.mkdir()
+        self.data = self.root / "data/applications"
+        self.data.mkdir(parents=True)
+        for name in ("before.desktop", "changed.desktop"):
+            (self.data / name).write_text("[Desktop Entry]\nType=Application\nName=Archive\nExec=true %f\n")
+        self.db = self.root / "choices.json"
+        self.db.write_text(json.dumps({"application/zip": "before.desktop"}))
+        executable = self.bin / "xdg-mime"
+        executable.write_text("""#!/usr/bin/python3
+import json, os, sys
+from pathlib import Path
+p = Path(os.environ["CHOICES"])
+d = json.loads(p.read_text())
+if sys.argv[1] == "query":
+    print(d.get(sys.argv[3], ""))
+elif sys.argv[1] == "default":
+    if os.environ.get("FAIL_RESTORE") and sys.argv[2] != "zipelo.desktop":
+        sys.exit(1)
+    d[sys.argv[3]] = sys.argv[2]
+    p.write_text(json.dumps(d))
+""")
+        executable.chmod(0o755)
+        self.env = dict(os.environ, HOME=str(self.root),
+                        XDG_STATE_HOME=str(self.root / "state"),
+                        XDG_DATA_HOME=str(self.root / "data"),
+                        XDG_DATA_DIRS=str(self.root / "empty"),
+                        CHOICES=str(self.db), PATH=str(self.bin) + ":" + os.environ["PATH"])
+        self.state = self.root / "state/zipelo-default-apps-v1"
+
+    def run_helper(self, action):
+        return subprocess.run(["sh", str(HELPER), action], env=self.env, check=True,
+                              capture_output=True, text=True)
+
+    def choice(self):
+        return json.loads(self.db.read_text())["application/zip"]
+
+    def test_previous_app_is_restored(self):
+        self.run_helper("install")
+        self.assertEqual(self.choice(), "zipelo.desktop")
+        self.run_helper("remove")
+        self.assertEqual(self.choice(), "before.desktop")
+        self.assertFalse(self.state.exists())
+
+    def test_changed_choice_is_preserved(self):
+        self.run_helper("install")
+        self.db.write_text(json.dumps({"application/zip": "changed.desktop"}))
+        self.run_helper("remove")
+        self.assertEqual(self.choice(), "changed.desktop")
+
+    def test_missing_previous_app_has_guidance(self):
+        self.run_helper("install")
+        (self.data / "before.desktop").unlink()
+        result = self.run_helper("remove")
+        self.assertEqual(self.choice(), "zipelo.desktop")
+        self.assertIn("다른 프로그램으로 열기", result.stderr)
+
+    def test_missing_record_does_not_change_defaults(self):
+        before = self.db.read_bytes()
+        self.run_helper("remove")
+        self.assertEqual(self.db.read_bytes(), before)
+
+    def test_repeated_install_does_not_replace_first_record(self):
+        self.run_helper("install")
+        original = (self.state / "zip").read_bytes()
+        self.run_helper("install")
+        self.assertEqual((self.state / "zip").read_bytes(), original)
+        self.run_helper("remove")
+        self.assertEqual(self.choice(), "before.desktop")
+
+    def test_symlinked_state_is_untouched(self):
+        self.state.parent.mkdir()
+        self.state.symlink_to(self.data, target_is_directory=True)
+        before = self.db.read_bytes()
+        self.run_helper("install")
+        self.assertEqual(self.db.read_bytes(), before)
+        self.assertEqual(len(list(self.data.iterdir())), 2)
+
+    def test_failed_restore_retains_record_for_retry(self):
+        self.run_helper("install")
+        self.env["FAIL_RESTORE"] = "1"
+        self.run_helper("remove")
+        self.assertTrue((self.state / "zip").exists())
+        self.assertEqual(self.choice(), "zipelo.desktop")
+        del self.env["FAIL_RESTORE"]
+        self.run_helper("remove")
+        self.assertEqual(self.choice(), "before.desktop")
+
+    def test_hidden_user_entry_does_not_fall_through_to_system_copy(self):
+        self.run_helper("install")
+        (self.data / "before.desktop").write_text("[Desktop Entry]\nHidden=true\n")
+        system = self.root / "system/applications"
+        system.mkdir(parents=True)
+        (system / "before.desktop").write_text("[Desktop Entry]\nType=Application\n")
+        self.env["XDG_DATA_DIRS"] = str(system.parent)
+        self.run_helper("remove")
+        self.assertEqual(self.choice(), "zipelo.desktop")
+
+    def test_hidden_previous_app_is_not_restored(self):
+        self.run_helper("install")
+        (self.data / "before.desktop").write_text("[Desktop Entry]\nHidden=true\n")
+        self.run_helper("remove")
+        self.assertEqual(self.choice(), "zipelo.desktop")
+
+
+if __name__ == "__main__":
+    unittest.main()

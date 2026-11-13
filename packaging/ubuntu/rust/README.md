@@ -11,7 +11,11 @@ sudo dpkg -r zipelo
 
 Rust 1.99.1, dpkg-deb와 desktop-file-validate가 필요합니다. 출력은 새 경로여야 하며 기본은 release 빌드입니다. 개발 검증은 --profile dev를 명시합니다. 앱과 작업자는 같은 커밋에서 빌드하며 BUILD-INFO.json에 커밋과 SHA-256을 기록합니다.
 
-sudo로 처음 설치하면 postinst가 SUDO_USER의 ZIP, 7z, TAR.GZ, GZ, TAR 기본 앱을 xdg-mime으로 적용합니다. 최초 설치에서 기존 기본 앱 선택을 바꿉니다. 업그레이드와 재설정에서는 사용자의 기본 앱 선택을 유지합니다. 다른 패키지 관리자로 설치해 SUDO_USER가 없으면 사용자 설정을 추측하지 않고 연결 후보만 등록합니다. 이 경우 사용자 계정에서 xdg-mime default zipelo.desktop application/zip 등을 실행해야 합니다. 제거는 사용자 MIME 설정을 지우지 않으며 다른 앱을 기본 앱으로 다시 선택할 수 있습니다.
+sudo로 처음 설치하면 postinst가 SUDO_USER의 ZIP, 7z, TAR.GZ, GZ, TAR 기본 앱을 xdg-mime으로 적용합니다. 최초 설치에서 기존 기본 앱 선택을 바꿉니다. 업그레이드와 재설정에서는 사용자의 기본 앱 선택을 유지합니다. 다른 패키지 관리자로 설치해 SUDO_USER가 없으면 사용자 설정을 추측하지 않고 연결 후보만 등록합니다. 이 경우 사용자 계정에서 xdg-mime default zipelo.desktop application/zip 등을 실행해야 합니다. 최초 적용 전에 이전 기본 앱 ID를 해당 사용자의 ~/.local/state/zipelo-default-apps-v1에 기록합니다. 같은 사용자가 sudo로 제거하면 prerm이 현재 선택이 여전히 Zipelo인지 확인하고, 이전 데스크톱 파일이 존재하며 숨김 상태가 아닐 때만 이전 앱으로 복원합니다. 설치 후 선택한 다른 앱과 다른 사용자의 설정은 건드리지 않습니다.
+
+이전 버전에서 설치해 기록이 없거나 이전 앱이 삭제된 경우에는 자동 복원하지 않습니다. 그래픽 패키지 관리자처럼 SUDO_USER를 제공하지 않는 제거도 사용자를 추측하지 않습니다. 사용자 지정 XDG 설정 경로와 하위 디렉터리 데스크톱 ID는 자동 복원 대상으로 보장하지 않습니다. 제거 전에 ZIP 파일을 오른쪽 클릭하고 [다른 프로그램으로 열기]에서 사용할 앱을 선택하세요. 다른 앱이 없다면 먼저 설치하세요. 제거 명령도 이 안내를 출력합니다. 사용자 MIME 설정 파일 전체를 지우거나 다른 사용자 홈을 순회하지 않습니다.
+
+제거된 desktop 파일을 가리키는 선택은 [freedesktop 기본 앱 규격](https://specifications.freedesktop.org/mime-apps/1.0/default.html)에 따라 다음 유효한 후보로 넘어갑니다. 기존 기록이 없을 때 임의의 앱을 새 기본값으로 강제하지 않습니다. 자동 복원은 이전 기본 앱 ID 한 개를 대상으로 하며 MIME 설정 파일 전체의 과거 내용을 되돌리지 않습니다.
 
 이 패키지의 검사 범위는 Ubuntu 26.04입니다. 다른 Ubuntu 버전과 Windows 실기는 별도 확인이 필요합니다.
 

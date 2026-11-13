@@ -21,6 +21,8 @@ def build(args):
     stage = output / "stage"
     lib = stage / "usr/lib/zipelo"
     lib.mkdir(parents=True)
+    shutil.copyfile(Path(__file__).with_name("default-apps"), lib / "default-apps")
+    (lib / "default-apps").chmod(0o755)
     records = {}
     docs = stage / "usr/share/doc/zipelo"
     docs.mkdir(parents=True)
@@ -60,7 +62,7 @@ Depends: libc6 (>= 2.39), libgcc-s1, libx11-6, libxkbcommon0, libwayland-client0
 Description: Lightweight Rust archive application
  ZIP, 7z, TAR, GZ and TAR.GZ archive application with a separate worker.
 """)
-    for script in ("postinst", "postrm"):
+    for script in ("postinst", "prerm", "postrm"):
         shutil.copyfile(Path(__file__).with_name(script), control / script)
         (control / script).chmod(0o755)
     package = output / "zipelo_0.1.0_amd64.deb"

@@ -1,0 +1,78 @@
+#!/bin/sh
+# 로그인 사용자 권한으로만 이전 선택을 기록하고 조건부 복원함.
+set -eu
+case "${1:-}" in
+    install|remove) action=$1 ;;
+    *) exit 2 ;;
+esac
+if [ "$(id -u)" -eq 0 ]; then
+    echo "기본 앱 처리는 일반 사용자 계정에서 실행해야 합니다." >&2
+    exit 1
+fi
+state="${XDG_STATE_HOME:-$HOME/.local/state}/zipelo-default-apps-v1"
+case "$state" in /*) ;; *) exit 1 ;; esac
+umask 077
+if [ "$action" = install ] && [ ! -e "$state" ] && [ ! -L "$state" ]; then
+    mkdir -p "$(dirname "$state")"
+    mkdir "$state"
+fi
+if [ -L "$state" ] || [ ! -d "$state" ] || [ ! -O "$state" ]; then
+    echo "이전 기본 앱 기록이 없습니다. 파일을 오른쪽 클릭해 [다른 프로그램으로 열기]에서 앱을 선택하세요." >&2
+    exit 0
+fi
+
+available() {
+    case "$1" in
+        ""|zipelo.desktop|*/*|*\\*|*";"*|*"="*) return 1 ;;
+        *.desktop) ;;
+        *) return 1 ;;
+    esac
+    # 기본 데스크톱 파일만 복원하며 모호한 ID는 수동 선택으로 남김.
+    old_ifs=$IFS
+    IFS=:
+    for directory in "${XDG_DATA_HOME:-$HOME/.local/share}" ${XDG_DATA_DIRS:-/usr/local/share:/usr/share}; do
+        if [ -f "$directory/applications/$1" ]; then
+            IFS=$old_ifs
+            if grep -Eq '^(Hidden|NoDisplay)=true[[:space:]]*$' "$directory/applications/$1"; then
+                return 1
+            fi
+            return 0
+        fi
+    done
+    IFS=$old_ifs
+    return 1
+}
+
+for item in zip:application/zip seven:application/x-7z-compressed targz:application/x-compressed-tar gzip:application/gzip tar:application/x-tar; do
+    key=${item%%:*}
+    mime=${item#*:}
+    record="$state/$key"
+    if [ -L "$record" ]; then
+        continue
+    fi
+    current=$(xdg-mime query default "$mime") || continue
+    if [ "$action" = install ]; then
+        # 미완료 기록이나 재설치의 기존 기록을 덮어쓰지 않음.
+        if [ -e "$record" ]; then
+            continue
+        fi
+        (set -C; printf '%s\n' "$current" > "$record") || continue
+        xdg-mime default zipelo.desktop "$mime" || echo "기본 앱 적용 실패: $mime" >&2
+    elif [ -f "$record" ] && [ -O "$record" ]; then
+        previous=$(cat "$record")
+        if [ "$current" = zipelo.desktop ]; then
+            if available "$previous"; then
+                if ! xdg-mime default "$previous" "$mime"; then
+                    echo "기본 앱 복원 실패: $mime" >&2
+                    continue
+                fi
+            else
+                echo "이전 앱을 복원할 수 없습니다: $mime. 파일을 오른쪽 클릭해 [다른 프로그램으로 열기]에서 앱을 선택하세요." >&2
+            fi
+        fi
+        rm -- "$record"
+    fi
+done
+if [ "$action" = remove ]; then
+    rmdir "$state" 2>/dev/null || :
+fi

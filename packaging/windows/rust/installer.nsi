@@ -20,6 +20,7 @@ ShowInstDetails show
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_INSTFILES
 Page custom FinishCreate
+UninstPage custom un.AssociationsCreate
 !insertmacro MUI_UNPAGE_CONFIRM
 !insertmacro MUI_UNPAGE_INSTFILES
 !insertmacro MUI_LANGUAGE "Korean"
@@ -383,6 +384,40 @@ settings_failed:
     MessageBox MB_OK "Windows 설정을 열지 못했습니다. 설정에서 앱 > 기본 앱을 직접 열어주세요."
 FunctionEnd
 
+
+; 현재 값이 설치 시 기록한 값과 같은 경우에만 지움.
+!macro RemoveOwnedValue KEY NAME EXPECTED
+    ReadRegStr $0 HKCU "${KEY}" "${NAME}"
+    ${If} $0 S== "${EXPECTED}"
+        DeleteRegValue HKCU "${KEY}" "${NAME}"
+    ${EndIf}
+!macroend
+
+Function un.AssociationsCreate
+    nsDialogs::Create 1018
+    Pop $Dialog
+    ${If} $Dialog == error
+        Abort
+    ${EndIf}
+    ${NSD_CreateLabel} 0 0 100% 62u "Zipelo를 기본 앱으로 사용했다면 제거 전에 다른 앱을 선택하세요. [기본 앱 설정 열기]에서 .zip, .7z, .tar, .gz, .tgz를 검색해 사용할 앱을 고를 수 있습니다. 다른 앱이 없으면 먼저 설치하세요."
+    Pop $0
+    ${NSD_CreateLabel} 0 66u 100% 38u "직접 고른 기본 앱은 자동으로 바꾸지 않습니다. 제거 후 파일이 열리지 않으면 파일을 오른쪽 클릭하고 [연결 프로그램]에서 다른 앱을 선택하세요."
+    Pop $0
+    ${NSD_CreateButton} 0 112u 100% 24u "기본 앱 설정 열기"
+    Pop $ApplyButton
+    ${NSD_OnClick} $ApplyButton un.OpenDefaultApps
+    nsDialogs::Show
+FunctionEnd
+
+Function un.OpenDefaultApps
+    Pop $0
+    ClearErrors
+    ExecShell "open" "ms-settings:defaultapps"
+    ${If} ${Errors}
+        MessageBox MB_OK "Windows 설정을 열지 못했습니다. 설정 > 앱 > 기본 앱에서 확장자를 검색해 다른 앱을 선택하세요."
+    ${EndIf}
+FunctionEnd
+
 Function un.onInit
     SetShellVarContext current
     SetRegView 64
@@ -419,20 +454,20 @@ Section "Uninstall"
     ${If} $0 == "${APPKEY}\Capabilities"
         DeleteRegValue HKCU "Software\RegisteredApplications" "Zipelo"
     ${EndIf}
-    DeleteRegValue HKCU "${APPKEY}\Capabilities\FileAssociations" ".zip"
-    DeleteRegValue HKCU "${APPKEY}\Capabilities\FileAssociations" ".7z"
-    DeleteRegValue HKCU "${APPKEY}\Capabilities\FileAssociations" ".tar"
-    DeleteRegValue HKCU "${APPKEY}\Capabilities\FileAssociations" ".gz"
-    DeleteRegValue HKCU "${APPKEY}\Capabilities\FileAssociations" ".tgz"
-    DeleteRegValue HKCU "${APPKEY}\Capabilities" "ApplicationName"
-    DeleteRegValue HKCU "${APPKEY}\Capabilities" "ApplicationDescription"
+    !insertmacro RemoveOwnedValue "${APPKEY}\Capabilities\FileAssociations" ".zip" "Zipelo.Archive"
+    !insertmacro RemoveOwnedValue "${APPKEY}\Capabilities\FileAssociations" ".7z" "Zipelo.Archive"
+    !insertmacro RemoveOwnedValue "${APPKEY}\Capabilities\FileAssociations" ".tar" "Zipelo.Archive"
+    !insertmacro RemoveOwnedValue "${APPKEY}\Capabilities\FileAssociations" ".gz" "Zipelo.Archive"
+    !insertmacro RemoveOwnedValue "${APPKEY}\Capabilities\FileAssociations" ".tgz" "Zipelo.Archive"
+    !insertmacro RemoveOwnedValue "${APPKEY}\Capabilities" "ApplicationName" "Zipelo"
+    !insertmacro RemoveOwnedValue "${APPKEY}\Capabilities" "ApplicationDescription" "압축파일 열기와 풀기"
     DeleteRegKey /ifempty HKCU "${APPKEY}\Capabilities\FileAssociations"
     DeleteRegKey /ifempty HKCU "${APPKEY}\Capabilities"
     DeleteRegKey /ifempty HKCU "${APPKEY}"
-    DeleteRegValue HKCU "${PROGKEY}\shell\open\command" ""
-    DeleteRegValue HKCU "${PROGKEY}\DefaultIcon" ""
+    !insertmacro RemoveOwnedValue "${PROGKEY}\shell\open\command" "" '$\"$INSTDIR\Zipelo.exe$\" $\"%1$\"'
+    !insertmacro RemoveOwnedValue "${PROGKEY}\DefaultIcon" "" '$\"$INSTDIR\Zipelo.exe$\",0'
     DeleteRegKey /ifempty HKCU "${PROGKEY}\DefaultIcon"
-    DeleteRegValue HKCU "${PROGKEY}" ""
+    !insertmacro RemoveOwnedValue "${PROGKEY}" "" "Zipelo 압축파일"
     DeleteRegKey /ifempty HKCU "${PROGKEY}\shell\open\command"
     DeleteRegKey /ifempty HKCU "${PROGKEY}\shell\open"
     DeleteRegKey /ifempty HKCU "${PROGKEY}\shell"
