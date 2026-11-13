@@ -80,7 +80,7 @@ Python 표준 bz2, lzma와 tarfile로 독립 생성 및 해제한 결과의 SHA2
 
 헤더는 ZAW1, version u16=1, kind u16, body length u32, reserved u32=0, job ID u64, sequence u64의 32바이트입니다. 양방향 sequence는 각각 0부터 시작합니다. body는 최대 1 MiB이며 한 방향당 최대 1,000,000프레임입니다. 잘린 프레임, 알 수 없는 tag, 잔여 payload, 잘못된 ID/sequence를 거부합니다.
 
-- kind: Start=1, Password=2, Cancel=3, StartInteractive=4, ConflictReply=5, Accepted=100, Entry=101, ListEnd=102, PasswordRequired=103, Progress=104, Output=105, Terminal=106, CancelAck=107, ConflictRequired=108, ConflictResolved=109입니다. 새 kind의 런타임 지원 상태는 아래 revision 3 절을 따릅니다.
+- kind: Start=1, Password=2, Cancel=3, StartInteractive=4, ConflictReply=5, StartGuarded=6, ResourceReply=7, Accepted=100, Entry=101, ListEnd=102, PasswordRequired=103, Progress=104, Output=105, Terminal=106, CancelAck=107, ConflictRequired=108, ConflictResolved=109, ResourceRequired=110입니다. 충돌 및 자원 승인의 지원 상태는 아래 계약 절을 따릅니다.
 - body 필드는 `protocol.rs` 선언 순서입니다. enum은 선언 순서의 u8 tag이며 NativePath/SourceObject만 Unix=1, Windows=2입니다. bool/Option은 0 또는 1입니다. String/Vec는 u32 길이 뒤 원소를 저장하며 String은 UTF-8 바이트 길이입니다. `[u8; N]`은 길이 없이 N바이트입니다. action variant의 필드는 선언 순서를 사용합니다. Start는 action 뒤 limits(input u64, output u64, entries u32)입니다.
 - Password의 비밀 값은 Debug에 노출되지 않습니다. 암호 작업은 PasswordRequired의 challenge_id와 일치하는 Password를 한 번 받습니다. 오래된 ID, 중복 또는 요청 전 암호는 Protocol 오류입니다. 비밀 값은 로그나 파일에 저장하지 않습니다.
 - CancelAck.request_sequence는 요청 헤더 sequence입니다. Requested, AlreadyRequested, TooLate, Finished는 최종 결과와 별개입니다. 종료와 경합한 요청은 읽히지 않아 응답이 없을 수 있습니다. Terminal은 마지막 프레임이며 Failed/Cancelled도 정상 전달 뒤 프로세스 exit=0입니다. 앱은 Terminal과 stdout/stderr EOF, child wait를 모두 확인해야 합니다.
