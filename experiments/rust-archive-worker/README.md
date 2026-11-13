@@ -1,6 +1,6 @@
 # Rust archive worker
 
-별도 프로세스의 stdin/stdout으로 revision 2 요청을 처리합니다. 제품 앱이 공유 codec으로 연결하며 프로세스 분리는 OS sandbox를 뜻하지 않습니다. 암호 기능은 capability=true이며 ZipCrypto 해제, WinZip AES-256 AE-1/AE-2 해제와 AE-2 생성을 지원합니다.
+별도 프로세스의 stdin/stdout으로 revision 3 요청을 처리합니다. 제품 앱이 공유 codec으로 연결하며 프로세스 분리는 OS sandbox를 뜻하지 않습니다. 암호 기능은 capability=true이며 ZipCrypto 해제, WinZip AES-256 AE-1/AE-2 해제와 AE-2 생성을 지원합니다.
 
 - ZIP32/ZIP64 Store/Deflate 목록과 해제, ZIP32/ZIP64 생성, 기본 TAR/USTAR, GZ, TAR.GZ, 비암호화 7z 해제를 지원합니다. GZ 연결 멤버는 하나의 논리 스트림으로 합칩니다. 다중 볼륨, UTF-8로 해석할 수 없는 ZIP 이름, PAX/GNU 확장과 특수 항목 해제는 미지원입니다.
 - ZIP 이름: UTF-8 플래그(비트 11)가 있으면 이름이 UTF-8이어야 하며 아니면 Integrity입니다. 플래그가 없으면 CRC가 원래 이름과 맞는 Info-ZIP Unicode Path 확장 필드(0x7075, 버전 1)를 우선 쓰고, 다음으로 UTF-8로 유효한 이름 바이트를 그대로 씁니다(Linux/macOS 도구의 기본 동작). CRC가 다르거나 버전이 다른 확장 필드는 무시합니다. 그 밖의 CP437/CP949 등 레거시 이름은 코드 페이지를 추측하지 않고 UnsupportedFeature로 거부합니다. 어느 경로로 얻은 이름이든 같은 경로 안전성 검사와 충돌 검사를 거칩니다.
@@ -10,7 +10,7 @@
 - ListId는 열린 파일 객체, 전체 입력 SHA-256과 catalog version에 연결됩니다. 입력을 다시 읽어 검증한 전용 임시 파일 스냅샷만 해독합니다. 불일치는 출력 전 SourceChanged이며 목록을 다시 열어야 합니다. 원본의 사후 변경 감시나 파일 잠금 보장은 아닙니다.
 - 출력 폴더는 미리 존재해야 합니다. Linux는 소유 UID가 같고 group/other 쓰기가 없는 폴더만 허용합니다. openat/O_NOFOLLOW로 디렉터리를 고정하고 새 임시 파일을 배타적으로 만든 뒤 hard link로 게시합니다. 기존 파일과 링크를 덮어쓰지 않습니다. Windows는 reparse point를 거부하고 부모 디렉터리 핸들에서 delete sharing을 제한합니다.
 - 파일 sync/close는 게시 전에 확인합니다. 게시 후 부모 sync와 임시 파일 정리 실패는 게시 사실과 따로 보고합니다. Windows의 디렉터리 내구성은 Unconfirmed입니다. hard link의 결과가 불명확하면 CommitUncertain/Uncertain이며 자동 재시도나 rollback은 없습니다.
-- 생성한 디렉터리와 게시한 파일은 취소 시 유지하고 Output으로 보고합니다. 실패한 임시 파일 정리는 실제 임시 이름과 PartialRetained로 보고합니다. 임시 파일 생성과 일부 쓰기 뒤 ENOSPC 주입 시험은 Linux에서 수행합니다. close/sync/link 장애 주입과 Windows 실기 검증은 아직 수행하지 않았습니다.
+- 생성한 디렉터리와 게시한 파일은 취소 시 유지하고 Output으로 보고합니다. 실패한 임시 파일 정리는 실제 임시 이름과 PartialRetained로 보고합니다. 임시 파일 생성과 일부 쓰기 뒤 ENOSPC, 파일 sync와 교체 호출 실패, 게시 후 디렉터리 sync 실패 주입 시험은 Linux에서 수행합니다. close 장애 주입과 Windows 실기 검증은 아직 수행하지 않았습니다.
 
 ## 스트리밍과 자원 정리
 
@@ -68,15 +68,19 @@ revision 2의 기존 필드와 오류 tag 0~12 및 입력/출력 기본 한도�
 
 ## revision 3 충돌 계약
 
-공용 타입과 codec만 준비된 단계입니다. 현재 실행 경로는 revision 2의 `Start`를 유지하며 `StartInteractive`는 아직 처리하지 않습니다. 충돌 런타임 구현과 앱 연동 검증이 끝나기 전에는 새 요청을 실제 기능에 활성화하지 않습니다. 이 상태는 덮어쓰기 기능의 구현 완료를 뜻하지 않습니다.
+작업자는 `StartInteractive`로 시작한 압축 해제에서 덮어쓰기, 건너뛰기와 이름 바꿔 저장을 처리합니다. 기존 `Start`는 이름 충돌 시 중단합니다. 앱의 활성화와 실제 UI 연동은 별도 PR에서 검증합니다.
 
 - `StartInteractive(Start)`는 kind 4이며 기존 Start body를 그대로 사용합니다. Extract만 허용하고 List와 CreateZip은 codec에서 거부합니다. 기존 Start=1의 충돌 시 중단 동작과 모든 기존 필드 및 tag는 유지하며 구버전 작업자로 자동 재시도하지 않습니다.
 - `ConflictChoice`는 Overwrite=0, Skip=1, Rename=2입니다. `ConflictReply`(5)는 challenge_id u64, choice u8, apply_to_remaining bool 순서입니다.
 - `ConflictRequired`(108)는 challenge_id u64, entry_id u32, relative_name String, incoming_size u64, existing_size u64 순서입니다. 일반 파일끼리의 충돌에 세 선택을 허용하며 폴더끼리는 합치고 파일과 폴더 충돌 및 링크는 차단합니다.
 - `ConflictResolved`(109)는 entry_id u32, relative_name String, choice u8 순서입니다. 일괄 적용에도 항목마다 보내며 저장 성공을 뜻하지 않습니다. 교체와 이름 변경의 게시 성공은 기존 `Output::Created`로 별도 확인하고 건너뛰기에는 Created를 보내지 않습니다.
-- Rename 이름은 작업자가 같은 폴더 안의 미사용 번호 이름으로 정합니다. 일괄 적용은 현재 작업의 남은 일반 파일 충돌에만 적용합니다. 질문은 한 번에 하나이며 잘못되거나 중복된 응답은 Protocol, 답변 전 EOF도 Protocol입니다. 취소를 처리하고 기존 300초 제한에 대기 시간을 포함합니다.
+- Rename 이름은 작업자가 같은 폴더 안에서 `파일명 (1).확장자` 형태의 미사용 번호 이름으로 정합니다. 기존 이름과 뒤에 처리할 항목의 경로도 피하며, 긴 이름은 UTF-8 경계를 보존해 255바이트 안으로 줄입니다. 일괄 적용은 현재 작업의 남은 일반 파일 충돌에만 적용합니다. 질문은 한 번에 하나이며 잘못되거나 중복된 응답은 Protocol, 답변 전 EOF도 Protocol입니다. 취소를 처리하고 기존 300초 제한에 대기 시간을 포함합니다.
 - 전부 건너뛰고 새 출력도 없으면 Completed, Publication::None, created_count=0, Durability::NotApplicable입니다. 새 폴더가 만들어졌다면 해당 Output과 실제 집계를 유지합니다. 교체는 created_count에 포함하며 건너뛰기는 제외합니다.
-- 런타임의 목표는 전체 무결성 검증 후 질문하고 목적지 임시 파일 기록, 검증, sync와 close를 마친 뒤 교체하는 것입니다. 교체 전 실패에는 원본을 보존하고 교체 후 오류에는 실제 게시, 내구성과 정리 상태를 보고합니다. 전체 작업의 원상 복구를 약속하지 않습니다.
+- 런타임은 전체 무결성 검증 후 질문하고 목적지 임시 파일 기록, 검증, sync와 close를 마친 뒤 교체합니다. 교체 전 실패에는 원본을 보존하고 교체 후 오류에는 실제 게시, 내구성과 정리 상태를 보고합니다. 전체 작업의 원상 복구를 약속하지 않습니다.
+
+덮어쓰기 직전에 기존 파일과 부모의 식별자, 크기와 수정 시각을 다시 비교하며 변경이 감지되면 Conflict로 중단합니다. Linux에서는 고정 부모의 renameat, Windows에서는 같은 폴더의 MoveFileExW(REPLACE_EXISTING)를 사용하며 원본을 먼저 지우지 않습니다. 기존 파일의 다른 hard link는 수정하지 않습니다. 같은 계정의 동시 수정과 검사 직후 경합을 원자적으로 비교하거나 전체 작업을 되돌리는 기능은 아닙니다. Windows의 폴더 내구성은 기존처럼 Unconfirmed이며 전원 차단 뒤 복구를 보장하지 않습니다.
+
+교체 동작의 근거는 [Linux rename](https://man7.org/linux/man-pages/man2/rename.2.html)과 [Microsoft MoveFileExW](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-movefileexw)입니다.
 
 ## 검증과 의존성
 

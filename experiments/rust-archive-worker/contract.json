@@ -1,5 +1,5 @@
 {
-    "status": "revision-3-codec-ready-runtime-pending",
+    "status": "revision-3-worker-implemented",
     "version": 1,
     "scope": "One job per separately spawned Rust worker; shared binary codec. Process separation is not an OS sandbox.",
     "frame": {
@@ -29,7 +29,7 @@
         "Start": "Exactly once: List{archive}, Extract{archive,destination,selection:All|EntryIds{ids:[u32]},list_id:optional<ListId>,gzip_output_name:optional<UTF8>}, CreateZip{sources:[source_path,archive_name],output_file,method:Store|Deflate,encryption:None|Aes256}. App supplies job_id; caller can lower worker hard limits. Extract destination is always an absolute output directory. EntryIds requires list_id; All may supply list_id to bind extraction to a displayed list.",
         "Password": "Matching outstanding challenge_id:u64 and max1024 UTF-8 bytes; never log, Debug, echo or persist secrets.",
         "Cancel": "Matching header job_id and empty body; command header sequence identifies the request. See CancelAck. Request acceptance is separate from final outcome. EOF alone is not successful cancellation.",
-        "StartInteractive": "Kind 4, body identical to Start with action restricted to Extract. Exactly one initial Start or StartInteractive. Invalid non-Extract action is rejected by the shared encoder and decoder. Opt in to interactive regular-file conflicts; never retry through legacy Start or an older worker automatically. Runtime support is pending in this commit.",
+        "StartInteractive": "Kind 4, body identical to Start with action restricted to Extract. Exactly one initial Start or StartInteractive. Invalid non-Extract action is rejected by the shared encoder and decoder. Opt in to interactive regular-file conflicts; never retry through legacy Start or an older worker automatically. Worker runtime supports the agreed choices; client activation and native UI integration are verified separately.",
         "ConflictReply": "Kind 5: challenge_id:u64, choice:ConflictChoice(u8), apply_to_remaining:bool. Match the one outstanding conflict challenge exactly once. Applying to remaining affects only later regular-file conflicts in this job."
     },
     "events": {
@@ -96,7 +96,7 @@
             "87ff39f9-f7fe-4efc-bd2e-d73ab3246356"
         ],
         "conflict_backend_message_id": "64e29128-e8a2-45e5-8577-db84a66feaa9",
-        "revision_3_status": "Joint agreement complete. Types and binary codec ready; conflict runtime and frontend integration are not implemented or verified by this commit. Existing revision 2 Start execution remains unchanged."
+        "revision_3_status": "Joint agreement complete. Types, codec and interactive worker runtime implemented; frontend activation and native UI integration remain separate."
     },
     "list_identity": {
         "ListId": {
@@ -209,16 +209,17 @@
         "Rename": 2
     },
     "extract_conflicts": {
-        "status": "codec-ready-runtime-pending",
+        "status": "worker-implemented",
         "compatibility": "Preserve frame version 1, every existing message kind, field order and enum tag. Add StartInteractive=4, ConflictReply=5, ConflictRequired=108 and ConflictResolved=109. Older workers reject kind 4 before output. Do not automatically retry, overwrite or fall back.",
         "legacy": "Start keeps its existing abort-on-conflict behavior. List and CreateZip never accept interactive conflict mode. Existing limits, source identity, integrity checks and path guards remain mandatory.",
         "scope": "Only ordinary-file/ordinary-file collisions. Merge existing directories as before; reject file/directory type collisions, symbolic links, reparse points and other special entries. Complete integrity validation of the entire catalog precedes conflict questions and destination publication.",
-        "rename": "Worker selects an unused numbered sibling in the same directory under the validated output root. The app never supplies an arbitrary replacement path. Revalidate the chosen destination before publication.",
+        "rename": "Worker selects an unused numbered sibling in the same directory under the validated output root. The app never supplies an arbitrary replacement path. Revalidate the chosen destination before publication. Avoid all selected archive output paths and prior generated names. Preserve UTF-8 boundaries when shortening a leaf to 255 bytes; try at most 10000 numbered candidates.",
         "wait": "At most one outstanding conflict or password challenge. Reject premature, stale or duplicate replies with Protocol. Cancel remains readable during a conflict wait. EOF without a reply fails Protocol; the existing 300-second job duration includes waits.",
         "apply_to_remaining": "Keep the chosen policy only for the remaining ordinary-file conflicts in this job. Emit ConflictResolved for every such entry even without another question. Never carry the policy to another job or a file/directory or link collision.",
         "events": "ConflictResolved reports an action and resolved relative name, not storage success. For overwrite and rename, Output Created separately confirms publication; skip has no Created output. On later errors preserve publication, durability and cleanup distinctions.",
         "overwrite": "Write, verify, sync and close a new owned temporary file in the destination directory before replacing the existing ordinary file. A pre-replacement failure preserves the original. After replacement, report actual publication and durability; do not claim whole-job rollback.",
         "counts": "created_count includes published replacement files and newly created files/directories; excludes skipped files. If all files are skipped and no new directory or other output is created, finish Completed/None with created_count=0 and Durability NotApplicable. Newly created directories retain their Output events and actual counts even if all files are skipped.",
-        "implementation_boundary": "This commit provides the agreed protocol types and codec only. The current runtime rejects StartInteractive as an unsupported initial message. Do not enable interactive requests in a shipping client until worker implementation and integration checks finish."
+        "implementation_boundary": "Worker supports StartInteractive extraction. Frontend activation and native Windows/Wayland integration require separate verification. Existing Start remains exclusive and aborts on file conflicts.",
+        "target_revalidation": "Before replacement compare parent and file native identities, size and modification time with the question-time observation. Detected changes fail Conflict. This is not atomic compare-and-replace against concurrent writes by the same account."
     }
 }
