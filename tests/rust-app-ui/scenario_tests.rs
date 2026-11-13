@@ -100,6 +100,12 @@ fn every_listed_scenario_draws_and_keeps_its_expected_screen() {
                 "uninstall-settings-error" => "Windows 설정을 열지 못했습니다",
                 "uninstall-ubuntu-missing" => "이전 앱을 복원할 수 없습니다",
                 "uninstall-ubuntu-unknown-user" => "사용자 기본 앱 설정은 변경하지 않습니다",
+                "conflict-choice" | "conflict-apply" | "gzip-conflict-choice" => {
+                    "나머지 파일에도 같게 적용"
+                }
+                "extract-skipped" => "모든 파일을 건너뛰었습니다",
+                "extract-rename-failed" => "아무 파일도 풀지 않았습니다",
+                "extract-renamed" => "이름 바꿔 저장: 읽어주세요 (1).txt",
                 "empty" => "TAR.BZ2, TAR.XZ",
                 "tar-bz2" | "tar-xz" => "읽어주세요.txt",
                 "folder-empty" => "이 폴더는 비어 있습니다",
@@ -124,6 +130,10 @@ fn every_listed_scenario_draws_and_keeps_its_expected_screen() {
                 _ => "읽어주세요.txt",
             };
             assert!(labels.contains(expected), "{}: {labels}", scenario.name);
+            if scenario.name == "extract-rename-failed" {
+                assert!(labels.contains("파일을 읽거나 쓰지 못했습니다"), "{labels}");
+                assert!(!labels.contains("이름 바꿔 저장:"), "{labels}");
+            }
             if matches!(scenario.name, "tar-bz2" | "tar-xz") {
                 assert!(app.model.entries.iter().all(|entry| !entry.encrypted));
                 assert_eq!(
@@ -255,5 +265,92 @@ fn uninstall_previews_match_packaged_notices_and_do_not_start_jobs() {
         assert!(preview.0.model.archive.is_none());
         assert!(output.platform_output.commands.is_empty());
         output.textures_delta.clear();
+    }
+}
+
+fn result_labels(
+    app: &mut zipelo_ui_memory_app::archive_screen::ArchiveApp,
+    size: egui::Vec2,
+) -> String {
+    let ctx = egui::Context::default();
+    let mut labels = String::new();
+    for _ in 0..3 {
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, size)),
+                ..Default::default()
+            },
+            |ui| app.show(ui),
+        );
+        labels = text(&output.shapes);
+        output.textures_delta.clear();
+    }
+    labels
+}
+
+#[test]
+fn rename_without_created_output_never_claims_saved_name() {
+    use zipelo_ui_memory_app::archive_ui::*;
+    for size in [egui::vec2(1060.0, 720.0), egui::vec2(760.0, 540.0)] {
+        for disposition in [
+            None,
+            Some(Disposition::PartialRetained),
+            Some(Disposition::Removed),
+            Some(Disposition::CommitUncertain),
+        ] {
+            let mut app = scenarios::parse("extract-renamed").unwrap().build();
+            app.model.outputs = disposition
+                .into_iter()
+                .map(|d| ("읽어주세요 (1).txt".into(), d))
+                .collect();
+            app.model.terminal = Some(Terminal {
+                outcome: Outcome::Failed,
+                error: Some(ErrorCode::Io),
+                publication: if disposition.is_none() {
+                    Publication::None
+                } else {
+                    Publication::Uncertain
+                },
+                created_count: 0,
+                retained_partial_count: 0,
+                durability: Durability::NotApplicable,
+                cleanup: Cleanup::Complete,
+            });
+            let labels = result_labels(&mut app, size);
+            assert!(labels.contains("파일을 읽거나 쓰지 못했습니다"), "{labels}");
+            if disposition.is_none() {
+                assert!(labels.contains("아무 파일도 풀지 않았습니다"), "{labels}");
+            }
+            assert!(
+                !labels.contains("이름 바꿔 저장: 읽어주세요 (1).txt"),
+                "{labels}"
+            );
+        }
+    }
+}
+
+#[test]
+fn rename_saved_before_later_failure_remains_reported() {
+    use zipelo_ui_memory_app::archive_ui::*;
+    for size in [egui::vec2(1060.0, 720.0), egui::vec2(760.0, 540.0)] {
+        let mut app = scenarios::parse("extract-renamed").unwrap().build();
+        app.model.resolutions.push(Resolution {
+            entry_id: 2,
+            relative_name: "여행 일정 (1).pdf".into(),
+            choice: ConflictChoice::Rename,
+        });
+        app.model.terminal.as_mut().unwrap().outcome = Outcome::Failed;
+        app.model.terminal.as_mut().unwrap().error = Some(ErrorCode::Io);
+        app.model.terminal.as_mut().unwrap().publication = Publication::Partial;
+        let labels = result_labels(&mut app, size);
+        assert!(
+            labels.contains("이름 바꿔 저장: 읽어주세요 (1).txt"),
+            "{labels}"
+        );
+        assert!(
+            !labels.contains("이름 바꿔 저장: 여행 일정 (1).pdf"),
+            "{labels}"
+        );
+        assert!(labels.contains("파일을 읽거나 쓰지 못했습니다"), "{labels}");
     }
 }
