@@ -1,0 +1,86 @@
+﻿param(
+    [Parameter(Mandatory = $true)][string]$Installer,
+    [ValidateSet("Snapshot", "Compare", "Rollback", "Upgrade")][string]$Mode,
+    [Parameter(Mandatory = $true)][string]$Evidence
+)
+$ErrorActionPreference = "Stop"
+$root = Join-Path $env:LOCALAPPDATA "Programs\Zipelo"
+$names = @("Zipelo.exe", "zipelo-archive-worker.exe", "LICENSE", "THIRD-PARTY-LICENSES.txt", "BUILD-INFO.json", "Uninstall.exe", "install.ini")
+
+function Snapshot {
+    $files = [ordered]@{}
+    foreach ($name in $names) {
+        $files[$name] = (Get-FileHash (Join-Path $root $name) -Algorithm SHA256).Hash
+    }
+    $keys = @("Software\Zipelo", "Software\Classes\Zipelo.Archive", "Software\Microsoft\Windows\CurrentVersion\Uninstall\Zipelo")
+    foreach ($extension in @(".zip", ".7z", ".tar", ".gz", ".tgz")) {
+        $keys += "Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\$extension\UserChoice"
+    }
+    $registry = [ordered]@{}
+    foreach ($key in $keys) {
+        $item = Get-Item "HKCU:\$key" -ErrorAction SilentlyContinue
+        if ($null -eq $item) { continue }
+        $items = @($item) + @(Get-ChildItem "HKCU:\$key" -Recurse)
+        foreach ($child in $items) {
+            foreach ($name in ($child.GetValueNames() | Sort-Object)) {
+                $registry["$($child.Name)\$name"] = $child.GetValue($name)
+            }
+        }
+    }
+    $registry["RegisteredApplications\Zipelo"] = (Get-Item "HKCU:\Software\RegisteredApplications").GetValue("Zipelo")
+    return [ordered]@{
+        files = $files
+        shortcut = (Get-FileHash (Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Zipelo.lnk")).Hash
+        registry = $registry
+    }
+}
+
+function RunInstaller {
+    $process = Start-Process $Installer -ArgumentList "/S" -PassThru
+    if (-not $process.WaitForExit(60000)) {
+        throw "설치가 제한 시간 안에 종료되지 않음. VM에서 상태 확인이 필요함."
+    }
+    return $process.ExitCode
+}
+
+function AssertEqual($expected, $actual, $message) {
+    if (($expected | ConvertTo-Json -Depth 8 -Compress) -cne ($actual | ConvertTo-Json -Depth 8 -Compress)) {
+        throw $message
+    }
+}
+
+$before = Snapshot
+switch ($Mode) {
+    "Snapshot" {
+        $before | ConvertTo-Json -Depth 8 | Set-Content -Encoding UTF8 $Evidence
+        "snapshot_saved"
+    }
+    "Compare" {
+        $saved = Get-Content $Evidence -Raw | ConvertFrom-Json
+        AssertEqual $saved $before "기존 설치 또는 연결이 바뀜"
+        "all_seven_files_shortcut_and_associations_unchanged"
+    }
+    "Rollback" {
+        # 첫 파일 이동 뒤 작업자 파일 이동 실패도 복원되는지 확인함.
+        foreach ($name in @("Zipelo.exe", "zipelo-archive-worker.exe", "install.ini")) {
+            $stream = [IO.File]::Open((Join-Path $root $name), [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+            try { $code = RunInstaller } finally { $stream.Dispose() }
+            if ($code -ne 1) { throw "잠긴 $name 업데이트의 종료 코드가 1이 아님: $code" }
+            AssertEqual $before (Snapshot) "잠긴 $name 실패 뒤 기존 설치가 바뀜"
+            "rollback_passed: $name"
+        }
+        $before | ConvertTo-Json -Depth 8 | Set-Content -Encoding UTF8 $Evidence
+    }
+    "Upgrade" {
+        $code = RunInstaller
+        if ($code -ne 0) { throw "업데이트 실패: $code" }
+        $after = Snapshot
+        AssertEqual $before.registry $after.registry "업데이트가 기존 연결 또는 등록을 바꿈"
+        AssertEqual $before.shortcut $after.shortcut "업데이트가 기존 바로가기를 바꿈"
+        if ($before.files['Uninstall.exe'] -eq $after.files['Uninstall.exe']) {
+            throw "새 제거 프로그램으로 교체되지 않음"
+        }
+        $after | ConvertTo-Json -Depth 8 | Set-Content -Encoding UTF8 $Evidence
+        "upgrade_passed: new_uninstaller_and_preserved_associations"
+    }
+}

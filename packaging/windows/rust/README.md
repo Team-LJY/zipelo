@@ -21,7 +21,9 @@ Cargo 1.99.1, Windows GNU Rust target, MinGW-w64와 makensis가 필요합니다.
 Zipelo.exe, zipelo-archive-worker.exe, MIT LICENSE, BUILD-INFO.json과 제거 프로그램을 설치합니다.
 설치 경로는 위 위치로 고정되며 명령행 /D로 다른 위치를 지정해도 파일 쓰기 전에 고정 위치를 적용합니다.
 설치와 제거는 같은 경로 상수를 사용합니다.
-기존 폴더나 등록이 있으면 중단하며 덮어쓰기 업데이트는 지원하지 않습니다.
+설치 표식과 제거 등록이 일치하는 기존 Zipelo는 같은 위치에 업데이트합니다. 알 수 없는 폴더나 불완전한 설치는 덮어쓰지 않습니다.
+새 파일을 별도 폴더에 준비하고 확인을 받은 뒤 교체합니다. 준비 화면에서 취소하거나 파일 잠금 등으로 교체에 실패하면 기존 파일을 유지하거나 복원합니다. 업데이트 시 시작 메뉴와 기본 앱 등록은 그대로 둡니다.
+교체와 복원 중 강제 종료나 전원 차단까지 자동 복구하지는 않습니다. 복원 실패가 표시되면 상세 보기의 백업 폴더를 보존하고 재설치하지 마세요.
 시작 메뉴에 Zipelo 바로가기를 추가합니다.
 
 마지막 화면의 [적용]을 누르면 HKCU의 Zipelo.Archive ProgID와 RegisteredApplications에
@@ -56,3 +58,5 @@ ms-settings URI를 사용합니다.
 로컬 crate에 원문이 없으면 packaging/license-supplements.json의 해당 버전 공식 upstream 원문을 사용합니다. 보충 파일에는 고정 출처 URL, crate 버전과 VCS 커밋, Cargo SPDX 식, UTF-8 원문과 SHA-256이 들어 있습니다. 생성기는 SPDX와 게시된 crate 커밋 및 원문 해시를 오프라인으로 검증합니다. 승인된 표준 보충도 없는 항목은 링크 설명만으로 대체하지 않고 계속 빌드를 차단합니다.
 
 upstream에도 원문이 없는 승인된 12개 항목은 SPDX의 MIT 표준 원문과 해당 버전 Cargo.toml의 저자 고지로 보충합니다. 고지에 표준 원문 보충 사유, 선택한 라이선스, 원문과 저자 고지의 출처 및 SHA-256을 표시합니다. Cargo 메타데이터의 전체 라이선스 식은 그대로 보존합니다.
+
+업데이트 회귀 검증은 전용 Windows VM에서 v0.1.0을 설치하고 기본 앱을 지정한 뒤 tests/windows-installer/upgrade.ps1을 사용합니다. -Installer <새 설치 파일> -Mode Rollback -Evidence <tests/work 아래 JSON>은 앱, 작업자와 마지막 표식 파일 잠금 시 7개 파일 및 등록 복원을 확인합니다. -Mode Upgrade는 정상 교체와 연결 및 바로가기 보존을 확인합니다. -Mode Snapshot 후 업데이트 준비 화면에서 취소하고 -Mode Compare로 취소 전후를 비교합니다. 검증용 설치 파일은 같은 v0.1.0 앱 payload를 새 NSIS로 포장할 수도 있으며 이 경우 앱 버전 변경을 검증한 것으로 보지 않습니다.

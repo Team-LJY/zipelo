@@ -30,9 +30,72 @@ Var RootOwned
 Var ShortcutOwned
 Var UninstallOwned
 Var InstallComplete
+Var Upgrading
+Var StageDir
+Var BackupBits
+Var PublishedBits
+Var RestoreFailed
+Var OldVersion
+Var VersionChanged
 !define APPKEY "Software\Zipelo"
 !define PROGKEY "Software\Classes\Zipelo.Archive"
 !define UNKEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\Zipelo"
+
+; 기존 앱을 먼저 치우고 새 앱은 마지막에 공개하여 버전 혼합 실행을 줄임.
+!macro BackupFile NAME BIT
+    ClearErrors
+    Rename "$INSTDIR\${NAME}" "$StageDir\previous\${NAME}"
+    IfErrors failed
+    IntOp $BackupBits $BackupBits | ${BIT}
+!macroend
+
+!macro PublishFile NAME BIT
+    ClearErrors
+    Rename "$StageDir\${NAME}" "$INSTDIR\${NAME}"
+    IfErrors failed
+    IntOp $PublishedBits $PublishedBits | ${BIT}
+!macroend
+
+!macro RestoreFile NAME BIT
+    IntOp $0 $PublishedBits & ${BIT}
+    ${If} $0 != 0
+        ClearErrors
+        Delete "$INSTDIR\${NAME}"
+        ${If} ${Errors}
+            StrCpy $RestoreFailed 1
+        ${Else}
+            IntOp $PublishedBits $PublishedBits ^ ${BIT}
+        ${EndIf}
+    ${EndIf}
+    IntOp $0 $BackupBits & ${BIT}
+    ${If} $0 != 0
+        ClearErrors
+        Rename "$StageDir\previous\${NAME}" "$INSTDIR\${NAME}"
+        ${If} ${Errors}
+            StrCpy $RestoreFailed 1
+        ${Else}
+            IntOp $BackupBits $BackupBits ^ ${BIT}
+        ${EndIf}
+    ${EndIf}
+!macroend
+
+!macro CleanupStageFile NAME
+    Delete "$StageDir\${NAME}"
+    ${If} $InstallComplete == 1
+        Delete "$StageDir\previous\${NAME}"
+    ${EndIf}
+!macroend
+
+!macro CheckInstalledFile NAME
+    System::Call 'kernel32::GetFileAttributesW(w "$INSTDIR\${NAME}") i.r0'
+    ${If} $0 == -1
+        Goto failed
+    ${EndIf}
+    IntOp $0 $0 & 0x410
+    ${If} $0 != 0
+        Goto failed
+    ${EndIf}
+!macroend
 
 Function .onInit
     ${IfNot} ${RunningX64}
@@ -55,8 +118,30 @@ FunctionEnd
 Section "Zipelo"
     ; /D로 바뀐 경로를 파일 쓰기 전에 고정하여 제거 경로와 일치시킴.
     StrCpy $INSTDIR "${INSTALLROOT}"
-    ; 기존 설치와 등록을 덮어쓰지 않음.
-    IfFileExists "$INSTDIR" failed
+    ; 설치 표식과 제거 등록이 일치하는 기존 설치만 업데이트함.
+    IfFileExists "$INSTDIR" upgrade
+    Goto fresh
+upgrade:
+    System::Call 'kernel32::GetFileAttributesW(w "$INSTDIR") i.r0'
+    IntOp $0 $0 & 0x410
+    IntCmp $0 0x10 0 failed failed
+    ReadINIStr $0 "$INSTDIR\install.ini" "Zipelo" "Location"
+    StrCmp $0 $INSTDIR 0 failed
+    ReadRegStr $0 HKCU "${UNKEY}" "UninstallString"
+    StrCmp $0 '$\"$INSTDIR\Uninstall.exe$\"' 0 failed
+    !insertmacro CheckInstalledFile "Zipelo.exe"
+    !insertmacro CheckInstalledFile "zipelo-archive-worker.exe"
+    !insertmacro CheckInstalledFile "LICENSE"
+    !insertmacro CheckInstalledFile "THIRD-PARTY-LICENSES.txt"
+    !insertmacro CheckInstalledFile "BUILD-INFO.json"
+    !insertmacro CheckInstalledFile "Uninstall.exe"
+    !insertmacro CheckInstalledFile "install.ini"
+    ClearErrors
+    ReadRegStr $OldVersion HKCU "${UNKEY}" "DisplayVersion"
+    IfErrors failed
+    StrCpy $Upgrading 1
+    Goto prepare
+fresh:
     System::Call 'advapi32::RegOpenKeyExW(p 0x80000001, w "${APPKEY}", i 0, i 0x20119, *p.r1) i.r0'
     ${If} $0 == 0
         System::Call 'advapi32::RegCloseKey(p r1)'
@@ -96,7 +181,18 @@ Section "Zipelo"
     System::Call 'kernel32::CreateDirectoryW(w "$INSTDIR", p 0) i.r0'
     IntCmp $0 0 failed
     StrCpy $RootOwned 1
-    SetOutPath "$INSTDIR"
+prepare:
+    ; 같은 볼륨에 새 파일을 모두 준비한 뒤에만 기존 파일을 이동함.
+    ClearErrors
+    GetTempFileName $StageDir "$LOCALAPPDATA\Programs"
+    IfErrors failed
+    Delete "$StageDir"
+    System::Call 'kernel32::CreateDirectoryW(w "$StageDir", p 0) i.r0'
+    ${If} $0 == 0
+        StrCpy $StageDir ""
+        Goto failed
+    ${EndIf}
+    SetOutPath "$StageDir"
     ClearErrors
     File "payload\Zipelo.exe"
     File "payload\zipelo-archive-worker.exe"
@@ -104,10 +200,37 @@ Section "Zipelo"
     File "payload\THIRD-PARTY-LICENSES.txt"
     File "payload\BUILD-INFO.json"
     IfErrors failed
-    WriteUninstaller "$INSTDIR\Uninstall.exe"
+    WriteUninstaller "$StageDir\Uninstall.exe"
     IfErrors failed
-    WriteINIStr "$INSTDIR\install.ini" "Zipelo" "Location" "$INSTDIR"
+    WriteINIStr "$StageDir\install.ini" "Zipelo" "Location" "$INSTDIR"
     IfErrors failed
+    ${If} $Upgrading == 1
+        ; 준비 후 취소하면 기존 설치와 연결은 전혀 바뀌지 않음.
+        MessageBox MB_OKCANCEL|MB_ICONINFORMATION "업데이트 준비가 끝났습니다. Zipelo와 압축 작업을 닫고 [확인]을 누르세요. [취소]를 누르면 기존 설치를 유지합니다." /SD IDOK IDCANCEL cancelled
+        CreateDirectory "$StageDir\previous"
+        IfErrors failed
+        !insertmacro BackupFile "Zipelo.exe" 1
+        !insertmacro BackupFile "zipelo-archive-worker.exe" 2
+        !insertmacro BackupFile "LICENSE" 4
+        !insertmacro BackupFile "THIRD-PARTY-LICENSES.txt" 8
+        !insertmacro BackupFile "BUILD-INFO.json" 16
+        !insertmacro BackupFile "Uninstall.exe" 32
+        !insertmacro BackupFile "install.ini" 64
+    ${EndIf}
+    !insertmacro PublishFile "zipelo-archive-worker.exe" 2
+    !insertmacro PublishFile "LICENSE" 4
+    !insertmacro PublishFile "THIRD-PARTY-LICENSES.txt" 8
+    !insertmacro PublishFile "BUILD-INFO.json" 16
+    !insertmacro PublishFile "Uninstall.exe" 32
+    !insertmacro PublishFile "install.ini" 64
+    !insertmacro PublishFile "Zipelo.exe" 1
+    ${If} $Upgrading == 1
+        StrCpy $VersionChanged 1
+        ClearErrors
+        WriteRegStr HKCU "${UNKEY}" "DisplayVersion" "0.1.0"
+        IfErrors failed
+        Goto committed
+    ${EndIf}
     StrCpy $ShortcutOwned 1
     CreateShortcut "$SMPROGRAMS\Zipelo.lnk" "$INSTDIR\Zipelo.exe"
     IfErrors failed
@@ -117,19 +240,52 @@ Section "Zipelo"
     WriteRegStr HKCU "${UNKEY}" "DisplayVersion" "0.1.0"
     WriteRegStr HKCU "${UNKEY}" "UninstallString" '$\"$INSTDIR\Uninstall.exe$\"'
     IfErrors failed
+committed:
     StrCpy $InstallComplete 1
+    Call CleanupStage
     Goto done
+cancelled:
+    Call Rollback
+    SetErrorLevel 2
+    Abort "업데이트를 취소했습니다"
 failed:
     Call Rollback
     SetErrorLevel 1
-    MessageBox MB_OK|MB_ICONSTOP "설치를 완료하지 못했습니다. 기존 Zipelo이 있으면 먼저 제거하고, 여유 공간과 쓰기 권한을 확인하세요. 이번 설치 항목을 정리했으며, 사용 중이라 지우지 못한 항목은 상세 보기에서 확인하세요."
+    MessageBox MB_OK|MB_ICONSTOP "설치를 완료하지 못했습니다. Zipelo와 압축 작업을 닫고 여유 공간과 쓰기 권한을 확인하세요. 복원하지 못한 파일이 있으면 상세 보기의 백업 경로를 보존하고 다시 설치하지 마세요." /SD IDOK
     Abort
  done:
 SectionEnd
 
 Function Rollback
     ${If} $InstallComplete == 1
-    ${OrIf} $RootOwned != 1
+        Return
+    ${EndIf}
+    ${If} $Upgrading == 1
+        SetOutPath "$TEMP"
+        !insertmacro RestoreFile "zipelo-archive-worker.exe" 2
+        !insertmacro RestoreFile "LICENSE" 4
+        !insertmacro RestoreFile "THIRD-PARTY-LICENSES.txt" 8
+        !insertmacro RestoreFile "BUILD-INFO.json" 16
+        !insertmacro RestoreFile "Uninstall.exe" 32
+        !insertmacro RestoreFile "install.ini" 64
+        !insertmacro RestoreFile "Zipelo.exe" 1
+        ${If} $VersionChanged == 1
+            ClearErrors
+            WriteRegStr HKCU "${UNKEY}" "DisplayVersion" "$OldVersion"
+            ${If} ${Errors}
+                StrCpy $RestoreFailed 1
+            ${Else}
+                StrCpy $VersionChanged 0
+            ${EndIf}
+        ${EndIf}
+        ${If} $RestoreFailed == 1
+            DetailPrint "복원 실패: 백업 폴더 $StageDir\previous 를 보존하세요."
+        ${EndIf}
+        Call CleanupStage
+        Return
+    ${EndIf}
+    Call CleanupStage
+    ${If} $RootOwned != 1
         Return
     ${EndIf}
     SetOutPath "$TEMP"
@@ -152,6 +308,28 @@ Function Rollback
     Delete "$INSTDIR\Uninstall.exe"
     RMDir "$INSTDIR"
     StrCpy $RootOwned 0
+FunctionEnd
+
+Function CleanupStage
+    ${If} $StageDir == ""
+        Return
+    ${EndIf}
+    SetOutPath "$TEMP"
+    !insertmacro CleanupStageFile "Zipelo.exe"
+    !insertmacro CleanupStageFile "zipelo-archive-worker.exe"
+    !insertmacro CleanupStageFile "LICENSE"
+    !insertmacro CleanupStageFile "THIRD-PARTY-LICENSES.txt"
+    !insertmacro CleanupStageFile "BUILD-INFO.json"
+    !insertmacro CleanupStageFile "Uninstall.exe"
+    !insertmacro CleanupStageFile "install.ini"
+    RMDir "$StageDir\previous"
+    ClearErrors
+    RMDir "$StageDir"
+    ${If} ${Errors}
+        DetailPrint "임시 파일 또는 복원 백업이 남아 있음: $StageDir"
+    ${Else}
+        StrCpy $StageDir ""
+    ${EndIf}
 FunctionEnd
 
 Function .onInstFailed
