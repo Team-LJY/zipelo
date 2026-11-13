@@ -500,7 +500,11 @@ impl ui::Connection for ProcessConnection {
                     self.stop.store(true, Ordering::Release);
                     "작업자 요청 상태 오류"
                 })? = Some(start.action.kind());
-                wire::Message::Start(start)
+                if start.action.kind() == wire::ActionKind::Extract {
+                    wire::Message::StartInteractive(start)
+                } else {
+                    wire::Message::Start(start)
+                }
             }
             ui::Command::ConflictReply {
                 challenge_id,

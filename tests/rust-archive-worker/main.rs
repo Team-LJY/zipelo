@@ -1611,3 +1611,5 @@ mod folder_inputs;
 mod zip_names;
 
 mod conflict_wire;
+
+mod conflicts;

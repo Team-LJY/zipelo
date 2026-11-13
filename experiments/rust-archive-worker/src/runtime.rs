@@ -12,12 +12,18 @@ use std::{
 };
 
 type Result<T> = std::result::Result<T, ErrorCode>;
+#[derive(PartialEq, Eq)]
+enum Challenge {
+    Password(u64),
+    Conflict(u64),
+}
 struct State<W> {
     writer: Writer<W>,
     cancelled: bool,
     phase: u8,
     fault: Option<ErrorCode>,
-    challenge: Option<u64>,
+    challenge: Option<Challenge>,
+    conflict_reply: Option<(ConflictChoice, bool)>,
     password: Option<Secret>,
     input_closed: bool,
 }
@@ -25,6 +31,8 @@ struct Job<W> {
     state: Arc<Mutex<State<W>>>,
     wake: Arc<Condvar>,
     next_challenge: u64,
+    interactive: bool,
+    remaining_choice: Option<ConflictChoice>,
     started: Instant,
     terminal: Terminal,
     parent: crate::parent::Parent,
@@ -36,7 +44,7 @@ impl<W: Write> Job<W> {
         let id = self.next_challenge;
         let state_ref = Arc::clone(&self.state);
         let mut state = state_ref.lock().map_err(|_| ErrorCode::Internal)?;
-        state.challenge = Some(id);
+        state.challenge = Some(Challenge::Password(id));
         state
             .writer
             .send(&Message::PasswordRequired {
@@ -70,6 +78,87 @@ impl<W: Write> Job<W> {
         }
     }
 
+    fn conflict(&mut self, entry: &Entry, existing_size: u64) -> Result<ConflictChoice> {
+        self.check()?;
+        if let Some(choice) = self.remaining_choice {
+            return Ok(choice);
+        }
+        self.next_challenge = self.next_challenge.checked_add(1).ok_or(ErrorCode::Limit)?;
+        let id = self.next_challenge;
+        let state_ref = Arc::clone(&self.state);
+        let mut state = state_ref.lock().map_err(|_| ErrorCode::Internal)?;
+        state.challenge = Some(Challenge::Conflict(id));
+        state
+            .writer
+            .send(&Message::ConflictRequired {
+                challenge_id: id,
+                entry_id: entry.entry_id,
+                relative_name: entry.name.clone(),
+                incoming_size: entry.size,
+                existing_size,
+            })
+            .map_err(|_| ErrorCode::Io)?;
+        loop {
+            self.parent.check()?;
+            if let Some(error) = state.fault {
+                return Err(error);
+            }
+            if state.cancelled {
+                return Err(ErrorCode::None);
+            }
+            if let Some((choice, apply)) = state.conflict_reply.take() {
+                if apply {
+                    self.remaining_choice = Some(choice);
+                }
+                return Ok(choice);
+            }
+            if state.input_closed {
+                return Err(ErrorCode::Protocol);
+            }
+            if self.started.elapsed() > Duration::from_secs(300) {
+                return Err(ErrorCode::Limit);
+            }
+            state = self
+                .wake
+                .wait_timeout(state, Duration::from_millis(50))
+                .map_err(|_| ErrorCode::Internal)?
+                .0;
+        }
+    }
+    fn rename(&mut self, root: &Dir, name: &str, reserved: &BTreeSet<String>) -> Result<String> {
+        let (prefix, leaf) = name.rsplit_once('/').unwrap_or(("", name));
+        let (stem, extension) = match leaf.rsplit_once('.') {
+            Some((stem, ext)) if !stem.is_empty() => (stem, format!(".{ext}")),
+            _ => (leaf, String::new()),
+        };
+        for index in 1..=10000 {
+            self.check()?;
+            fn clip(text: &str, bytes: usize) -> &str {
+                let mut end = text.len().min(bytes);
+                while !text.is_char_boundary(end) {
+                    end -= 1;
+                }
+                &text[..end]
+            }
+            let suffix = format!(" ({index})");
+            let extension = clip(&extension, 255 - suffix.len() - 4).trim_end_matches(['.', ' ']);
+            let stem = clip(stem, 255 - suffix.len() - extension.len());
+            let stem = if stem.is_empty() { "file" } else { stem };
+            let leaf = format!("{stem}{suffix}{extension}");
+            let candidate = if prefix.is_empty() {
+                leaf
+            } else {
+                format!("{prefix}/{leaf}")
+            };
+            archive::valid_name(&candidate, false)?;
+            if !reserved.contains(&candidate.to_lowercase())
+                && filesystem::unused(root, &candidate)?
+            {
+                return Ok(candidate);
+            }
+        }
+        Err(ErrorCode::Conflict)
+    }
     fn event(&mut self, event: Message) -> Result<()> {
         let mut state = self.state.lock().map_err(|_| ErrorCode::Internal)?;
         state.writer.send(&event).map_err(|_| {
@@ -122,6 +211,7 @@ impl<W: Write> Job<W> {
         length: u64,
         id: Option<u32>,
         last: bool,
+        replace: Option<&filesystem::Existing>,
     ) -> Result<()> {
         self.check()?;
         self.progress(
@@ -130,7 +220,7 @@ impl<W: Write> Job<W> {
             Some(length),
             self.terminal.created_count as u32,
         )?;
-        let p = filesystem::publish_reader(root, name, data, length, &mut |commit| {
+        let p = filesystem::publish_reader_mode(root, name, data, length, replace, &mut |commit| {
             if commit && last {
                 self.cutoff()
             } else {
@@ -366,8 +456,12 @@ impl<W: Write> Job<W> {
                             .iter()
                             .map(|m| (m.entry.name.clone(), EntryKind::File)),
                     );
-                    filesystem::preflight(&root, &names)?;
+                    filesystem::preflight_mode(&root, &names, self.interactive)?;
                     filesystem::preflight_space(&root, &output_sizes, None)?;
+                    let mut reserved = names
+                        .iter()
+                        .map(|(name, _)| name.to_lowercase())
+                        .collect::<BTreeSet<_>>();
                     for name in dirs {
                         self.check()?;
                         let (created, durability, sync_error) =
@@ -389,16 +483,45 @@ impl<W: Write> Job<W> {
                     for (index, m) in files.iter().enumerate() {
                         data.seek(SeekFrom::Start(offsets[m.entry.entry_id as usize]))
                             .map_err(|_| ErrorCode::Io)?;
+                        self.check()?;
+                        let existing = if self.interactive {
+                            filesystem::existing(&root, &m.entry.name)?
+                        } else {
+                            None
+                        };
+                        let mut name = m.entry.name.clone();
+                        let mut replace = None;
+                        if let Some(ref existing) = existing {
+                            let choice = self.conflict(&m.entry, existing.size)?;
+                            self.check()?;
+                            if choice == ConflictChoice::Rename {
+                                name = self.rename(&root, &name, &reserved)?;
+                                reserved.insert(name.to_lowercase());
+                            } else if choice == ConflictChoice::Overwrite {
+                                replace = Some(existing);
+                            }
+                            self.event(Message::ConflictResolved {
+                                entry_id: m.entry.entry_id,
+                                relative_name: name.clone(),
+                                choice,
+                            })?;
+                            if choice == ConflictChoice::Skip {
+                                continue;
+                            }
+                        }
                         self.output_reader(
                             &root,
-                            &m.entry.name,
+                            &name,
                             &mut (&mut data).take(m.entry.size),
                             m.entry.size,
                             Some(m.entry.entry_id),
                             index + 1 == files.len(),
+                            replace,
                         )?;
                     }
-                    self.terminal.publication = Publication::Complete;
+                    if !self.interactive || self.terminal.created_count != 0 {
+                        self.terminal.publication = Publication::Complete;
+                    }
                 }
             }
             Action::CreateZip {
@@ -433,7 +556,7 @@ impl<W: Write> Job<W> {
                     &mut || self.check(),
                 )?;
                 filesystem::preflight_space(&root, &[(name.clone(), length)], None)?;
-                self.output_reader(&root, &name, &mut data, length, None, true)?;
+                self.output_reader(&root, &name, &mut data, length, None, true, None)?;
                 self.terminal.publication = Publication::Complete;
             }
         }
@@ -451,11 +574,15 @@ pub fn serve<R: Read + Send + 'static, W: Write + Send + 'static>(
     let (job, _, message) = reader
         .read()?
         .ok_or_else(|| std::io::Error::from(std::io::ErrorKind::UnexpectedEof))?;
-    let Message::Start(start) = message else {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            "Start required",
-        ));
+    let (start, interactive) = match message {
+        Message::Start(start) => (start, false),
+        Message::StartInteractive(start) => (start, true),
+        _ => {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "Start required",
+            ));
+        }
     };
     let state = Arc::new(Mutex::new(State {
         writer: Writer::new(output, job),
@@ -463,6 +590,7 @@ pub fn serve<R: Read + Send + 'static, W: Write + Send + 'static>(
         phase: 0,
         fault: None,
         challenge: None,
+        conflict_reply: None,
         password: None,
         input_closed: false,
     }));
@@ -494,7 +622,7 @@ pub fn serve<R: Read + Send + 'static, W: Write + Send + 'static>(
                     secret,
                 } => {
                     if state.phase != 0
-                        || state.challenge != Some(challenge_id)
+                        || state.challenge != Some(Challenge::Password(challenge_id))
                         || state.password.is_some()
                     {
                         state.fault = Some(ErrorCode::Protocol);
@@ -502,6 +630,24 @@ pub fn serve<R: Read + Send + 'static, W: Write + Send + 'static>(
                         state.challenge = None;
                         if !state.cancelled {
                             state.password = Some(secret);
+                        }
+                    }
+                    control_wake.notify_all();
+                }
+                Message::ConflictReply {
+                    challenge_id,
+                    choice,
+                    apply_to_remaining,
+                } => {
+                    if state.phase != 0
+                        || state.challenge != Some(Challenge::Conflict(challenge_id))
+                        || state.conflict_reply.is_some()
+                    {
+                        state.fault = Some(ErrorCode::Protocol);
+                    } else {
+                        state.challenge = None;
+                        if !state.cancelled {
+                            state.conflict_reply = Some((choice, apply_to_remaining));
                         }
                     }
                     control_wake.notify_all();
@@ -540,6 +686,8 @@ pub fn serve<R: Read + Send + 'static, W: Write + Send + 'static>(
         state: Arc::clone(&state),
         wake,
         next_challenge: 0,
+        interactive,
+        remaining_choice: None,
         parent,
         started: Instant::now(),
         terminal: Terminal {
@@ -568,6 +716,7 @@ pub fn serve<R: Read + Send + 'static, W: Write + Send + 'static>(
     state.phase = 2;
     state.challenge = None;
     state.password = None;
+    state.conflict_reply = None;
     if let Some(error) = state.fault.or(error) {
         context.terminal.error = error;
         context.terminal.outcome = if error == ErrorCode::None {

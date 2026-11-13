@@ -136,3 +136,10 @@ int fsync(int fd) {
     }
     return real_fsync(fd);
 }
+
+int renameat(int oldfd, const char *oldname, int newfd, const char *newname) {
+    const char *fault = getenv("ZIPELO_TEST_FAULT");
+    if (fault && !strcmp(fault, "replace-fail")) { errno = EIO; return -1; }
+    int (*real_renameat)(int, const char *, int, const char *) = dlsym(RTLD_NEXT, "renameat");
+    return real_renameat(oldfd, oldname, newfd, newname);
+}

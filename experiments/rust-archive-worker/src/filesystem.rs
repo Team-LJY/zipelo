@@ -10,6 +10,32 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 type Result<T> = std::result::Result<T, ErrorCode>;
 static TEMP: AtomicU64 = AtomicU64::new(0);
+#[derive(Debug, PartialEq, Eq)]
+pub struct Existing {
+    parent: SourceObject,
+    object: SourceObject,
+    pub size: u64,
+    modified: std::time::SystemTime,
+}
+fn existing_file(parent: &File, file: File) -> Result<Existing> {
+    let metadata = file.metadata().map_err(|_| ErrorCode::Io)?;
+    if !metadata.is_file() {
+        return Err(ErrorCode::UnsafePath);
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        if metadata.file_attributes() & 0x400 != 0 {
+            return Err(ErrorCode::UnsafePath);
+        }
+    }
+    Ok(Existing {
+        parent: object(parent)?,
+        object: object(&file)?,
+        size: metadata.len(),
+        modified: metadata.modified().map_err(|_| ErrorCode::Io)?,
+    })
+}
 pub struct Snapshot {
     pub bytes: Vec<u8>,
     pub object: SourceObject,
@@ -163,6 +189,7 @@ mod platform {
         fn openat(fd: i32, path: *const i8, flags: i32, ...) -> i32;
         fn mkdirat(fd: i32, path: *const i8, mode: u32) -> i32;
         fn linkat(fd: i32, path: *const i8, newfd: i32, newpath: *const i8, flags: i32) -> i32;
+        fn renameat(fd: i32, path: *const i8, newfd: i32, newpath: *const i8) -> i32;
         fn unlinkat(fd: i32, path: *const i8, flags: i32) -> i32;
         fn geteuid() -> u32;
     }
@@ -260,6 +287,31 @@ mod platform {
                 Ok(_) => Ok(false),
                 Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(true),
                 Err(_) => Err(ErrorCode::Io),
+            }
+        }
+        pub fn existing(&self, n: &str) -> Result<Option<Existing>> {
+            match open(&self.file, std::ffi::OsStr::new(n), 0x200000) {
+                Ok(file) => existing_file(&self.file, file).map(Some),
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+                Err(_) => Err(ErrorCode::Io),
+            }
+        }
+        pub fn replace(&self, from: &str, to: &str) -> std::io::Result<()> {
+            let from = CString::new(from).unwrap();
+            let to = CString::new(to).unwrap();
+            // 고정 부모 안에서 완성된 임시 파일로 원본 이름을 교체함.
+            if unsafe {
+                renameat(
+                    self.file.as_raw_fd(),
+                    from.as_ptr(),
+                    self.file.as_raw_fd(),
+                    to.as_ptr(),
+                )
+            } == 0
+            {
+                Ok(())
+            } else {
+                Err(std::io::Error::last_os_error())
             }
         }
         pub fn create(&self, n: &str) -> std::io::Result<File> {
@@ -377,6 +429,45 @@ mod platform {
                 Err(_) => Err(ErrorCode::Io),
             }
         }
+        pub fn existing(&self, n: &str) -> Result<Option<Existing>> {
+            match OpenOptions::new()
+                .access_mode(0x80)
+                .share_mode(7)
+                .custom_flags(0x02000000 | 0x00200000)
+                .open(self.path.join(n))
+            {
+                Ok(file) => existing_file(self.handle(), file).map(Some),
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+                Err(_) => Err(ErrorCode::Io),
+            }
+        }
+        pub fn replace(&self, from: &str, to: &str) -> std::io::Result<()> {
+            use std::os::windows::ffi::OsStrExt;
+            unsafe extern "system" {
+                fn MoveFileExW(from: *const u16, to: *const u16, flags: u32) -> i32;
+            }
+            let extended = |name: &str| {
+                [92u16, 92, 63, 92]
+                    .into_iter()
+                    .chain(
+                        self.path
+                            .join(name)
+                            .as_os_str()
+                            .encode_wide()
+                            .map(|unit| if unit == 47 { 92 } else { unit }),
+                    )
+                    .chain(Some(0))
+                    .collect::<Vec<_>>()
+            };
+            let from = extended(from);
+            let to = extended(to);
+            // 같은 부모의 이름만 교체하고 복사나 사전 삭제는 하지 않음.
+            if unsafe { MoveFileExW(from.as_ptr(), to.as_ptr(), 1) } != 0 {
+                Ok(())
+            } else {
+                Err(std::io::Error::last_os_error())
+            }
+        }
         pub fn create(&self, n: &str) -> std::io::Result<File> {
             OpenOptions::new()
                 .write(true)
@@ -414,11 +505,30 @@ fn parent(root: &Dir, name: &str, create: bool) -> Result<Option<(Dir, String)>>
     }
     Ok(Some((d, leaf.to_owned())))
 }
+pub fn existing(root: &Dir, name: &str) -> Result<Option<Existing>> {
+    valid_name(name, false)?;
+    match parent(root, name, false)? {
+        Some((dir, leaf)) => dir.existing(&leaf),
+        None => Ok(None),
+    }
+}
+pub fn unused(root: &Dir, name: &str) -> Result<bool> {
+    valid_name(name, false)?;
+    match parent(root, name, false)? {
+        Some((dir, leaf)) => dir.absent(&leaf),
+        None => Ok(true),
+    }
+}
 pub fn preflight(root: &Dir, names: &[(String, EntryKind)]) -> Result<()> {
+    preflight_mode(root, names, false)
+}
+pub fn preflight_mode(root: &Dir, names: &[(String, EntryKind)], interactive: bool) -> Result<()> {
     for (name, kind) in names {
         if let Some((d, leaf)) = parent(root, name, false)? {
             if *kind == EntryKind::Directory {
                 let _ = d.child(&leaf, false)?;
+            } else if interactive {
+                d.existing(&leaf)?;
             } else if !d.absent(&leaf)? {
                 return Err(ErrorCode::Conflict);
             }
@@ -508,6 +618,16 @@ pub fn publish_reader(
     length: u64,
     check: &mut impl FnMut(bool) -> Result<()>,
 ) -> Published {
+    publish_reader_mode(root, name, data, length, None, check)
+}
+pub fn publish_reader_mode(
+    root: &Dir,
+    name: &str,
+    data: &mut impl Read,
+    length: u64,
+    replace: Option<&Existing>,
+    check: &mut impl FnMut(bool) -> Result<()>,
+) -> Published {
     let mut result = Published {
         created: false,
         uncertain: false,
@@ -550,10 +670,24 @@ pub fn publish_reader(
             file.sync_all().map_err(crate::space::io_error)
         })();
         let closed = close(file).map_err(crate::space::io_error);
-        let mut finish = written.and(closed).and_then(|_| check(true));
+        let mut finish = written.and(closed).and_then(|_| {
+            if let Some(expected) = replace {
+                if dir.existing(&leaf)?.as_ref() != Some(expected) {
+                    return Err(ErrorCode::Conflict);
+                }
+            }
+            check(true)
+        });
+        let mut temp_consumed = false;
         if finish.is_ok() {
-            match dir.link(&temp, &leaf) {
+            let published = if replace.is_some() {
+                dir.replace(&temp, &leaf)
+            } else {
+                dir.link(&temp, &leaf)
+            };
+            match published {
                 Ok(()) => {
+                    temp_consumed = replace.is_some();
                     result.created = true;
                     match dir.sync_checked() {
                         Ok(durability) => result.durability = durability,
@@ -573,7 +707,7 @@ pub fn publish_reader(
                 }
             }
         }
-        if !dir.remove(&temp) {
+        if !temp_consumed && !dir.remove(&temp) {
             result.cleanup = Cleanup::Failed;
             result.retained = 1;
             result.retained_name = Some(match name.rsplit_once('/') {

@@ -21,6 +21,7 @@ macro_rules! catalog {
 }
 
 catalog! {
+    "gzip-conflict-choice" => "단일 GZ 파일의 충돌 선택",
     "conflict-choice" => "같은 이름 파일의 세 가지 처리 선택",
     "conflict-apply" => "남은 충돌에 같은 선택 적용",
     "extract-skipped" => "모든 파일을 건너뛴 정상 완료",
@@ -167,11 +168,13 @@ impl Scenario {
         if self.name == "empty" {
             return app;
         }
-        let archive = base.join(if self.name == "gzip-conflict" {
-            "여행 자료.gz"
-        } else {
-            "여행 자료.zip"
-        });
+        let archive = base.join(
+            if matches!(self.name, "gzip-conflict" | "gzip-conflict-choice") {
+                "여행 자료.gz"
+            } else {
+                "여행 자료.zip"
+            },
+        );
         app.model.archive = Some(archive.clone());
         app.model.entries = entries(self.name == "many-items");
         app.model.list_id = Some(ListId {
@@ -236,7 +239,7 @@ impl Scenario {
         }
         let creating = self.name.starts_with("create-") || self.name == "password-create";
         let listing_error = matches!(self.name, "unsupported" | "damaged");
-        if self.name == "gzip-conflict" {
+        if matches!(self.name, "gzip-conflict" | "gzip-conflict-choice") {
             app.model.list_id.as_mut().unwrap().format = Format::Gzip;
             app.model.entries = vec![Entry {
                 id: 0,
@@ -263,12 +266,13 @@ impl Scenario {
                 destination: app.destination.clone(),
                 selection: Selection::All,
                 list_id: app.model.list_id.clone().unwrap(),
-                gzip_output_name: (self.name == "gzip-conflict").then(|| app.gzip_name.clone()),
+                gzip_output_name: (matches!(self.name, "gzip-conflict" | "gzip-conflict-choice"))
+                    .then(|| app.gzip_name.clone()),
             }
         };
         app.targets = Some(if creating {
             BTreeSet::from(["여행 자료.zip".into()])
-        } else if self.name == "gzip-conflict" {
+        } else if matches!(self.name, "gzip-conflict" | "gzip-conflict-choice") {
             BTreeSet::from(["여행 자료".into()])
         } else {
             BTreeSet::from([
@@ -290,11 +294,20 @@ impl Scenario {
             let mut state = state.borrow_mut();
             state.frame(Event::Accepted { encryption: true });
             match self.name {
-                "conflict-choice" | "conflict-apply" => {
+                "conflict-choice" | "conflict-apply" | "gzip-conflict-choice" => {
                     state.frame(Event::ConflictRequired(Conflict {
                         challenge_id: 29,
-                        entry_id: 1,
-                        relative_name: "읽어주세요.txt".into(),
+                        entry_id: if self.name == "gzip-conflict-choice" {
+                            0
+                        } else {
+                            1
+                        },
+                        relative_name: if self.name == "gzip-conflict-choice" {
+                            "여행 자료"
+                        } else {
+                            "읽어주세요.txt"
+                        }
+                        .into(),
                         incoming_size: 1_287_952,
                         existing_size: 2048,
                     }));
