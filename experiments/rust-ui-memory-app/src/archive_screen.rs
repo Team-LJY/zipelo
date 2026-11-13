@@ -1803,6 +1803,13 @@ impl ArchiveApp {
             .iter()
             .filter(|r| r.choice == ConflictChoice::Skip)
             .count();
+        let created_names = self
+            .model
+            .outputs
+            .iter()
+            .filter(|(_, disposition)| *disposition == Disposition::Created)
+            .map(|(name, _)| name.replace('\\', "/"))
+            .collect::<BTreeSet<_>>();
         let warnings = if listing {
             Vec::new()
         } else {
@@ -1898,12 +1905,10 @@ impl ArchiveApp {
                     if skipped > 0 {
                         ui.label(format!("건너뛴 파일 {skipped}개"));
                     }
-                    for resolution in self
-                        .model
-                        .resolutions
-                        .iter()
-                        .filter(|r| r.choice == ConflictChoice::Rename)
-                    {
+                    for resolution in self.model.resolutions.iter().filter(|r| {
+                        r.choice == ConflictChoice::Rename
+                            && created_names.contains(&r.relative_name.replace('\\', "/"))
+                    }) {
                         theme::bounded_text(
                             ui,
                             &format!("이름 바꿔 저장: {}", resolution.relative_name),
