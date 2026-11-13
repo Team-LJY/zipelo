@@ -246,6 +246,7 @@ impl Connection for CaptureConnection {
                     }
                 }
             }
+            Command::ConflictReply { .. } => return Err("충돌 선택은 상황 명령으로 확인함".into()),
             Command::Password { .. } => self.finish(false),
             Command::ResourceReply { .. } => {}
             Command::Cancel => {

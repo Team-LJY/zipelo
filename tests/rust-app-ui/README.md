@@ -1,6 +1,6 @@
 # 앱 화면 흐름 시험
 
-가짜 작업자는 계약 revision 2의 의미를 따르는 프론트엔드 어댑터임. 바이너리 codec, 실제 프로세스 실행, 파일 읽기와 쓰기, 암호 해독은 수행하지 않음. 실제 codec은 backend 소유이며 이 PR에서 중복 구현하지 않음.
+가짜 작업자는 합의된 계약의 의미를 따르는 프론트엔드 어댑터임. revision 3의 충돌 요청과 응답은 가짜 작업자로 검증함. 실제 StartGuarded의 interactive=true와 화면 버튼의 파일 기반 통합 시험은 tests/rust-app-real-worker/conflict_flows.rs에서 별도로 실행함. 바이너리 codec, 실제 프로세스 실행, 파일 읽기와 쓰기, 암호 해독은 수행하지 않음. 실제 codec은 backend 소유이며 이 PR에서 중복 구현하지 않음.
 
 `python3 tests/ci/run_rust.py local`은 기존 시험과 새 `archive_ui` 시험을 all-features로 실행함. Windows 결과는 교차 빌드이며 Windows 실제 실행은 별도 확인해야 함.
 

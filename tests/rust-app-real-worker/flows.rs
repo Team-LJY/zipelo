@@ -304,12 +304,17 @@ mod screen {
             self.settle();
             assert_eq!(
                 self.app.model.terminal.as_ref().unwrap().publication,
-                Publication::Complete
+                if self.app.model.terminal.as_ref().unwrap().created_count == 0 {
+                    Publication::None
+                } else {
+                    Publication::Complete
+                }
             );
         }
     }
     include!("password_flows.rs");
     include!("selection_flows.rs");
+    include!("conflict_flows.rs");
     include!("native_dialog_flows.rs");
     include!("compressed_tar_flows.rs");
 

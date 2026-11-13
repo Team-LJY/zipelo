@@ -114,6 +114,22 @@ convert_enum!(
     TooLate,
     Finished
 );
+convert_enum!(
+    conflict_to_wire,
+    ui::ConflictChoice,
+    wire::ConflictChoice,
+    Overwrite,
+    Skip,
+    Rename
+);
+convert_enum!(
+    conflict_to_ui,
+    wire::ConflictChoice,
+    ui::ConflictChoice,
+    Overwrite,
+    Skip,
+    Rename
+);
 fn list_to_wire(id: ui::ListId) -> wire::ListId {
     wire::ListId {
         catalog_version: id.catalog_version,
@@ -267,6 +283,32 @@ fn event_to_ui(
             attempt,
             encrypt: purpose == wire::PasswordPurpose::Encrypt,
         },
+        wire::Message::ConflictRequired {
+            challenge_id,
+            entry_id,
+            relative_name,
+            incoming_size,
+            existing_size,
+        } if expected == Some(wire::ActionKind::Extract) => {
+            ui::Event::ConflictRequired(ui::Conflict {
+                challenge_id,
+                entry_id,
+                relative_name,
+                incoming_size,
+                existing_size,
+            })
+        }
+        wire::Message::ConflictResolved {
+            entry_id,
+            relative_name,
+            choice,
+        } if expected == Some(wire::ActionKind::Extract) => {
+            ui::Event::ConflictResolved(ui::Resolution {
+                entry_id,
+                relative_name,
+                choice: conflict_to_ui(choice),
+            })
+        }
         wire::Message::Progress {
             stage,
             processed_bytes,
@@ -494,10 +536,11 @@ impl ui::Connection for ProcessConnection {
                 } else {
                     wire::Limits::default()
                 };
+                let interactive = start.action.kind() == wire::ActionKind::Extract;
                 wire::Message::StartGuarded(wire::GuardedStart {
                     start,
                     ceiling,
-                    interactive: false,
+                    interactive,
                 })
             }
             ui::Command::ResourceReply {
@@ -508,6 +551,15 @@ impl ui::Connection for ProcessConnection {
                 challenge_id,
                 scope,
                 allow,
+            },
+            ui::Command::ConflictReply {
+                challenge_id,
+                choice,
+                apply_to_remaining,
+            } => wire::Message::ConflictReply {
+                challenge_id,
+                choice: conflict_to_wire(choice),
+                apply_to_remaining,
             },
             ui::Command::Cancel => wire::Message::Cancel,
             ui::Command::Password {
@@ -759,3 +811,7 @@ fn supervise(
         );
     }
 }
+
+#[cfg(test)]
+#[path = "../../../tests/rust-app-ui/conflict_codec.rs"]
+mod conflict_codec_tests;
