@@ -498,6 +498,7 @@ fn zip(
     }
     let mut cursor = central;
     let mut total = 0u64;
+    let mut compressed_total = 0u64;
     let mut metadata = MetadataBudget::default();
     let mut members = Vec::new();
     let mut packed = Vec::new();
@@ -555,9 +556,10 @@ fn zip(
         } else {
             12
         };
-        compressed
+        let payload = compressed
             .checked_sub(overhead)
             .ok_or(ErrorCode::Integrity)?;
+        compressed_total = add(compressed_total, payload)?;
         total = total
             .checked_add(size)
             .filter(|n| *n <= limits.output)
@@ -566,7 +568,7 @@ fn zip(
             ResourceUsage {
                 estimated_bytes: Some(total),
                 estimated_entries: Some(count as u32),
-                compressed_bytes: Some(compressed - overhead),
+                compressed_bytes: Some(payload),
                 ratio_output_bytes: Some(size),
                 ..ResourceUsage::default()
             },
@@ -689,6 +691,17 @@ fn zip(
         return Err(ErrorCode::Integrity);
     }
     archive::validate_members(&members)?;
+    // 작은 항목으로 나뉜 고압축 입력도 디코딩 전에 합계로 확인함.
+    check.observe(
+        ResourceUsage {
+            estimated_bytes: Some(total),
+            estimated_entries: Some(count as u32),
+            compressed_bytes: Some(compressed_total),
+            ratio_output_bytes: Some(total),
+            ..ResourceUsage::default()
+        },
+        Some(source),
+    )?;
     let mut data = spool::temporary()?;
     if decode {
         crate::space::ensure(&data, total)?;

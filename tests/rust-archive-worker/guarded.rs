@@ -28,10 +28,13 @@ fn run_fault(
         assert!(
             Command::new("cc")
                 .args(["-shared", "-fPIC", "-O2", "-Wall", "-Wextra", "-Werror"])
-                .arg(
-                    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                        .join("../../tests/rust-archive-worker/io_fault.c")
-                )
+                .arg(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(
+                    if fault.starts_with("clock-") {
+                        "../../tests/rust-archive-worker/progress_clock.c"
+                    } else {
+                        "../../tests/rust-archive-worker/io_fault.c"
+                    }
+                ))
                 .args(["-ldl", "-o"])
                 .arg(&shim)
                 .status()
@@ -551,4 +554,130 @@ fn disk_space_and_write_failures_remain_enforced_after_permission() {
                 .starts_with(".zipelo-")
         }));
     }
+}
+
+#[test]
+fn split_zip_ratio_requires_permission_before_decoding() {
+    let s = setup();
+    generate(&s, "split-zip");
+    assert!(fs::metadata(s.0.join("input")).unwrap().len() < 300_000);
+    let mut start = request(&s, Limits::default().output, Limits::default().output);
+    start.ceiling.entries = Limits::default().entries;
+    for mode in 0..3 {
+        let outcome = if mode == 2 {
+            Outcome::Completed
+        } else {
+            Outcome::Cancelled
+        };
+        let mut asked = false;
+        let events = run(&s, start.clone(), |event| {
+            if let Message::ResourceRequired {
+                challenge_id,
+                scope,
+                usage,
+                ..
+            } = event
+            {
+                assert!(!asked);
+                asked = true;
+                assert_eq!(
+                    *scope,
+                    ResourceScope {
+                        ratio: true,
+                        ..ResourceScope::default()
+                    }
+                );
+                assert_eq!(usage.estimated_bytes, Some(258 * 1024 * 1024));
+                assert_eq!(usage.ratio_output_bytes, usage.estimated_bytes);
+                assert_eq!(usage.actual_bytes, None);
+                assert!(usage.compressed_bytes.unwrap() < 300_000);
+                assert_eq!(fs::read_dir(s.0.join("output")).unwrap().count(), 0);
+                if mode == 0 {
+                    return Some(vec![Message::Cancel]);
+                }
+                return Some(vec![Message::ResourceReply {
+                    challenge_id: *challenge_id,
+                    scope: *scope,
+                    allow: outcome == Outcome::Completed,
+                }]);
+            }
+            None
+        });
+        assert!(asked);
+        assert_eq!(terminal(&events).outcome, outcome, "{events:?}");
+        assert_eq!(
+            terminal(&events).created_count,
+            if outcome == Outcome::Completed { 2 } else { 0 }
+        );
+    }
+    for name in ["first.bin", "second.bin"] {
+        let mut file = fs::File::open(s.0.join("output").join(name)).unwrap();
+        assert_eq!(file.metadata().unwrap().len(), 129 * 1024 * 1024);
+        let mut block = [0; 65536];
+        loop {
+            let n = file.read(&mut block).unwrap();
+            if n == 0 {
+                break;
+            }
+            assert!(block[..n].iter().all(|b| *b == 0));
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn progress_archive(s: &Scratch, kind: EntryKind, size: u64) {
+    if kind == EntryKind::Directory {
+        generate(s, "empty-directories");
+        return;
+    }
+    let members = (0..36)
+        .map(|entry_id| archive::Member {
+            entry: Entry {
+                entry_id,
+                name: format!("entry-{entry_id}"),
+                kind,
+                size,
+                compressed_size: size,
+                encrypted: false,
+            },
+            data: vec![0; size as usize],
+        })
+        .collect::<Vec<_>>();
+    let zip =
+        archive::create_zip(&members, Method::Store, Limits::default(), &mut || Ok(())).unwrap();
+    fs::write(s.0.join("input"), zip).unwrap();
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn completed_empty_files_and_directories_refresh_idle_deadline() {
+    for (kind, size) in [
+        (EntryKind::File, 0),
+        (EntryKind::File, 1),
+        (EntryKind::Directory, 0),
+    ] {
+        let s = setup();
+        progress_archive(&s, kind, size);
+        let events = run_fault(&s, request(&s, 64, 128), Some("clock-progress"), approve);
+        assert_eq!(
+            terminal(&events).outcome,
+            Outcome::Completed,
+            "{kind:?}: {events:?}"
+        );
+        assert_eq!(terminal(&events).created_count, 36);
+        assert_eq!(terminal(&events).durability, Durability::Synced);
+        assert_eq!(fs::read_dir(s.0.join("output")).unwrap().count(), 36);
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn publication_still_stops_after_sixty_seconds_without_progress() {
+    let s = setup();
+    progress_archive(&s, EntryKind::File, 0);
+    let events = run_fault(&s, request(&s, 64, 128), Some("clock-stall"), approve);
+    assert_eq!(terminal(&events).outcome, Outcome::Failed, "{events:?}");
+    assert_eq!(terminal(&events).error, ErrorCode::Limit);
+    assert_eq!(terminal(&events).created_count, 0);
+    assert_eq!(fs::read_dir(s.0.join("output")).unwrap().count(), 0);
 }

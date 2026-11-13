@@ -350,6 +350,9 @@ impl<W: Write> Job<W> {
         if let Some(error) = p.error {
             return Err(error);
         }
+        if p.created {
+            self.activity()?;
+        }
         Ok(())
     }
     fn run(&mut self, start: Start) -> Result<()> {
@@ -582,6 +585,7 @@ impl<W: Write> Job<W> {
                             if let Some(error) = sync_error {
                                 return Err(error);
                             }
+                            self.activity()?;
                         }
                     }
                     for (index, m) in files.iter().enumerate() {

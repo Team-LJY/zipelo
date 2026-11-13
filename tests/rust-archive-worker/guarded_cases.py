@@ -3,6 +3,7 @@ import gzip
 import lzma
 from pathlib import Path
 import sys
+import zipfile
 
 
 root = Path(sys.argv[1])
@@ -12,6 +13,17 @@ if case == "bomb":
         block = bytes(1024 * 1024)
         for _ in range(257):
             output.write(block)
+elif case == "empty-directories":
+    with zipfile.ZipFile(root / "input", "w") as archive:
+        for entry_id in range(36):
+            archive.writestr(f"entry-{entry_id}/", b"")
+elif case == "split-zip":
+    with zipfile.ZipFile(root / "input", "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        block = bytes(1024 * 1024)
+        for name in ["first.bin", "second.bin"]:
+            with archive.open(name, "w") as output:
+                for _ in range(129):
+                    output.write(block)
 elif case in {"bz2", "xz"}:
     source = Path(__file__).with_name("fixtures").joinpath("sample.tar").read_bytes()
     encode = bz2.compress if case == "bz2" else lzma.compress
