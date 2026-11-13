@@ -82,7 +82,7 @@ fn every_listed_scenario_draws_and_keeps_its_expected_screen() {
                         screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, size)),
                         ..Default::default()
                     },
-                    |ui| app.show(ui),
+                    |ui| scenario.show(&mut app, ui),
                 );
                 assert!(!output.shapes.is_empty(), "{}", scenario.name);
                 labels = text(&output.shapes);
@@ -96,6 +96,10 @@ fn every_listed_scenario_draws_and_keeps_its_expected_screen() {
             );
             assert!(app.model.input_error.is_none(), "{}", scenario.name);
             let expected = match scenario.name {
+                "uninstall-windows" => "제거 전에 다른 앱을 선택하세요",
+                "uninstall-settings-error" => "Windows 설정을 열지 못했습니다",
+                "uninstall-ubuntu-missing" => "이전 앱을 복원할 수 없습니다",
+                "uninstall-ubuntu-unknown-user" => "사용자 기본 앱 설정은 변경하지 않습니다",
                 "conflict-choice" | "conflict-apply" | "gzip-conflict-choice" => {
                     "나머지 파일에도 같게 적용"
                 }
@@ -206,6 +210,62 @@ fn preview_ignores_password_submission() {
     }
     assert_eq!(preview.0.model.challenge, Some((17, 1, false)));
     assert!(preview.0.model.busy());
+}
+
+#[test]
+fn uninstall_previews_match_packaged_notices_and_do_not_start_jobs() {
+    let installer = include_str!("../../packaging/windows/rust/installer.nsi");
+    let prerm = include_str!("../../packaging/ubuntu/rust/prerm");
+    let helper = include_str!("../../packaging/ubuntu/rust/default-apps");
+    for (name, source, expected) in [
+        (
+            "uninstall-windows",
+            installer,
+            "직접 고른 기본 앱은 자동으로 바꾸지 않습니다.",
+        ),
+        (
+            "uninstall-settings-error",
+            installer,
+            "Windows 설정을 열지 못했습니다.",
+        ),
+        (
+            "uninstall-ubuntu-missing",
+            helper,
+            "이전 앱을 복원할 수 없습니다:",
+        ),
+        (
+            "uninstall-ubuntu-unknown-user",
+            prerm,
+            "제거를 요청한 사용자를 확인할 수 없어 사용자 기본 앱 설정은 변경하지 않습니다.",
+        ),
+    ] {
+        assert!(source.contains(expected));
+        let scenario = scenarios::parse(name).unwrap();
+        let ctx = egui::Context::default();
+        let mut preview = scenarios::Preview::new(scenario.build(), &ctx).with_scenario(scenario);
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(760.0, 540.0),
+                )),
+                events: vec![egui::Event::Key {
+                    key: egui::Key::Enter,
+                    physical_key: None,
+                    pressed: true,
+                    repeat: false,
+                    modifiers: egui::Modifiers::NONE,
+                }],
+                ..Default::default()
+            },
+            |ui| preview.show(ui),
+        );
+        assert!(text(&output.shapes).contains(expected), "{name}");
+        assert!(!preview.0.model.busy());
+        assert!(preview.0.model.archive.is_none());
+        assert!(output.platform_output.commands.is_empty());
+        output.textures_delta.clear();
+    }
 }
 
 fn result_labels(

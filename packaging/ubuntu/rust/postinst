@@ -11,8 +11,10 @@ if [ "$1" = configure ] && [ -z "${2:-}" ] && [ -n "${SUDO_USER:-}" ] && [ "$SUD
     uid=$(printf '%s' "$account" | cut -d: -f3)
     home_dir=$(printf '%s' "$account" | cut -d: -f6)
     if [ -n "$uid" ] && [ "$uid" -ge 1000 ] && [ -d "$home_dir" ]; then
-        for mime in application/zip application/x-7z-compressed application/x-compressed-tar application/gzip application/x-tar; do
-            runuser -u "$SUDO_USER" -- env HOME="$home_dir" xdg-mime default zipelo.desktop "$mime"
-        done
+        runuser -u "$SUDO_USER" -- env HOME="$home_dir" \
+            XDG_CONFIG_HOME="$home_dir/.config" XDG_DATA_HOME="$home_dir/.local/share" \
+            XDG_STATE_HOME="$home_dir/.local/state" XDG_DATA_DIRS="/usr/local/share:/usr/share" \
+            /usr/lib/zipelo/default-apps install || \
+            echo "기본 앱 기록 또는 적용에 실패했습니다. 파일의 [다른 프로그램으로 열기]에서 직접 선택하세요." >&2
     fi
 fi

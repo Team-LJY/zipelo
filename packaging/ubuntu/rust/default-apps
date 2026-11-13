@@ -1,0 +1,131 @@
+#!/bin/sh
+# 로그인 사용자 권한으로만 이전 선택을 기록하고 조건부 복원함.
+set -eu
+case "${1:-}" in
+    install|remove) action=$1 ;;
+    *) exit 2 ;;
+esac
+if [ "$(id -u)" -eq 0 ]; then
+    echo "기본 앱 처리는 일반 사용자 계정에서 실행해야 합니다." >&2
+    exit 1
+fi
+state="${XDG_STATE_HOME:-$HOME/.local/state}/zipelo-default-apps-v1"
+case "$state" in /*) ;; *) exit 1 ;; esac
+umask 077
+if [ "$action" = install ] && [ ! -e "$state" ] && [ ! -L "$state" ]; then
+    mkdir -p "$(dirname "$state")"
+    mkdir "$state"
+fi
+if [ -L "$state" ] || [ ! -d "$state" ] || [ ! -O "$state" ]; then
+    echo "이전 기본 앱 기록이 없습니다. 파일을 오른쪽 클릭해 [다른 프로그램으로 열기]에서 앱을 선택하세요." >&2
+    exit 0
+fi
+
+# 주 그룹의 키만 읽고 값의 이스케이프를 해석함. 파일 내용을 실행하지 않음.
+desktop_value() {
+    awk -v key="$2" '
+        /^\[/ { entry = ($0 == "[Desktop Entry]"); next }
+        entry && /^[^#=]+=/ {
+            name = substr($0, 1, index($0, "=") - 1)
+            gsub(/^[ \t]+|[ \t]+$/, "", name)
+            if (name != key) next
+            value = substr($0, index($0, "=") + 1)
+            gsub(/^[ \t]+|[ \t]+$/, "", value)
+            result = ""
+            for (i = 1; i <= length(value); i++) {
+                c = substr(value, i, 1)
+                if (c == "\\") {
+                    c = substr(value, ++i, 1)
+                    if (c == "s") c = " "
+                    else if (c == "n") c = "\n"
+                    else if (c == "t") c = "\t"
+                    else if (c == "r") c = "\r"
+                    else if (c != "\\") exit 1
+                }
+                result = result c
+            }
+            print result
+            exit
+        }
+    ' "$1"
+}
+
+executable_available() (
+    case "$1" in
+        /*) [ -f "$1" ] && [ -x "$1" ]; exit $? ;;
+    esac
+    # 내장 명령이나 셸 구문이 아닌 PATH 안의 실행 파일만 검사함.
+    search_path=${PATH:-}
+    while :; do
+        directory=${search_path%%:*}
+        if [ -f "${directory:-.}/$1" ] && [ -x "${directory:-.}/$1" ]; then
+            exit 0
+        fi
+        case "$search_path" in
+            *:*) search_path=${search_path#*:} ;;
+            *) exit 1 ;;
+        esac
+    done
+)
+
+available() {
+    case "$1" in
+        ""|zipelo.desktop|*/*|*\\*|*";"*|*"="*) return 1 ;;
+        *.desktop) ;;
+        *) return 1 ;;
+    esac
+    # 기본 데스크톱 파일만 복원하며 모호한 ID는 수동 선택으로 남김.
+    old_ifs=$IFS
+    IFS=:
+    for directory in "${XDG_DATA_HOME:-$HOME/.local/share}" ${XDG_DATA_DIRS:-/usr/local/share:/usr/share}; do
+        if [ -f "$directory/applications/$1" ]; then
+            IFS=$old_ifs
+            desktop="$directory/applications/$1"
+            hidden=$(desktop_value "$desktop" Hidden) || return 1
+            [ "$hidden" != true ] || return 1
+            try_exec=$(desktop_value "$desktop" TryExec) || return 1
+            if [ -n "$try_exec" ]; then
+                executable_available "$try_exec" || return 1
+            fi
+            return 0
+        fi
+    done
+    IFS=$old_ifs
+    return 1
+}
+
+for item in zip:application/zip seven:application/x-7z-compressed targz:application/x-compressed-tar gzip:application/gzip tar:application/x-tar; do
+    key=${item%%:*}
+    mime=${item#*:}
+    record="$state/$key"
+    if [ -L "$record" ]; then
+        continue
+    fi
+    current=$(xdg-mime query default "$mime") || continue
+    if [ "$action" = install ]; then
+        # 미완료 기록이나 재설치의 기존 기록을 덮어쓰지 않음.
+        if [ -e "$record" ]; then
+            continue
+        fi
+        (set -C; printf '%s\n' "$current" > "$record") || continue
+        xdg-mime default zipelo.desktop "$mime" || echo "기본 앱 적용 실패: $mime" >&2
+    elif [ -f "$record" ] && [ -O "$record" ]; then
+        previous=$(cat "$record")
+        if [ "$current" = zipelo.desktop ]; then
+            if available "$previous"; then
+                if ! xdg-mime default "$previous" "$mime"; then
+                    echo "기본 앱 복원 실패: $mime" >&2
+                    continue
+                fi
+            else
+                echo "이전 앱을 복원할 수 없습니다: $mime. 파일을 오른쪽 클릭해 [다른 프로그램으로 열기]에서 앱을 선택하세요." >&2
+                # 이전 앱이 없던 빈 기록은 재시도 대상이 아님.
+                [ -n "$previous" ] && continue
+            fi
+        fi
+        rm -- "$record"
+    fi
+done
+if [ "$action" = remove ]; then
+    rmdir "$state" 2>/dev/null || :
+fi
