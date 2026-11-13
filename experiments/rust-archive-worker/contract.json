@@ -1,5 +1,5 @@
 {
-    "status": "implemented-streaming-runtime",
+    "status": "revision-3-worker-implemented",
     "version": 1,
     "scope": "One job per separately spawned Rust worker; shared binary codec. Process separation is not an OS sandbox.",
     "frame": {
@@ -28,7 +28,9 @@
     "commands": {
         "Start": "Exactly once: List{archive}, Extract{archive,destination,selection:All|EntryIds{ids:[u32]},list_id:optional<ListId>,gzip_output_name:optional<UTF8>}, CreateZip{sources:[source_path,archive_name],output_file,method:Store|Deflate,encryption:None|Aes256}. App supplies job_id; caller can lower worker hard limits. Extract destination is always an absolute output directory. EntryIds requires list_id; All may supply list_id to bind extraction to a displayed list.",
         "Password": "Matching outstanding challenge_id:u64 and max1024 UTF-8 bytes; never log, Debug, echo or persist secrets.",
-        "Cancel": "Matching header job_id and empty body; command header sequence identifies the request. See CancelAck. Request acceptance is separate from final outcome. EOF alone is not successful cancellation."
+        "Cancel": "Matching header job_id and empty body; command header sequence identifies the request. See CancelAck. Request acceptance is separate from final outcome. EOF alone is not successful cancellation.",
+        "StartInteractive": "Kind 4, body identical to Start with action restricted to Extract. Exactly one initial Start or StartInteractive. Invalid non-Extract action is rejected by the shared encoder and decoder. Opt in to interactive regular-file conflicts; never retry through legacy Start or an older worker automatically. Worker runtime supports the agreed choices; client activation and native UI integration are verified separately.",
+        "ConflictReply": "Kind 5: challenge_id:u64, choice:ConflictChoice(u8), apply_to_remaining:bool. Match the one outstanding conflict challenge exactly once. Applying to remaining affects only later regular-file conflicts in this job."
     },
     "events": {
         "Accepted": "Action and capabilities; encryption capability is true for implemented ZipCrypto extraction and WinZip AES-256 extraction/creation.",
@@ -55,10 +57,12 @@
             "TooLate": "Final job completion/commit decision has been sealed so cancellation can no longer influence the outcome; final outcome may still be Failed or publication Uncertain. Previously created entries alone do not make a multi-entry job TooLate.",
             "Finished": "Business outcome has already been fixed, but Terminal has not yet been emitted. Does not establish success, EOF, child exit or reaping.",
             "ordering": "Each well-formed Cancel consumed before Terminal is acknowledged once before Terminal. Terminal is the last worker protocol frame. A Cancel racing with Terminal/exit may remain unread and have no acknowledgement; app uses Terminal plus EOF and wait, never synthesizes a worker acknowledgement or successful cancellation."
-        }
+        },
+        "ConflictRequired": "Kind 108: challenge_id:u64, entry_id:u32, relative_name:UTF8, incoming_size:u64, existing_size:u64. One ordinary-file conflict at a time, after complete archive integrity validation. All three choices are permitted; links and file/directory type conflicts remain rejected.",
+        "ConflictResolved": "Kind 109: entry_id:u32, relative_name:UTF8, choice:ConflictChoice(u8). Emit for every resolved conflict, including automatically applied choices. This records the action and resolved name, not successful publication; successful overwrite or rename also requires Output Created. Skip emits no Output Created."
     },
     "lifecycle": [
-        "Start once; no automatic retry or overwrite. Password/Cancel remain readable during work.",
+        "Exactly one Start or StartInteractive; no automatic retry or fallback. Password/Cancel remain readable during work. ConflictReply is accepted only for a matching outstanding interactive conflict.",
         "Parent drains both streams concurrently. Stdout is protocol only; stderr is bounded diagnostics without secrets.",
         "Exactly one Terminal ends business results and is the final worker protocol frame; CancelAck can precede but never follow it. Worker exits0 after delivered terminal, including Failed/Cancelled. Malformed protocol or crash can exit nonzero without terminal.",
         "App requires matching terminal, stdout/stderr EOF and owned child wait/exit before replacement/close. EOF/exit0 alone is not success.",
@@ -69,7 +73,7 @@
     "safe_output": [
         "Reject absolute/dotdot/drive/UNC/device/reserved/alternate-stream names and case/path collisions before writes.",
         "Reject archive links/special entries on extraction. Do not follow output parent symlinks/reparse points.",
-        "Create output files exclusively; never truncate or write pre-existing files. GZip FNAME does not choose destination.",
+        "Legacy Start creates output files exclusively and never truncates or writes pre-existing files. StartInteractive may replace an existing ordinary file only after the agreed choice and complete temporary output validation. GZip FNAME does not choose destination.",
         "CRC/size/stream-end validation precedes committed output events; preserve commit/durability/cleanup distinctions."
     ],
     "pending": [
@@ -81,12 +85,18 @@
         "implementation_verified": false,
         "policy": "Human approved pure Rust RustCrypto under MIT/Apache. No home-grown AES or password KDF; approval alone does not enable encryption capability."
     },
-    "revision": 2,
+    "revision": 3,
     "coordination": {
         "frontend_message_id": "41a0e5a5-27d0-437f-805d-d39313082096",
         "basis": "Revision 2 list identity, explicit raw GZip output naming and cancellation acknowledgement are implemented. Field order and tags remain unchanged.",
         "streaming_frontend_message_id": "59142fd4-22d3-4dc5-a875-5347e1b054da",
-        "disk_full_frontend_message_id": "3b01f4c4-c9b4-4c72-a9a0-b3df39979ea1"
+        "disk_full_frontend_message_id": "3b01f4c4-c9b4-4c72-a9a0-b3df39979ea1",
+        "conflict_frontend_message_ids": [
+            "37815dda-3271-4f83-be4d-8da1a6e0c2ab",
+            "87ff39f9-f7fe-4efc-bd2e-d73ab3246356"
+        ],
+        "conflict_backend_message_id": "64e29128-e8a2-45e5-8577-db84a66feaa9",
+        "revision_3_status": "Joint agreement complete. Types, codec and interactive worker runtime implemented; frontend activation and native UI integration remain separate."
     },
     "list_identity": {
         "ListId": {
@@ -114,7 +124,7 @@
         "gzip_output_name": "Required Some(nonempty validated UTF-8 single leaf filename) for raw GZIP extraction, for both All and EntryIds. Reject absolute/drive/UNC/device/alternate-stream/reserved names, separators, dot/dotdot and invalid leaf names before creating outputs. Missing/invalid value returns InvalidRequest; no implicit basename or FNAME fallback.",
         "other_formats": "Must be None for ZIP, TAR and TAR_GZIP; reject Some as InvalidRequest rather than silently ignoring it. TAR_GZIP uses validated inner TAR member names.",
         "gzip_catalog": "Raw GZIP is one logical stream entry with entry_id0. Its listed display name is not an output path; entry selection still requires ListId.",
-        "publication": "Resolve the supplied leaf under destination using the same no-follow and exclusive-create guards. Existing destination files return Conflict; never overwrite, rename to an automatic alternative or retry."
+        "publication": "Resolve the supplied leaf under destination using the same no-follow guards. Existing destination files return Conflict for legacy Start. StartInteractive follows the regular-file conflict policy; never automatically downgrade or retry through legacy Start."
     },
     "design_references": [
         {
@@ -156,7 +166,7 @@
         "staging": "64 KiB buffers; immutable input capture and verified decoded content use private temporary files that are removed on last-handle close. No decoded content is published until the entire catalog and integrity checks succeed. Temporary disk usage can include the archive plus expanded content plus current destination temporary file; disk exhaustion fails with DiskFull and closes/removes unpublished data.",
         "legacy": "The slice parser keeps 64 MiB input /128 MiB output caps; the slice ZIP builder keeps 128 MiB source/result caps. Runtime 7z and ZIP creation use streaming file paths.",
         "parent_lifetime": "Capture native parent before reading Start. At decode/read/write/password checkpoints, fail Io if parent is gone; close anonymous staging and remove current unpublished destination temp. stdin EOF alone remains valid for one-shot requests. Already published entries and directories are reported and retained. A blocked OS file operation cannot be forcibly interrupted by this cooperative guard.",
-        "disk_space": "Advisory free-space checks use opened Linux x86_64 filesystem handles (fstatvfs) or the Windows handle-derived directory (GetDiskFreeSpaceExW). Before ZIP/7z decoding and before publication, group remaining staging and selected output logical bytes by volume. For GZip with unknown expanded size, check staging space before each decoded chunk, then preflight selected output. Input capture also checks its snapshot space. Insufficient space returns DiskFull tag 13. Query failure and other I/O errors retain Io tag 8. Checks do not reserve space or account for every metadata/block-allocation overhead; later ENOSPC still closes staging and removes current unpublished output.",
+        "disk_space": "Advisory free-space checks use opened Linux x86_64 filesystem handles (fstatvfs) or the Windows handle-derived directory (GetDiskFreeSpaceExW). Legacy Start groups remaining staging and selected output logical bytes by volume before ZIP/7z decoding and before publication. StartInteractive checks required staging before choices, then checks only the current non-skipped output at its resolved name immediately before publication; do not charge undecided or skipped files to the destination. For GZip with unknown expanded size, check staging space before each decoded chunk, then preflight selected output. Input capture also checks its snapshot space. Insufficient space returns DiskFull tag 13. Query failure and other I/O errors retain Io tag 8. Checks do not reserve space or account for every metadata/block-allocation overhead; later ENOSPC still closes staging and removes current unpublished output.",
         "remaining_risk": "High compression ratios within 16 GiB may expand fully onto disk. Resource duration, cooperative cancellation and measured memory target remain. Free-space checks can race with other disk users; already published outputs are retained on failure.",
         "seven_zip": "Copy, LZMA and LZMA2 use file-backed solid output with checked declared/actual output totals. Encoded headers remain limited to 8 MiB. Dictionary size remains at most 64 MiB; only the last 8 MiB is cached in memory and older dictionary bytes are read from the temporary output.",
         "create_zip": "The sum of source logical bytes cannot exceed min(input,output) quotas. output defaults to 16 GiB of uncompressed source content; ZIP container/encryption overhead may exceed that logical content quota. Capture one immutable source at a time, stream Store/Deflate and optional AES-256 through 64 KiB buffers, then publish the completed ZIP without replacing existing files. Emit ZIP64 sizes/offsets only when their 32-bit fields would overflow or equal the sentinel. Check staging and destination free space; StorageFull maps to DiskFull tag 13 and other I/O failures retain Io tag 8."
@@ -192,5 +202,25 @@
         "limits": "All expanded file and directory entries count toward entries (default 10000). Only file logical bytes count toward min(input,output), default output 16 GiB. Preserve 8 MiB metadata and 64-component name limits. Validate the complete plan and case-insensitive/path-prefix conflicts before requesting a password.",
         "consistency": "Capture each file from its validated open handle. Compare planned object identity, kind, size and modification time before capture and check planned objects again before publishing the completed ZIP; detected changes fail SourceChanged. This is not an atomic snapshot of an entire directory tree.",
         "encryption": "AES-256 protects file contents using the existing AE-2 encoding. Directory entries are stored as zero-byte unencrypted directory records; entry names remain visible, as with other ZIP entries."
+    },
+    "conflict_choice_tags": {
+        "Overwrite": 0,
+        "Skip": 1,
+        "Rename": 2
+    },
+    "extract_conflicts": {
+        "status": "worker-implemented",
+        "compatibility": "Preserve frame version 1, every existing message kind, field order and enum tag. Add StartInteractive=4, ConflictReply=5, ConflictRequired=108 and ConflictResolved=109. Older workers reject kind 4 before output. Do not automatically retry, overwrite or fall back.",
+        "legacy": "Start keeps its existing abort-on-conflict behavior. List and CreateZip never accept interactive conflict mode. Existing limits, source identity, integrity checks and path guards remain mandatory.",
+        "scope": "Only ordinary-file/ordinary-file collisions. Merge existing directories as before; reject file/directory type collisions, symbolic links, reparse points and other special entries. Complete integrity validation of the entire catalog precedes conflict questions and destination publication.",
+        "rename": "Worker selects an unused numbered sibling in the same directory under the validated output root. The app never supplies an arbitrary replacement path. Revalidate the chosen destination before publication. Avoid all selected archive output paths and prior generated names. Preserve UTF-8 boundaries when shortening a leaf to 255 bytes; try at most 10000 numbered candidates.",
+        "wait": "At most one outstanding conflict or password challenge. Reject premature, stale or duplicate replies with Protocol. Cancel remains readable during a conflict wait. EOF without a reply fails Protocol; the existing 300-second job duration includes waits.",
+        "apply_to_remaining": "Keep the chosen policy only for the remaining ordinary-file conflicts in this job. Emit ConflictResolved for every such entry even without another question. Never carry the policy to another job or a file/directory or link collision.",
+        "events": "ConflictResolved reports an action and resolved relative name, not storage success. For overwrite and rename, Output Created separately confirms publication; skip has no Created output. On later errors preserve publication, durability and cleanup distinctions.",
+        "overwrite": "Write, verify, sync and close a new owned temporary file in the destination directory before replacing the existing ordinary file. A pre-replacement failure preserves the original. After replacement, report actual publication and durability; do not claim whole-job rollback.",
+        "counts": "created_count includes published replacement files and newly created files/directories; excludes skipped files. If all files are skipped and no new directory or other output is created, finish Completed/None with created_count=0 and Durability NotApplicable. Newly created directories retain their Output events and actual counts even if all files are skipped.",
+        "implementation_boundary": "Worker supports StartInteractive extraction. Frontend activation and native Windows/Wayland integration require separate verification. Existing Start remains exclusive and aborts on file conflicts.",
+        "target_revalidation": "Before replacement compare parent and file native identities, size and modification time with the question-time observation. Detected changes fail Conflict. This is not atomic compare-and-replace against concurrent writes by the same account.",
+        "disk_space": "Required input capture and complete integrity staging checks remain before conflict questions. Defer destination space checks until the current choice is resolved. Skip has no destination byte charge; overwrite, rename and non-conflicting files are checked immediately before their publication. Preserve legacy Start aggregate preflight, limits, per-write checks and partial-output reporting."
     }
 }
