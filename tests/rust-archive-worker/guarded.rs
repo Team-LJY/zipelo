@@ -19,6 +19,15 @@ fn run_fault(
     s: &Scratch,
     start: GuardedStart,
     fault: Option<&str>,
+    respond: impl FnMut(&Message) -> Option<Vec<Message>>,
+) -> Vec<Message> {
+    run_record(s, start, fault, true, respond)
+}
+fn run_record(
+    s: &Scratch,
+    start: GuardedStart,
+    fault: Option<&str>,
+    record_entries: bool,
     mut respond: impl FnMut(&Message) -> Option<Vec<Message>>,
 ) -> Vec<Message> {
     let mut command = s.worker();
@@ -64,7 +73,7 @@ fn run_fault(
         .unwrap();
     let stdout = child.0.stdout.take().unwrap();
     let mut stderr = child.0.stderr.take().unwrap();
-    let (send, receive) = mpsc::channel();
+    let (send, receive) = mpsc::sync_channel(128);
     let reader = std::thread::spawn(move || {
         let mut reader = Reader::new(stdout);
         loop {
@@ -95,7 +104,9 @@ fn run_fault(
             }
         }
         let done = matches!(event, Message::Terminal(_));
-        events.push(event);
+        if record_entries || !matches!(event, Message::Entry(_)) {
+            events.push(event);
+        }
         if done {
             writer = None;
         }
@@ -699,26 +710,30 @@ fn approved_list_reaches_two_hundred_thousand_short_entries() {
             .any(|e| matches!(e, Message::ResourceRequired { .. }))
     );
     start.ceiling.entries = 200_000;
-    let events = run(&s, start, approve);
+    let mut count = 0;
+    // 대량 목록을 시험 부모에 모아 이후 자식의 RSS 측정을 오염시키지 않음.
+    let events = run_record(&s, start, None, false, |event| {
+        if let Message::Entry(entry) = event {
+            assert_eq!(entry.entry_id, count);
+            assert_eq!(entry.name, format!("e{count}"));
+            count += 1;
+        }
+        approve(event)
+    });
     assert_eq!(
         terminal(&events).outcome,
         Outcome::Completed,
         "{:?}",
         terminal(&events)
     );
-    let count = events
-        .iter()
-        .filter_map(|e| match e {
-            Message::Entry(entry) => Some(entry),
-            _ => None,
-        })
-        .enumerate()
-        .map(|(i, entry)| {
-            assert_eq!(entry.entry_id, i as u32);
-            assert_eq!(entry.name, format!("e{i}"));
-        })
-        .count();
     assert_eq!(count, 200_000);
+    assert!(events.iter().any(|event| matches!(
+        event,
+        Message::ListEnd {
+            entry_count: 200_000,
+            ..
+        }
+    )));
     assert_eq!(terminal(&events).created_count, 0);
 }
 
