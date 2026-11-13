@@ -947,3 +947,6 @@ mod item_progress;
 
 #[path = "header_budget.rs"]
 mod header_budget;
+
+#[path = "tar_stream_limit.rs"]
+mod tar_stream_limit;

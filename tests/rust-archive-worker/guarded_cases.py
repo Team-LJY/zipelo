@@ -33,6 +33,27 @@ elif case.startswith("header-budget-"):
     if size:
         entries.append(("payload", b"x" * size, 0x20))
     (root / "input").write_bytes(archive(entries, encoded="encoded" in case))
+elif case.startswith("tar-stream-limit-"):
+    import io
+    import tarfile
+
+    kind, mode = case.removeprefix("tar-stream-limit-").split("-")
+    payload = bytes(index % 251 for index in range(65_537))
+    raw = io.BytesIO()
+    with tarfile.open(fileobj=raw, mode="w", format=tarfile.USTAR_FORMAT) as archive:
+        entry = tarfile.TarInfo("payload")
+        entry.size = len(payload)
+        archive.addfile(entry, io.BytesIO(payload))
+    data = raw.getvalue()
+    encode = {"gz": gzip.compress, "bz2": bz2.compress, "xz": lzma.compress}[kind]
+    parts = (
+        [data]
+        if mode == "single"
+        else [data[: len(data) // 2], data[len(data) // 2 :]]
+    )
+    (root / "input").write_bytes(b"".join(encode(part) for part in parts))
+    (root / "expected").write_bytes(payload)
+    (root / "stream-size").write_text(str(len(data)))
 elif case == "wide-names":
     with zipfile.ZipFile(root / "input", "w") as archive:
         for entry_id in range(9000):
