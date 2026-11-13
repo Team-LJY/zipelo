@@ -6,6 +6,7 @@ pub struct State {
     pub requests: Vec<(u64, &'static str)>,
     pub starts: Vec<Start>,
     pub password_seen: bool,
+    pub conflict_replies: Vec<(u64, ConflictChoice, bool)>,
     /// 마지막으로 받은 암호 원문. 화면에서 입력한 암호가 그대로 전달됐는지 확인할 때 씀.
     pub password: Vec<u8>,
     pub job: u64,
@@ -183,6 +184,15 @@ impl Connection for FakeConnection {
                 if !s.manual {
                     s.complete_action();
                 }
+            }
+            Command::ConflictReply {
+                challenge_id,
+                choice,
+                apply_to_remaining,
+            } => {
+                s.requests.push((request.sequence, "conflict"));
+                s.conflict_replies
+                    .push((challenge_id, choice, apply_to_remaining));
             }
             Command::Cancel => {
                 s.requests.push((request.sequence, "cancel"));

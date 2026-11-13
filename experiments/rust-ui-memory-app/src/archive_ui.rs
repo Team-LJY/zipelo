@@ -70,9 +70,37 @@ impl Drop for Secret {
         self.0.fill(0);
     }
 }
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ConflictChoice {
+    Overwrite,
+    Skip,
+    Rename,
+}
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Conflict {
+    pub challenge_id: u64,
+    pub entry_id: u32,
+    pub relative_name: String,
+    pub incoming_size: u64,
+    pub existing_size: u64,
+}
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Resolution {
+    pub entry_id: u32,
+    pub relative_name: String,
+    pub choice: ConflictChoice,
+}
 pub enum Command {
     Start(Start),
-    Password { challenge_id: u64, secret: Secret },
+    Password {
+        challenge_id: u64,
+        secret: Secret,
+    },
+    ConflictReply {
+        challenge_id: u64,
+        choice: ConflictChoice,
+        apply_to_remaining: bool,
+    },
     Cancel,
 }
 pub struct Request {
@@ -186,6 +214,8 @@ pub enum Event {
         attempt: u32,
         encrypt: bool,
     },
+    ConflictRequired(Conflict),
+    ConflictResolved(Resolution),
     Progress {
         stage: Stage,
         processed: u64,
@@ -247,6 +277,9 @@ struct Running {
     stderr_eof: bool,
     exit: Option<bool>,
     cancel_sequence: Option<u64>,
+    conflict_ids: BTreeSet<u64>,
+    resolved_ids: BTreeSet<u32>,
+    file_ids: BTreeSet<u32>,
 }
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum Close {
@@ -267,6 +300,8 @@ pub struct Model {
     pub selected: BTreeSet<u32>,
     pub terminal: Option<Terminal>,
     pub challenge: Option<(u64, u32, bool)>,
+    pub conflict: Option<Conflict>,
+    pub resolutions: Vec<Resolution>,
     pub progress: Option<(Stage, u64, Option<u64>, u64)>,
     pub outputs: Vec<(String, Disposition)>,
     pub cancel: Option<CancelStatus>,
@@ -375,6 +410,8 @@ impl Model {
         self.next_id = id;
         self.terminal = None;
         self.challenge = None;
+        self.conflict = None;
+        self.resolutions.clear();
         self.progress = None;
         self.outputs.clear();
         self.cancel = None;
@@ -396,6 +433,14 @@ impl Model {
             stderr_eof: false,
             exit: None,
             cancel_sequence: None,
+            conflict_ids: BTreeSet::new(),
+            resolved_ids: BTreeSet::new(),
+            file_ids: self
+                .entries
+                .iter()
+                .filter(|e| e.kind == Kind::File)
+                .map(|e| e.id)
+                .collect(),
         });
         started
     }
@@ -443,6 +488,29 @@ impl Model {
             .is_some()
         {
             self.challenge = None;
+            self.conflict = None;
+            self.input_error = None;
+            true
+        } else {
+            false
+        }
+    }
+    pub fn resolve_conflict(&mut self, choice: ConflictChoice, apply_to_remaining: bool) -> bool {
+        let Some(conflict) = &self.conflict else {
+            return false;
+        };
+        if self.cancellation_requested() || self.error.is_some() || self.close != Close::Open {
+            return false;
+        }
+        if self
+            .send(Command::ConflictReply {
+                challenge_id: conflict.challenge_id,
+                choice,
+                apply_to_remaining,
+            })
+            .is_some()
+        {
+            self.conflict = None;
             self.input_error = None;
             true
         } else {
@@ -483,6 +551,7 @@ impl Model {
             if let Some(seq) = self.send(Command::Cancel) {
                 self.running.as_mut().unwrap().cancel_sequence = Some(seq);
                 self.challenge = None;
+                self.conflict = None;
                 self.input_error = None;
             }
         }
@@ -565,6 +634,7 @@ impl Model {
                 self.selected.clear();
             }
             self.challenge = None;
+            self.conflict = None;
             self.input_error = None;
             if matches!(self.close, Close::Waiting | Close::Confirm) {
                 self.close = Close::Review;
@@ -636,10 +706,44 @@ impl Model {
                         attempt,
                         encrypt,
                     } => {
-                        if self.challenge.is_some() || challenge_id == 0 {
+                        if self.challenge.is_some() || self.conflict.is_some() || challenge_id == 0
+                        {
                             self.error = Some("암호 요청이 유효하지 않습니다".into());
                         } else {
                             self.challenge = Some((challenge_id, attempt, encrypt));
+                        }
+                    }
+                    Event::ConflictRequired(conflict) => {
+                        let valid_entry = self
+                            .entries
+                            .iter()
+                            .any(|entry| entry.id == conflict.entry_id && entry.kind == Kind::File);
+                        if !matches!(run.start, Start::Extract { .. })
+                            || !valid_entry
+                            || conflict.challenge_id == 0
+                            || self.challenge.is_some()
+                            || self.conflict.is_some()
+                            || run.conflict_ids.len() >= 100_000
+                            || !valid_relative(&conflict.relative_name)
+                            || conflict.relative_name.len() > 4096
+                            || !run.conflict_ids.insert(conflict.challenge_id)
+                        {
+                            self.error = Some("파일 충돌 요청이 유효하지 않습니다".into());
+                        } else if run.cancel_sequence.is_none() {
+                            self.conflict = Some(conflict);
+                        }
+                    }
+                    Event::ConflictResolved(resolution) => {
+                        if !matches!(run.start, Start::Extract { .. })
+                            || !run.file_ids.contains(&resolution.entry_id)
+                            || self.resolutions.len() >= 100_000
+                            || !valid_relative(&resolution.relative_name)
+                            || resolution.relative_name.len() > 4096
+                            || !run.resolved_ids.insert(resolution.entry_id)
+                        {
+                            self.error = Some("파일 충돌 결과가 유효하지 않습니다".into());
+                        } else {
+                            self.resolutions.push(resolution);
                         }
                     }
                     Event::Progress {
@@ -671,6 +775,7 @@ impl Model {
                     }
                     Event::Terminal(t) => {
                         self.challenge = None;
+                        self.conflict = None;
                         self.terminal = Some(t);
                     }
                 }
@@ -684,6 +789,9 @@ impl Model {
         if self.busy() {
             if self.terminal.is_some() {
                 return "작업 결과 수신 / 프로세스 종료 확인 중".into();
+            }
+            if self.conflict.is_some() {
+                return "같은 이름의 파일을 처리할 방법을 선택하세요".into();
             }
             if self.challenge.is_some() {
                 return "암호를 입력하세요".into();

@@ -21,6 +21,12 @@ macro_rules! catalog {
 }
 
 catalog! {
+    "gzip-conflict-choice" => "단일 GZ 파일의 충돌 선택",
+    "conflict-choice" => "같은 이름 파일의 세 가지 처리 선택",
+    "conflict-apply" => "남은 충돌에 같은 선택 적용",
+    "extract-skipped" => "모든 파일을 건너뛴 정상 완료",
+    "extract-renamed" => "이름을 바꿔 저장한 완료 결과",
+    "extract-rename-failed" => "새 이름을 정한 뒤 저장 전 I/O 실패",
     "empty" => "빈 첫 화면",
     "archive" => "폴더와 파일이 있는 압축파일",
     "tar-bz2" => "TAR.BZ2 목록과 자동 해제 폴더",
@@ -165,7 +171,7 @@ impl Scenario {
             return app;
         }
         let archive = base.join(match self.name {
-            "gzip-conflict" => "여행 자료.gz",
+            "gzip-conflict" | "gzip-conflict-choice" => "여행 자료.gz",
             "tar-bz2" => "여행 자료.TAR.BZ2",
             "tar-xz" => "여행 자료.TaR.Xz",
             _ => "여행 자료.zip",
@@ -243,7 +249,7 @@ impl Scenario {
         }
         let creating = self.name.starts_with("create-") || self.name == "password-create";
         let listing_error = matches!(self.name, "unsupported" | "damaged");
-        if self.name == "gzip-conflict" {
+        if matches!(self.name, "gzip-conflict" | "gzip-conflict-choice") {
             app.model.list_id.as_mut().unwrap().format = Format::Gzip;
             app.model.entries = vec![Entry {
                 id: 0,
@@ -270,12 +276,13 @@ impl Scenario {
                 destination: app.destination.clone(),
                 selection: Selection::All,
                 list_id: app.model.list_id.clone().unwrap(),
-                gzip_output_name: (self.name == "gzip-conflict").then(|| app.gzip_name.clone()),
+                gzip_output_name: (matches!(self.name, "gzip-conflict" | "gzip-conflict-choice"))
+                    .then(|| app.gzip_name.clone()),
             }
         };
         app.targets = Some(if creating {
             BTreeSet::from(["여행 자료.zip".into()])
-        } else if self.name == "gzip-conflict" {
+        } else if matches!(self.name, "gzip-conflict" | "gzip-conflict-choice") {
             BTreeSet::from(["여행 자료".into()])
         } else {
             BTreeSet::from([
@@ -285,11 +292,87 @@ impl Scenario {
                 "사진/풍경.jpg".into(),
             ])
         });
+        if matches!(
+            self.name,
+            "extract-skipped" | "extract-renamed" | "extract-rename-failed"
+        ) {
+            app.targets = Some(["읽어주세요.txt".into()].into_iter().collect());
+            app.directories.clear();
+        }
         assert!(app.start(request));
         {
             let mut state = state.borrow_mut();
             state.frame(Event::Accepted { encryption: true });
             match self.name {
+                "conflict-choice" | "conflict-apply" | "gzip-conflict-choice" => {
+                    state.frame(Event::ConflictRequired(Conflict {
+                        challenge_id: 29,
+                        entry_id: if self.name == "gzip-conflict-choice" {
+                            0
+                        } else {
+                            1
+                        },
+                        relative_name: if self.name == "gzip-conflict-choice" {
+                            "여행 자료"
+                        } else {
+                            "읽어주세요.txt"
+                        }
+                        .into(),
+                        incoming_size: 1_287_952,
+                        existing_size: 2048,
+                    }));
+                }
+                "extract-skipped" | "extract-renamed" | "extract-rename-failed" => {
+                    let failed = self.name == "extract-rename-failed";
+                    let skip = self.name == "extract-skipped";
+                    let name = if skip {
+                        "읽어주세요.txt"
+                    } else {
+                        "읽어주세요 (1).txt"
+                    };
+                    state.frame(Event::ConflictResolved(Resolution {
+                        entry_id: 1,
+                        relative_name: name.into(),
+                        choice: if skip {
+                            ConflictChoice::Skip
+                        } else {
+                            ConflictChoice::Rename
+                        },
+                    }));
+                    if !skip && !failed {
+                        state.frame(Event::Output {
+                            entry_id: Some(1),
+                            relative_name: name.into(),
+                            disposition: Disposition::Created,
+                        });
+                    }
+                    state.frame(Event::Terminal(Terminal {
+                        outcome: if failed {
+                            Outcome::Failed
+                        } else {
+                            Outcome::Completed
+                        },
+                        error: failed.then_some(ErrorCode::Io),
+                        publication: if skip || failed {
+                            Publication::None
+                        } else {
+                            Publication::Complete
+                        },
+                        created_count: u64::from(!skip && !failed),
+                        retained_partial_count: 0,
+                        durability: if skip || failed {
+                            Durability::NotApplicable
+                        } else {
+                            Durability::Synced
+                        },
+                        cleanup: Cleanup::Complete,
+                    }));
+                    state.queue.extend([
+                        HostEvent::StdoutEof,
+                        HostEvent::StderrEof,
+                        HostEvent::Exited { success: true },
+                    ]);
+                }
                 "password" | "password-retry" | "password-create" => {
                     state.frame(Event::PasswordRequired {
                         challenge_id: 17,
@@ -391,6 +474,10 @@ impl Scenario {
         }
         for _ in 0..64 {
             app.model.poll();
+        }
+        if self.name == "conflict-apply" {
+            app.conflict_challenge = Some((app.model.job_id().unwrap(), 29));
+            app.conflict_apply = true;
         }
         if self.name == "extract-unsynced" {
             app.details = true;

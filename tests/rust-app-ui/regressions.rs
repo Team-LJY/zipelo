@@ -1,3 +1,4 @@
+mod conflicts;
 #[cfg(feature = "ui")]
 mod dialogs;
 mod fake;

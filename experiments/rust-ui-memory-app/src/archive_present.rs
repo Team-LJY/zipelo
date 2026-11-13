@@ -1,6 +1,6 @@
 use crate::archive_ui::*;
 use std::{
-    collections::BTreeSet,
+    collections::{BTreeMap, BTreeSet},
     fs, io,
     path::{Path, PathBuf},
 };
@@ -127,6 +127,31 @@ pub fn target_files(
         .filter(|entry| entry.kind == Kind::File && requested(entry, selection))
     {
         if !names.insert(gzip.unwrap_or(&entry.name).replace('\\', "/")) {
+            return None;
+        }
+    }
+    Some(names)
+}
+
+pub fn resolved_targets(
+    targets: Option<&BTreeSet<String>>,
+    entries: &[Entry],
+    gzip: Option<&str>,
+    resolutions: &[Resolution],
+) -> Option<BTreeSet<String>> {
+    let mut names = targets?.clone();
+    let entries: BTreeMap<_, _> = entries.iter().map(|entry| (entry.id, entry)).collect();
+    for resolution in resolutions {
+        let entry = entries.get(&resolution.entry_id)?;
+        let original = gzip.unwrap_or(&entry.name).replace('\\', "/");
+        if !names.remove(&original) {
+            return None;
+        }
+    }
+    for resolution in resolutions {
+        if resolution.choice != ConflictChoice::Skip
+            && !names.insert(resolution.relative_name.replace('\\', "/"))
+        {
             return None;
         }
     }
@@ -355,6 +380,8 @@ pub fn activity_text(model: &Model, creating: bool) -> &'static str {
         "마무리하는 중"
     } else if model.cancellation_requested() || model.cancel.is_some() {
         "취소하는 중..."
+    } else if model.conflict.is_some() {
+        "파일 충돌 선택 대기 중"
     } else if model.challenge.is_some() {
         "암호를 입력하세요"
     } else {
