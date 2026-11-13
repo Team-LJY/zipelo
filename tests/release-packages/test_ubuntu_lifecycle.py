@@ -49,13 +49,43 @@ class LifecycleTests(unittest.TestCase):
             "TEST_HOME": str(self.directory),
             "TEST_LOG": str(log),
         }
-        for arguments, count in ((["configure"], 5), (["configure", "0.1.0"], 0),
+        for arguments, count in ((["configure"], 1), (["configure", "0.1.0"], 0),
                                  (["triggered", "desktop"], 0)):
             with self.subTest(arguments=arguments):
                 log.write_text("")
                 subprocess.run(["sh", str(ROOT / "packaging/ubuntu/rust/postinst"), *arguments],
                                env=env, check=True)
                 self.assertEqual(len(log.read_text().splitlines()), count)
+
+    def test_prerm_restores_only_on_remove_for_known_user(self):
+        commands = self.directory / "bin"
+        commands.mkdir()
+        log = self.directory / "calls"
+        for name, content in {
+            "getent": '#!/bin/sh\nprintf "tester:x:1000:1000::%s:/bin/sh\\n" "$TEST_HOME"\n',
+            "runuser": '#!/bin/sh\nprintf "%s\\n" "$*" >> "$TEST_LOG"\n',
+        }.items():
+            executable = commands / name
+            executable.write_text(content)
+            executable.chmod(0o755)
+        env = {**os.environ, "PATH": str(commands) + os.pathsep + os.environ["PATH"],
+               "SUDO_USER": "tester", "TEST_HOME": str(self.directory), "TEST_LOG": str(log)}
+        for action, count in (("upgrade", 0), ("failed-upgrade", 0), ("remove", 1)):
+            with self.subTest(action=action):
+                log.write_text("")
+                subprocess.run(["sh", str(ROOT / "packaging/ubuntu/rust/prerm"), action],
+                               env=env, check=True, capture_output=True)
+                calls = log.read_text().splitlines()
+                self.assertEqual(len(calls), count)
+                if count:
+                    self.assertIn("HOME=" + str(self.directory), calls[0])
+                    self.assertTrue(calls[0].endswith("/usr/lib/zipelo/default-apps remove"))
+        env.pop("SUDO_USER")
+        log.write_text("")
+        result = subprocess.run(["sh", str(ROOT / "packaging/ubuntu/rust/prerm"), "remove"],
+                                env=env, check=True, capture_output=True, text=True)
+        self.assertEqual(log.read_text(), "")
+        self.assertIn("사용자를 확인할 수 없어", result.stdout)
 
     def check_smoke(self, install_fails=False, purge_fails=False, body_fails=False):
         calls = []
