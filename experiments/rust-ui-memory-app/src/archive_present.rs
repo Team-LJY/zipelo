@@ -70,8 +70,11 @@ pub fn middle_text(text: &str, max_chars: usize) -> String {
 pub fn default_destination(archive: &Path) -> PathBuf {
     let name = archive.file_name().unwrap_or_default().to_string_lossy();
     let lower = name.to_ascii_lowercase();
-    let stem = if lower.ends_with(".tar.gz") {
-        &name[..name.len() - 7]
+    let compound = [".tar.bz2", ".tar.gz", ".tar.xz"]
+        .into_iter()
+        .find(|suffix| lower.ends_with(suffix));
+    let stem = if let Some(suffix) = compound {
+        &name[..name.len() - suffix.len()]
     } else {
         name.rsplit_once('.')
             .map_or(name.as_ref(), |(stem, _)| stem)
