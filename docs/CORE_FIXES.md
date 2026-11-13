@@ -1,5 +1,11 @@
 # Core 경합과 종료 처리 수정
 
+> 과거 C# 구현 기록: C#은 v0.1에서 중단하고 Rust로 대체했다. PR103(f1d9fa5)에서 C# 소스와 전용 시험 및 .NET 설정을 제거했다. 아래 본문의 "현재", 미구현 상태, API와 검증 결과는 작성 당시 C# 스냅샷에 관한 내용이며, 현재 Rust 제품의 지원 범위나 검증 상태를 뜻하지 않는다. 삭제된 경로와 실행 명령은 현재 main에서 사용할 수 없다.
+>
+> 현재 기준은 [기획서](PLANS.md), [UI 설계](ui-design-v0.1.md), [릴리스 노트](release-notes-v0.1.md)다. 앱은 [Rust UI](../experiments/rust-ui-memory-app/), 압축 처리는 [Rust 작업자](../experiments/rust-archive-worker/README.md)를 사용한다. 과거 검사 재현과 소스 보존 안내는 [기획서의 과거 기록](PLANS.md#7-c-중단과-과거-검증-기록)을 따른다.
+
+## 보존된 당시 기록
+
 ## 범위와 검증 상태
 
 2026-11-09의 [보안 검토](SECURITY_REVIEW.md) 4~6장을 기준으로 암호 요청 경합과 초기화 실패 시 출력 정리 누락을 수정했다. src/Zipelo.Core의 ArchiveJob.cs, EngineContext.cs와 ArchiveContracts.cs만 수정했으며 tests/와 Desktop은 수정하지 않았다. 공개 타입, 메서드 시그니처, enum 값과 결과 필드는 그대로다.
@@ -8,7 +14,7 @@
 
 ## 암호 요청과 상태
 
-[EngineContext](../src/Zipelo.Core/EngineContext.cs)의 전용 SemaphoreSlim이 작업별 PasswordProvider 호출을 직렬화한다. 시도 번호는 잠금 안에서 증가시킨 지역값으로 전달하며 제한 확인을 증가보다 먼저 해 정수 넘침도 피한다. 대기 중 취소된 요청은 제공자를 호출하거나 시도 횟수를 소비하지 않는다. FIFO 순서는 보장하지 않는다.
+[EngineContext](https://github.com/Team-LJY/zipelo/blob/ae91536/src/Zipelo.Core/EngineContext.cs)의 전용 SemaphoreSlim이 작업별 PasswordProvider 호출을 직렬화한다. 시도 번호는 잠금 안에서 증가시킨 지역값으로 전달하며 제한 확인을 증가보다 먼저 해 정수 넘침도 피한다. 대기 중 취소된 요청은 제공자를 호출하거나 시도 횟수를 소비하지 않는다. FIFO 순서는 보장하지 않는다.
 
 WaitingForPassword는 실제 제공자가 응답을 기다리는 동안만 유지한다. 다른 항목의 목록 및 복사 진행이 이 상태를 Running으로 덮지 못하도록 상태 잠금을 사용한다. 제공자가 반환하면 상태와 잠금을 복원하고 소비 콜백은 잠금 밖에서 실행한다. 따라서 소비 콜백의 추가 암호 요청은 가능하지만 제공자 자체가 같은 작업의 암호 요청을 재진입하고 기다리는 동작은 금지한다.
 
@@ -18,7 +24,7 @@ UI 연결 시 제공자 중복 호출은 없어지고 WaitingForPassword의 의�
 
 ## 초기화와 출력 소유권
 
-[ArchiveJob](../src/Zipelo.Core/ArchiveJob.cs)은 필수 인자의 null 검사와 일회 실행 확인이 끝난 시점부터 출력 소유권을 받는다. 이 사전 검사에서 거부된 호출의 출력은 호출자가 소유한다. 그 뒤 JobBudget 생성, 연결 취소 토큰 생성, 입력 목록 복사와 문맥 초기화는 모두 출력 DisposeAsync를 호출하는 try/finally 안에서 수행한다.
+[ArchiveJob](https://github.com/Team-LJY/zipelo/blob/ae91536/src/Zipelo.Core/ArchiveJob.cs)은 필수 인자의 null 검사와 일회 실행 확인이 끝난 시점부터 출력 소유권을 받는다. 이 사전 검사에서 거부된 호출의 출력은 호출자가 소유한다. 그 뒤 JobBudget 생성, 연결 취소 토큰 생성, 입력 목록 복사와 문맥 초기화는 모두 출력 DisposeAsync를 호출하는 try/finally 안에서 수행한다.
 
 제한값 오류 등 문맥 생성 전 ArgumentException은 Failed/UnsupportedOperation 결과와 빈 항목 목록으로 반환한다. 초기화 전에 실패한 예산의 진행량은 0이다. 입력 목록 복사 등 그 밖의 예외도 정리를 거친 뒤 오류 결과를 반환한다. 실패한 작업 인스턴스는 재사용하지 않는다. 출력 정리는 정확히 한 번 시도하며 정리가 반환해야 종료 이벤트를 보낸다.
 
@@ -26,7 +32,7 @@ UI 연결 시 제공자 중복 호출은 없어지고 WaitingForPassword의 의�
 
 ## 게시 실패와 취소 완료 계약
 
-[IOutputTransaction](../src/Zipelo.Core/ArchiveContracts.cs)은 전체 게시 성공 또는 실패 시 작업 소유 출력 원복을 요구한다. 두 번째 파일에서 실패했다면 이미 게시한 첫 번째 파일도 원복해야 하며, 원본과 작업 전부터 있던 파일은 건드리지 않아야 한다. 부분 게시 결과를 돌려줄 수 없는 현재 인터페이스에 부분 성공 저장 계층을 그대로 연결하지 않는다.
+[IOutputTransaction](https://github.com/Team-LJY/zipelo/blob/ae91536/src/Zipelo.Core/ArchiveContracts.cs)은 전체 게시 성공 또는 실패 시 작업 소유 출력 원복을 요구한다. 두 번째 파일에서 실패했다면 이미 게시한 첫 번째 파일도 원복해야 하며, 원본과 작업 전부터 있던 파일은 건드리지 않아야 한다. 부분 게시 결과를 돌려줄 수 없는 현재 인터페이스에 부분 성공 저장 계층을 그대로 연결하지 않는다.
 
 이것은 저장 구현의 의무를 명확히 한 것이며 원자적인 Windows 파일시스템 동작을 구현한 것이 아니다. 현재 실제 구현은 UnavailableOutput뿐이다. 기존 메모리 테스트 대역도 일반적인 부분 게시 후 실패와 원복을 입증하지 않는다. 저장 계층이 원복에 실패하거나 프로세스가 중단되면 현재 결과만으로 남은 파일을 정확히 나열할 수 없다. 그런 저장 방식을 채택하려면 별도의 항목별 게시 결과 및 복구 계약이 먼저 필요하다.
 

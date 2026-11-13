@@ -1,5 +1,11 @@
 # Zipelo Core 보안 검토
 
+> 과거 C# 구현 기록: C#은 v0.1에서 중단하고 Rust로 대체했다. PR103(f1d9fa5)에서 C# 소스와 전용 시험 및 .NET 설정을 제거했다. 아래 본문의 "현재", 미구현 상태, API와 검증 결과는 작성 당시 C# 스냅샷에 관한 내용이며, 현재 Rust 제품의 지원 범위나 검증 상태를 뜻하지 않는다. 삭제된 경로와 실행 명령은 현재 main에서 사용할 수 없다.
+>
+> 현재 기준은 [기획서](PLANS.md), [UI 설계](ui-design-v0.1.md), [릴리스 노트](release-notes-v0.1.md)다. 앱은 [Rust UI](../experiments/rust-ui-memory-app/), 압축 처리는 [Rust 작업자](../experiments/rust-archive-worker/README.md)를 사용한다. 과거 검사 재현과 소스 보존 안내는 [기획서의 과거 기록](PLANS.md#7-c-중단과-과거-검증-기록)을 따른다.
+
+## 보존된 당시 기록
+
 ## 기록 범위와 최신 상태
 
 아래 1~8장은 최초 Core 29개 단계의 역사적 소스 검토임. 그 시점의 미구현 설명, 예상 결함과 행 번호를 최신 제품 상태로 해석하지 않음. 암호 요청 직렬화, 초기화 정리와 게시 계약의 후속 수정은 [CORE_FIXES](CORE_FIXES.md)에 기록되어 있으며, 작업자 분리와 ZIP 목록/생성/메모리 해제 및 조건부 폴더 게시 구현이 이후 추가됨.
@@ -16,7 +22,7 @@
 
 문자열 경로 차단, 동일 작업의 출력 이름 충돌 검사, 실제 복사량 누적, 실패 후 출력 확정 차단, 암호 콜백 종료 시 폐기 로직은 존재한다. 그러나 실제 저장 계층, 압축 엔진, 작업자 격리와 강제 종료는 없다. 따라서 목적지 밖 쓰기 방지, 원본 불변, 제한 시간 내 중단을 제품 차원에서 보장할 수 없다.
 
-현재 앱은 [App.xaml.cs 10행](../src/Zipelo.Desktop/App.xaml.cs#L10)에서 `UnavailableWorkspace`를 사용한다. [WorkspacePort.cs 48행](../src/Zipelo.Desktop/WorkspacePort.cs#L48)은 사용 가능 상태를 false로 반환한다. 아래 높은 우선순위 항목은 실제 엔진 연결 전 해소할 결함 또는 구현 공백이며, 현재 제품에서 공격이 재현되었다는 뜻은 아니다.
+현재 앱은 [App.xaml.cs 10행](https://github.com/Team-LJY/zipelo/blob/ae91536/src/Zipelo.Desktop/App.xaml.cs#L10)에서 `UnavailableWorkspace`를 사용한다. [WorkspacePort.cs 48행](https://github.com/Team-LJY/zipelo/blob/ae91536/src/Zipelo.Desktop/WorkspacePort.cs#L48)은 사용 가능 상태를 false로 반환한다. 아래 높은 우선순위 항목은 실제 엔진 연결 전 해소할 결함 또는 구현 공백이며, 현재 제품에서 공격이 재현되었다는 뜻은 아니다.
 
 - 우선순위 높음: 실제 저장 시 링크와 경로 교체 방어 부재, 처리량 계측 밖의 엔진 작업, 강제 시간 제한과 취소 완료 보장 부재, 출력 확정 도중 실패의 결과 계약 부족.
 - 우선순위 보통: 동시 암호 요청의 시도 번호와 상태 경합, 잘못된 제한값에 대한 정리 경로 누락, 정리 실패 시 원래 오류 소실.
@@ -26,17 +32,17 @@
 
 ### 2.1 문자열 정책과 작업 안의 충돌 검사
 
-[OutputPathPolicy.cs 8행](../src/Zipelo.Core/OutputPathPolicy.cs#L8)은 길이 제한, 구분자 변환, 빈 세그먼트, `.`과 `..`, 끝의 공백과 점, 비정규화 Unicode, 제어 문자, 콜론과 기타 금지 문자, Windows 예약 이름을 검사한다. 절대 경로, 드라이브 상대 경로, UNC와 장치 경로는 이 규칙에 걸리도록 구성되어 있다. 이 함수는 파일시스템을 열거나 최종 목적지를 확인하지 않는다.
+[OutputPathPolicy.cs 8행](https://github.com/Team-LJY/zipelo/blob/ae91536/src/Zipelo.Core/OutputPathPolicy.cs#L8)은 길이 제한, 구분자 변환, 빈 세그먼트, `.`과 `..`, 끝의 공백과 점, 비정규화 Unicode, 제어 문자, 콜론과 기타 금지 문자, Windows 예약 이름을 검사한다. 절대 경로, 드라이브 상대 경로, UNC와 장치 경로는 이 규칙에 걸리도록 구성되어 있다. 이 함수는 파일시스템을 열거나 최종 목적지를 확인하지 않는다.
 
-[EngineContext.cs 72행](../src/Zipelo.Core/EngineContext.cs#L72)은 항목 종류가 일반 파일이 아니면 쓰기를 거부한다. 이 동작은 어댑터가 링크 항목을 올바르게 분류한다는 전제다. 기존 목적지의 링크를 탐지하는 동작과는 별개이며 빈 디렉터리 생성도 현재 허용하지 않는다.
+[EngineContext.cs 72행](https://github.com/Team-LJY/zipelo/blob/ae91536/src/Zipelo.Core/EngineContext.cs#L72)은 항목 종류가 일반 파일이 아니면 쓰기를 거부한다. 이 동작은 어댑터가 링크 항목을 올바르게 분류한다는 전제다. 기존 목적지의 링크를 탐지하는 동작과는 별개이며 빈 디렉터리 생성도 현재 허용하지 않는다.
 
-[EngineContext.cs 78행](../src/Zipelo.Core/EngineContext.cs#L78)은 정책을 통과한 경로를 대소문자 무시 비교로 확인하여 같은 이름과 파일/자식 경로 충돌을 거부한다. 예를 들어 `Readme.txt`와 `README.TXT`, `file`과 `file/child`의 순서 두 가지가 검사 대상이다. 실패 후 `Failure`와 항목 결과를 남기므로 엔진이 해당 예외를 삼켜도 [ArchiveJob.cs 62행](../src/Zipelo.Core/ArchiveJob.cs#L62)이 출력 확정을 막는다.
+[EngineContext.cs 78행](https://github.com/Team-LJY/zipelo/blob/ae91536/src/Zipelo.Core/EngineContext.cs#L78)은 정책을 통과한 경로를 대소문자 무시 비교로 확인하여 같은 이름과 파일/자식 경로 충돌을 거부한다. 예를 들어 `Readme.txt`와 `README.TXT`, `file`과 `file/child`의 순서 두 가지가 검사 대상이다. 실패 후 `Failure`와 항목 결과를 남기므로 엔진이 해당 예외를 삼켜도 [ArchiveJob.cs 62행](https://github.com/Team-LJY/zipelo/blob/ae91536/src/Zipelo.Core/ArchiveJob.cs#L62)이 출력 확정을 막는다.
 
 이 검사는 현재 작업이 등록한 문자열끼리의 비교다. 기존 파일, 다른 작업의 출력, 파일시스템 별칭, 원본과 출력의 동일 파일 여부는 검사하지 않는다. 경로 목록 전체를 매번 순회하므로 출력 파일 수가 n개일 때 비교 횟수는 누적하여 O(n²)이며, 대량의 빈 파일에도 비용이 발생한다. 실제 성능 영향은 측정하지 않았다.
 
 ### 2.2 높은 우선순위: 저장 계층의 보호는 미구현
 
-[ArchiveContracts.cs 62행](../src/Zipelo.Core/ArchiveContracts.cs#L62)에 핸들 기준 링크/junction, 경로 교체 경쟁, 기존 파일 충돌과 원본 보존 의무가 주석으로 선언되어 있다. 실제 제품 구현은 오류만 반환하는 [UnavailableOutput 71행](../src/Zipelo.Core/ArchiveContracts.cs#L71)뿐이다.
+[ArchiveContracts.cs 62행](https://github.com/Team-LJY/zipelo/blob/ae91536/src/Zipelo.Core/ArchiveContracts.cs#L62)에 핸들 기준 링크/junction, 경로 교체 경쟁, 기존 파일 충돌과 원본 보존 의무가 주석으로 선언되어 있다. 실제 제품 구현은 오류만 반환하는 [UnavailableOutput 71행](https://github.com/Team-LJY/zipelo/blob/ae91536/src/Zipelo.Core/ArchiveContracts.cs#L71)뿐이다.
 
 따라서 안전한 문자열 `folder/file.txt`도 목적지의 `folder`가 외부를 가리키거나 검사 이후 교체되는 경우에 안전하다는 근거가 없다. 실제 출력이 없는 현재 상태에서 목적지 이탈을 재현한 것은 아니며, 문자열 검사를 통과했다는 이유로 일반 파일 생성 API에 바로 전달하면 안 된다.
 
@@ -48,25 +54,25 @@
 
 ### 3.1 지금 적용되는 예산
 
-[JobBudget.cs 18행](../src/Zipelo.Core/JobBudget.cs#L18)은 양수 제한값을 요구한다. [53행](../src/Zipelo.Core/JobBudget.cs#L53)의 잠금과 잔여량 비교는 동시 청구와 정수 오버플로를 고려한다. 제한을 넘긴 뒤 `exhausted`를 유지하여 후속 작업이 예산을 재사용하지 못하게 한다.
+[JobBudget.cs 18행](https://github.com/Team-LJY/zipelo/blob/ae91536/src/Zipelo.Core/JobBudget.cs#L18)은 양수 제한값을 요구한다. [53행](https://github.com/Team-LJY/zipelo/blob/ae91536/src/Zipelo.Core/JobBudget.cs#L53)의 잠금과 잔여량 비교는 동시 청구와 정수 오버플로를 고려한다. 제한을 넘긴 뒤 `exhausted`를 유지하여 후속 작업이 예산을 재사용하지 못하게 한다.
 
-[EngineContext.cs 93행](../src/Zipelo.Core/EngineContext.cs#L93)은 헤더의 선언 크기 대신 읽은 바이트 수를 처리량과 출력량에 누적한 뒤 목적지에 쓴다. 항목마다 예산 인스턴스를 새로 만들지 않는다. 따라서 이 경로를 통해 목적지에 넘기는 바이트는 청구에 성공한 양으로 제한된다.
+[EngineContext.cs 93행](https://github.com/Team-LJY/zipelo/blob/ae91536/src/Zipelo.Core/EngineContext.cs#L93)은 헤더의 선언 크기 대신 읽은 바이트 수를 처리량과 출력량에 누적한 뒤 목적지에 쓴다. 항목마다 예산 인스턴스를 새로 만들지 않는다. 따라서 이 경로를 통해 목적지에 넘기는 바이트는 청구에 성공한 양으로 제한된다.
 
 다만 읽기가 청구보다 먼저다. 최대 65,536바이트 버퍼에 반환된 마지막 덩어리가 제한을 넘으면 그 덩어리는 출력되지 않지만 이미 읽힌 뒤이며 사용량에는 반영되지 않는다. 디코더가 그 읽기를 준비하며 수행한 선행 해제량이나 메모리 사용까지 같은 값이라고 해석하면 안 된다.
 
 ### 3.2 높은 우선순위: 엔진 내부 처리와 메모리의 계측 공백
 
-[JobBudget.cs 49행](../src/Zipelo.Core/JobBudget.cs#L49)은 중간 TAR, 솔리드 선행 처리와 복구 재시도를 같은 예산에 청구하도록 요구하지만, 강제하는 실행 경로는 없다. 엔진이 디코딩을 끝내고 작은 스트림만 넘기거나 목록만 보고하면 앞선 작업량은 Core가 알 수 없다. 이는 임의의 외부 코드가 안전 경계를 돌파했다는 발견이 아니라, 신뢰하는 어댑터에 필요한 계측 의무가 아직 구현되지 않았다는 뜻이다.
+[JobBudget.cs 49행](https://github.com/Team-LJY/zipelo/blob/ae91536/src/Zipelo.Core/JobBudget.cs#L49)은 중간 TAR, 솔리드 선행 처리와 복구 재시도를 같은 예산에 청구하도록 요구하지만, 강제하는 실행 경로는 없다. 엔진이 디코딩을 끝내고 작은 스트림만 넘기거나 목록만 보고하면 앞선 작업량은 Core가 알 수 없다. 이는 임의의 외부 코드가 안전 경계를 돌파했다는 발견이 아니라, 신뢰하는 어댑터에 필요한 계측 의무가 아직 구현되지 않았다는 뜻이다.
 
-[EngineContext.cs 40행](../src/Zipelo.Core/EngineContext.cs#L40)의 목록 경로는 항목 수만 청구한다. [Register 166행](../src/Zipelo.Core/EngineContext.cs#L166)은 ID 중복과 선언 크기는 검사하지만 목록 이름과 ID의 길이, 전체 메타데이터 크기를 제한하지 않는다. `JobLimits`에도 메모리와 CPU 한도는 없다. 파서 단계의 할당은 Core 등록보다 먼저 발생할 수 있다.
+[EngineContext.cs 40행](https://github.com/Team-LJY/zipelo/blob/ae91536/src/Zipelo.Core/EngineContext.cs#L40)의 목록 경로는 항목 수만 청구한다. [Register 166행](https://github.com/Team-LJY/zipelo/blob/ae91536/src/Zipelo.Core/EngineContext.cs#L166)은 ID 중복과 선언 크기는 검사하지만 목록 이름과 ID의 길이, 전체 메타데이터 크기를 제한하지 않는다. `JobLimits`에도 메모리와 CPU 한도는 없다. 파서 단계의 할당은 Core 등록보다 먼저 발생할 수 있다.
 
 필요한 후속 검증은 단계 전환, 중첩 TAR, 솔리드 선행 처리, 암호 재시도와 복구 재시도의 합산, 큰 메타데이터와 메모리 할당, 마지막 청구 실패 덩어리의 의미다. 현재 중간 처리 테스트는 대역이 직접 `ChargeProcessed(2, ...)`를 호출하는 경우만 다룬다.
 
 ### 3.3 높은 우선순위: 시간 제한과 취소 완료는 협력에 의존
 
-[JobBudget.cs 37행](../src/Zipelo.Core/JobBudget.cs#L37)은 호출될 때만 경과 시간을 검사한다. [ArchiveJob.cs 31행](../src/Zipelo.Core/ArchiveJob.cs#L31)은 호출자 취소 토큰만 연결하며 시간 초과를 예약하지 않는다. 엔진 실행, 읽기, 쓰기, 검증, 암호 제공자, 출력 확정과 정리 중 어느 하나가 반환하지 않으면 다음 검사도 실행되지 않는다. `DisposeAsync`에는 취소 토큰 인자조차 없다.
+[JobBudget.cs 37행](https://github.com/Team-LJY/zipelo/blob/ae91536/src/Zipelo.Core/JobBudget.cs#L37)은 호출될 때만 경과 시간을 검사한다. [ArchiveJob.cs 31행](https://github.com/Team-LJY/zipelo/blob/ae91536/src/Zipelo.Core/ArchiveJob.cs#L31)은 호출자 취소 토큰만 연결하며 시간 초과를 예약하지 않는다. 엔진 실행, 읽기, 쓰기, 검증, 암호 제공자, 출력 확정과 정리 중 어느 하나가 반환하지 않으면 다음 검사도 실행되지 않는다. `DisposeAsync`에는 취소 토큰 인자조차 없다.
 
-사용자 취소는 `Cancelling` 이벤트로 전달되고, 협력하는 호출이 취소 예외를 반환하면 [ArchiveJob.cs 78행](../src/Zipelo.Core/ArchiveJob.cs#L78)이 `Cancelled`로 처리한다. [85행](../src/Zipelo.Core/ArchiveJob.cs#L85)의 정리를 기다린 다음 종료 이벤트를 보내는 흐름은 존재한다. 그러나 멈춘 디코더나 정리를 일정 시간 안에 종료시키는 작업자 감독과 강제 종료는 없다. 마지막 `budget.Check` 이후 오래 걸린 출력 확정은 시간 제한을 넘겨도 성공으로 끝날 수 있다.
+사용자 취소는 `Cancelling` 이벤트로 전달되고, 협력하는 호출이 취소 예외를 반환하면 [ArchiveJob.cs 78행](https://github.com/Team-LJY/zipelo/blob/ae91536/src/Zipelo.Core/ArchiveJob.cs#L78)이 `Cancelled`로 처리한다. [85행](https://github.com/Team-LJY/zipelo/blob/ae91536/src/Zipelo.Core/ArchiveJob.cs#L85)의 정리를 기다린 다음 종료 이벤트를 보내는 흐름은 존재한다. 그러나 멈춘 디코더나 정리를 일정 시간 안에 종료시키는 작업자 감독과 강제 종료는 없다. 마지막 `budget.Check` 이후 오래 걸린 출력 확정은 시간 제한을 넘겨도 성공으로 끝날 수 있다.
 
 시간 초과 시 토큰 취소만 추가해도 비협력 작업은 멈추지 않는다. 후속 설계에는 작업자 종료 확인, 정리의 소유권과 제한 시간, 사용자 취소와 시간 초과의 구분, 암호 입력 대기 시간을 예산에 포함할지에 대한 정책이 필요하다. 종료를 기다리는 쪽만 포기하고 작업자가 계속 쓰게 해서는 안 된다.
 
@@ -76,7 +82,7 @@
 
 ### 4.1 높은 우선순위: 출력 일부 확정 후 실패를 표현할 계약 부족
 
-[ArchiveJob.cs 71행](../src/Zipelo.Core/ArchiveJob.cs#L71)은 `CommitAsync` 전체가 반환해야 `committed`를 true로 바꾼다. 실패하면 [93행](../src/Zipelo.Core/ArchiveJob.cs#L93)이 모든 `Staged` 항목을 실패로 바꾼다. 인터페이스는 취소 후 게시 금지를 명시하지만 일반 입출력 오류 시 전체 원복이나 항목별 확정 결과를 반환하는 방식은 명시하지 않는다.
+[ArchiveJob.cs 71행](https://github.com/Team-LJY/zipelo/blob/ae91536/src/Zipelo.Core/ArchiveJob.cs#L71)은 `CommitAsync` 전체가 반환해야 `committed`를 true로 바꾼다. 실패하면 [93행](https://github.com/Team-LJY/zipelo/blob/ae91536/src/Zipelo.Core/ArchiveJob.cs#L93)이 모든 `Staged` 항목을 실패로 바꾼다. 인터페이스는 취소 후 게시 금지를 명시하지만 일반 입출력 오류 시 전체 원복이나 항목별 확정 결과를 반환하는 방식은 명시하지 않는다.
 
 정적 시나리오는 두 파일 중 첫 파일을 최종 위치로 옮긴 뒤 두 번째 파일에서 저장 오류가 발생하는 경우다. 원복이 보장되지 않는 저장 구현이라면 실제 첫 파일이 남았는데 결과는 전부 실패로 표시된다. 현재 저장 구현이 없으므로 실제 디스크에서 재현한 결함은 아니다. `JobState.Partial`은 선언되어 있지만 현재 `ArchiveJob`에서 선택되지 않는다.
 
@@ -84,19 +90,19 @@
 
 ### 4.2 정리 실패가 주 오류를 덮어씀
 
-[ArchiveJob.cs 87행](../src/Zipelo.Core/ArchiveJob.cs#L87)은 정리 예외가 발생하면 이미 정한 오류를 항상 `OutputUnavailable`로 바꾼다. 무결성 실패 후 정리 실패가 이어지면 원래 `IntegrityFailure`는 작업 오류에서 사라진다. 항목에 기록된 오류가 남을 수도 있으나 두 오류를 모두 설명하는 계약은 없다.
+[ArchiveJob.cs 87행](https://github.com/Team-LJY/zipelo/blob/ae91536/src/Zipelo.Core/ArchiveJob.cs#L87)은 정리 예외가 발생하면 이미 정한 오류를 항상 `OutputUnavailable`로 바꾼다. 무결성 실패 후 정리 실패가 이어지면 원래 `IntegrityFailure`는 작업 오류에서 사라진다. 항목에 기록된 오류가 남을 수도 있으나 두 오류를 모두 설명하는 계약은 없다.
 
 출력 확정이 성공한 후 정리만 실패한 경우에는 전체 작업이 `Failed`인 동시에 확정된 항목은 `Extracted`로 유지된다. 이를 원복 완료로 안내해서는 안 된다. 주 오류, 정리 오류, 확정된 결과를 각각 보존하는 표현이 필요하다. 현재 `CleanupFailure` 테스트는 출력이 없는 작업만 사용하므로 이 두 조합을 검증하지 않는다.
 
 ### 4.3 무결성 검증과 작업 완료를 구분해야 함
 
-[EngineContext.cs 108행](../src/Zipelo.Core/EngineContext.cs#L108)은 검증 콜백이 `Failed`이면 확정을 막고, `Unavailable` 또는 `NotChecked`이면 해당 상태를 보존한 채 확정할 수 있다. [CoreTests.cs 242행](../tests/security/CoreTests.cs#L242)은 `Unavailable`인 항목의 작업 완료를 의도적으로 기대한다. 따라서 `Completed`는 CRC 또는 인증 검증 통과를 뜻하지 않는다.
+[EngineContext.cs 108행](https://github.com/Team-LJY/zipelo/blob/ae91536/src/Zipelo.Core/EngineContext.cs#L108)은 검증 콜백이 `Failed`이면 확정을 막고, `Unavailable` 또는 `NotChecked`이면 해당 상태를 보존한 채 확정할 수 있다. [CoreTests.cs 242행](../tests/security/CoreTests.cs#L242)은 `Unavailable`인 항목의 작업 완료를 의도적으로 기대한다. 따라서 `Completed`는 CRC 또는 인증 검증 통과를 뜻하지 않는다.
 
 Core가 CRC나 암호 인증을 계산하지는 않는다. 검증 콜백의 정확성, 검증 가능한 형식에서 `NotChecked`를 허용할지, 부분 복구 결과의 표시 정책은 어댑터와 UI 연결 시 확정해야 한다. 현재 `Verify` 작업의 항목별 검증 결과를 추가하는 별도 API도 없으므로 이 기능의 완성을 주장할 수 없다.
 
 ### 4.4 원본 보존의 실제 보장 범위
 
-[ArchiveJob.cs 49행](../src/Zipelo.Core/ArchiveJob.cs#L49)은 입력이 읽기 가능하고 쓰기 불가능한지 확인한다. Core는 입력에 쓰거나 입력 수명을 종료하는 호출을 하지 않는다. 다만 원본 파일을 여는 계층, 공유 방식, 출력과 원본의 파일 동일성 검사, 복구 사본 생성은 없다.
+[ArchiveJob.cs 49행](https://github.com/Team-LJY/zipelo/blob/ae91536/src/Zipelo.Core/ArchiveJob.cs#L49)은 입력이 읽기 가능하고 쓰기 불가능한지 확인한다. Core는 입력에 쓰거나 입력 수명을 종료하는 호출을 하지 않는다. 다만 원본 파일을 여는 계층, 공유 방식, 출력과 원본의 파일 동일성 검사, 복구 사본 생성은 없다.
 
 입력 스트림 객체는 그대로 어댑터에 전달된다. 경로 문자열을 별도 인자로 넘기지 않는다는 계약은 프로세스 격리나 파일 접근 권한 제한과 같지 않으며, `FileStream` 같은 구체 객체가 가진 정보를 감추는 래퍼도 없다. 엔진 어댑터는 신뢰하는 코드라는 전제가 필요하다.
 
@@ -106,7 +112,7 @@ Core가 CRC나 암호 인증을 계산하지는 않는다. 검증 콜백의 정�
 
 ### 5.1 지금 존재하는 보호
 
-[ArchiveContracts.cs 42행](../src/Zipelo.Core/ArchiveContracts.cs#L42)은 반환된 `SecureString`의 소유권을 Core로 넘기도록 한다. [EngineContext.cs 154행](../src/Zipelo.Core/EngineContext.cs#L154)의 `using`은 암호가 전달된 뒤 정상 종료, 소비자 예외 또는 취소 검사 실패로 범위를 벗어날 때 폐기한다. null 응답은 작업 취소로 연결한다. 작업별 시도 제한과 요청 ID도 존재한다.
+[ArchiveContracts.cs 42행](https://github.com/Team-LJY/zipelo/blob/ae91536/src/Zipelo.Core/ArchiveContracts.cs#L42)은 반환된 `SecureString`의 소유권을 Core로 넘기도록 한다. [EngineContext.cs 154행](https://github.com/Team-LJY/zipelo/blob/ae91536/src/Zipelo.Core/EngineContext.cs#L154)의 `using`은 암호가 전달된 뒤 정상 종료, 소비자 예외 또는 취소 검사 실패로 범위를 벗어날 때 폐기한다. null 응답은 작업 취소로 연결한다. 작업별 시도 제한과 요청 ID도 존재한다.
 
 Core의 이벤트와 결과 타입은 암호를 포함하지 않고 예외 원문 대신 오류 코드를 사용한다. 현재 `src/`를 읽고 관련 호출을 검색했을 때 암호의 로그, 명령행, 환경변수와 영구 파일 기록 경로는 발견하지 않았다. 이는 실제 IPC, 엔진 변환 코드, 덤프와 외부 관찰 검증을 대신하지 않는다.
 
@@ -114,11 +120,11 @@ Core의 이벤트와 결과 타입은 암호를 포함하지 않고 예외 원�
 
 ### 5.2 구현 결함: 동시 요청의 시도 번호와 상태 경합
 
-[EngineContext.cs 144행](../src/Zipelo.Core/EngineContext.cs#L144)은 `Interlocked.Increment`의 반환값을 저장하지 않는다. [154행](../src/Zipelo.Core/EngineContext.cs#L154)에서 요청을 만들 때 공유 필드 `passwordAttempts`를 다시 읽는다. 두 호출이 각각 카운터를 1과 2로 올린 뒤 첫 호출이 요청을 만들면 두 요청 모두 시도 번호 2를 받을 수 있다.
+[EngineContext.cs 144행](https://github.com/Team-LJY/zipelo/blob/ae91536/src/Zipelo.Core/EngineContext.cs#L144)은 `Interlocked.Increment`의 반환값을 저장하지 않는다. [154행](https://github.com/Team-LJY/zipelo/blob/ae91536/src/Zipelo.Core/EngineContext.cs#L154)에서 요청을 만들 때 공유 필드 `passwordAttempts`를 다시 읽는다. 두 호출이 각각 카운터를 1과 2로 올린 뒤 첫 호출이 요청을 만들면 두 요청 모두 시도 번호 2를 받을 수 있다.
 
 암호 요청은 항목 처리용 `serial`을 사용하지 않는다. 하나의 요청이 끝나면 다른 요청이 대기 중이어도 `Running` 상태를 보낼 수 있다. 전체 시도 횟수 제한을 우회한다는 주장은 아니며, 동시 호출 시 요청 표시와 작업 상태가 잘못될 수 있다는 결함이다. 현재 인터페이스에는 암호 요청 동시 실행을 금지하는 명시적 계약도 없다.
 
-[MainWindow.xaml.cs 205행](../src/Zipelo.Desktop/MainWindow.xaml.cs#L205)은 이미 암호창이 있으면 null을 반환한다. 두 인터페이스가 그대로 연결되면 겹친 요청이 사용자 취소처럼 처리될 가능성도 있으나, 현재 Core/UI 어댑터가 없어 동작을 재현하지 않았다.
+[MainWindow.xaml.cs 205행](https://github.com/Team-LJY/zipelo/blob/ae91536/src/Zipelo.Desktop/MainWindow.xaml.cs#L205)은 이미 암호창이 있으면 null을 반환한다. 두 인터페이스가 그대로 연결되면 겹친 요청이 사용자 취소처럼 처리될 가능성도 있으나, 현재 Core/UI 어댑터가 없어 동작을 재현하지 않았다.
 
 후속 수정안은 증가 결과를 지역값으로 보존하고 요청을 작업별로 직렬화하거나 동시 요청을 명시적으로 거부하는 것이다. 요청별 응답 귀속, 취소 후 늦은 응답 폐기, 종료 시 남은 암호 폐기를 함께 정의해야 한다. 기존 테스트는 순차 시도 번호와 서로 다른 요청 ID만 확인한다.
 
@@ -126,13 +132,13 @@ Core의 이벤트와 결과 타입은 암호를 포함하지 않고 예외 원�
 
 ### 6.1 구현 결함: 제한값 오류가 출력 정리 범위 밖에서 발생
 
-[ArchiveJob.cs 25행](../src/Zipelo.Core/ArchiveJob.cs#L25)에서 일회 실행 표시를 설정한 후 [30행](../src/Zipelo.Core/ArchiveJob.cs#L30)에서 제한값을 검증한다. 이 검증은 출력 정리를 보장하는 try/finally보다 앞에 있다. 잘못된 `JobLimits`로 호출하면 예외가 바로 전파되고 전달된 출력 트랜잭션의 정리와 종료 이벤트가 수행되지 않는다.
+[ArchiveJob.cs 25행](https://github.com/Team-LJY/zipelo/blob/ae91536/src/Zipelo.Core/ArchiveJob.cs#L25)에서 일회 실행 표시를 설정한 후 [30행](https://github.com/Team-LJY/zipelo/blob/ae91536/src/Zipelo.Core/ArchiveJob.cs#L30)에서 제한값을 검증한다. 이 검증은 출력 정리를 보장하는 try/finally보다 앞에 있다. 잘못된 `JobLimits`로 호출하면 예외가 바로 전파되고 전달된 출력 트랜잭션의 정리와 종료 이벤트가 수행되지 않는다.
 
 이는 잘못된 호스트 설정에서 발생하는 수명 계약 결함이며 악성 압축파일만으로 유발됨을 확인한 것은 아니다. 생성자에서 제한을 먼저 검증하거나 출력 소유권을 넘겨받은 뒤의 초기화를 정리 범위에 포함해야 한다. [CoreTests.cs 100행](../tests/security/CoreTests.cs#L100)은 `JobBudget` 자체의 잘못된 값만 검사하므로 `ArchiveJob` 정리 누락을 다루지 않는다.
 
 ### 6.2 미리보기는 구현 검증 대상이 아직 없음
 
-[EngineContext.cs 67행](../src/Zipelo.Core/EngineContext.cs#L67)은 `Preview`에서 추출용 쓰기를 허용하지 않는다. [CoreTests.cs 416행](../tests/security/CoreTests.cs#L416)은 이 호출이 거부되는지만 검사한다. 렌더러, 파일 형식 판별, 외부 리소스 차단, 평문 임시 파일 수명과 별도 프로세스는 구현되어 있지 않다.
+[EngineContext.cs 67행](https://github.com/Team-LJY/zipelo/blob/ae91536/src/Zipelo.Core/EngineContext.cs#L67)은 `Preview`에서 추출용 쓰기를 허용하지 않는다. [CoreTests.cs 416행](../tests/security/CoreTests.cs#L416)은 이 호출이 거부되는지만 검사한다. 렌더러, 파일 형식 판별, 외부 리소스 차단, 평문 임시 파일 수명과 별도 프로세스는 구현되어 있지 않다.
 
 현재 소스에서 자동 외부 실행과 통신 호출을 발견하지 않았다는 사실을, 향후 미리보기의 실행 및 통신 차단 검증 통과로 해석하면 안 된다. 렌더러가 마련된 뒤 위장 확장자, HTML/SVG, 외부 URL, 큰 이미지 및 종료 후 임시 파일을 실제로 관찰해야 한다.
 

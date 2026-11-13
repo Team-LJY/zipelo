@@ -1,5 +1,11 @@
 # OS 정책과 단일 ZIP 게시 API
 
+> 과거 C# 구현 기록: C#은 v0.1에서 중단하고 Rust로 대체했다. PR103(f1d9fa5)에서 C# 소스와 전용 시험 및 .NET 설정을 제거했다. 아래 본문의 "현재", 미구현 상태, API와 검증 결과는 작성 당시 C# 스냅샷에 관한 내용이며, 현재 Rust 제품의 지원 범위나 검증 상태를 뜻하지 않는다. 삭제된 경로와 실행 명령은 현재 main에서 사용할 수 없다.
+>
+> 현재 기준은 [기획서](PLANS.md), [UI 설계](ui-design-v0.1.md), [릴리스 노트](release-notes-v0.1.md)다. 앱은 [Rust UI](../experiments/rust-ui-memory-app/), 압축 처리는 [Rust 작업자](../experiments/rust-archive-worker/README.md)를 사용한다. 과거 검사 재현과 소스 보존 안내는 [기획서의 과거 기록](PLANS.md#7-c-중단과-과거-검증-기록)을 따른다.
+
+## 보존된 당시 기록
+
 ## 상태와 범위
 
 Windows x64와 Ubuntu 24.04/26.04 LTS x64용 소스를 추가한 상태임. 담당자 보고 기준 2026-11-09T13:59:27.796888Z Windows 스냅샷은 빌드 경고/오류 0, C# 57/60 통과이며 게시 관련 3개가 실패함. 이후 아래 Windows 게시 수정은 로컬 SDK 부재로 컴파일과 실제 실행을 검증하지 못했음. Ubuntu 두 LTS에서의 C# 실행 검증도 남아 있음.
