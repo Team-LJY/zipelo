@@ -29,7 +29,7 @@ Windows에서는 아래 순서로 설치합니다.
 
 Ubuntu에서는 [.deb 설치 파일](https://github.com/Team-LJY/zipelo/releases/download/v0.1.0/zipelo_0.1.0_amd64.deb)을 받아 `sudo apt install ./zipelo_0.1.0_amd64.deb`로 설치하세요. 처음 설치할 때 ZIP, 7z, TAR, GZ, TAR.GZ의 기본 앱이 Zipelo로 바뀝니다.
 
-## 아직 안 되는 것과 사용 전 알아둘 점
+## v0.1.0에서 아직 안 되는 것과 사용 전 알아둘 점
 
 - RAR 열기, 손상된 압축 파일 복구, 파일 내용 미리보기는 지원하지 않습니다.
 - 여러 조각으로 나뉜 압축 파일과 7z 만들기는 지원하지 않습니다. TAR.BZ2와 TAR.XZ 풀기는 개발 중인 main에서 해결됐으며([PR119](https://github.com/Team-LJY/zipelo/pull/119)), 게시된 v0.1.0에는 포함되지 않습니다. Wayland 파일 선택 창과 릴리스 설치 패키지 검증은 남아 있습니다.
@@ -40,6 +40,17 @@ Ubuntu에서는 [.deb 설치 파일](https://github.com/Team-LJY/zipelo/releases
 - Windows와 Ubuntu 모두 Zipelo를 제거해도 압축 파일의 기본 앱 설정은 남습니다. Windows에서 파일을 열 때 "앱 선택" 창이 뜨면 다른 앱을 고르거나 설정의 [기본 앱]에서 다시 지정하세요. Ubuntu에서도 다른 압축 앱을 기본 앱으로 다시 선택하세요.
 
 자세한 지원 범위와 제한은 [v0.1 릴리스 노트](docs/release-notes-v0.1.md)를 참고하세요.
+
+## 개발 중인 main에서 해결된 항목
+
+아래 변경은 소스에 반영됐지만 위에서 받는 v0.1.0 설치 파일에는 포함되지 않습니다.
+
+- **같은 이름의 파일 처리:** 덮어쓰기, 건너뛰기, 이름 바꿔 저장을 선택하고 나머지 파일에도 적용할 수 있습니다([PR114](https://github.com/Team-LJY/zipelo/pull/114)).
+- **제거 후 기본 앱 정리:** Windows에서는 다른 앱을 선택할 설정 화면을 안내합니다. Ubuntu에서는 같은 사용자가 제거하고 기본 앱이 여전히 Zipelo인 경우, 기록된 이전 앱이 유효하면 복원합니다. 설치 후 사용자가 바꾼 선택은 보존합니다([PR116](https://github.com/Team-LJY/zipelo/pull/116)).
+- **큰 작업 허용과 압축 폭탄 대응:** 기본 16 GiB를 넘는 작업은 사용자 허용 후 최대 64 GiB까지 진행할 수 있습니다. 항목 수, 압축률, 진행 시간과 여유 공간 등 안전 제한은 계속 적용됩니다([PR121](https://github.com/Team-LJY/zipelo/pull/121)).
+- **Ubuntu X11 실행에 필요한 구성 요소:** 새 `.deb`는 빠져 있던 라이브러리를 설치 의존성에 포함해 X11 시작 오류를 해결했습니다([PR122](https://github.com/Team-LJY/zipelo/pull/122)).
+
+**남은 한계:** 압축된 TAR(TAR.GZ, TAR.BZ2, TAR.XZ)은 기본 16 GiB, 승인 후 요청한 상한(최대 64 GiB)을 따릅니다. 이때 파일 내용뿐 아니라 TAR 헤더와 패딩도 계산하므로 파일 크기 합계보다 먼저 한도에 도달할 수 있습니다. 미리보기와 분할 압축 파일 지원도 아직 없으며, [v0.2 계획](docs/PLANS.md)의 범위가 확정되어 구현을 기다리고 있습니다.
 
 ## 개발자용
 
