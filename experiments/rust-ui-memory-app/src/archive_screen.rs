@@ -1788,12 +1788,14 @@ impl ArchiveApp {
             && (self.model.volume_problem.is_some()
                 || self.model.terminal.as_ref().is_some_and(|terminal| {
                     terminal.error == Some(ErrorCode::Limit)
-                        || (terminal.error == Some(ErrorCode::UnsupportedFormat)
-                            && self
-                                .model
-                                .archive
-                                .as_ref()
-                                .is_some_and(|p| present::excluded_split(p)))
+                        || (matches!(
+                            terminal.error,
+                            Some(ErrorCode::UnsupportedFormat | ErrorCode::UnsupportedFeature)
+                        ) && self
+                            .model
+                            .archive
+                            .as_ref()
+                            .is_some_and(|p| present::excluded_split(p)))
                 }))
     }
 
@@ -2144,12 +2146,14 @@ impl ArchiveApp {
                         ui.add(egui::Label::new(present::volume_problem_text(problem)).wrap());
                     } else if let Some(code) = t.as_ref().and_then(|t| t.error) {
                         ui.label(
-                            if code == ErrorCode::UnsupportedFormat
-                                && self
-                                    .model
-                                    .archive
-                                    .as_ref()
-                                    .is_some_and(|p| present::excluded_split(p))
+                            if matches!(
+                                code,
+                                ErrorCode::UnsupportedFormat | ErrorCode::UnsupportedFeature
+                            ) && self
+                                .model
+                                .archive
+                                .as_ref()
+                                .is_some_and(|p| present::excluded_split(p))
                             {
                                 present::SPLIT_SUPPORT.to_owned()
                             } else if creating && code == ErrorCode::SourceChanged {

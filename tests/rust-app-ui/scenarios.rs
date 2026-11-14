@@ -302,7 +302,7 @@ impl Scenario {
                 Some(VolumeProblemReason::MissingVolume) => ErrorCode::MissingVolume,
                 Some(VolumeProblemReason::IncompleteSet) => ErrorCode::Integrity,
                 None if self.name == "split-source-changed" => ErrorCode::SourceChanged,
-                None => ErrorCode::UnsupportedFormat,
+                None => ErrorCode::UnsupportedFeature,
             };
             if let Some(reason) = reason {
                 state.frame(Event::VolumeProblem(VolumeProblem {

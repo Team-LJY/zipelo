@@ -603,3 +603,51 @@ fn split_errors_use_main_modal_without_native_child() {
         assert!(labels.contains("작업 결과"), "{name}: {labels}");
     }
 }
+
+#[test]
+fn excluded_split_errors_show_support_guidance_in_main_modal() {
+    use zipelo_ui_memory_app::archive_ui::ErrorCode;
+
+    for code in [ErrorCode::UnsupportedFeature, ErrorCode::UnsupportedFormat] {
+        for archive in ["sample.zip.001", "sample.z01", "sample.rar", "sample.7z"] {
+            let scenario = scenarios::parse("split-unsupported").unwrap();
+            let mut app = scenario.build();
+            let ctx = egui::Context::default();
+            ctx.set_embed_viewports(false);
+            let input = || egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(1060.0, 720.0),
+                )),
+                ..Default::default()
+            };
+            for _ in 0..3 {
+                let mut output = ctx.run_ui(input(), |ui| scenario.show(&mut app, ui));
+                output.textures_delta.clear();
+            }
+            assert_eq!(
+                app.model.terminal.as_ref().unwrap().error,
+                Some(ErrorCode::UnsupportedFeature)
+            );
+            app.model.terminal.as_mut().unwrap().error = Some(code);
+            app.model.archive = Some(archive.into());
+            let mut output = ctx.run_ui(input(), |ui| scenario.show(&mut app, ui));
+            let labels = text(&output.shapes);
+            output.textures_delta.clear();
+            if archive == "sample.7z" {
+                assert!(!labels.contains("분할 ZIP과 RAR"));
+            } else {
+                assert!(
+                    labels.contains("분할 ZIP과 RAR"),
+                    "{code:?} {archive}: {labels}"
+                );
+                assert!(
+                    output
+                        .viewport_output
+                        .keys()
+                        .all(|id| *id == egui::ViewportId::ROOT)
+                );
+            }
+        }
+    }
+}
