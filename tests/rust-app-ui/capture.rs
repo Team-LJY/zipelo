@@ -236,6 +236,11 @@ impl Connection for CaptureConnection {
                         durability: Durability::NotApplicable,
                         cleanup: Cleanup::Complete,
                     }),
+                    Start::CreateSevenZip { output_file, .. } => {
+                        self.create_name =
+                            Some(output_file.file_name().unwrap().to_string_lossy().into());
+                        self.finish(false);
+                    }
                     Start::CreateZip {
                         output_file,
                         aes256,

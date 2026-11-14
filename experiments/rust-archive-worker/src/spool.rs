@@ -139,7 +139,7 @@ impl Snapshot {
             Step::Read { .. } => check.check(),
         })
     }
-    fn capture_reporting(
+    pub(crate) fn capture_reporting(
         source: &mut File,
         limit: u64,
         step: &mut impl FnMut(Step) -> Result<()>,

@@ -41,6 +41,7 @@ struct Job<W> {
     remaining_choice: Option<ConflictChoice>,
     source_group: Option<crate::split_seven_zip::Group>,
     source_verified_for_publication: bool,
+    creation_plan: Option<crate::create::Plan>,
     started: Instant,
     terminal: Terminal,
     parent: crate::parent::Parent,
@@ -283,8 +284,19 @@ impl<W: Write> Job<W> {
         self.source_group = Some(group);
         self.split_result(result)
     }
-    fn verify_before_publication(&mut self) -> Result<()> {
+    fn verify_before_publication(
+        &mut self,
+        temporary: Option<&filesystem::PublicationTemp>,
+    ) -> Result<()> {
         if !self.source_verified_for_publication {
+            if let Some(plan) = self.creation_plan.take() {
+                let result = match temporary {
+                    Some(temporary) => plan.verify_for_publication(temporary, self),
+                    None => plan.verify(self),
+                };
+                self.creation_plan = Some(plan);
+                result?;
+            }
             self.verify_split()?;
             self.source_verified_for_publication = true;
         }
@@ -294,8 +306,11 @@ impl<W: Write> Job<W> {
         match step {
             filesystem::PublishStep::Check => self.check(),
             filesystem::PublishStep::Activity => completed(Ok(()), self),
-            filesystem::PublishStep::Commit => {
-                self.verify_before_publication()?;
+            filesystem::PublishStep::Commit(temporary) => {
+                self.verify_before_publication(temporary.as_ref())?;
+                if let Some(plan) = &self.creation_plan {
+                    self.progress(Stage::Commit, 0, None, plan.items.len() as u32)?;
+                }
                 if last { self.cutoff() } else { self.check() }
             }
         }
@@ -545,9 +560,23 @@ impl<W: Write> Job<W> {
         let limits = self.budget.as_ref().map_or(start.limits, |b| b.ceiling);
         self.event(Message::Accepted {
             action: start.action.kind(),
-            encryption: true,
+            encryption: !matches!(start.action, Action::CreateSevenZip { .. }),
         })?;
         self.check()?;
+        if let Action::CreateSevenZip {
+            sources,
+            solid,
+            encryption,
+            ..
+        } = &start.action
+        {
+            if *solid || *encryption != Encryption::None {
+                return Err(ErrorCode::UnsupportedFeature);
+            }
+            if sources.is_empty() {
+                return Err(ErrorCode::InvalidRequest);
+            }
+        }
         if let Some(budget) = &self.budget {
             let scope = ResourceScope {
                 output: budget.ceiling.output > budget.soft.output,
@@ -865,7 +894,7 @@ impl<W: Write> Job<W> {
                         )?;
                     }
                     // 건너뛰기 등 실제 게시가 없을 때도 완료 전에 원본을 확인함.
-                    self.verify_before_publication()?;
+                    self.verify_before_publication(None)?;
                     if !self.interactive || self.terminal.created_count != 0 {
                         self.terminal.publication = Publication::Complete;
                     }
@@ -921,12 +950,50 @@ impl<W: Write> Job<W> {
                 self.output_reader(&root, &name, &mut data, length, None, true, None)?;
                 self.terminal.publication = Publication::Complete;
             }
+            Action::CreateSevenZip {
+                sources,
+                output_file,
+                ..
+            } => {
+                let output = output_file.to_path()?;
+                let leaf = output
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .ok_or(ErrorCode::InvalidRequest)?;
+                let name = archive::valid_name(leaf, false)?;
+                let root = completed(
+                    Dir::root(output.parent().ok_or(ErrorCode::InvalidRequest)?),
+                    self,
+                )?;
+                filesystem::preflight_mode_with(
+                    &root,
+                    &[(name.clone(), EntryKind::File)],
+                    false,
+                    self,
+                )?;
+                self.progress(Stage::Scan, 0, None, 0)?;
+                let mut plan = crate::create::plan(&sources, limits, self)?;
+                let (mut data, length) = crate::seven_zip_create::archive(&mut plan, limits, self)?;
+                filesystem::preflight_space_with(&root, &[(name.clone(), length)], None, self)?;
+                self.creation_plan = Some(plan);
+                self.output_reader(&root, &name, &mut data, length, None, true, None)?;
+                self.terminal.publication = Publication::Complete;
+            }
         }
         self.cutoff()?;
         Ok(())
     }
 }
 impl<W: Write> Monitor for Job<W> {
+    fn progress(
+        &mut self,
+        stage: Stage,
+        bytes: u64,
+        total: Option<u64>,
+        entries: u32,
+    ) -> Result<()> {
+        Job::progress(self, stage, bytes, total, entries)
+    }
     fn metadata_limits(&self) -> archive::MetadataLimits {
         self.budget
             .as_ref()
@@ -1108,6 +1175,7 @@ pub fn serve<R: Read + Send + 'static, W: Write + Send + 'static>(
         remaining_choice: None,
         source_group: None,
         source_verified_for_publication: false,
+        creation_plan: None,
         parent,
         started: Instant::now(),
         terminal: Terminal {

@@ -615,7 +615,7 @@ pub(crate) fn directory_with(
     check: &mut impl Monitor,
 ) -> Result<(bool, Durability, Option<ErrorCode>)> {
     directory_steps(root, name, &mut |step| match step {
-        PublishStep::Check | PublishStep::Commit => check.check(),
+        PublishStep::Check | PublishStep::Commit(_) => check.check(),
         PublishStep::Activity => check.activity(),
     })
 }
@@ -629,7 +629,7 @@ pub(crate) fn directory_steps(
     if completed(d.child(&leaf, false), &mut PublicationMonitor(check))?.is_some() {
         return Ok((false, Durability::NotApplicable, None));
     }
-    check(PublishStep::Commit)?;
+    check(PublishStep::Commit(None))?;
     d.child(&leaf, true)?.ok_or(ErrorCode::Io)?;
     let progress_error = completed(Ok(()), &mut PublicationMonitor(check)).err();
     Ok(match d.sync_checked() {
@@ -684,14 +684,19 @@ pub fn publish_reader_mode(
 ) -> Published {
     publish_reader_steps(root, name, data, length, replace, &mut |step| match step {
         PublishStep::Check => check(false),
-        PublishStep::Commit => check(true),
+        PublishStep::Commit(_) => check(true),
         PublishStep::Activity => Ok(()),
     })
+}
+pub(crate) struct PublicationTemp {
+    pub parent: SourceObject,
+    pub name: String,
+    pub object: SourceObject,
 }
 pub(crate) enum PublishStep {
     Check,
     Activity,
-    Commit,
+    Commit(Option<PublicationTemp>),
 }
 struct PublicationMonitor<'a, F>(&'a mut F);
 impl<F: FnMut(PublishStep) -> Result<()>> Monitor for PublicationMonitor<'_, F> {
@@ -744,7 +749,13 @@ pub(crate) fn publish_reader_steps(
                 crate::space::io_error(e)
             }
         })?;
+        let mut temporary = None;
         let written = (|| {
+            temporary = Some(PublicationTemp {
+                parent: object(dir.handle())?,
+                name: temp.clone(),
+                object: object(&file)?,
+            });
             completed(Ok(()), &mut PublicationMonitor(check))?;
             completed(
                 crate::space::ensure(&file, length),
@@ -780,7 +791,7 @@ pub(crate) fn publish_reader_steps(
             &mut PublicationMonitor(check),
         );
         let mut finish = written.and(closed).and_then(|_| {
-            check(PublishStep::Commit)?;
+            check(PublishStep::Commit(temporary))?;
             // 긴 원본 재검증 중 바뀐 대상은 교체 직전에 거부함.
             if let Some(expected) = replace {
                 if completed(dir.existing(&leaf), &mut PublicationMonitor(check))?.as_ref()

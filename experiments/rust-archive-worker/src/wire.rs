@@ -137,8 +137,9 @@ macro_rules! enumeration { ($t:ident {$($v:ident=$n:expr),*$(,)?}) => { impl Wir
 } }; }
 enumeration!(Format{Zip=0,Tar=1,Gzip=2,TarGzip=3,SevenZip=4});
 enumeration!(Method{Store=0,Deflate=1});
+enumeration!(SevenZipMethod{Lzma2=0});
 enumeration!(Encryption{None=0,Aes256=1});
-enumeration!(ActionKind{List=0,Extract=1,CreateZip=2,Preview=3});
+enumeration!(ActionKind{List=0,Extract=1,CreateZip=2,Preview=3,CreateSevenZip=4});
 enumeration!(PreviewFormat{Utf8Text=0,Rgba8=1});
 enumeration!(EntryKind{File=0,Directory=1,Link=2,Other=3});
 enumeration!(Stage{Scan=0,Read=1,Decode=2,Write=3,Verify=4,Commit=5});
@@ -385,6 +386,20 @@ impl Wire for Action {
                 entry_id.enc(e)?;
                 list_id.enc(e)
             }
+            Self::CreateSevenZip {
+                sources,
+                output_file,
+                method,
+                solid,
+                encryption,
+            } => {
+                4u8.enc(e)?;
+                sources.enc(e)?;
+                output_file.enc(e)?;
+                method.enc(e)?;
+                solid.enc(e)?;
+                encryption.enc(e)
+            }
         }
     }
     fn dec(d: &mut Decoder<'_>) -> io::Result<Self> {
@@ -409,6 +424,13 @@ impl Wire for Action {
                 archive: Wire::dec(d)?,
                 entry_id: Wire::dec(d)?,
                 list_id: Wire::dec(d)?,
+            }),
+            4 => Ok(Self::CreateSevenZip {
+                sources: Wire::dec(d)?,
+                output_file: Wire::dec(d)?,
+                method: Wire::dec(d)?,
+                solid: Wire::dec(d)?,
+                encryption: Wire::dec(d)?,
             }),
             _ => Err(invalid()),
         }

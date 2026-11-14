@@ -1,6 +1,6 @@
 # Rust archive worker
 
-별도 프로세스의 stdin/stdout으로 revision 3 요청을 처리합니다. 제품 앱이 공유 codec으로 연결하며 프로세스 분리는 OS sandbox를 뜻하지 않습니다. 암호 기능은 capability=true이며 ZipCrypto 해제, WinZip AES-256 AE-1/AE-2 해제와 AE-2 생성을 지원합니다.
+별도 프로세스의 stdin/stdout으로 revision 3 요청을 처리합니다. 제품 앱이 공유 codec으로 연결하며 프로세스 분리는 OS sandbox를 뜻하지 않습니다. 기존 작업의 암호 기능은 capability=true이며 ZipCrypto 해제, WinZip AES-256 AE-1/AE-2 해제와 AE-2 생성을 지원합니다.
 
 - ZIP32/ZIP64 Store/Deflate 목록과 해제, ZIP32/ZIP64 생성, 기본 TAR/USTAR, GZ, TAR.GZ, TAR.BZ2, TAR.XZ, 비암호화 7z 해제를 지원합니다. GZ 연결 멤버는 하나의 논리 스트림으로 합칩니다. 다중 볼륨, UTF-8로 해석할 수 없는 ZIP 이름, PAX/GNU 확장과 특수 항목 해제는 미지원입니다.
 - ZIP 이름: UTF-8 플래그(비트 11)가 있으면 이름이 UTF-8이어야 하며 아니면 Integrity입니다. 플래그가 없으면 CRC가 원래 이름과 맞는 Info-ZIP Unicode Path 확장 필드(0x7075, 버전 1)를 우선 쓰고, 다음으로 UTF-8로 유효한 이름 바이트를 그대로 씁니다(Linux/macOS 도구의 기본 동작). CRC가 다르거나 버전이 다른 확장 필드는 무시합니다. 그 밖의 CP437/CP949 등 레거시 이름은 코드 페이지를 추측하지 않고 UnsupportedFeature로 거부합니다. 어느 경로로 얻은 이름이든 같은 경로 안전성 검사와 충돌 검사를 거칩니다.
@@ -49,7 +49,7 @@ XZ의 헤더, 인덱스, 푸터 CRC와 역방향 크기 및 전체 선언 해제
 의존성 선택 근거는 다음과 같습니다.
 
 - [bzip2 0.6.1](https://docs.rs/crate/bzip2/0.6.1/source/Cargo.toml)은 MIT OR Apache-2.0이며 기본 백엔드가 Rust 구현인 libbz2-rs-sys입니다. 고정 lockfile은 libbz2-rs-sys 0.2.6(bzip2-1.0.6 자유 라이선스)을 선택하고 Rust 할당자를 사용합니다. C 구현인 bzip2-sys 기능과 stdio/C 할당자는 활성화하지 않습니다.
-- [lzma-rust2 0.25.0](https://docs.rs/lzma-rust2/latest/lzma_rust2/struct.XzReader.html)은 Apache-2.0의 Rust 구현입니다. std와 xz만 활성화해 인코더와 다중 스레드 구현을 제외하고 사전 할당 전 메모리 제한을 적용합니다. CRC와 인덱스 레코드 개수를 검증하며 연결 스트림을 끝까지 읽습니다. 레코드별 크기는 작업자가 별도로 대조합니다.
+- [lzma-rust2 0.25.0](https://docs.rs/lzma-rust2/latest/lzma_rust2/struct.XzReader.html)은 Apache-2.0의 Rust 구현입니다. TAR.XZ에는 std와 xz를 사용하며 7z 생성을 위해 encoder도 활성화합니다. optimization 기본 기능은 끄고 사전 할당 전 메모리 제한을 적용합니다. CRC와 인덱스 레코드 개수를 검증하며 연결 스트림을 끝까지 읽습니다. 레코드별 크기는 작업자가 별도로 대조합니다.
 - 두 라이브러리와 새 전이 의존성의 원문은 Cargo 체크섬을 대조하는 기존 packaging/licenses.py가 고지에 자동 포함합니다. tests/release-packages/test_compressed_tar_licenses.py는 실제 고지에 세 압축 라이브러리의 원문과 해시가 포함되고 C 압축 백엔드가 없는지 확인합니다.
 - 2026-11-13 [RUSTSEC-2023-0004](https://rustsec.org/advisories/RUSTSEC-2023-0004.html)의 bzip2 DoS 권고와 수정 범위(>=0.4.4)를 확인했습니다. 고정 lockfile의 bzip2 0.6.1은 수정 범위에 해당하므로 이 권고의 영향을 받지 않습니다. 새 전이 sha2 0.11.1은 RUSTSEC-2021-0100의 수정 범위(>=0.9.8)에 해당합니다. 전체 최신 DB 자동 감사와 취약점 부재를 보장하는 확인은 수행하지 않았습니다.
 
@@ -68,6 +68,20 @@ Python 표준 bz2, lzma와 tarfile로 독립 생성 및 해제한 결과의 SHA2
 대용량 7z 표본은 Python LZMA로 실행 시 생성하고 Linux 시스템 libarchive의 스트리밍 판독으로 내용과 CRC를 먼저 확인합니다. libarchive는 시험에만 사용합니다.
 
 7z의 Copy/LZMA/LZMA2 입력과 solid 출력은 고정 버퍼와 임시 파일로 처리합니다. 모든 폴더와 하위 스트림의 CRC와 크기 검증이 끝난 뒤 기존 게시 경로를 사용합니다. ZIP 생성의 압축 및 AES 처리도 64 KiB 버퍼를 사용하며 여유 공간 사전 검사와 실제 쓰기의 DiskFull 구분을 적용합니다. 공간 예약을 보장하지 않으므로 다른 프로세스와의 경쟁으로 쓰기가 실패할 수 있습니다.
+
+## 7z 생성
+
+[합의된 설계](../../docs/sevenzip-create-design.md)의 단일 .7z 작성을 구현했습니다. 압축 방식은 LZMA2, 1 MiB 사전과 non-solid이며 본문/헤더 암호화, 분할 생성과 SFX는 지원하지 않습니다. 원본 파일과 폴더, 한글 및 UTF-16 보조 평면 이름, 빈 파일과 빈 폴더를 보존합니다. RAR 제외 정책은 유지합니다.
+
+- Action과 ActionKind의 CreateSevenZip tag는 4입니다. 필드 순서는 sources:Vec<Source>, output_file:NativePath, method:SevenZipMethod, solid:bool, encryption:Encryption이며 SevenZipMethod는 Lzma2=0입니다. 기존 ZIP 태그/프레임은 유지합니다. Start 또는 StartGuarded(interactive=false)만 허용하며 전송 상한은 자원 승인으로 확대하지 않습니다.
+- Accepted.encryption=false입니다. solid=true 또는 Aes256은 Accepted 뒤 자원/암호/충돌 질문이나 파일 접근 전에 UnsupportedFeature로 끝납니다. 빈 원본 목록은 InvalidRequest입니다. ZIP이나 구버전으로 자동 우회하지 않습니다.
+- 기존 소스 계획과 검증한 핸들로 파일별 스냅샷을 캡처하고 독립 LZMA2 스트림을 만듭니다. 비압축 NextHeader와 CRC를 기록하고 기존 구조 검사기로 이름/종류/크기를 대조합니다. 계획의 메타데이터 예산에 UTF-16 헤더, 검증용 사본과 스트림 배열을 함께 반영합니다. 실제 payload 전체 해독은 수용 시험에서 별도로 수행합니다.
+- 기존 16 GiB/10,000개 및 승인 뒤 최대 64 GiB/200,000개 정책을 따르며 메타데이터 상한은 독립적입니다. 순차 복사 버퍼는 64 KiB이고 인코더 추정 메모리가 32 MiB를 넘으면 거부합니다. 파일별 패킹 상한은 upstream 청크 분기를 보수적으로 계산한 4*원본 길이+1이며 캡처와 새 패킹, 헤더의 동시 임시 공간을 사전 검사합니다. 압축되는 입력도 이 보수적 검사로 공간 부족이 될 수 있습니다. 실제 쓰기와 목적지 복사도 별도로 공간을 검사하며 공간을 예약하지는 않습니다.
+- finish와 헤더 seek/패치 오류를 전파하고 Drop으로 성공을 결정하지 않습니다. 게시용 복사/sync/close 뒤 실제 게시 직전에 원본 계획을 다시 확인하며 배타적 게시만 사용합니다. 기존 목적지나 사전 검사 뒤 나타난 파일은 보존합니다. 전체 폴더의 원자적 스냅샷이나 게시와 원본 재검증의 원자성을 보장하지 않습니다.
+- Scan/Read/Write/Verify/Commit 진행과 기존 취소, 부모 생존/시간 제한을 사용합니다. 인코더 출력에서도 취소를 확인하지만 단일 CPU 호출이나 블로킹 OS I/O를 즉시 중단하지는 않습니다. 생성물 하나의 Output Created와 Complete/created_count=1만 성공입니다. 게시 후 오류와 실제 내구성/정리 상태를 그대로 보고하며 앱은 Terminal, 양쪽 EOF와 자식 회수까지 확인합니다.
+- lzma-rust2 =0.25.0의 std,xz,encoder만 사용합니다. encoder 기능은 추가 전이 의존성이 없고 Apache-2.0 원문은 기존 packaging/licenses.py 고지에 포함합니다. tests/release-packages/test_compressed_tar_licenses.py에서 실제 원문과 해시, 고정 버전 및 기능을 확인합니다. 기본/optimization 기능과 liblzma 개발 의존성은 제품에 포함하지 않습니다.
+- 2026-11-14 OSV에 lzma-rust2 0.25.0을 조회했을 때 알려진 권고가 반환되지 않았습니다. RustSec 패키지명 검색도 결과가 없었으며 전체 의존성 감사나 취약점 부재를 뜻하지 않습니다. 정확한 질의와 결과는 PR의 검증 기록에 남깁니다.
+- tests/rust-archive-worker/seven_zip_create_fields.rs와 seven_zip_create_runtime.rs는 정수/비트맵/버퍼 경계, 원본/목적지 변경, 자원 승인, 취소와 저장 실패를 검사합니다. ZIPELO_TEST_7ZIP에 독립 7-Zip 실행 파일을 지정하면 실제 test/list/extract와 SHA256/구조 대조도 수행합니다. 도구를 지정하지 않은 실행은 독립 7-Zip 검증 근거가 아닙니다. 1 GiB 메모리 회귀는 Linux에서 실행합니다. Windows/Wayland 실제 생성 통합 검증과 독립 리뷰는 별도입니다.
 
 ## ZIP 생성 입력
 

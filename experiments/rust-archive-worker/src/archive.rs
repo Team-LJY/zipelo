@@ -53,6 +53,9 @@ impl MetadataBudget {
         self.nodes = nodes;
         Ok(())
     }
+    pub(crate) fn charge_bytes(&mut self, bytes: usize, limits: MetadataLimits) -> Result<()> {
+        self.charge_cost(bytes, 0, limits)
+    }
     pub(crate) fn charge(&mut self, name: &str) -> Result<()> {
         self.charge_with(name, MetadataLimits::default())
     }

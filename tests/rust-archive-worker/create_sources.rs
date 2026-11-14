@@ -4,8 +4,9 @@ static NEXT: AtomicU64 = AtomicU64::new(0);
 struct Scratch(PathBuf);
 impl Scratch {
     fn new() -> Self {
-        let root =
-            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/rust-archive-worker/runs");
+        let root = std::env::var_os("TMPDIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/work/tmp"));
         fs::create_dir_all(&root).unwrap();
         let path = root.join(format!(
             "sources-{}-{}",
@@ -104,4 +105,81 @@ fn pinned_directory_enumeration_does_not_follow_replacement_link() {
     assert!(input.open_child(&path, "original").is_ok());
     assert!(input.open_child(&path, "secret").is_err());
     assert!(matches!(Input::open(&path), Err(ErrorCode::UnsafePath)));
+}
+
+#[test]
+fn publication_exception_requires_the_exact_parent_name_and_temporary_object() {
+    for mismatch in [
+        "parent",
+        "name",
+        "object",
+        "missing",
+        "replacement",
+        "directory",
+    ] {
+        let s = Scratch::new();
+        fs::create_dir(s.0.join("folder")).unwrap();
+        fs::write(s.0.join("folder/source"), b"original").unwrap();
+        let plan = Plan::new(&[s.source("folder")], Limits::default(), &mut || Ok(())).unwrap();
+        let path = s.0.join("folder/.zipelo-owned.tmp");
+        fs::write(&path, b"archive").unwrap();
+        let mut temporary = filesystem::PublicationTemp {
+            parent: filesystem::object(&Input::open(&s.0.join("folder")).unwrap().file).unwrap(),
+            name: ".zipelo-owned.tmp".into(),
+            object: filesystem::object(&Input::open(&path).unwrap().file).unwrap(),
+        };
+        assert_eq!(plan.verify(&mut || Ok(())), Err(ErrorCode::SourceChanged));
+        assert_eq!(
+            plan.verify_for_publication(&temporary, &mut || Ok(())),
+            Ok(())
+        );
+        match mismatch {
+            "parent" => temporary.parent = temporary.object.clone(),
+            "name" => temporary.name = ".zipelo-other.tmp".into(),
+            "object" => temporary.object = temporary.parent.clone(),
+            "missing" => fs::remove_file(&path).unwrap(),
+            "replacement" => {
+                fs::rename(&path, s.0.join("owned")).unwrap();
+                fs::write(&path, b"foreign").unwrap();
+            }
+            "directory" => {
+                fs::rename(s.0.join("folder"), s.0.join("previous")).unwrap();
+                fs::create_dir(s.0.join("folder")).unwrap();
+            }
+            _ => unreachable!(),
+        }
+        assert_eq!(
+            plan.verify_for_publication(&temporary, &mut || Ok(())),
+            Err(ErrorCode::SourceChanged),
+            "{mismatch}"
+        );
+    }
+}
+
+#[test]
+fn publication_directory_enumeration_remains_cancellable() {
+    let s = Scratch::new();
+    fs::create_dir(s.0.join("folder")).unwrap();
+    for index in 0..20 {
+        fs::write(s.0.join(format!("folder/{index}")), b"x").unwrap();
+    }
+    let plan = Plan::new(&[s.source("folder")], Limits::default(), &mut || Ok(())).unwrap();
+    let path = s.0.join("folder/.zipelo-owned.tmp");
+    fs::write(&path, b"archive").unwrap();
+    let temporary = filesystem::PublicationTemp {
+        parent: filesystem::object(&Input::open(&s.0.join("folder")).unwrap().file).unwrap(),
+        name: ".zipelo-owned.tmp".into(),
+        object: filesystem::object(&Input::open(&path).unwrap().file).unwrap(),
+    };
+    let mut calls = 0;
+    let result = plan.verify_for_publication(&temporary, &mut || {
+        calls += 1;
+        if calls == 12 {
+            Err(ErrorCode::None)
+        } else {
+            Ok(())
+        }
+    });
+    assert_eq!(result, Err(ErrorCode::None));
+    assert_eq!(calls, 12);
 }

@@ -11,7 +11,7 @@ png = "=0.18.1"
 zune-jpeg = { package = "zipelo-jpeg", path = "vendor/zune-jpeg", default-features = false, features = ["std"] }
 zune-core = { version = "=0.5.3", default-features = false, features = ["std"] }
 bzip2 = "=0.6.1"
-lzma-rust2 = { version = "=0.25.0", default-features = false, features = ["std", "xz"] }
+lzma-rust2 = { version = "=0.25.0", default-features = false, features = ["std", "xz", "encoder"] }
 aes = { version = "=0.8.4", features = ["zeroize"] }
 hmac = "=0.12.1"
 pbkdf2 = { version = "=0.12.2", default-features = false, features = ["hmac"] }

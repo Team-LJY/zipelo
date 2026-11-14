@@ -636,3 +636,49 @@ fn native_picker_lowers_child_windows_and_restores_their_position_and_level() {
         }
     }
 }
+
+#[test]
+fn sevenzip_selection_clears_zip_password_and_sends_only_supported_options() {
+    let scratch = Folder::new();
+    let factory = FakeFactory::default();
+    let (mut app, ctx) = create_from_folder(&scratch, &factory);
+    policy_click(&ctx, &mut app, "암호로 보호하기");
+    text(&ctx, &mut app, "zip-password-input", "previous-secret");
+    text(&ctx, &mut app, "zip-password-confirm", "previous-secret");
+    policy_click(&ctx, &mut app, "7z");
+    let shown = policy_render(&ctx, &mut app, vec![]);
+    assert!(shown.iter().any(|(s, _)| s == "LZMA2"));
+    assert!(!shown.iter().any(|(s, _)| s == "암호 확인"));
+    policy_click(&ctx, &mut app, "ZIP");
+    policy_click(&ctx, &mut app, "암호로 보호하기");
+    policy_click(&ctx, &mut app, "압축하기");
+    assert_eq!(factory.state.borrow().starts.len(), 1);
+    policy_click(&ctx, &mut app, "7z");
+    let dialogs = TestDialogs::default();
+    app.set_dialogs(Box::new(dialogs.clone()));
+    policy_click(&ctx, &mut app, "압축하기");
+    let state = dialogs.0.borrow();
+    let save = state.requests.last().unwrap();
+    assert_eq!(save.purpose, Purpose::SaveSevenZip);
+    assert_eq!(save.file_name, "photos.7z");
+    assert!(matches!(factory.state.borrow().starts.last(),
+        Some(Start::CreateSevenZip { sources, output_file })
+        if sources.len() == 1 && sources[0].1 == "photos" && output_file.ends_with("photos.7z")));
+    assert!(!factory.state.borrow().password_seen);
+}
+
+#[test]
+fn cancelling_sevenzip_save_keeps_selected_format_without_starting() {
+    let scratch = Folder::new();
+    let factory = FakeFactory::default();
+    let (mut app, ctx) = create_from_folder(&scratch, &factory);
+    policy_click(&ctx, &mut app, "7z");
+    let dialogs = TestDialogs::default();
+    dialogs.0.borrow_mut().cancel_save = true;
+    app.set_dialogs(Box::new(dialogs));
+    policy_click(&ctx, &mut app, "압축하기");
+    assert_eq!(factory.state.borrow().starts.len(), 1);
+    let shown = policy_render(&ctx, &mut app, vec![]);
+    assert!(shown.iter().any(|(s, _)| s == "7z 만들기"));
+    assert!(shown.iter().any(|(s, _)| s == "LZMA2"));
+}

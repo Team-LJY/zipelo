@@ -412,7 +412,7 @@ fn preview_action_kind_keeps_all_existing_tags() {
             matches!(decoded(&bytes), Message::Accepted { action: actual, encryption: true } if actual == action)
         );
     }
-    reject_decode(&raw(100, &[4, 1]));
+    reject_decode(&raw(100, &[5, 1]));
     reject_decode(&raw(8, &[]));
     reject_decode(&raw(114, &[]));
 }

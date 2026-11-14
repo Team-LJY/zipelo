@@ -201,6 +201,24 @@ fn start_to_wire(start: ui::Start) -> wire::Start {
             entry_id,
             list_id: list_to_wire(list_id),
         },
+        ui::Start::CreateSevenZip {
+            sources,
+            output_file,
+        } => wire::Action::CreateSevenZip {
+            sources: sources
+                .into_iter()
+                .map(|(path, archive_name)| wire::Source {
+                    path: wire::NativePath::from_path(&crate::archive_path::worker_path(&path)),
+                    archive_name,
+                })
+                .collect(),
+            output_file: wire::NativePath::from_path(&crate::archive_path::worker_path(
+                &output_file,
+            )),
+            method: wire::SevenZipMethod::Lzma2,
+            solid: false,
+            encryption: wire::Encryption::None,
+        },
         ui::Start::CreateZip {
             sources,
             output_file,

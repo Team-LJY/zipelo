@@ -69,6 +69,10 @@ pub enum Start {
         entry_id: u32,
         list_id: ListId,
     },
+    CreateSevenZip {
+        sources: Vec<(PathBuf, String)>,
+        output_file: PathBuf,
+    },
     CreateZip {
         sources: Vec<(PathBuf, String)>,
         output_file: PathBuf,
@@ -476,7 +480,8 @@ impl Model {
         }
     }
     pub fn begin(&mut self, start: Start, factory: &mut dyn Factory) -> bool {
-        let expanded = self.needs_expansion(&start);
+        let expanded =
+            matches!(start, Start::CreateSevenZip { .. }) || self.needs_expansion(&start);
         self.begin_with_limits(start, factory, expanded)
     }
     pub fn estimated_usage(&self) -> ResourceUsage {
@@ -513,7 +518,7 @@ impl Model {
                     .iter()
                     .try_fold(0u64, |sum, e| sum.checked_add(e.bytes?));
             }
-            Start::CreateZip { sources, .. } => {
+            Start::CreateZip { sources, .. } | Start::CreateSevenZip { sources, .. } => {
                 usage.estimated_bytes = sources.iter().try_fold(0u64, |sum, (path, _)| {
                     let m = std::fs::symlink_metadata(path).ok()?;
                     if !m.is_file() {
@@ -643,6 +648,10 @@ impl Model {
                 sources,
                 output_file,
                 ..
+            }
+            | Start::CreateSevenZip {
+                sources,
+                output_file,
             } => {
                 !sources.is_empty()
                     && output_file.is_absolute()
@@ -1100,6 +1109,9 @@ impl Model {
                         }
                     }
                     Event::Accepted { encryption } => {
+                        if matches!(run.start, Start::CreateSevenZip { .. }) && encryption {
+                            self.error = Some("7z 생성의 암호 응답이 유효하지 않습니다".into());
+                        }
                         if run.accepted {
                             self.error = Some("작업 승인 중복".into());
                         }
@@ -1144,7 +1156,8 @@ impl Model {
                         if run.cancel_sequence.is_some() {
                             return;
                         }
-                        if self.challenge.is_some()
+                        if matches!(run.start, Start::CreateSevenZip { .. })
+                            || self.challenge.is_some()
                             || self.resource.is_some()
                             || challenge_id <= run.last_challenge
                             || self.conflict.is_some()
@@ -1163,6 +1176,7 @@ impl Model {
                             Start::List { .. } => ActionKind::List,
                             Start::Extract { .. } => ActionKind::Extract,
                             Start::CreateZip { .. } => ActionKind::CreateZip,
+                            Start::CreateSevenZip { .. } => ActionKind::CreateSevenZip,
                             Start::Preview { .. } => ActionKind::Preview,
                         };
                         let hard = Limits {

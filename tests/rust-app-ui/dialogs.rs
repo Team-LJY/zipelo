@@ -23,7 +23,8 @@ impl Dialogs for TestDialogs {
         if let Some(answer) = state.answers.pop_front() {
             return Ok(answer);
         }
-        if request.purpose == Purpose::SaveZip && !state.cancel_save {
+        if matches!(request.purpose, Purpose::SaveZip | Purpose::SaveSevenZip) && !state.cancel_save
+        {
             let name = state.save_name.take().unwrap_or(request.file_name);
             return Ok(Some(vec![request.directory.join(name)]));
         }

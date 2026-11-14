@@ -8,6 +8,15 @@ pub trait Monitor {
         crate::archive::MetadataLimits::default()
     }
     fn check(&mut self) -> Result<()>;
+    fn progress(
+        &mut self,
+        _stage: Stage,
+        _bytes: u64,
+        _total: Option<u64>,
+        _entries: u32,
+    ) -> Result<()> {
+        self.check()
+    }
     fn activity(&mut self) -> Result<()> {
         self.check()
     }
