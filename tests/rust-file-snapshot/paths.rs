@@ -158,7 +158,10 @@ fn fifo_without_writer_rejected_before_data_open() {
 fn unix_socket_rejected_before_data_open() {
     let sandbox = Sandbox::new();
     let path = sandbox.path("socket");
-    let socket = UnixListener::bind(&path).unwrap();
+    use std::os::fd::AsRawFd;
+    let directory = fs::File::open(path.parent().unwrap()).unwrap();
+    let socket =
+        UnixListener::bind(format!("/proc/self/fd/{}/socket", directory.as_raw_fd())).unwrap();
     unsupported(&path, Unsupported::FileType);
     drop(socket);
     sandbox.finish();
