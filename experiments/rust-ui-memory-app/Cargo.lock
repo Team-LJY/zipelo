@@ -4656,11 +4656,14 @@ dependencies = [
  "hmac",
  "lzma-rust2",
  "pbkdf2",
+ "png",
  "sha1",
  "sha2 0.10.9",
  "subtle",
  "zeroize",
  "zlib-rs",
+ "zune-core",
+ "zune-jpeg",
 ]
 
 [[package]]

@@ -352,6 +352,140 @@ impl<W: Write> Job<W> {
         }
         Ok(())
     }
+    fn preview(
+        &mut self,
+        archive: NativePath,
+        entry_id: u32,
+        expected: ListId,
+        limits: Limits,
+    ) -> Result<()> {
+        use sha2::{Digest, Sha256};
+        use std::io::{Read, Seek, SeekFrom};
+        let path = archive.to_path()?;
+        self.progress(Stage::Read, 0, None, 0)?;
+        let mut snapshot =
+            crate::spool::Snapshot::open_reporting(&path, limits.input, &mut |step| match step {
+                crate::spool::Step::Check => self.check(),
+                crate::spool::Step::Activity => completed(Ok(()), self),
+                crate::spool::Step::Read { bytes, total } => {
+                    self.progress(Stage::Read, bytes, Some(total), 0)
+                }
+            })?;
+        if expected.catalog_version != 1
+            || expected.source_object != snapshot.object
+            || expected.archive_bytes != snapshot.len
+            || expected.archive_sha256 != snapshot.hash
+        {
+            return Err(ErrorCode::SourceChanged);
+        }
+        let mut catalog = crate::streaming::Catalog::open(
+            &mut snapshot.file,
+            snapshot.len,
+            limits,
+            false,
+            None,
+            self,
+        )?;
+        if expected.format != catalog.format {
+            return Err(ErrorCode::SourceChanged);
+        }
+        let entry = catalog
+            .members
+            .get(entry_id as usize)
+            .ok_or(ErrorCode::InvalidRequest)?
+            .entry
+            .clone();
+        if entry.entry_id != entry_id || entry.kind != EntryKind::File {
+            return Err(ErrorCode::InvalidRequest);
+        }
+        let name = if catalog.format == Format::Gzip {
+            let name = path
+                .file_name()
+                .and_then(|s| s.to_str())
+                .ok_or(ErrorCode::UnsupportedFeature)?;
+            if !name.to_ascii_lowercase().ends_with(".gz") {
+                return Err(ErrorCode::UnsupportedFeature);
+            }
+            &name[..name.len() - 3]
+        } else {
+            &entry.name
+        };
+        let kind = crate::preview::Kind::from_name(name)?;
+        if entry.size > kind.limit() {
+            return Err(ErrorCode::Limit);
+        }
+        self.progress(Stage::Decode, 0, Some(entry.size), 0)?;
+        if matches!(catalog.format, Format::Zip | Format::SevenZip) {
+            for attempt in 1..=3 {
+                let secret = if entry.encrypted {
+                    Some(self.password(PasswordPurpose::Decrypt, attempt)?)
+                } else {
+                    None
+                };
+                match crate::streaming::Catalog::preview(
+                    &mut snapshot.file,
+                    snapshot.len,
+                    limits,
+                    secret.as_ref().map(|s| s.0.as_slice()),
+                    entry_id,
+                    self,
+                ) {
+                    Ok(decoded) => {
+                        catalog = decoded;
+                        break;
+                    }
+                    Err(ErrorCode::WrongPassword) if entry.encrypted && attempt < 3 => continue,
+                    Err(error) => return Err(error),
+                }
+            }
+        }
+        let mut bytes = Vec::new();
+        bytes
+            .try_reserve_exact(entry.size as usize)
+            .map_err(|_| ErrorCode::Limit)?;
+        catalog
+            .data
+            .seek(SeekFrom::Start(catalog.offsets[entry_id as usize]))
+            .map_err(crate::space::io_error)?;
+        let mut remaining = entry.size;
+        let mut chunk = [0; 32768];
+        while remaining != 0 {
+            self.check()?;
+            let length = remaining.min(chunk.len() as u64) as usize;
+            catalog
+                .data
+                .read_exact(&mut chunk[..length])
+                .map_err(|_| ErrorCode::Integrity)?;
+            bytes.extend_from_slice(&chunk[..length]);
+            remaining -= length as u64;
+            completed(Ok(()), self)?;
+        }
+        let (info, bytes) = crate::preview::decode(kind, entry_id, bytes, self)?;
+        self.check()?;
+        let hash: [u8; 32] = Sha256::digest(&bytes).into();
+        completed(self.event(Message::PreviewBegin(info)), self)?;
+        for (index, chunk) in bytes.chunks(MAX_PREVIEW_CHUNK_BYTES).enumerate() {
+            self.check()?;
+            completed(
+                self.event(Message::PreviewChunk {
+                    entry_id,
+                    offset: (index * MAX_PREVIEW_CHUNK_BYTES) as u64,
+                    data: chunk.to_vec(),
+                }),
+                self,
+            )?;
+        }
+        self.check()?;
+        completed(
+            self.event(Message::PreviewEnd {
+                entry_id,
+                total_bytes: info.total_bytes,
+                sha256: hash,
+            }),
+            self,
+        )?;
+        Ok(())
+    }
     fn run(&mut self, start: Start) -> Result<()> {
         if !start.limits.valid() {
             return Err(ErrorCode::InvalidRequest);
@@ -649,8 +783,13 @@ impl<W: Write> Job<W> {
                     }
                 }
             }
-            // 미리보기 실행은 디코더 연결 전까지 지원하지 않음.
-            Action::Preview { .. } => return Err(ErrorCode::UnsupportedFeature),
+            Action::Preview {
+                archive,
+                entry_id,
+                list_id,
+            } => {
+                self.preview(archive, entry_id, list_id, limits)?;
+            }
             Action::CreateZip {
                 sources,
                 output_file,

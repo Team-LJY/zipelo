@@ -132,7 +132,7 @@ Python 표준 bz2, lzma와 tarfile로 독립 생성 및 해제한 결과의 SHA2
 
 ## 미리보기 계약
 
-상태: frontend와 backend의 계약 합의가 완료되었다. protocol.rs와 wire.rs에 공용 타입, 전송 규칙과 상한 검증을 반영했다. 작업자 디코더와 앱 연동 전이므로 미리보기 실행은 UnsupportedFeature로 끝나며 결과를 생성하지 않는다. 확정된 범위는 [PLANS 8.7](../../docs/PLANS.md)을 따른다. 8.8 분할 7z는 이 구현에서 제외한다.
+상태: frontend와 backend의 계약 합의가 완료되었다. protocol.rs와 wire.rs에 공용 타입, 전송 규칙과 상한 검증을 반영했다. 작업자의 제한된 해제와 PNG/JPEG 디코더를 연결했다. 실제 압축파일을 사용하는 운영체제별 화면 검증과 독립 리뷰는 완료 전이다. 확정된 범위는 [PLANS 8.7](../../docs/PLANS.md)을 따른다. 8.8 분할 7z는 이 구현에서 제외한다.
 
 ### 요청과 수명
 
@@ -166,9 +166,12 @@ Python 표준 bz2, lzma와 tarfile로 독립 생성 및 해제한 결과의 SHA2
 - 선택 항목 해제 후 원본 바이트는 텍스트 1 MiB, 이미지 8 MiB 이하다. 실제 읽는 양에도 같은 상한을 적용하며 차원과 픽셀 수를 할당 전에 검사한다. APNG, 다른 애니메이션, 미지원 형식은 제외한다. 손상 입력을 복구하거나 부분 디코딩으로 성공 처리하지 않는다.
 - UnsupportedFormat/UnsupportedFeature는 형식/확장자 불일치와 미지원, Integrity는 잘못된 UTF-8과 손상, Limit는 바이트/픽셀 또는 공통 자원 상한을 뜻한다. SourceChanged, WrongPassword와 기존 I/O/Protocol 오류는 유지한다. 앱은 미리보기 Limit에 고유 상한 확대를 제안하지 않고 일반 해제를 별도 사용자 동작으로 안내한다.
 
-### 디코더 후보와 담당
+### 디코더와 담당
 
-- PNG는 png 0.18.1(MIT OR Apache-2.0), JPEG는 zune-jpeg 0.5.15와 zune-core(MIT OR Apache-2.0 OR Zlib)의 직접 사용을 우선 검토한다. MIT 또는 Apache-2.0 조건을 선택하고 순수 Rust 기능만 사용한다. 공통 image 래퍼의 기본 관대한 JPEG 처리 대신 strict 디코딩과 치수/출력 제어를 직접 설정할 수 있다는 이유다. 버전과 실제 활성 기능은 구현 시 잠금 파일로 고정하고 권고 적용성을 대조한다.
+- PNG는 png 0.18.1(MIT OR Apache-2.0), JPEG는 zune-jpeg 0.5.15와 zune-core 0.5.3(MIT OR Apache-2.0 OR Zlib)을 직접 사용하며 모두 MIT 조건을 선택한다. zune는 std 기능만 켜고 순수 Rust 디코더를 사용한다. strict 모드, 입력/출력 길이와 치수를 직접 제어하기 위해 공통 image 래퍼 대신 선택했다. packaging/licenses.py에서 선택한 MIT와 체크섬을 대조한 라이선스 원문을 배포 고지에 포함한다.
+- PNG는 모든 청크 CRC와 마지막 IEND를 검증하고 APNG를 거부한다. 텍스트와 ICC 메타데이터의 추가 해독은 끄고 16비트/팔레트/회색조를 RGBA8로 정규화한다. JPEG는 헤더와 스캔 경계를 먼저 확인해 단일 8비트 baseline/progressive 프레임만 해독한다. 회색조와 CMYK도 RGB 해독 뒤 같은 결과 버퍼에서 불투명 RGBA8로 변환한다. 산술 부호화, lossless JPEG와 MPO는 지원하지 않는다.
+- ZIP은 선택 항목만 해제하며 7z는 선택 항목이 속한 solid 블록 전체를 무결성 검증한다. TAR 계열과 GZip 컨테이너 해독, solid 블록 및 메타데이터에는 기존 공통 예산과 임시 공간 감시를 적용한다. 선택 항목을 결과 버퍼로 읽는 양은 텍스트/이미지 고유 상한을 넘지 않는다. PNG 입력 읽기, 변환 행과 결과 청크마다 취소를 확인한다. JPEG 라이브러리 호출은 전후에 취소를 확인하고 기존 자식 종료/회수 정책을 유지한다.
+- 2026-11-14 공개 RustSec DB의 crates 트리 86148de9e400d7460a03b8089d1de31af2d1e6c3에서 추가 의존성 10종 이름의 권고 기록이 없는 것을 확인했다. 이 확인은 전체 잠금 파일의 자동 감사나 취약점 부재를 보장하지 않는다.
 - PNG의 제한된 Decoder와 행/프레임 API는 [공식 문서](https://docs.rs/png/0.18.1/png/)를 참고한다. 라이브러리 내부 할당 제한을 작업자 전체 RSS의 강제 상한으로 표현하지 않는다. 엄격한 항목 길이, 치수와 결과 길이 검사를 별도로 적용한다.
 - backend는 작업자 protocol.rs, wire.rs, runtime 및 디코더, 작업자 시험과 packaging/licenses.py 고지를 맡는다. frontend는 앱 재조립/전송 제어, 화면과 앱 시험, --ui-scenario 및 가이드를 맡는다. 같은 원격 브랜치는 양쪽 결과를 확인하며 순차 갱신하고 공용 타입 변경은 이 계약 합의 후 backend가 반영한다.
 - 시험은 바이트/치수/픽셀 경계, UTF-8 청크 경계와 BOM, 형식 불일치/APNG/손상, 암호와 solid 예산, malformed/순서/중복/초과 전송, 64개 큐 역압과 디코딩 및 전송 중 취소, 늦은 완료 폐기와 정리 및 원본 해시 보존을 포함한다.

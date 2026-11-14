@@ -306,18 +306,28 @@ impl Streams {
         input: &mut std::fs::File,
         ranges: &[(u64, u64)],
         output: &mut std::fs::File,
+        selected: Option<usize>,
         check: &mut impl crate::resources::Monitor,
     ) -> Result<()> {
         use std::io::{Read, Seek, SeekFrom, Write};
-        let total = self.folders.iter().try_fold(0u64, |sum, f| {
-            crate::resources::completed(
-                sum.checked_add(f.size as u64).ok_or(ErrorCode::Limit),
-                check,
-            )
-        })?;
+        let total = self
+            .folders
+            .iter()
+            .enumerate()
+            .filter(|(index, _)| selected.is_none_or(|id| id == *index))
+            .try_fold(0u64, |sum, (_, f)| {
+                crate::resources::completed(
+                    sum.checked_add(f.size as u64).ok_or(ErrorCode::Limit),
+                    check,
+                )
+            })?;
         crate::space::ensure(output, total)?;
-        for (f, (start, size)) in self.folders.iter().zip(ranges) {
+        for (index, (f, (start, size))) in self.folders.iter().zip(ranges).enumerate() {
             check.check()?;
+            if selected.is_some_and(|id| id != index) {
+                crate::resources::completed(Ok(()), check)?;
+                continue;
+            }
             let base = output.stream_position().map_err(crate::space::io_error)?;
             check.observe(
                 ResourceUsage {
@@ -585,6 +595,16 @@ pub(crate) fn open(
     decode: bool,
     check: &mut impl crate::resources::Monitor,
 ) -> Result<crate::streaming::Catalog> {
+    open_selected(input, length, limits, decode, None, check)
+}
+pub(crate) fn open_selected(
+    input: &mut std::fs::File,
+    length: u64,
+    limits: Limits,
+    decode: bool,
+    selected: Option<u32>,
+    check: &mut impl crate::resources::Monitor,
+) -> Result<crate::streaming::Catalog> {
     use std::io::{Read, Seek, SeekFrom};
     check.check()?;
     if length > limits.input {
@@ -652,6 +672,7 @@ pub(crate) fn open(
             input,
             &ranges,
             &mut data,
+            None,
             &mut crate::resources::MetadataMonitor(check),
         )?;
         data_end = 32u64
@@ -725,9 +746,15 @@ pub(crate) fn open(
         let ranges = streams.ranges(input, data_end, check)?;
         let mut at = 0u64;
         let mut ids = stream_indices.into_iter();
-        for f in &streams.folders {
+        let mut selected_folder = None;
+        for (folder, f) in streams.folders.iter().enumerate() {
+            let base = at;
             for size in &f.sizes {
-                offsets[ids.next().ok_or(ErrorCode::Integrity)?] = at;
+                let id = ids.next().ok_or(ErrorCode::Integrity)?;
+                offsets[id] = if selected.is_some() { at - base } else { at };
+                if selected == Some(id as u32) {
+                    selected_folder = Some(folder);
+                }
                 at = at.checked_add(*size as u64).ok_or(ErrorCode::Limit)?;
                 crate::resources::completed(Ok(()), check)?;
             }
@@ -735,8 +762,8 @@ pub(crate) fn open(
         if at > limits.output {
             return Err(ErrorCode::Limit);
         }
-        if decode {
-            streams.decode_file(input, &ranges, &mut data, check)?;
+        if decode && (selected.is_none() || selected_folder.is_some()) {
+            streams.decode_file(input, &ranges, &mut data, selected_folder, check)?;
         }
     }
     Ok(crate::streaming::Catalog {

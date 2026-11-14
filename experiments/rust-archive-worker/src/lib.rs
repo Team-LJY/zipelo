@@ -6,6 +6,7 @@ mod crypto;
 pub mod filesystem;
 mod lzma;
 mod parent;
+mod preview;
 pub mod protocol;
 pub mod resources;
 pub mod runtime;

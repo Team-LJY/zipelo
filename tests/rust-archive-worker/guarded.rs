@@ -8,7 +8,7 @@ impl Drop for Running {
         let _ = self.0.wait();
     }
 }
-fn run(
+pub(super) fn run(
     s: &Scratch,
     start: GuardedStart,
     respond: impl FnMut(&Message) -> Option<Vec<Message>>,
