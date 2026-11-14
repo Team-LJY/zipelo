@@ -284,10 +284,16 @@ impl<W: Write> Job<W> {
         self.source_group = Some(group);
         self.split_result(result)
     }
-    fn verify_before_publication(&mut self) -> Result<()> {
+    fn verify_before_publication(
+        &mut self,
+        temporary: Option<&filesystem::PublicationTemp>,
+    ) -> Result<()> {
         if !self.source_verified_for_publication {
             if let Some(plan) = self.creation_plan.take() {
-                let result = plan.verify(self);
+                let result = match temporary {
+                    Some(temporary) => plan.verify_for_publication(temporary, self),
+                    None => plan.verify(self),
+                };
                 self.creation_plan = Some(plan);
                 result?;
             }
@@ -300,8 +306,8 @@ impl<W: Write> Job<W> {
         match step {
             filesystem::PublishStep::Check => self.check(),
             filesystem::PublishStep::Activity => completed(Ok(()), self),
-            filesystem::PublishStep::Commit => {
-                self.verify_before_publication()?;
+            filesystem::PublishStep::Commit(temporary) => {
+                self.verify_before_publication(temporary.as_ref())?;
                 if let Some(plan) = &self.creation_plan {
                     self.progress(Stage::Commit, 0, None, plan.items.len() as u32)?;
                 }
@@ -888,7 +894,7 @@ impl<W: Write> Job<W> {
                         )?;
                     }
                     // 건너뛰기 등 실제 게시가 없을 때도 완료 전에 원본을 확인함.
-                    self.verify_before_publication()?;
+                    self.verify_before_publication(None)?;
                     if !self.interactive || self.terminal.created_count != 0 {
                         self.terminal.publication = Publication::Complete;
                     }

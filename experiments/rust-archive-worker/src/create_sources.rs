@@ -180,6 +180,7 @@ pub(super) struct Planned {
     path: PathBuf,
     object: SourceObject,
     modified: Option<SystemTime>,
+    children: Vec<String>,
 }
 impl Planned {
     pub fn open(&self) -> Result<Input> {
@@ -195,6 +196,56 @@ impl Planned {
             && metadata.modified().ok() == self.modified
             && metadata.is_dir() == (self.member.entry.kind == EntryKind::Directory)
             && (metadata.is_dir() || metadata.len() == self.member.entry.size))
+    }
+    fn verify_with_temporary(
+        &self,
+        temporary: &filesystem::PublicationTemp,
+        check: &mut impl crate::resources::Monitor,
+    ) -> Result<()> {
+        let input = Input::open(&self.path).map_err(|_| ErrorCode::SourceChanged)?;
+        let before = input.file.metadata().map_err(crate::space::io_error)?;
+        if !before.is_dir() || filesystem::object(&input.file)? != self.object {
+            return Err(ErrorCode::SourceChanged);
+        }
+        // 게시 임시 파일의 부모만 시각 대신 원래 항목과 소유 객체를 대조함.
+        let mut count = 0;
+        let mut found = false;
+        for entry in input.children(&self.path)? {
+            check.check()?;
+            let name = entry.map_err(crate::space::io_error)?.file_name();
+            let name = name.to_str().ok_or(ErrorCode::SourceChanged)?;
+            if name == temporary.name {
+                let child = input
+                    .open_child(&self.path, name)
+                    .map_err(|_| ErrorCode::SourceChanged)?;
+                if found
+                    || !child
+                        .file
+                        .metadata()
+                        .map_err(crate::space::io_error)?
+                        .is_file()
+                    || filesystem::object(&child.file)? != temporary.object
+                {
+                    return Err(ErrorCode::SourceChanged);
+                }
+                found = true;
+            } else if self
+                .children
+                .binary_search_by(|leaf| leaf.as_str().cmp(name))
+                .is_ok()
+            {
+                count += 1;
+            } else {
+                return Err(ErrorCode::SourceChanged);
+            }
+            crate::resources::completed(Ok(()), check)?;
+        }
+        let after = input.file.metadata().map_err(crate::space::io_error)?;
+        if !found || count != self.children.len() || before.modified().ok() != after.modified().ok()
+        {
+            return Err(ErrorCode::SourceChanged);
+        }
+        Ok(())
     }
 }
 pub(super) struct Plan {
@@ -283,6 +334,7 @@ impl Plan {
             None,
         )?;
         crate::resources::completed(Ok(()), check)?;
+        let index = self.items.len();
         self.items.push(Planned {
             member: Member {
                 entry: Entry {
@@ -302,6 +354,7 @@ impl Plan {
             path: path.clone(),
             object: crate::resources::completed(filesystem::object(&input.file), check)?,
             modified: metadata.modified().ok(),
+            children: Vec::new(),
         });
         if directory {
             let mut children = Vec::new();
@@ -328,10 +381,11 @@ impl Plan {
                 crate::resources::completed(Ok(()), check)?;
             }
             children.sort();
-            for leaf in children {
-                let child = crate::resources::completed(input.open_child(&path, &leaf), check)?;
-                self.visit(path.join(&leaf), format!("{name}/{leaf}"), child, check)?;
+            for leaf in &children {
+                let child = crate::resources::completed(input.open_child(&path, leaf), check)?;
+                self.visit(path.join(leaf), format!("{name}/{leaf}"), child, check)?;
             }
+            self.items[index].children = children;
         }
         Ok(())
     }
@@ -346,6 +400,22 @@ impl Plan {
         for item in &self.items {
             check.check()?;
             item.open()?;
+            crate::resources::completed(Ok(()), check)?;
+        }
+        Ok(())
+    }
+    pub fn verify_for_publication(
+        &self,
+        temporary: &filesystem::PublicationTemp,
+        check: &mut impl crate::resources::Monitor,
+    ) -> Result<()> {
+        for item in &self.items {
+            check.check()?;
+            if item.member.entry.kind == EntryKind::Directory && item.object == temporary.parent {
+                item.verify_with_temporary(temporary, check)?;
+            } else {
+                item.open()?;
+            }
             crate::resources::completed(Ok(()), check)?;
         }
         Ok(())

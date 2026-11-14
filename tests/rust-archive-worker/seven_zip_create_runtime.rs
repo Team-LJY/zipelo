@@ -228,6 +228,64 @@ fn tree(root: &std::path::Path) -> std::collections::BTreeMap<String, Option<[u8
 }
 
 #[test]
+fn saving_outside_inside_and_nested_in_source_preserves_the_original_tree() {
+    for parent in ["", "source", "source/nested"] {
+        let c = Case::new();
+        private_dir(&c.0.join("source"));
+        private_dir(&c.0.join("source/nested"));
+        private_dir(&c.0.join("source/nested/empty"));
+        fs::write(c.0.join("source/한글.txt"), b"original").unwrap();
+        fs::write(c.0.join("source/nested/empty.txt"), b"").unwrap();
+        let expected = tree(&c.0.join("source"));
+        let archive = NativePath::from_path(&c.0.join(parent).join("result.7z"));
+        let mut request = c.request(&["source"]);
+        if let Action::CreateSevenZip { output_file, .. } = &mut request.action {
+            *output_file = archive.clone();
+        }
+        success(&c.run(Message::Start(request)));
+        let listed = c.run(Message::Start(Start {
+            action: Action::List {
+                archive: archive.clone(),
+            },
+            limits: Limits::default(),
+        }));
+        assert_eq!(terminal(&listed).outcome, Outcome::Completed, "{listed:?}");
+        private_dir(&c.0.join("decoded"));
+        let extracted = c.run(Message::Start(Start {
+            action: Action::Extract {
+                archive: archive.clone(),
+                destination: c.path("decoded"),
+                selection: Selection::All,
+                list_id: None,
+                gzip_output_name: None,
+            },
+            limits: Limits::default(),
+        }));
+        assert_eq!(
+            terminal(&extracted).outcome,
+            Outcome::Completed,
+            "{extracted:?}"
+        );
+        assert_eq!(tree(&c.0.join("decoded/source")), expected);
+        if let Some(tool) = std::env::var_os("ZIPELO_TEST_7ZIP") {
+            let output = Command::new(tool)
+                .args(["x", "-y"])
+                .arg(archive.to_path().unwrap())
+                .arg(format!("-o{}", c.0.join("independent").display()))
+                .output()
+                .unwrap();
+            assert!(output.status.success(), "{output:?}");
+            assert_eq!(tree(&c.0.join("independent/source")), expected);
+        }
+        assert!(
+            !tree(&c.0.join("source"))
+                .keys()
+                .any(|name| name.contains(".zipelo-"))
+        );
+    }
+}
+
+#[test]
 fn mixed_unicode_files_and_empty_bitmap_boundaries_round_trip() {
     for count in [7, 8, 9] {
         let c = Case::new();
@@ -592,6 +650,146 @@ fn source_changes_new_destination_and_cancel_before_publication_are_preserved() 
         } else {
             assert!(!c.0.join("result.7z").exists());
         }
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn internal_destination_still_rejects_real_source_changes_and_cancellation() {
+    for parent in ["source", "source/nested"] {
+        for operation in [
+            "add",
+            "foreign-temp",
+            "remove",
+            "rename",
+            "modify",
+            "replace-dir",
+            "cancel",
+        ] {
+            let c = Case::new();
+            private_dir(&c.0.join("source"));
+            private_dir(&c.0.join("source/nested"));
+            let directory = c.0.join(parent);
+            private_dir(&directory.join("empty"));
+            fs::write(directory.join("file"), b"a".repeat(100_000)).unwrap();
+            let mut request = c.request(&["source"]);
+            if let Action::CreateSevenZip { output_file, .. } = &mut request.action {
+                *output_file = NativePath::from_path(&directory.join("result.7z"));
+            }
+            let marker = c.0.join("marker");
+            let release = c.0.join("release");
+            let mut command = c.command();
+            command
+                .env("LD_PRELOAD", shim(&c, "io_fault.c"))
+                .env("ZIPELO_TEST_FAULT", "pause")
+                .env("ZIPELO_TEST_MARKER", &marker)
+                .env("ZIPELO_TEST_RELEASE", &release);
+            let mut changed = false;
+            let events = c.run_with(&mut command, Message::Start(request), |event| {
+                if changed
+                    || !matches!(
+                        event,
+                        Message::Progress {
+                            stage: Stage::Write,
+                            total_bytes: Some(_),
+                            ..
+                        }
+                    )
+                {
+                    return Vec::new();
+                }
+                let until = std::time::Instant::now() + Duration::from_secs(5);
+                while !marker.exists() {
+                    assert!(std::time::Instant::now() < until);
+                    std::thread::sleep(Duration::from_millis(2));
+                }
+                match operation {
+                    "add" => fs::write(directory.join("new-file"), b"user addition").unwrap(),
+                    "foreign-temp" => {
+                        fs::write(directory.join(".zipelo-user.tmp"), b"user file").unwrap()
+                    }
+                    "remove" => fs::remove_file(directory.join("file")).unwrap(),
+                    "rename" => {
+                        fs::rename(directory.join("file"), directory.join("renamed")).unwrap()
+                    }
+                    "modify" => fs::write(directory.join("file"), b"user modification").unwrap(),
+                    "replace-dir" => {
+                        fs::rename(directory.join("empty"), c.0.join("old-empty")).unwrap();
+                        private_dir(&directory.join("empty"));
+                    }
+                    _ => {}
+                }
+                changed = true;
+                fs::write(&release, b"resume").unwrap();
+                if operation == "cancel" {
+                    vec![Message::Cancel]
+                } else {
+                    Vec::new()
+                }
+            });
+            assert!(changed);
+            failure(
+                &events,
+                if operation == "cancel" {
+                    ErrorCode::None
+                } else {
+                    ErrorCode::SourceChanged
+                },
+            );
+            assert!(!directory.join("result.7z").exists());
+            let expected_temp = if operation == "foreign-temp" { 1 } else { 0 };
+            assert_eq!(
+                fs::read_dir(&directory)
+                    .unwrap()
+                    .filter(|entry| {
+                        entry
+                            .as_ref()
+                            .unwrap()
+                            .file_name()
+                            .to_string_lossy()
+                            .starts_with(".zipelo-")
+                    })
+                    .count(),
+                expected_temp
+            );
+            if operation == "foreign-temp" {
+                assert_eq!(
+                    fs::read(directory.join(".zipelo-user.tmp")).unwrap(),
+                    b"user file"
+                );
+            }
+            if operation == "modify" {
+                assert_eq!(
+                    fs::read(directory.join("file")).unwrap(),
+                    b"user modification"
+                );
+            }
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn internal_destination_write_failures_clean_only_the_owned_temporary() {
+    for fault in ["full", "sync-full"] {
+        let c = Case::new();
+        private_dir(&c.0.join("source"));
+        fs::write(c.0.join("source/file"), b"original").unwrap();
+        fs::write(c.0.join("source/.zipelo-user.tmp"), b"keep").unwrap();
+        let expected = tree(&c.0.join("source"));
+        let mut request = c.request(&["source"]);
+        if let Action::CreateSevenZip { output_file, .. } = &mut request.action {
+            *output_file = c.path("source/result.7z");
+        }
+        let mut command = c.command();
+        command
+            .env("LD_PRELOAD", shim(&c, "io_fault.c"))
+            .env("ZIPELO_TEST_FAULT", fault);
+        failure(
+            &c.run_with(&mut command, Message::Start(request), |_| Vec::new()),
+            ErrorCode::DiskFull,
+        );
+        assert_eq!(tree(&c.0.join("source")), expected);
     }
 }
 
