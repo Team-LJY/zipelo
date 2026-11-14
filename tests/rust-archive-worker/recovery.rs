@@ -542,3 +542,71 @@ fn central_comment_locator_bytes_do_not_reject_zip32_recovery() {
         }
     }
 }
+
+#[test]
+fn fake_eocd_in_archive_comment_keeps_real_central_directory() {
+    let source = include_bytes!("../zip-recovery-fixtures/broken-local-header.zip");
+    for fake_kind in 0..7 {
+        for locator in [false, true] {
+            let mut comment = Vec::new();
+            if locator {
+                comment.extend(b"PK\x06\x07");
+                comment.extend([0; 16]);
+            }
+            let mut fake = [0u8; 22];
+            fake[..4].copy_from_slice(b"PK\x05\x06");
+            match fake_kind {
+                0 => fake[4..6].copy_from_slice(&1u16.to_le_bytes()),
+                1 => fake[10..12].copy_from_slice(&u16::MAX.to_le_bytes()),
+                2 => fake[16..20].copy_from_slice(&u32::MAX.to_le_bytes()),
+                3 => fake[12..16].copy_from_slice(&u32::MAX.to_le_bytes()),
+                4 => {
+                    fake[12..16].copy_from_slice(&46u32.to_le_bytes());
+                    fake[16..20].copy_from_slice(&39u32.to_le_bytes());
+                }
+                5 => {
+                    fake[12..16].copy_from_slice(&340u32.to_le_bytes());
+                    fake[16..20].copy_from_slice(&1372u32.to_le_bytes());
+                }
+                _ => {
+                    fake[4..6].copy_from_slice(&1u16.to_le_bytes());
+                    let size = (source.len() + comment.len() - 1372) as u32;
+                    fake[12..16].copy_from_slice(&size.to_le_bytes());
+                    fake[16..20].copy_from_slice(&1372u32.to_le_bytes());
+                }
+            }
+            comment.extend(fake);
+            let mut input = source.to_vec();
+            let end = input.len() - 22;
+            input[end + 20..end + 22].copy_from_slice(&(comment.len() as u16).to_le_bytes());
+            input.extend(comment);
+            let s = Scratch::new();
+            fs::write(s.0.join("damaged.zip"), &input).unwrap();
+            let events = execute(start(&s));
+            let terminal = terminal(&events);
+            assert_eq!(terminal.error, ErrorCode::None, "{fake_kind}/{locator}");
+            assert_eq!(terminal.outcome, Outcome::Completed);
+            assert_eq!(terminal.publication, Publication::Complete);
+            let summary = recovery_end(&events);
+            assert!(summary.complete());
+            assert_eq!(summary.mode, RecoveryMode::CentralDirectory);
+            assert_eq!(summary.known_entries, Some(6));
+            assert_eq!(
+                summary.source_sha256,
+                <[u8; 32]>::from(Sha256::digest(&input))
+            );
+            assert_eq!(fs::read(s.0.join("damaged.zip")).unwrap(), input);
+            let checked = Command::new("python3")
+                .arg("-B")
+                .arg(
+                    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                        .join("../../tests/zip-recovery-fixtures/verify.py"),
+                )
+                .args(["--recovered", "broken-local-header.zip"])
+                .arg(s.0.join("recovered.zip"))
+                .output()
+                .unwrap();
+            assert!(checked.status.success(), "{checked:?}");
+        }
+    }
+}

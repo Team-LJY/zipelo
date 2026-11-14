@@ -226,3 +226,38 @@ fn zip64_locator_after_central_directory_remains_unsupported() {
     ));
     assert_eq!(std::fs::read(s.path()).unwrap(), input);
 }
+
+#[test]
+fn structurally_valid_zip64_end_records_are_not_downgraded_to_local_recovery() {
+    let source = include_bytes!("../zip-recovery-fixtures/broken-local-header.zip");
+    for extended in [false, true] {
+        let mut input = source[..source.len() - 22].to_vec();
+        let mut end = source[source.len() - 22..].to_vec();
+        end[8..12].fill(0xff);
+        if extended {
+            let record_at = input.len() as u64;
+            let mut record = [0u8; 56];
+            record[..4].copy_from_slice(b"PK\x06\x06");
+            record[4..12].copy_from_slice(&44u64.to_le_bytes());
+            record[12..14].copy_from_slice(&45u16.to_le_bytes());
+            record[14..16].copy_from_slice(&45u16.to_le_bytes());
+            record[24..32].copy_from_slice(&6u64.to_le_bytes());
+            record[32..40].copy_from_slice(&6u64.to_le_bytes());
+            record[40..48].copy_from_slice(&340u64.to_le_bytes());
+            record[48..56].copy_from_slice(&1372u64.to_le_bytes());
+            input.extend(record);
+            input.extend(b"PK\x06\x07");
+            input.extend(0u32.to_le_bytes());
+            input.extend(record_at.to_le_bytes());
+            input.extend(1u32.to_le_bytes());
+            end[12..20].fill(0xff);
+        }
+        input.extend(end);
+        let s = Scratch::new(&input);
+        assert!(matches!(
+            Recovery::open(&s.path(), Limits::default(), &mut || Ok(())),
+            Err(ErrorCode::UnsupportedFeature)
+        ));
+        assert_eq!(std::fs::read(s.path()).unwrap(), input);
+    }
+}

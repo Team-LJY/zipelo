@@ -129,6 +129,114 @@ fn charge(
         check.metadata_limits(),
     )
 }
+
+fn zip64_bounds(source: &mut File, end: u64) -> Result<Option<(u64, u64)>> {
+    if end < 20 {
+        return Ok(None);
+    }
+    let locator_at = end - 20;
+    let locator = bytes(source, locator_at, 20, end)?;
+    if &locator[..4] != b"PK\x06\x07" || u32at(&locator, 4) != 0 || u32at(&locator, 16) != 1 {
+        return Ok(None);
+    }
+    let record_at = u64::from_le_bytes(locator[8..16].try_into().unwrap());
+    if record_at.checked_add(56).is_none_or(|n| n > locator_at) {
+        return Ok(None);
+    }
+    let record = bytes(source, record_at, 56, locator_at)?;
+    let length = u64::from_le_bytes(record[4..12].try_into().unwrap());
+    if &record[..4] != b"PK\x06\x06"
+        || length < 44
+        || record_at
+            .checked_add(12)
+            .and_then(|n| n.checked_add(length))
+            != Some(locator_at)
+    {
+        return Ok(None);
+    }
+    let size = u64::from_le_bytes(record[40..48].try_into().unwrap());
+    let offset = u64::from_le_bytes(record[48..56].try_into().unwrap());
+    Ok((offset.checked_add(size) == Some(record_at)).then_some((offset, size)))
+}
+
+fn directory_span(
+    source: &mut File,
+    mut at: u64,
+    end: u64,
+    check: &mut impl Monitor,
+) -> Result<bool> {
+    let mut count = 0u32;
+    while at < end {
+        check.check()?;
+        if end - at < 46 {
+            return Ok(false);
+        }
+        let header = bytes(source, at, 46, end)?;
+        if &header[..4] != b"PK\x01\x02" {
+            return Ok(false);
+        }
+        let next = add(
+            at,
+            46 + u16at(&header, 28) as u64 + u16at(&header, 30) as u64 + u16at(&header, 32) as u64,
+        )?;
+        if next > end {
+            return Ok(false);
+        }
+        count += 1;
+        if count > u16::MAX as u32 {
+            return Err(ErrorCode::UnsupportedFeature);
+        }
+        at = next;
+    }
+    Ok(true)
+}
+
+fn end_record(
+    source: &mut File,
+    tail: &[u8],
+    tail_at: u64,
+    check: &mut impl Monitor,
+) -> Result<Option<usize>> {
+    for end in (0..=tail.len() - 22).rev() {
+        if &tail[end..end + 4] != b"PK\x05\x06"
+            || end + 22 + u16at(tail, end + 20) as usize != tail.len()
+        {
+            continue;
+        }
+        check.check()?;
+        let h = &tail[end..];
+        let at = tail_at + end as u64;
+        let mut offset = u32at(h, 16) as u64;
+        let mut size = u32at(h, 12) as u64;
+        let zip64 = offset == u32::MAX as u64 || size == u32::MAX as u64;
+        if zip64 {
+            let Some(bounds) = zip64_bounds(source, at)? else {
+                continue;
+            };
+            (offset, size) = bounds;
+        }
+        let Some(stop) = offset.checked_add(size).filter(|&n| n <= at) else {
+            continue;
+        };
+        if size < 46 || bytes(source, offset, 4, stop)? != b"PK\x01\x02" {
+            continue;
+        }
+        // 주석 안 후보는 중앙 목록 또는 실제 ZIP64 경계와 이어지지 않으면 제외함.
+        if stop != at && !zip64 {
+            let adjacent_locator =
+                at.checked_sub(20) == Some(stop) && bytes(source, stop, 4, at)? == b"PK\x06\x07";
+            if !adjacent_locator && zip64_bounds(source, at)? != Some((offset, size)) {
+                continue;
+            }
+        }
+        if !directory_span(source, offset, stop, check)? {
+            continue;
+        }
+        return Ok(Some(end));
+    }
+    Ok(None)
+}
+
 fn central(
     source: &mut File,
     len: u64,
@@ -142,9 +250,7 @@ fn central(
     metadata.charge_bytes(len.min(65557) as usize, check.metadata_limits())?;
     let tail_at = len.saturating_sub(65557);
     let tail = bytes(source, tail_at, (len - tail_at) as usize, len)?;
-    let Some(end) = (0..=tail.len() - 22).rev().find(|&i| {
-        &tail[i..i + 4] == b"PK\x05\x06" && i + 22 + u16at(&tail, i + 20) as usize == tail.len()
-    }) else {
+    let Some(end) = end_record(source, &tail, tail_at, check)? else {
         return Ok(None);
     };
     let h = &tail[end..];
