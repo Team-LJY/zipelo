@@ -786,12 +786,17 @@ pub(crate) fn publish_reader_steps(
                 &mut PublicationMonitor(check),
             )
         })();
+        let identity = temporary.as_ref().map(|temp| temp.object.clone());
         let closed = completed(
             close(file).map_err(crate::space::io_error),
             &mut PublicationMonitor(check),
         );
         let mut finish = written.and(closed).and_then(|_| {
             check(PublishStep::Commit(temporary))?;
+            // 생성한 임시 파일과 이름이 가리키는 파일이 같은지 확인함.
+            if dir.existing(&temp)?.as_ref().map(|file| &file.object) != identity.as_ref() {
+                return Err(ErrorCode::Conflict);
+            }
             // 긴 원본 재검증 중 바뀐 대상은 교체 직전에 거부함.
             if let Some(expected) = replace {
                 if completed(dir.existing(&leaf), &mut PublicationMonitor(check))?.as_ref()
@@ -836,18 +841,27 @@ pub(crate) fn publish_reader_steps(
             }
         }
         if !temp_consumed {
-            if dir.remove(&temp) {
-                publication_activity(&mut finish, check);
-            } else {
-                result.cleanup = Cleanup::Failed;
-                result.retained = 1;
-                result.retained_name = Some(match name.rsplit_once('/') {
-                    Some((prefix, _)) => format!("{prefix}/{temp}"),
-                    None => temp.clone(),
-                });
-                if finish.is_ok() {
-                    finish = Err(ErrorCode::Io);
+            match dir.existing(&temp) {
+                Ok(None) => {}
+                Ok(Some(current)) if Some(&current.object) == identity.as_ref() => {
+                    if dir.remove(&temp) {
+                        publication_activity(&mut finish, check);
+                    } else {
+                        result.cleanup = Cleanup::Failed;
+                        result.retained = 1;
+                        result.retained_name = Some(match name.rsplit_once('/') {
+                            Some((prefix, _)) => format!("{prefix}/{temp}"),
+                            None => temp.clone(),
+                        });
+                    }
                 }
+                _ => {
+                    // 다른 파일은 보존하고 소유 임시 파일의 위치를 단정하지 않음.
+                    result.cleanup = Cleanup::Unconfirmed;
+                }
+            }
+            if result.cleanup != Cleanup::Complete && finish.is_ok() {
+                finish = Err(ErrorCode::Io);
             }
         }
         if result.created {
