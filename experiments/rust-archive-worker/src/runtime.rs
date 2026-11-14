@@ -649,6 +649,8 @@ impl<W: Write> Job<W> {
                     }
                 }
             }
+            // 미리보기 실행은 디코더 연결 전까지 지원하지 않음.
+            Action::Preview { .. } => return Err(ErrorCode::UnsupportedFeature),
             Action::CreateZip {
                 sources,
                 output_file,

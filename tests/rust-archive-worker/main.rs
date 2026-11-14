@@ -1612,6 +1612,8 @@ mod zip_names;
 
 mod conflict_wire;
 
+mod preview_wire;
+
 mod conflicts;
 
 mod compressed_tar;

@@ -132,7 +132,7 @@ Python 표준 bz2, lzma와 tarfile로 독립 생성 및 해제한 결과의 SHA2
 
 ## 미리보기 계약
 
-상태: frontend의 32 KiB 청크, 64개 수신 큐와 버퍼 및 취소 기준에 backend가 동의했다. 아래 요청과 결과 타입 명세를 공유하며 아직 protocol.rs, wire.rs와 제품 동작에 적용하지 않았다. 확정된 범위는 [PLANS 8.7](../../docs/PLANS.md)을 따른다. 8.8 분할 7z는 이 구현에서 제외한다.
+상태: frontend와 backend의 계약 합의가 완료되었다. protocol.rs와 wire.rs에 공용 타입, 전송 규칙과 상한 검증을 반영했다. 작업자 디코더와 앱 연동 전이므로 미리보기 실행은 UnsupportedFeature로 끝나며 결과를 생성하지 않는다. 확정된 범위는 [PLANS 8.7](../../docs/PLANS.md)을 따른다. 8.8 분할 7z는 이 구현에서 제외한다.
 
 ### 요청과 수명
 
