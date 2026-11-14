@@ -310,6 +310,20 @@ impl Wire for SourceObject {
         }
     }
 }
+pub(crate) fn encode_source_object(value: &SourceObject) -> io::Result<Vec<u8>> {
+    encode_component(value)
+}
+pub(crate) fn encode_native_path(value: &NativePath) -> io::Result<Vec<u8>> {
+    encode_component(value)
+}
+fn encode_component(value: &impl Wire) -> io::Result<Vec<u8>> {
+    let mut encoder = Encoder {
+        bytes: Vec::new(),
+        selection_limit: LEGACY_VECTOR_ITEMS,
+    };
+    value.enc(&mut encoder)?;
+    Ok(encoder.bytes)
+}
 impl Wire for Selection {
     fn enc(&self, e: &mut Encoder) -> io::Result<()> {
         match self {

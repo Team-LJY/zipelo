@@ -178,7 +178,7 @@ Python 표준 bz2, lzma와 tarfile로 독립 생성 및 해제한 결과의 SHA2
 
 ## 분할 7z 계약
 
-상태: 2026-11-14 frontend 합의 완료. [PLANS 8.8](../../docs/PLANS.md)의 공용 타입과 코덱에 묶음 ListId, MissingVolume 및 VolumeProblem을 반영했다. 조각 탐색과 캡처 및 실제 목록/해제, 앱 수신과 화면 연동은 구현 대기다. 기준은 main ecad460이며 frontend가 같은 PR에서 화면과 상황별 디버깅 명령을 연결한다.
+상태: 2026-11-14 frontend 합의 완료. [PLANS 8.8](../../docs/PLANS.md)의 묶음 ListId, MissingVolume 및 VolumeProblem과 조각 탐색, 캡처, 재검증 및 실제 목록/해제를 구현했다. 같은 PR에서 앱 수신, 화면과 상황별 디버깅 명령을 연결했으며 실제 분할 파일의 Windows/Wayland 화면 통합 검증과 독립 리뷰는 남아 있다. 기준은 main ecad460이다.
 
 ### 지원 범위와 조각 탐색
 
@@ -224,3 +224,9 @@ Python 표준 bz2, lzma와 tarfile로 독립 생성 및 해제한 결과의 SHA2
 - backend는 조각 탐색과 캡처, 묶음 동일성, 공용 타입 및 wire와 작업자 회귀 시험을 담당한다. frontend는 .001 열기와 제외 형식 및 조각 오류 안내, 묶음 ListId 보존, 분할 미리보기 실행 제한, 수신 검증, --ui-scenario와 가이드 및 Windows/Wayland 실기를 담당한다. 구현 변경은 계약 합의와 공용 타입 반영 뒤 파일 소유 범위를 나눠 연결한다.
 - 독립 도구 표본의 목록과 해제 해시, 헤더 및 데이터의 조각 경계, .009/.010, 서로 다른 조각 길이, 999개와 초과, 중간 및 마지막 누락, 잘림, 검출 가능한 혼입과 순서 변경을 시험한다. 목록 후 중간/마지막 조각의 같은 길이 교체와 내용 변경, 실행 중 변경, 링크 및 부모 교체, 길이 오버플로와 합산 예산, 승인 후 한도, 암호, 취소와 충돌도 회귀로 확인한다.
 - 새 시험 코드는 저장소 루트 tests/에만 둔다. 작업 파일과 캐시 및 일회성 로그는 프로젝트의 tests/work/split7z 한 곳에 두고 clone 안에 다시 tests/work나 생성용 tests/ci 캐시를 만들지 않는다. PR 병합 또는 종료 뒤 담당자가 해당 작업 폴더와 캐시를 정리한다.
+
+### 독립 분할 표본
+
+- `tests/rust-archive-worker/fixtures/split7z/`는 Ubuntu `7zip 26.00+dfsg-1`의 7-Zip 26.00이 `-v64b`로 직접 만든 조각이다. 일반 solid LZMA2, 헤더 암호화와 본문 암호화 묶음을 포함한다. 테스트에만 쓰는 독립 실행 도구이며 제품 의존성이나 배포 파일에 추가하지 않는다.
+- 생성기 `tests/rust-archive-worker/split_fixtures.py`가 독립 도구로 다시 풀어 원본 바이트와 비교하고 `manifest.json`에 도구 버전, 옵션, 각 조각과 논리 입력 및 해제 결과의 SHA256을 기록한다. 암호 표본의 공개 시험 암호는 `zipelo-split-test`다. 새 표본을 만들 때 `--tool`에 7-Zip 실행 파일을, `--work`와 `--output`에는 `tests/work/split7z` 아래의 비어 있는 별도 하위 폴더를 지정한다.
+- 작업자 회귀 시험은 추적된 일반 표본의 두 파일을 풀어 기준 바이트와 해시를 대조한다. 암호화 표본은 기존 7z 정책대로 UnsupportedFeature이며 새 암호 지원이나 암호 질문을 추가하지 않는다. 목록 성공은 패킹 데이터 전체의 무결성 검증을 뜻하지 않는다.
