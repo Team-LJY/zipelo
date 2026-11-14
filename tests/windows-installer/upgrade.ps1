@@ -1,7 +1,9 @@
 ﻿param(
     [Parameter(Mandatory = $true)][string]$Installer,
     [ValidateSet("Snapshot", "Compare", "Rollback", "Upgrade")][string]$Mode,
-    [Parameter(Mandatory = $true)][string]$Evidence
+    [Parameter(Mandatory = $true)][string]$Evidence,
+    [string]$ExpectedVersion,
+    [string]$Payload
 )
 $ErrorActionPreference = "Stop"
 $root = Join-Path $env:LOCALAPPDATA "Programs\Zipelo"
@@ -75,12 +77,34 @@ switch ($Mode) {
         $code = RunInstaller
         if ($code -ne 0) { throw "업데이트 실패: $code" }
         $after = Snapshot
-        AssertEqual $before.registry $after.registry "업데이트가 기존 연결 또는 등록을 바꿈"
+        # 정상 업데이트는 DisplayVersion만 바꾸므로 따로 확인하고 나머지 등록을 비교함.
+        $versionKey = @($after.registry.Keys | Where-Object { $_ -match '\\Uninstall\\Zipelo\\DisplayVersion$' })
+        if ($versionKey.Count -ne 1) { throw "DisplayVersion 등록을 찾지 못함" }
+        $newVersion = $after.registry[$versionKey[0]]
+        if ($ExpectedVersion -and $newVersion -cne $ExpectedVersion) {
+            throw "업데이트 후 DisplayVersion이 $ExpectedVersion 이 아님: $newVersion"
+        }
+        if ($ExpectedVersion -and $before.registry[$versionKey[0]] -ceq $ExpectedVersion) {
+            throw "업데이트 전부터 DisplayVersion이 $ExpectedVersion 이라 교체를 확인할 수 없음"
+        }
+        # 증거에는 버전을 남기고 비교용 복사본에서만 제외함.
+        $beforeRegistry = [ordered]@{}
+        foreach ($key in $before.registry.Keys) { if ($key -ne $versionKey[0]) { $beforeRegistry[$key] = $before.registry[$key] } }
+        $afterRegistry = [ordered]@{}
+        foreach ($key in $after.registry.Keys) { if ($key -ne $versionKey[0]) { $afterRegistry[$key] = $after.registry[$key] } }
+        AssertEqual $beforeRegistry $afterRegistry "업데이트가 기존 연결 또는 등록을 바꿈"
         AssertEqual $before.shortcut $after.shortcut "업데이트가 기존 바로가기를 바꿈"
-        if ($before.files['Uninstall.exe'] -eq $after.files['Uninstall.exe']) {
+        if ($ExpectedVersion) {
+            # 버전만 바뀌고 파일이 그대로인 경우를 막기 위해 설치된 파일을 빌드 payload와 대조함.
+            if (-not $Payload) { throw "-ExpectedVersion에는 빌드 출력의 payload 폴더(-Payload)가 필요함" }
+            foreach ($name in @("Zipelo.exe", "zipelo-archive-worker.exe", "LICENSE", "THIRD-PARTY-LICENSES.txt", "BUILD-INFO.json")) {
+                $expected = (Get-FileHash (Join-Path $Payload $name) -Algorithm SHA256).Hash
+                if ($after.files[$name] -ne $expected) { throw "설치된 $name 이 payload와 다름" }
+            }
+        } elseif ($before.files['Uninstall.exe'] -eq $after.files['Uninstall.exe']) {
             throw "새 제거 프로그램으로 교체되지 않음"
         }
         $after | ConvertTo-Json -Depth 8 | Set-Content -Encoding UTF8 $Evidence
-        "upgrade_passed: new_uninstaller_and_preserved_associations"
+        "upgrade_passed: version $($newVersion), files match payload or new uninstaller, preserved associations"
     }
 }
