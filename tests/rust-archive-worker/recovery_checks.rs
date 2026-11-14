@@ -209,3 +209,20 @@ fn decoder_error_bytes_are_charged_before_reporting_loss() {
     ));
     assert_eq!(used, count);
 }
+
+#[test]
+fn zip64_locator_after_central_directory_remains_unsupported() {
+    let source = include_bytes!("../zip-recovery-fixtures/broken-local-header.zip");
+    let mut input = source[..source.len() - 22].to_vec();
+    input.extend(b"PK\x06\x07");
+    input.extend(0u32.to_le_bytes());
+    input.extend(0u64.to_le_bytes());
+    input.extend(1u32.to_le_bytes());
+    input.extend(&source[source.len() - 22..]);
+    let s = Scratch::new(&input);
+    assert!(matches!(
+        Recovery::open(&s.path(), Limits::default(), &mut || Ok(())),
+        Err(ErrorCode::UnsupportedFeature)
+    ));
+    assert_eq!(std::fs::read(s.path()).unwrap(), input);
+}

@@ -495,3 +495,50 @@ fn recovery_publication_rechecks_source_destination_and_cancel() {
         }
     }
 }
+
+#[test]
+fn central_comment_locator_bytes_do_not_reject_zip32_recovery() {
+    let source = include_bytes!("../zip-recovery-fixtures/broken-local-header.zip");
+    for comment_len in [20usize, 37] {
+        for archive_comment_len in [0usize, 41] {
+            let mut input = source[..source.len() - 22].to_vec();
+            let last = input.windows(4).rposition(|w| w == b"PK\x01\x02").unwrap();
+            input[last + 32..last + 34].copy_from_slice(&(comment_len as u16).to_le_bytes());
+            let mut comment = vec![0; comment_len];
+            comment[comment_len - 20..comment_len - 16].copy_from_slice(b"PK\x06\x07");
+            input.extend(comment);
+            let mut end = source[source.len() - 22..].to_vec();
+            let size = u32::from_le_bytes(end[12..16].try_into().unwrap());
+            end[12..16].copy_from_slice(&(size + comment_len as u32).to_le_bytes());
+            end[20..22].copy_from_slice(&(archive_comment_len as u16).to_le_bytes());
+            input.extend(end);
+            input.extend(vec![0; archive_comment_len]);
+            let s = Scratch::new();
+            fs::write(s.0.join("damaged.zip"), &input).unwrap();
+            let events = execute(start(&s));
+            let t = terminal(&events);
+            assert_eq!(t.error, ErrorCode::None);
+            assert_eq!(t.outcome, Outcome::Completed);
+            assert_eq!(t.publication, Publication::Complete);
+            assert_eq!(t.created_count, 1);
+            let end = recovery_end(&events);
+            assert!(end.complete());
+            assert_eq!(end.verified_entries, 6);
+            assert_eq!(end.source_sha256, <[u8; 32]>::from(Sha256::digest(&input)));
+            assert_eq!(fs::read(s.0.join("damaged.zip")).unwrap(), input);
+            assert!(
+                Command::new("python3")
+                    .arg("-B")
+                    .arg(
+                        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                            .join("../../tests/zip-recovery-fixtures/verify.py")
+                    )
+                    .args(["--recovered", "broken-local-header.zip"])
+                    .arg(s.0.join("recovered.zip"))
+                    .status()
+                    .unwrap()
+                    .success()
+            );
+        }
+    }
+}

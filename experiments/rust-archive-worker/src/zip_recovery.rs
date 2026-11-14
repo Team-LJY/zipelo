@@ -160,10 +160,15 @@ fn central(
     }
     let cd = u32at(h, 16) as u64;
     let cd_end = tail_at + end as u64;
-    if cd_end >= 20 && bytes(source, cd_end - 20, 4, len)? == b"PK\x06\x07" {
+    let declared_cd_end = add(cd, u32at(h, 12) as u64)?;
+    // 중앙 목록의 주석을 ZIP64 locator로 오인하지 않음.
+    if cd_end >= 20
+        && declared_cd_end <= cd_end - 20
+        && bytes(source, cd_end - 20, 4, len)? == b"PK\x06\x07"
+    {
         return Err(ErrorCode::UnsupportedFeature);
     }
-    if add(cd, u32at(h, 12) as u64)? != cd_end {
+    if declared_cd_end != cd_end {
         return Err(ErrorCode::Integrity);
     }
     if count > limits.entries {
