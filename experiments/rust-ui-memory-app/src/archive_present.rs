@@ -19,6 +19,8 @@ pub const FOLDER_ERROR: &str = "풀 위치 폴더를 만들 수 없습니다. �
 
 pub fn error_text(code: ErrorCode) -> &'static str {
     match code {
+        ErrorCode::RecoveryIncomplete => "일부 항목만 복구했습니다. 복구본과 경고를 확인하세요.",
+        ErrorCode::RecoveryImpossible => "복구 가능한 항목이 없습니다.",
         ErrorCode::MissingVolume => {
             "분할 압축파일의 조각이 없습니다. 모든 조각을 같은 폴더에 모은 뒤 .001을 다시 여세요"
         }

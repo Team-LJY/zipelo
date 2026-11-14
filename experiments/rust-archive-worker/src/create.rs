@@ -288,6 +288,19 @@ pub(crate) fn zip(
         central.extend(extra);
         crate::resources::completed(Ok(()), check)?;
     }
+    finish_directory(&mut output, &central, plan.items.len(), have_zip64, check)?;
+    plan.verify(check)?;
+    let size = io(output.stream_position())?;
+    io(output.rewind())?;
+    Ok((output, size))
+}
+fn finish_directory(
+    output: &mut File,
+    central: &[u8],
+    count: usize,
+    have_zip64: bool,
+    check: &mut impl crate::resources::Monitor,
+) -> Result<()> {
     check.check()?;
     let at = io(output.stream_position())?;
     crate::space::ensure(&output, central.len() as u64 + 98)?;
@@ -297,7 +310,7 @@ pub(crate) fn zip(
     let large_at = io(output.stream_position())?;
     let mut end = Vec::new();
     if have_zip64
-        || plan.items.len() >= u16::MAX as usize
+        || count >= u16::MAX as usize
         || at >= u32::MAX as u64
         || central.len() >= u32::MAX as usize
     {
@@ -307,8 +320,8 @@ pub(crate) fn zip(
         put16(&mut end, 45);
         put32(&mut end, 0);
         put32(&mut end, 0);
-        put64(&mut end, plan.items.len() as u64);
-        put64(&mut end, plan.items.len() as u64);
+        put64(&mut end, count as u64);
+        put64(&mut end, count as u64);
         put64(&mut end, central.len() as u64);
         put64(&mut end, at);
         end.extend(b"PK\x06\x07");
@@ -327,17 +340,137 @@ pub(crate) fn zip(
         end.extend(b"PK\x05\x06");
         put16(&mut end, 0);
         put16(&mut end, 0);
-        put16(&mut end, plan.items.len() as u16);
-        put16(&mut end, plan.items.len() as u16);
+        put16(&mut end, count as u16);
+        put16(&mut end, count as u16);
         put32(&mut end, central.len() as u32);
         put32(&mut end, at as u32);
         put16(&mut end, 0);
     }
     crate::resources::completed(io(output.write_all(&end)), check)?;
-    plan.verify(check)?;
-    let size = io(output.stream_position())?;
+    Ok(())
+}
+
+pub(crate) fn recovered_zip(
+    findings: &[RecoveryEntry],
+    offsets: &[u64],
+    input: &mut File,
+    check: &mut impl crate::resources::Monitor,
+) -> Result<(File, u64)> {
+    if findings.len() != offsets.len() {
+        return Err(ErrorCode::Internal);
+    }
+    let mut output = spool::temporary()?;
+    let mut central = Vec::new();
+    let mut metadata = crate::archive::MetadataBudget::default();
+    let mut count = 0;
+    let mut wide = false;
+    let mut buffer = [0; 65536];
+    for (entry, offset) in findings.iter().zip(offsets) {
+        if entry.status != RecoveryStatus::Verified {
+            continue;
+        }
+        check.check()?;
+        let directory = entry.kind == Some(EntryKind::Directory);
+        let name = entry.name.as_ref().ok_or(ErrorCode::Internal)?;
+        metadata.charge_with(name, check.metadata_limits())?;
+        let name = if directory {
+            format!("{name}/")
+        } else {
+            name.clone()
+        };
+        let size = entry.verified_size.ok_or(ErrorCode::Internal)?;
+        io(input.seek(std::io::SeekFrom::Start(*offset)))?;
+        let mut left = size;
+        let mut crc = 0;
+        while left != 0 {
+            check.check()?;
+            let n = io(input.read(&mut buffer[..left.min(65536) as usize]))?;
+            if n == 0 {
+                return Err(ErrorCode::Internal);
+            }
+            crc = crc32(crc, &buffer[..n]);
+            left -= n as u64;
+            crate::resources::completed(Ok(()), check)?;
+        }
+        let at = io(output.stream_position())?;
+        let big = size >= u32::MAX as u64;
+        wide |= big || at >= u32::MAX as u64;
+        let ext = zip64_extra(size, size, None);
+        let mut header = b"PK\x03\x04".to_vec();
+        for value in [if big { 45 } else { 20 }, 0x0800, 0, 0, 33] {
+            put16(&mut header, value);
+        }
+        put32(&mut header, crc);
+        for _ in 0..2 {
+            put32(&mut header, if big { u32::MAX } else { size as u32 });
+        }
+        put16(&mut header, name.len() as u16);
+        put16(&mut header, ext.len() as u16);
+        header.extend(name.as_bytes());
+        header.extend(ext);
+        crate::space::ensure(
+            &output,
+            size.checked_add(header.len() as u64)
+                .ok_or(ErrorCode::Limit)?,
+        )?;
+        crate::resources::completed(io(output.write_all(&header)), check)?;
+        io(input.seek(std::io::SeekFrom::Start(*offset)))?;
+        let mut left = size;
+        while left != 0 {
+            check.check()?;
+            let n = io(input.read(&mut buffer[..left.min(65536) as usize]))?;
+            if n == 0 {
+                return Err(ErrorCode::Internal);
+            }
+            crate::space::ensure(&output, n as u64)?;
+            crate::resources::completed(io(output.write_all(&buffer[..n])), check)?;
+            left -= n as u64;
+        }
+        let ext = zip64_extra(size, size, Some(at));
+        central.extend(b"PK\x01\x02");
+        for value in [
+            0x032d,
+            if big || at >= u32::MAX as u64 { 45 } else { 20 },
+            0x0800,
+            0,
+            0,
+            33,
+        ] {
+            put16(&mut central, value);
+        }
+        put32(&mut central, crc);
+        for _ in 0..2 {
+            put32(&mut central, if big { u32::MAX } else { size as u32 });
+        }
+        put16(&mut central, name.len() as u16);
+        put16(&mut central, ext.len() as u16);
+        for _ in 0..3 {
+            put16(&mut central, 0);
+        }
+        put32(
+            &mut central,
+            if directory {
+                (0o40700 << 16) | 0x10
+            } else {
+                0o100600 << 16
+            },
+        );
+        put32(
+            &mut central,
+            if at >= u32::MAX as u64 {
+                u32::MAX
+            } else {
+                at as u32
+            },
+        );
+        central.extend(name.as_bytes());
+        central.extend(ext);
+        count += 1;
+    }
+    finish_directory(&mut output, &central, count, wide, check)?;
+    let len = io(output.stream_position())?;
     io(output.rewind())?;
-    Ok((output, size))
+    Ok((output, len))
 }
 
 #[cfg(test)]

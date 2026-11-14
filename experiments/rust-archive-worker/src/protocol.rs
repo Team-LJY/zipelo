@@ -237,6 +237,10 @@ pub enum Action {
         entry_id: u32,
         list_id: ListId,
     },
+    RecoverZip {
+        archive: NativePath,
+        output_file: NativePath,
+    },
     CreateSevenZip {
         sources: Vec<Source>,
         output_file: NativePath,
@@ -252,6 +256,7 @@ pub enum ActionKind {
     CreateZip,
     Preview,
     CreateSevenZip,
+    RecoverZip,
 }
 impl Action {
     pub fn kind(&self) -> ActionKind {
@@ -261,6 +266,7 @@ impl Action {
             Self::CreateZip { .. } => ActionKind::CreateZip,
             Self::Preview { .. } => ActionKind::Preview,
             Self::CreateSevenZip { .. } => ActionKind::CreateSevenZip,
+            Self::RecoverZip { .. } => ActionKind::RecoverZip,
         }
     }
 }
@@ -357,6 +363,8 @@ pub enum ErrorCode {
     InvalidRequest,
     DiskFull,
     MissingVolume,
+    RecoveryIncomplete,
+    RecoveryImpossible,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum VolumeProblemReason {
@@ -501,6 +509,8 @@ pub enum Message {
         reason: VolumeProblemReason,
         volume: NativePath,
     },
+    RecoveryEntry(RecoveryEntry),
+    RecoveryEnd(RecoveryEnd),
     Terminal(Terminal),
     CancelAck {
         request_sequence: u64,
@@ -518,4 +528,125 @@ pub enum Message {
         relative_name: String,
         choice: ConflictChoice,
     },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RecoveryMode {
+    CentralDirectory,
+    LocalChain,
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RecoveryStatus {
+    Verified,
+    Lost,
+    Unverified,
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RecoveryReason {
+    None,
+    HeaderRebuilt,
+    Truncated,
+    CrcMismatch,
+    DecodeFailure,
+    BoundaryUnknown,
+    UnsupportedFeature,
+    MetadataMissing,
+}
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RecoveryEntry {
+    pub candidate_id: u32,
+    pub source_offset: u64,
+    pub name: Option<String>,
+    pub kind: Option<EntryKind>,
+    pub status: RecoveryStatus,
+    pub reason: RecoveryReason,
+    pub declared_size: Option<u64>,
+    pub verified_size: Option<u64>,
+    pub sha256: Option<[u8; 32]>,
+}
+impl RecoveryEntry {
+    pub fn valid(&self) -> bool {
+        if self.name.as_ref().is_some_and(|name| name.is_empty()) {
+            return false;
+        }
+        if !matches!(
+            self.kind,
+            None | Some(EntryKind::File | EntryKind::Directory)
+        ) {
+            return false;
+        }
+        match self.status {
+            RecoveryStatus::Verified => {
+                if self.name.as_ref().is_none_or(|name| name.is_empty())
+                    || !matches!(
+                        self.reason,
+                        RecoveryReason::None
+                            | RecoveryReason::HeaderRebuilt
+                            | RecoveryReason::MetadataMissing
+                    )
+                    || self.declared_size.is_none()
+                    || self.declared_size != self.verified_size
+                {
+                    return false;
+                }
+                match self.kind {
+                    Some(EntryKind::File) => self.sha256.is_some(),
+                    Some(EntryKind::Directory) => {
+                        self.declared_size == Some(0) && self.sha256.is_none()
+                    }
+                    _ => false,
+                }
+            }
+            RecoveryStatus::Lost => {
+                self.verified_size.is_none()
+                    && self.sha256.is_none()
+                    && matches!(
+                        self.reason,
+                        RecoveryReason::Truncated
+                            | RecoveryReason::CrcMismatch
+                            | RecoveryReason::DecodeFailure
+                    )
+            }
+            RecoveryStatus::Unverified => {
+                self.verified_size.is_none()
+                    && self.sha256.is_none()
+                    && matches!(
+                        self.reason,
+                        RecoveryReason::BoundaryUnknown
+                            | RecoveryReason::UnsupportedFeature
+                            | RecoveryReason::MetadataMissing
+                    )
+            }
+        }
+    }
+}
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RecoveryEnd {
+    pub mode: RecoveryMode,
+    pub source_bytes: u64,
+    pub source_sha256: [u8; 32],
+    pub known_entries: Option<u32>,
+    pub verified_entries: u32,
+    pub lost_entries: u32,
+    pub unverified_entries: u32,
+    pub unknown_loss: bool,
+}
+impl RecoveryEnd {
+    pub fn valid(&self) -> bool {
+        let total = self
+            .verified_entries
+            .checked_add(self.lost_entries)
+            .and_then(|n| n.checked_add(self.unverified_entries));
+        let Some(total) = total else {
+            return false;
+        };
+        match (self.mode, self.known_entries, self.unknown_loss) {
+            (RecoveryMode::CentralDirectory, Some(known), false) => known == total,
+            (_, None, true) => true,
+            _ => false,
+        }
+    }
+    pub fn complete(&self) -> bool {
+        self.valid() && !self.unknown_loss && self.lost_entries == 0 && self.unverified_entries == 0
+    }
 }

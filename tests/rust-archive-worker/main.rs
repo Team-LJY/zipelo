@@ -1601,7 +1601,7 @@ fn disk_full_error_tag_preserves_previous_tags_and_rejects_unknown() {
         assert_eq!(bytes[33], tag as u8);
         let decoded = Reader::new(bytes.as_slice()).read().unwrap().unwrap().2;
         assert_eq!(terminal(&[decoded]).error, error);
-        bytes[33] = 15;
+        bytes[33] = 17;
         assert!(Reader::new(bytes.as_slice()).read().is_err());
     }
 }
@@ -1629,3 +1629,5 @@ mod split_runtime;
 mod seven_zip_create;
 
 mod seven_zip_create_runtime;
+
+mod recovery;

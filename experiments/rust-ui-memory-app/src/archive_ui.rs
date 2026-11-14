@@ -69,6 +69,10 @@ pub enum Start {
         entry_id: u32,
         list_id: ListId,
     },
+    RecoverZip {
+        archive: PathBuf,
+        output_file: PathBuf,
+    },
     CreateSevenZip {
         sources: Vec<(PathBuf, String)>,
         output_file: PathBuf,
@@ -184,6 +188,8 @@ pub enum Outcome {
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ErrorCode {
+    RecoveryIncomplete,
+    RecoveryImpossible,
     MissingVolume,
     Integrity,
     UnsupportedFormat,
@@ -237,7 +243,8 @@ pub struct Terminal {
     pub cleanup: Cleanup,
 }
 pub use worker_protocol::protocol::{
-    ActionKind, Limits, NativePath, PreviewFormat, PreviewInfo, ResourceScope, ResourceUsage,
+    ActionKind, Limits, NativePath, PreviewFormat, PreviewInfo, RecoveryEnd, RecoveryEntry,
+    RecoveryMode, RecoveryReason, RecoveryStatus, ResourceScope, ResourceUsage,
     VolumeProblemReason,
 };
 
@@ -295,6 +302,8 @@ pub struct ResourceChallenge {
 
 #[derive(Clone, Debug)]
 pub enum Event {
+    RecoveryEntry(RecoveryEntry),
+    RecoveryEnd(RecoveryEnd),
     VolumeProblem(VolumeProblem),
     PreviewBegin(PreviewInfo),
     PreviewChunk {
@@ -370,6 +379,7 @@ impl Factory for Unavailable {
     }
 }
 struct Running {
+    recovery_metadata: usize,
     volume_problem: Option<VolumeProblem>,
     preview: Option<PreviewBuffer>,
     preview_discarded: bool,
@@ -406,6 +416,8 @@ pub enum Close {
 }
 #[derive(Default)]
 pub struct Model {
+    pub recovery_entries: Vec<RecoveryEntry>,
+    pub recovery_end: Option<RecoveryEnd>,
     pub volume_problem: Option<VolumeProblem>,
     running: Option<Running>,
     pub preview: Option<Preview>,
@@ -539,7 +551,7 @@ impl Model {
                     .iter()
                     .try_fold(0u64, |sum, e| sum.checked_add(e.bytes?));
             }
-            Start::List { .. } => {}
+            Start::List { .. } | Start::RecoverZip { .. } => {}
         }
         usage
     }
@@ -604,6 +616,10 @@ impl Model {
             .map(|e| e.id)
             .collect();
         let validation = match &start {
+            Start::RecoverZip {
+                archive,
+                output_file,
+            } => archive.is_absolute() && output_file.is_absolute() && archive != output_file,
             Start::List { archive } => archive.is_absolute(),
             Start::Preview {
                 archive,
@@ -699,6 +715,8 @@ impl Model {
             self.selected.clear();
         }
         self.next_id = id;
+        self.recovery_entries.clear();
+        self.recovery_end = None;
         self.terminal = None;
         self.volume_problem = None;
         self.retry_start = None;
@@ -713,6 +731,7 @@ impl Model {
         self.error = send_error;
         self.confirmed = false;
         self.running = Some(Running {
+            recovery_metadata: 0,
             volume_problem: None,
             preview: None,
             preview_discarded: false,
@@ -1036,6 +1055,59 @@ impl Model {
                     return;
                 }
                 match event {
+                    Event::RecoveryEntry(entry) => {
+                        let budget = if run.granted.any() {
+                            64 * 1024 * 1024
+                        } else {
+                            8 * 1024 * 1024
+                        };
+                        let used = run.recovery_metadata;
+                        if !matches!(run.start, Start::RecoverZip { .. })
+                            || self.recovery_end.is_some()
+                            || !entry.valid()
+                            || entry.candidate_id as usize != self.recovery_entries.len()
+                            || entry.name.as_ref().is_some_and(|n| {
+                                n.len() > 4096 || !valid_relative(n.trim_end_matches('/'))
+                            })
+                            || self
+                                .recovery_entries
+                                .last()
+                                .is_some_and(|e| e.source_offset >= entry.source_offset)
+                            || self.recovery_entries.len()
+                                >= if run.granted.entries { 200_000 } else { 10_000 }
+                            || used + 128 + entry.name.as_ref().map_or(0, String::len) > budget
+                        {
+                            self.error = Some("복구 항목 응답이 유효하지 않습니다".into());
+                        } else {
+                            run.recovery_metadata +=
+                                128 + entry.name.as_ref().map_or(0, String::len);
+                            self.recovery_entries.push(entry);
+                        }
+                    }
+                    Event::RecoveryEnd(summary) => {
+                        let count = |status| {
+                            self.recovery_entries
+                                .iter()
+                                .filter(|e| e.status == status)
+                                .count() as u32
+                        };
+                        if !matches!(run.start, Start::RecoverZip { .. })
+                            || self.recovery_end.is_some()
+                            || !summary.valid()
+                            || summary.source_bytes > 4 * 1024 * 1024 * 1024
+                            || self
+                                .recovery_entries
+                                .iter()
+                                .any(|e| e.source_offset >= summary.source_bytes)
+                            || summary.verified_entries != count(RecoveryStatus::Verified)
+                            || summary.lost_entries != count(RecoveryStatus::Lost)
+                            || summary.unverified_entries != count(RecoveryStatus::Unverified)
+                        {
+                            self.error = Some("복구 요약이 항목과 일치하지 않습니다".into());
+                        } else {
+                            self.recovery_end = Some(summary);
+                        }
+                    }
                     Event::VolumeProblem(problem) => {
                         if run.cancel_sequence.is_some() {
                             return;
@@ -1109,7 +1181,11 @@ impl Model {
                         }
                     }
                     Event::Accepted { encryption } => {
-                        if matches!(run.start, Start::CreateSevenZip { .. }) && encryption {
+                        if matches!(
+                            run.start,
+                            Start::CreateSevenZip { .. } | Start::RecoverZip { .. }
+                        ) && encryption
+                        {
                             self.error = Some("7z 생성의 암호 응답이 유효하지 않습니다".into());
                         }
                         if run.accepted {
@@ -1156,8 +1232,10 @@ impl Model {
                         if run.cancel_sequence.is_some() {
                             return;
                         }
-                        if matches!(run.start, Start::CreateSevenZip { .. })
-                            || self.challenge.is_some()
+                        if matches!(
+                            run.start,
+                            Start::CreateSevenZip { .. } | Start::RecoverZip { .. }
+                        ) || self.challenge.is_some()
                             || self.resource.is_some()
                             || challenge_id <= run.last_challenge
                             || self.conflict.is_some()
@@ -1178,6 +1256,7 @@ impl Model {
                             Start::CreateZip { .. } => ActionKind::CreateZip,
                             Start::CreateSevenZip { .. } => ActionKind::CreateSevenZip,
                             Start::Preview { .. } => ActionKind::Preview,
+                            Start::RecoverZip { .. } => ActionKind::RecoverZip,
                         };
                         let hard = Limits {
                             input: u64::MAX,
@@ -1261,8 +1340,36 @@ impl Model {
                     Event::Output {
                         relative_name,
                         disposition,
-                        ..
+                        entry_id,
                     } => {
+                        if let Start::RecoverZip { output_file, .. } = &run.start {
+                            let final_output = matches!(
+                                disposition,
+                                Disposition::Created | Disposition::CommitUncertain
+                            );
+                            let valid_output = if final_output {
+                                output_file.file_name().and_then(|n| n.to_str())
+                                    == Some(relative_name.as_str())
+                                    && !self.outputs.iter().any(|(_, d)| {
+                                        matches!(
+                                            d,
+                                            Disposition::Created | Disposition::CommitUncertain
+                                        )
+                                    })
+                            } else {
+                                valid_leaf(&relative_name)
+                                    && (disposition != Disposition::PartialRetained
+                                        || output_file.file_name().and_then(|n| n.to_str())
+                                            != Some(relative_name.as_str()))
+                                    && !self.outputs.iter().any(|(name, d)| {
+                                        name == &relative_name && *d == disposition
+                                    })
+                            };
+                            if entry_id.is_some() || self.recovery_end.is_none() || !valid_output {
+                                self.error = Some("복구본 출력 응답이 유효하지 않습니다".into());
+                                return;
+                            }
+                        }
                         if matches!(run.start, Start::Preview { .. }) {
                             self.error = Some("미리보기 중 파일 출력이 보고됐습니다".into());
                             return;
@@ -1292,6 +1399,42 @@ impl Model {
                         }
                     }
                     Event::Terminal(t) => {
+                        if matches!(run.start, Start::RecoverZip { .. }) {
+                            let business = t.outcome == Outcome::Completed
+                                || matches!(
+                                    t.error,
+                                    Some(
+                                        ErrorCode::RecoveryIncomplete
+                                            | ErrorCode::RecoveryImpossible
+                                    )
+                                );
+                            if business
+                                && !self.recovery_end.as_ref().is_some_and(|s| {
+                                    if s.verified_entries == 0 {
+                                        t.outcome == Outcome::Failed
+                                            && t.error == Some(ErrorCode::RecoveryImpossible)
+                                            && t.publication == Publication::None
+                                            && t.created_count == 0
+                                            && self.outputs.is_empty()
+                                    } else {
+                                        t.publication == Publication::Complete
+                                            && t.created_count == 1
+                                            && self.outputs.len() == 1
+                                            && self.outputs[0].1 == Disposition::Created
+                                            && if s.complete() {
+                                                t.outcome == Outcome::Completed && t.error.is_none()
+                                            } else {
+                                                t.outcome == Outcome::Failed
+                                                    && t.error
+                                                        == Some(ErrorCode::RecoveryIncomplete)
+                                            }
+                                    }
+                                })
+                            {
+                                self.error =
+                                    Some("복구 결과와 저장 상태가 일치하지 않습니다".into());
+                            }
+                        }
                         if run.cancel_sequence.is_none()
                             && run.volume_problem.as_ref().is_some_and(|problem| {
                                 t.outcome != Outcome::Failed
@@ -1463,6 +1606,8 @@ pub fn terminal_lines(t: &Terminal) -> Vec<String> {
     if let Some(error) = t.error {
         lines.push(
             match error {
+                ErrorCode::RecoveryIncomplete => "일부 항목만 복구했습니다",
+                ErrorCode::RecoveryImpossible => "복구 가능한 항목이 없습니다",
                 ErrorCode::MissingVolume => "분할 압축파일의 조각이 없습니다. 모든 조각을 같은 폴더에 모은 뒤 첫 조각을 다시 여세요",
                 ErrorCode::Integrity => "압축파일이 손상됐습니다",
                 ErrorCode::UnsupportedFormat => "지원하지 않는 압축 형식입니다",

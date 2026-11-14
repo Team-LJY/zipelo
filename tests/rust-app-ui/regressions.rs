@@ -5,6 +5,7 @@ mod fake;
 #[cfg(feature = "ui")]
 mod native_dialogs;
 mod preview;
+mod recovery;
 mod split_volumes;
 use fake::*;
 use std::path::PathBuf;

@@ -263,10 +263,10 @@ fn action_kind_events_keep_existing_tags_and_append_creation_tag_four() {
             matches!(decode(&bytes), Message::ResourceRequired { action: actual, scope: value, .. } if actual == action && value == scope)
         );
         let mut body = bytes[32..].to_vec();
-        body[8] = 5;
+        body[8] = 6;
         reject_decode(&raw(110, &body));
     }
-    reject_decode(&raw(100, &[5, 0]));
+    reject_decode(&raw(100, &[6, 0]));
 }
 
 #[test]

@@ -11,8 +11,7 @@ static NEXT: AtomicU64 = AtomicU64::new(0);
 struct Scratch(PathBuf);
 impl Scratch {
     fn new() -> Self {
-        let root =
-            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/rust-app-real-worker/runs");
+        let root = std::env::temp_dir().join("app-real-worker");
         fs::create_dir_all(&root).unwrap();
         let path = root.join(format!(
             "{}-{}",
@@ -699,3 +698,48 @@ fn cancel_racing_exit_without_terminal_remains_unconfirmed() {
 mod guarded_flows;
 
 mod preview_catalog;
+
+#[test]
+fn recovery_adapter_confirms_complete_partial_and_impossible_without_changing_source() {
+    use sha2::{Digest, Sha256};
+    let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/zip-recovery-fixtures");
+    for (name, expected, count) in [
+        ("broken-local-header.zip", None, 1),
+        (
+            "missing-directory.zip",
+            Some(ErrorCode::RecoveryIncomplete),
+            1,
+        ),
+        ("body-corrupt.zip", Some(ErrorCode::RecoveryIncomplete), 1),
+        ("unrecoverable.zip", Some(ErrorCode::RecoveryImpossible), 0),
+    ] {
+        let scratch = Scratch::new();
+        let source = scratch.path("source.zip");
+        fs::copy(fixtures.join(name), &source).unwrap();
+        let before = Sha256::digest(fs::read(&source).unwrap());
+        let output = scratch.path("recovered.zip");
+        let mut model = Model::default();
+        let (mut factory, observed) = observed_factory();
+        assert!(model.begin(
+            Start::RecoverZip {
+                archive: source.clone(),
+                output_file: output.clone()
+            },
+            &mut factory
+        ));
+        wait(&mut model);
+        assert!(model.confirmed, "{name}: {:?}", model.error);
+        let terminal = model.terminal.as_ref().unwrap();
+        assert_eq!(terminal.error, expected, "{name}");
+        assert_eq!(terminal.created_count, count);
+        assert_eq!(output.exists(), count == 1);
+        assert_eq!(Sha256::digest(fs::read(source).unwrap()), before);
+        assert_reaped(&observed);
+        if count == 1 {
+            assert!(model.begin(Start::List { archive: output }, &mut factory));
+            wait(&mut model);
+            completed(&model);
+            assert!(model.list_id.is_some());
+        }
+    }
+}

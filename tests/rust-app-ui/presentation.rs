@@ -503,6 +503,110 @@ mod widgets {
         );
     }
 
+    #[test]
+    fn recovery_save_uses_native_dialog_and_partial_copy_keeps_warning_when_opened() {
+        let scratch = Folder::new();
+        let factory = FakeFactory::manual();
+        let archive = scratch.0.join("손상.zip");
+        let output = scratch.0.join("복구본.zip");
+        let mut app = ArchiveApp::new(Box::new(factory.clone()), Some(archive.clone()), false);
+        {
+            let mut state = factory.state.borrow_mut();
+            state.frame(Event::Accepted { encryption: false });
+            state.frame(Event::Terminal(Terminal {
+                outcome: Outcome::Failed,
+                error: Some(ErrorCode::Integrity),
+                publication: Publication::None,
+                created_count: 0,
+                retained_partial_count: 0,
+                durability: Durability::NotApplicable,
+                cleanup: Cleanup::Complete,
+            }));
+            state.queue.extend([
+                HostEvent::StdoutEof,
+                HostEvent::StderrEof,
+                HostEvent::Exited { success: true },
+            ]);
+        }
+        pump(&mut app.model);
+        let dialogs = TestDialogs::default();
+        dialogs
+            .0
+            .borrow_mut()
+            .answers
+            .push_back(Some(vec![output.clone()]));
+        app.set_dialogs(Box::new(dialogs.clone()));
+        let ctx = egui::Context::default();
+        click(&ctx, &mut app, "복구본 저장 위치 선택");
+        assert_eq!(
+            dialogs.0.borrow().requests[0].purpose,
+            Purpose::SaveRecoveryZip
+        );
+        assert_eq!(
+            dialogs.0.borrow().requests[0].file_name,
+            "손상-recovered.zip"
+        );
+        assert!(
+            matches!(factory.state.borrow().starts.last(), Some(Start::RecoverZip { archive: actual, output_file }) if actual == &archive && output_file == &output)
+        );
+        {
+            let mut state = factory.state.borrow_mut();
+            state.frame(Event::Accepted { encryption: false });
+            state.frame(Event::RecoveryEntry(RecoveryEntry {
+                candidate_id: 0,
+                source_offset: 0,
+                name: Some("내용.txt".into()),
+                kind: Some(worker_protocol::protocol::EntryKind::File),
+                status: RecoveryStatus::Verified,
+                reason: RecoveryReason::MetadataMissing,
+                declared_size: Some(0),
+                verified_size: Some(0),
+                sha256: Some([1; 32]),
+            }));
+            state.frame(Event::RecoveryEnd(RecoveryEnd {
+                mode: RecoveryMode::LocalChain,
+                source_bytes: 128,
+                source_sha256: [2; 32],
+                known_entries: None,
+                verified_entries: 1,
+                lost_entries: 0,
+                unverified_entries: 0,
+                unknown_loss: true,
+            }));
+            state.frame(Event::Output {
+                entry_id: None,
+                relative_name: "복구본.zip".into(),
+                disposition: Disposition::Created,
+            });
+            state.frame(Event::Terminal(Terminal {
+                outcome: Outcome::Failed,
+                error: Some(ErrorCode::RecoveryIncomplete),
+                publication: Publication::Complete,
+                created_count: 1,
+                retained_partial_count: 0,
+                durability: Durability::Synced,
+                cleanup: Cleanup::Complete,
+            }));
+            state.queue.extend([
+                HostEvent::StdoutEof,
+                HostEvent::StderrEof,
+                HostEvent::Exited { success: true },
+            ]);
+        }
+        pump(&mut app.model);
+        assert!(app.model.confirmed, "{:?}", app.model.error);
+        click(&ctx, &mut app, "복구본 열기");
+        assert!(
+            matches!(factory.state.borrow().starts.last(), Some(Start::List { archive }) if archive == &output)
+        );
+        let labels = render(&ctx, &mut app, vec![]);
+        assert!(
+            labels
+                .iter()
+                .any(|(text, _)| text.contains("전체 목록을 알 수 없어"))
+        );
+    }
+
     fn loaded(scratch: &Folder, factory: &FakeFactory) -> ArchiveApp {
         let mut app = ArchiveApp::new(
             Box::new(factory.clone()),

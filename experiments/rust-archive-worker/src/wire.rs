@@ -139,13 +139,16 @@ enumeration!(Format{Zip=0,Tar=1,Gzip=2,TarGzip=3,SevenZip=4});
 enumeration!(Method{Store=0,Deflate=1});
 enumeration!(SevenZipMethod{Lzma2=0});
 enumeration!(Encryption{None=0,Aes256=1});
-enumeration!(ActionKind{List=0,Extract=1,CreateZip=2,Preview=3,CreateSevenZip=4});
+enumeration!(ActionKind{List=0,Extract=1,CreateZip=2,Preview=3,CreateSevenZip=4,RecoverZip=5});
+enumeration!(RecoveryMode{CentralDirectory=0,LocalChain=1});
+enumeration!(RecoveryStatus{Verified=0,Lost=1,Unverified=2});
+enumeration!(RecoveryReason{None=0,HeaderRebuilt=1,Truncated=2,CrcMismatch=3,DecodeFailure=4,BoundaryUnknown=5,UnsupportedFeature=6,MetadataMissing=7});
 enumeration!(PreviewFormat{Utf8Text=0,Rgba8=1});
 enumeration!(EntryKind{File=0,Directory=1,Link=2,Other=3});
 enumeration!(Stage{Scan=0,Read=1,Decode=2,Write=3,Verify=4,Commit=5});
 enumeration!(Disposition{Created=0,PartialRetained=1,Removed=2,CommitUncertain=3});
 enumeration!(Outcome{Completed=0,Failed=1,Cancelled=2});
-enumeration!(ErrorCode{None=0,Integrity=1,UnsupportedFormat=2,UnsupportedFeature=3,WrongPassword=4,UnsafePath=5,Conflict=6,Limit=7,Io=8,Protocol=9,Internal=10,SourceChanged=11,InvalidRequest=12,DiskFull=13,MissingVolume=14});
+enumeration!(ErrorCode{None=0,Integrity=1,UnsupportedFormat=2,UnsupportedFeature=3,WrongPassword=4,UnsafePath=5,Conflict=6,Limit=7,Io=8,Protocol=9,Internal=10,SourceChanged=11,InvalidRequest=12,DiskFull=13,MissingVolume=14,RecoveryIncomplete=15,RecoveryImpossible=16});
 enumeration!(VolumeProblemReason{FirstVolumeRequired=0,MissingVolume=1,IncompleteSet=2});
 enumeration!(Publication{None=0,Partial=1,Complete=2,Uncertain=3});
 enumeration!(Durability{NotApplicable=0,Synced=1,Unconfirmed=2,Failed=3});
@@ -210,6 +213,72 @@ impl Wire for PreviewInfo {
             return Err(invalid());
         }
         Ok(info)
+    }
+}
+impl Wire for RecoveryEntry {
+    fn enc(&self, e: &mut Encoder) -> io::Result<()> {
+        if !self.valid() {
+            return Err(invalid());
+        }
+        self.candidate_id.enc(e)?;
+        self.source_offset.enc(e)?;
+        self.name.enc(e)?;
+        self.kind.enc(e)?;
+        self.status.enc(e)?;
+        self.reason.enc(e)?;
+        self.declared_size.enc(e)?;
+        self.verified_size.enc(e)?;
+        self.sha256.enc(e)?;
+        Ok(())
+    }
+    fn dec(d: &mut Decoder<'_>) -> io::Result<Self> {
+        let value = Self {
+            candidate_id: Wire::dec(d)?,
+            source_offset: Wire::dec(d)?,
+            name: Wire::dec(d)?,
+            kind: Wire::dec(d)?,
+            status: Wire::dec(d)?,
+            reason: Wire::dec(d)?,
+            declared_size: Wire::dec(d)?,
+            verified_size: Wire::dec(d)?,
+            sha256: Wire::dec(d)?,
+        };
+        if !value.valid() {
+            return Err(invalid());
+        }
+        Ok(value)
+    }
+}
+impl Wire for RecoveryEnd {
+    fn enc(&self, e: &mut Encoder) -> io::Result<()> {
+        if !self.valid() {
+            return Err(invalid());
+        }
+        self.mode.enc(e)?;
+        self.source_bytes.enc(e)?;
+        self.source_sha256.enc(e)?;
+        self.known_entries.enc(e)?;
+        self.verified_entries.enc(e)?;
+        self.lost_entries.enc(e)?;
+        self.unverified_entries.enc(e)?;
+        self.unknown_loss.enc(e)?;
+        Ok(())
+    }
+    fn dec(d: &mut Decoder<'_>) -> io::Result<Self> {
+        let value = Self {
+            mode: Wire::dec(d)?,
+            source_bytes: Wire::dec(d)?,
+            source_sha256: Wire::dec(d)?,
+            known_entries: Wire::dec(d)?,
+            verified_entries: Wire::dec(d)?,
+            lost_entries: Wire::dec(d)?,
+            unverified_entries: Wire::dec(d)?,
+            unknown_loss: Wire::dec(d)?,
+        };
+        if !value.valid() {
+            return Err(invalid());
+        }
+        Ok(value)
     }
 }
 structure!(Source { path, archive_name });
@@ -346,6 +415,14 @@ impl Wire for Selection {
 impl Wire for Action {
     fn enc(&self, e: &mut Encoder) -> io::Result<()> {
         match self {
+            Self::RecoverZip {
+                archive,
+                output_file,
+            } => {
+                5u8.enc(e)?;
+                archive.enc(e)?;
+                output_file.enc(e)
+            }
             Self::List { archive } => {
                 0u8.enc(e)?;
                 archive.enc(e)
@@ -424,6 +501,10 @@ impl Wire for Action {
                 archive: Wire::dec(d)?,
                 entry_id: Wire::dec(d)?,
                 list_id: Wire::dec(d)?,
+            }),
+            5 => Ok(Self::RecoverZip {
+                archive: Wire::dec(d)?,
+                output_file: Wire::dec(d)?,
             }),
             4 => Ok(Self::CreateSevenZip {
                 sources: Wire::dec(d)?,
@@ -520,6 +601,9 @@ impl Message {
                 110
             }
             Self::Accepted { action, encryption } => {
+                if *action == ActionKind::RecoverZip && *encryption {
+                    return Err(invalid());
+                }
                 action.enc(&mut e)?;
                 encryption.enc(&mut e)?;
                 100
@@ -606,6 +690,14 @@ impl Message {
                 reason.enc(&mut e)?;
                 volume.enc(&mut e)?;
                 114
+            }
+            Self::RecoveryEntry(v) => {
+                v.enc(&mut e)?;
+                115
+            }
+            Self::RecoveryEnd(v) => {
+                v.enc(&mut e)?;
+                116
             }
             Self::Terminal(v) => {
                 if v.detail.len() > 4096 {
@@ -717,10 +809,16 @@ impl Message {
                 soft_limits: Wire::dec(&mut d)?,
                 ceiling: Wire::dec(&mut d)?,
             },
-            100 => Self::Accepted {
-                action: Wire::dec(&mut d)?,
-                encryption: Wire::dec(&mut d)?,
-            },
+            100 => {
+                let action = Wire::dec(&mut d)?;
+                let encryption = Wire::dec(&mut d)?;
+                if action == ActionKind::RecoverZip && encryption {
+                    return Err(invalid());
+                }
+                Self::Accepted { action, encryption }
+            }
+            115 => Self::RecoveryEntry(Wire::dec(&mut d)?),
+            116 => Self::RecoveryEnd(Wire::dec(&mut d)?),
             101 => Self::Entry(Wire::dec(&mut d)?),
             102 => Self::ListEnd {
                 entry_count: Wire::dec(&mut d)?,
