@@ -21,6 +21,7 @@ macro_rules! catalog {
 }
 
 catalog! {
+    "preview-catalog-approval" => "미리보기의 전체 목록 처리 예산 승인",
     "preview-loading" => "미리보기 로딩과 취소",
     "preview-text" => "읽기 전용 텍스트 미리보기",
     "preview-image" => "정적 이미지 미리보기",
@@ -273,7 +274,47 @@ impl Scenario {
                 app.model.selected.insert(0);
                 return app;
             }
+            if self.name == "preview-catalog-approval" {
+                let template = app.model.entries[1].clone();
+                app.model.entries = (0..10_001)
+                    .map(|id| Entry {
+                        id,
+                        name: if id == 1 {
+                            "읽어주세요.txt".into()
+                        } else {
+                            format!("{id}.bin")
+                        },
+                        bytes: Some(if id == 1 { 7 } else { 0 }),
+                        ..template.clone()
+                    })
+                    .collect();
+            }
             app.begin_preview(&egui::Context::default());
+            if self.name == "preview-catalog-approval" {
+                let mut state = state.borrow_mut();
+                state.frame(Event::Accepted { encryption: false });
+                state.frame(Event::ResourceRequired(ResourceChallenge {
+                    id: 1,
+                    action: ActionKind::Preview,
+                    scope: ResourceScope {
+                        output: true,
+                        entries: true,
+                        ..ResourceScope::default()
+                    },
+                    usage: ResourceUsage::default(),
+                    soft_limits: Limits::default(),
+                    ceiling: Limits {
+                        input: u64::MAX,
+                        output: 64 * 1024 * 1024 * 1024,
+                        entries: 200_000,
+                    },
+                }));
+                drop(state);
+                for _ in 0..32 {
+                    app.model.poll();
+                }
+                return app;
+            }
             {
                 let mut state = state.borrow_mut();
                 state.frame(Event::Accepted { encryption: false });

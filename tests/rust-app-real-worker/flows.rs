@@ -697,3 +697,5 @@ fn cancel_racing_exit_without_terminal_remains_unconfirmed() {
 }
 
 mod guarded_flows;
+
+mod preview_catalog;

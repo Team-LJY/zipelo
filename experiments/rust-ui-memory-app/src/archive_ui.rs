@@ -501,7 +501,7 @@ impl Model {
                     .flatten();
             }
             Start::Preview { entry_id, .. } => {
-                usage.estimated_entries = Some(1);
+                usage.estimated_entries = u32::try_from(self.entries.len()).ok();
                 usage.estimated_bytes = self
                     .entries
                     .iter()
