@@ -83,14 +83,21 @@ switch ($Mode) {
         if ($ExpectedVersion -and $newVersion -cne $ExpectedVersion) {
             throw "업데이트 후 DisplayVersion이 $ExpectedVersion 이 아님: $newVersion"
         }
-        $before.registry.Remove($versionKey[0])
-        $after.registry.Remove($versionKey[0])
-        AssertEqual $before.registry $after.registry "업데이트가 기존 연결 또는 등록을 바꿈"
+        if ($ExpectedVersion -and $before.registry[$versionKey[0]] -ceq $ExpectedVersion) {
+            throw "업데이트 전부터 DisplayVersion이 $ExpectedVersion 이라 교체를 확인할 수 없음"
+        }
+        # 증거에는 버전을 남기고 비교용 복사본에서만 제외함.
+        $beforeRegistry = [ordered]@{}
+        foreach ($key in $before.registry.Keys) { if ($key -ne $versionKey[0]) { $beforeRegistry[$key] = $before.registry[$key] } }
+        $afterRegistry = [ordered]@{}
+        foreach ($key in $after.registry.Keys) { if ($key -ne $versionKey[0]) { $afterRegistry[$key] = $after.registry[$key] } }
+        AssertEqual $beforeRegistry $afterRegistry "업데이트가 기존 연결 또는 등록을 바꿈"
         AssertEqual $before.shortcut $after.shortcut "업데이트가 기존 바로가기를 바꿈"
-        if ($before.files['Uninstall.exe'] -eq $after.files['Uninstall.exe']) {
+        # 버전을 지정하면 그 값으로 교체를 확인함. 같은 NSIS 스크립트의 제거 프로그램은 버전만 달라도 같을 수 있음.
+        if (-not $ExpectedVersion -and $before.files['Uninstall.exe'] -eq $after.files['Uninstall.exe']) {
             throw "새 제거 프로그램으로 교체되지 않음"
         }
         $after | ConvertTo-Json -Depth 8 | Set-Content -Encoding UTF8 $Evidence
-        "upgrade_passed: version $($newVersion), new uninstaller, preserved associations"
+        "upgrade_passed: version $($newVersion), preserved associations"
     }
 }

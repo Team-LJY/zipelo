@@ -61,4 +61,4 @@ ms-settings URI를 사용합니다.
 
 upstream에도 원문이 없는 승인된 12개 항목은 SPDX의 MIT 표준 원문과 해당 버전 Cargo.toml의 저자 고지로 보충합니다. 고지에 표준 원문 보충 사유, 선택한 라이선스, 원문과 저자 고지의 출처 및 SHA-256을 표시합니다. Cargo 메타데이터의 전체 라이선스 식은 그대로 보존합니다.
 
-업데이트 회귀 검증은 전용 Windows VM에서 v0.1.0을 설치하고 기본 앱을 지정한 뒤 tests/windows-installer/upgrade.ps1을 사용합니다. -Installer <새 설치 파일> -Mode Rollback -Evidence <tests/work 아래 JSON>은 앱, 작업자와 마지막 표식 파일 잠금 시 7개 파일 및 등록 복원을 확인합니다. -Mode Upgrade는 정상 교체와 연결 및 바로가기 보존을 확인하며, 등록 중 DisplayVersion만 따로 확인합니다. -ExpectedVersion 0.2.0을 주면 바뀐 버전도 검사합니다. -Mode Snapshot 후 업데이트 준비 화면에서 취소하고 -Mode Compare로 취소 전후를 비교합니다. 검증용 설치 파일은 같은 v0.1.0 앱 payload를 새 NSIS로 포장할 수도 있으며 이 경우 앱 버전 변경을 검증한 것으로 보지 않습니다.
+업데이트 회귀 검증은 전용 Windows VM에서 v0.1.0을 설치하고 기본 앱을 지정한 뒤 tests/windows-installer/upgrade.ps1을 사용합니다. -Installer <새 설치 파일> -Mode Rollback -Evidence <tests/work 아래 JSON>은 앱, 작업자와 마지막 표식 파일 잠금 시 7개 파일 및 등록 복원을 확인합니다. -Mode Upgrade는 정상 교체와 연결 및 바로가기 보존을 확인하며, 등록 중 DisplayVersion만 따로 확인합니다. -ExpectedVersion 0.2.0을 주면 바뀐 버전으로 교체를 확인하고, 주지 않으면 제거 프로그램 교체로 확인합니다. -Mode Snapshot 후 업데이트 준비 화면에서 취소하고 -Mode Compare로 취소 전후를 비교합니다. 검증용 설치 파일은 같은 v0.1.0 앱 payload를 새 NSIS로 포장할 수도 있으며 이 경우 앱 버전 변경을 검증한 것으로 보지 않습니다.
