@@ -58,6 +58,9 @@ def corpus():
     corrupt[corrupt_offset] ^= 0x80
     bad_eocd = bytearray(original)
     bad_eocd[-22:-18] = b"BAD!"
+    local_offset = entries[1]["local_offset"]
+    bad_local = bytearray(original)
+    bad_local[local_offset:local_offset + 4] = b"BAD!"
     cases = [
         ("control.zip", "control", original, [], ["verified"] * 6),
         ("missing-directory.zip", "header_damage", original[:directory_offset],
@@ -74,6 +77,9 @@ def corpus():
          ["verified"] * 4 + ["integrity_failed", "verified"]),
         ("unrecoverable.zip", "unrecoverable", original[:20],
          [{"operation": "truncate", "offset": 20}], ["not_observable"] * 6),
+        ("broken-local-header.zip", "header_damage", bytes(bad_local),
+         [{"operation": "replace", "offset": local_offset, "hex": "42414421"}],
+         ["verified"] * 6),
     ]
     files = {}
     samples = []
@@ -87,8 +93,8 @@ def corpus():
             "mutations_from_control": mutations,
             "expected": {
                 "publish_archive": bool(verified) and category != "control",
-                "warning_required": category != "control",
-                "must_not_claim_complete_original": category != "control",
+                "warning_required": category != "control" and name != "broken-local-header.zip",
+                "must_not_claim_complete_original": category != "control" and name != "broken-local-header.zip",
                 "must_preserve_source_sha256": sha256(data),
                 "verified_entries": verified,
                 "excluded_entries": [entry["name"] for entry, state in zip(entries, states)
@@ -96,6 +102,21 @@ def corpus():
                 "oracle_states": dict(zip((entry["name"] for entry in entries), states)),
             },
         })
+        if name == "broken-local-header.zip":
+            samples[-1]["expected"]["recovery_summary"] = {
+                "mode": "CentralDirectory",
+                "known_entries": 6,
+                "verified_entries": 6,
+                "lost_entries": 0,
+                "unverified_entries": 0,
+                "unknown_loss": False,
+            }
+            samples[-1]["expected"]["terminal_after_successful_publication"] = {
+                "outcome": "Completed",
+                "error": "None",
+                "publication": "Complete",
+                "created_count": 1,
+            }
         files[name] = data
     manifest = {
         "schema_version": 1,

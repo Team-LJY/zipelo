@@ -283,6 +283,56 @@
                     "after.txt": "not_observable"
                 }
             }
+        },
+        {
+            "file": "broken-local-header.zip",
+            "category": "header_damage",
+            "bytes": 1734,
+            "sha256": "62f2b6a029a3654856feabbdc90882e124798ad50dbe54e0a54a2502fd464181",
+            "mutations_from_control": [
+                {
+                    "operation": "replace",
+                    "offset": 65,
+                    "hex": "42414421"
+                }
+            ],
+            "expected": {
+                "publish_archive": true,
+                "warning_required": false,
+                "must_not_claim_complete_original": false,
+                "must_preserve_source_sha256": "62f2b6a029a3654856feabbdc90882e124798ad50dbe54e0a54a2502fd464181",
+                "verified_entries": [
+                    "hello.txt",
+                    "한글/자료.txt",
+                    "empty.txt",
+                    "empty-dir/",
+                    "middle.bin",
+                    "after.txt"
+                ],
+                "excluded_entries": [],
+                "oracle_states": {
+                    "hello.txt": "verified",
+                    "한글/자료.txt": "verified",
+                    "empty.txt": "verified",
+                    "empty-dir/": "verified",
+                    "middle.bin": "verified",
+                    "after.txt": "verified"
+                },
+                "recovery_summary": {
+                    "mode": "CentralDirectory",
+                    "known_entries": 6,
+                    "verified_entries": 6,
+                    "lost_entries": 0,
+                    "unverified_entries": 0,
+                    "unknown_loss": false
+                },
+                "terminal_after_successful_publication": {
+                    "outcome": "Completed",
+                    "error": "None",
+                    "publication": "Complete",
+                    "created_count": 1
+                }
+            }
         }
     ]
 }

@@ -20,6 +20,14 @@ def digest(data):
     return hashlib.sha256(data).hexdigest()
 
 
+def reference_restore_local_signature(data):
+    with zipfile.ZipFile(io.BytesIO(data)) as archive:
+        offset = archive.getinfo("한글/자료.txt").header_offset
+    if data[offset:offset + 4] != b"BAD!":
+        raise ValueError("표본의 로컬 서명 손상 위치 불일치")
+    return data[:offset] + b"PK\x03\x04" + data[offset + 4:]
+
+
 def local_payload(data, entry):
     offset = entry["local_offset"]
     if data[offset:offset + 4] != b"PK\x03\x04" or len(data) < offset + 30:
@@ -115,11 +123,47 @@ class CorpusTests(unittest.TestCase):
             if sample["category"] == "control":
                 continue
             with self.subTest(name=name), self.assertRaises(zipfile.BadZipFile):
-                zipfile.ZipFile(ROOT / name)
+                with zipfile.ZipFile(ROOT / name) as archive:
+                    for info in archive.infolist():
+                        archive.read(info)
+
+    def test_complete_inventory_with_only_local_signature_damage(self):
+        original = (ROOT / "control.zip").read_bytes()
+        damaged = (ROOT / "broken-local-header.zip").read_bytes()
+        with zipfile.ZipFile(io.BytesIO(damaged)) as archive:
+            self.assertEqual(archive.namelist(), list(ENTRIES))
+            self.assertEqual(damaged[archive.start_dir:], original[archive.start_dir:])
+            offset = 0
+            for info in archive.infolist():
+                self.assertEqual(info.header_offset, offset)
+                name_size, extra_size = struct.unpack_from("<HH", damaged, offset + 26)
+                offset += 30 + name_size + extra_size + info.compress_size
+            self.assertEqual(offset, archive.start_dir)
+            with self.assertRaises(zipfile.BadZipFile):
+                archive.read("한글/자료.txt")
+        repaired = reference_restore_local_signature(damaged)
+        self.assertEqual(repaired, original)
+        with zipfile.ZipFile(io.BytesIO(repaired)) as archive:
+            self.assertIsNone(archive.testzip())
+            for info in archive.infolist():
+                self.assertEqual(digest(archive.read(info)), ENTRIES[info.filename]["sha256"])
+        self.assertEqual((ROOT / "broken-local-header.zip").read_bytes(), damaged)
+        expected = SAMPLES["broken-local-header.zip"]["expected"]
+        self.assertEqual(expected["recovery_summary"], {
+            "mode": "CentralDirectory", "known_entries": 6, "verified_entries": 6,
+            "lost_entries": 0, "unverified_entries": 0, "unknown_loss": False,
+        })
+        self.assertFalse(expected["must_not_claim_complete_original"])
+        self.assertFalse(expected["warning_required"])
+        self.assertEqual(expected["terminal_after_successful_publication"], {
+            "outcome": "Completed", "error": "None", "publication": "Complete", "created_count": 1,
+        })
 
     def test_verified_entries_have_intact_local_payloads(self):
         for name, sample in SAMPLES.items():
             data = (ROOT / name).read_bytes()
+            if name == "broken-local-header.zip":
+                data = reference_restore_local_signature(data)
             for entry_name in sample["expected"]["verified_entries"]:
                 with self.subTest(sample=name, entry=entry_name):
                     payload = local_payload(data, ENTRIES[entry_name])
@@ -132,7 +176,7 @@ class CorpusTests(unittest.TestCase):
                 with self.subTest(sample=name, entry=entry_name), self.assertRaises(ValueError):
                     local_payload(data, ENTRIES[entry_name])
         counts = [len(sample["expected"]["verified_entries"]) for sample in SAMPLES.values()]
-        self.assertEqual(counts, [6, 6, 6, 4, 5, 0])
+        self.assertEqual(counts, [6, 6, 6, 4, 5, 0, 6])
         self.assertEqual(SAMPLES["middle-truncated.zip"]["expected"]["oracle_states"]["after.txt"],
                          "not_observable")
 
