@@ -161,3 +161,84 @@ fn recovery_summary_is_not_a_saved_artifact() {
     assert!(!model.confirmed);
     assert!(model.outputs.is_empty());
 }
+
+#[test]
+fn recovery_retains_temporary_paths_with_and_without_a_publication_report() {
+    for final_disposition in [
+        None,
+        Some(Disposition::Created),
+        Some(Disposition::CommitUncertain),
+    ] {
+        let (mut model, factory) = begin();
+        let mut state = factory.state.borrow_mut();
+        state.frame(Event::RecoveryEntry(entry()));
+        state.frame(Event::RecoveryEnd(summary(false)));
+        if let Some(disposition) = final_disposition {
+            state.frame(Event::Output {
+                entry_id: None,
+                relative_name: "recovered.zip".into(),
+                disposition,
+            });
+        }
+        state.frame(Event::Output {
+            entry_id: None,
+            relative_name: ".zipelo-42-1.tmp".into(),
+            disposition: Disposition::PartialRetained,
+        });
+        state.frame(Event::Terminal(Terminal {
+            outcome: Outcome::Failed,
+            error: Some(ErrorCode::Io),
+            publication: match final_disposition {
+                None => Publication::None,
+                Some(Disposition::Created) => Publication::Partial,
+                _ => Publication::Uncertain,
+            },
+            created_count: u64::from(final_disposition == Some(Disposition::Created)),
+            retained_partial_count: 1,
+            durability: Durability::Unconfirmed,
+            cleanup: Cleanup::Failed,
+        }));
+        drop(state);
+        eof(&factory);
+        pump(&mut model);
+        assert!(model.confirmed, "{:?}", model.error);
+        assert!(
+            model
+                .outputs
+                .contains(&(".zipelo-42-1.tmp".into(), Disposition::PartialRetained))
+        );
+        assert!(!model.can_retry_expanded());
+    }
+}
+
+#[test]
+fn recovery_output_validation_still_rejects_wrong_fields_and_duplicates() {
+    for case in 0..6 {
+        let (mut model, factory) = begin();
+        let mut state = factory.state.borrow_mut();
+        state.frame(Event::RecoveryEntry(entry()));
+        state.frame(Event::RecoveryEnd(summary(false)));
+        let (entry_id, name, disposition) = match case {
+            0 => (Some(0), ".zipelo-42-1.tmp", Disposition::PartialRetained),
+            1 => (None, "../outside.tmp", Disposition::PartialRetained),
+            2 => (None, "other.zip", Disposition::Created),
+            3 => (None, "recovered.zip", Disposition::PartialRetained),
+            4 => (None, "recovered.zip", Disposition::Created),
+            _ => (None, ".zipelo-42-1.tmp", Disposition::PartialRetained),
+        };
+        let report = Event::Output {
+            entry_id,
+            relative_name: name.into(),
+            disposition,
+        };
+        state.frame(report.clone());
+        if case >= 4 {
+            state.frame(report);
+        }
+        drop(state);
+        for _ in 0..20 {
+            model.poll();
+        }
+        assert!(model.error.is_some(), "{case}");
+    }
+}

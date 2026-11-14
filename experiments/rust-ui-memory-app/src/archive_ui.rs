@@ -1343,12 +1343,29 @@ impl Model {
                         entry_id,
                     } => {
                         if let Start::RecoverZip { output_file, .. } = &run.start {
-                            if entry_id.is_some()
-                                || self.recovery_end.is_none()
-                                || !self.outputs.is_empty()
-                                || output_file.file_name().and_then(|n| n.to_str())
-                                    != Some(relative_name.as_str())
-                            {
+                            let final_output = matches!(
+                                disposition,
+                                Disposition::Created | Disposition::CommitUncertain
+                            );
+                            let valid_output = if final_output {
+                                output_file.file_name().and_then(|n| n.to_str())
+                                    == Some(relative_name.as_str())
+                                    && !self.outputs.iter().any(|(_, d)| {
+                                        matches!(
+                                            d,
+                                            Disposition::Created | Disposition::CommitUncertain
+                                        )
+                                    })
+                            } else {
+                                valid_leaf(&relative_name)
+                                    && (disposition != Disposition::PartialRetained
+                                        || output_file.file_name().and_then(|n| n.to_str())
+                                            != Some(relative_name.as_str()))
+                                    && !self.outputs.iter().any(|(name, d)| {
+                                        name == &relative_name && *d == disposition
+                                    })
+                            };
+                            if entry_id.is_some() || self.recovery_end.is_none() || !valid_output {
                                 self.error = Some("복구본 출력 응답이 유효하지 않습니다".into());
                                 return;
                             }

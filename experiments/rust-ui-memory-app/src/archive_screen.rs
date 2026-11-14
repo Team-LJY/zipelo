@@ -2152,8 +2152,27 @@ impl ArchiveApp {
             Some(Start::RecoverZip { output_file, .. }) => output_file.clone(),
             _ => return,
         };
-        if saved || !self.model.outputs.is_empty() {
+        if saved
+            || self
+                .model
+                .outputs
+                .iter()
+                .any(|(_, d)| matches!(d, Disposition::Created | Disposition::CommitUncertain))
+        {
             theme::bounded_text(ui, &output.display().to_string(), ui.available_width());
+        }
+        for (name, _) in self
+            .model
+            .outputs
+            .iter()
+            .filter(|(_, d)| *d == Disposition::PartialRetained)
+        {
+            let retained = output.parent().unwrap_or(Path::new("")).join(name);
+            theme::bounded_text(
+                ui,
+                &format!("남은 임시 파일: {}", retained.display()),
+                ui.available_width(),
+            );
         }
         if let Some(error) = &self.model.error {
             ui.colored_label(theme::WARNING, error);

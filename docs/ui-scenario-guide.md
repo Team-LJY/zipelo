@@ -206,6 +206,7 @@ Ubuntu 제거 안내는 패키지 관리자 터미널 출력입니다. 이전 �
 - recovery-unknown: 전체 목록을 알 수 없어 추가 유실 여부를 확인할 수 없습니다.
 - recovery-impossible: 복구 가능한 항목과 생성된 복구본이 없습니다.
 - recovery-cancelled: 취소 종료와 출력 없음 상태입니다.
+- recovery-retained: 저장 실패 뒤 남은 임시 파일의 실제 경로와 정리 경고를 표시합니다. 완성된 복구본으로 열지 않습니다.
 - recovery-save-error: 분석이 끝났어도 저장 실패를 완료로 표시하지 않습니다.
 - recovery-resource: 원본 제한은 유지하면서 압축률 예산 승인을 확인합니다.
 

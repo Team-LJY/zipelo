@@ -27,6 +27,7 @@ catalog! {
     "recovery-unknown" => "전체 목록 불명의 추가 유실 경고",
     "recovery-impossible" => "복구 가능한 항목 없음과 출력 없음",
     "recovery-cancelled" => "복구 취소와 출력 없음",
+    "recovery-retained" => "복구 저장 실패 뒤 남은 임시 파일 경로와 정리 경고",
     "recovery-save-error" => "복구 분석 뒤 저장 실패",
     "recovery-resource" => "복구 작업의 자원 승인",
 
@@ -581,7 +582,8 @@ impl Scenario {
                 let impossible = self.name == "recovery-impossible";
                 let partial = self.name == "recovery-partial";
                 let unknown = self.name == "recovery-unknown";
-                let failed = self.name == "recovery-save-error";
+                let retained = self.name == "recovery-retained";
+                let failed = self.name == "recovery-save-error" || retained;
                 state.frame(Event::RecoveryEntry(RecoveryEntry {
                     candidate_id: 0,
                     source_offset: 0,
@@ -635,6 +637,13 @@ impl Scenario {
                         disposition: Disposition::Created,
                     });
                 }
+                if retained {
+                    state.frame(Event::Output {
+                        entry_id: None,
+                        relative_name: ".zipelo-42-1.tmp".into(),
+                        disposition: Disposition::PartialRetained,
+                    });
+                }
                 state.frame(Event::Terminal(Terminal {
                     outcome: if partial || unknown || impossible || failed {
                         Outcome::Failed
@@ -656,13 +665,17 @@ impl Scenario {
                         Publication::Complete
                     },
                     created_count: u64::from(!impossible && !failed),
-                    retained_partial_count: 0,
+                    retained_partial_count: u64::from(retained),
                     durability: if impossible || failed {
                         Durability::NotApplicable
                     } else {
                         Durability::Synced
                     },
-                    cleanup: Cleanup::Complete,
+                    cleanup: if retained {
+                        Cleanup::Failed
+                    } else {
+                        Cleanup::Complete
+                    },
                 }));
                 state.queue.extend([
                     HostEvent::StdoutEof,

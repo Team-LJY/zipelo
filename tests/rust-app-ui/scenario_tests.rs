@@ -101,7 +101,9 @@ fn every_listed_scenario_draws_and_keeps_its_expected_screen() {
                     "recovery-partial" => "일부 항목만 복구함",
                     "recovery-unknown" => "전체 목록을 알 수 없어",
                     "recovery-impossible" => "복구 가능한 항목 없음",
-                    "recovery-save-error" => "복구본 저장을 완료하지 못했습니다",
+                    "recovery-save-error" | "recovery-retained" => {
+                        "복구본 저장을 완료하지 못했습니다"
+                    }
                     "recovery-cancelled" => "복구를 취소했습니다",
                     "recovery-resource" => "이 작업 허용",
                     _ => "ZIP 복구 중",
@@ -115,6 +117,12 @@ fn every_listed_scenario_draws_and_keeps_its_expected_screen() {
                     )
                 );
                 assert!(!labels.contains("100%"));
+                if scenario.name == "recovery-retained" {
+                    assert!(labels.contains("남은 임시 파일:"), "{labels}");
+                    assert!(labels.contains(".zipelo-42-1.tmp"), "{labels}");
+                    assert!(app.model.confirmed);
+                    assert!(!app.model.can_retry_expanded());
+                }
             }
             if scenario.name == "split-archive" {
                 assert!(app.model.list_id.as_ref().unwrap().is_split());
