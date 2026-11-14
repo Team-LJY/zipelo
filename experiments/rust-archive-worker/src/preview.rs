@@ -240,6 +240,9 @@ fn jpeg_info(entry_id: u32, source: &[u8], check: &mut impl Monitor) -> Result<P
     let mut scanning = false;
     let mut info = None;
     let mut seen_scan = false;
+    let mut components = Vec::new();
+    let mut decoded_components = 0u8;
+    let mut progressive = false;
     while at < source.len() {
         check.check()?;
         if scanning {
@@ -258,7 +261,12 @@ fn jpeg_info(entry_id: u32, source: &[u8], check: &mut impl Monitor) -> Result<P
         at += 1;
         match marker {
             0 | 0xd0..=0xd7 if scanning => continue,
-            0xd9 if at == source.len() && seen_scan => return info.ok_or(ErrorCode::Integrity),
+            0xd9 if at == source.len() && seen_scan => {
+                if decoded_components != (1 << components.len()) - 1 {
+                    return Err(ErrorCode::Integrity);
+                }
+                return info.ok_or(ErrorCode::Integrity);
+            }
             0 | 0xd0..=0xd9 => return Err(ErrorCode::Integrity),
             1 => continue,
             _ => {}
@@ -277,6 +285,17 @@ fn jpeg_info(entry_id: u32, source: &[u8], check: &mut impl Monitor) -> Result<P
             if !matches!(marker, 0xc0 | 0xc2) || body[0] != 8 {
                 return Err(ErrorCode::UnsupportedFeature);
             }
+            progressive = marker == 0xc2;
+            let count = usize::from(body[5]);
+            if !(1..=4).contains(&count) || body.len() != 6 + count * 3 {
+                return Err(ErrorCode::Integrity);
+            }
+            for component in body[6..].chunks_exact(3) {
+                if components.contains(&component[0]) {
+                    return Err(ErrorCode::Integrity);
+                }
+                components.push(component[0]);
+            }
             info = Some(rgba_info(
                 entry_id,
                 u32::from(u16::from_be_bytes(body[3..5].try_into().unwrap())),
@@ -287,6 +306,38 @@ fn jpeg_info(entry_id: u32, source: &[u8], check: &mut impl Monitor) -> Result<P
             return Err(ErrorCode::UnsupportedFeature);
         }
         scanning = marker == 0xda;
+        if scanning {
+            let count = usize::from(*body.first().ok_or(ErrorCode::Integrity)?);
+            if info.is_none()
+                || count == 0
+                || count > components.len()
+                || body.len() != 4 + count * 2
+            {
+                return Err(ErrorCode::Integrity);
+            }
+            let mut scan_components = 0u8;
+            for component in body[1..1 + count * 2].chunks_exact(2) {
+                let index = components
+                    .iter()
+                    .position(|id| *id == component[0])
+                    .ok_or(ErrorCode::Integrity)?;
+                let bit = 1 << index;
+                if scan_components & bit != 0 {
+                    return Err(ErrorCode::Integrity);
+                }
+                scan_components |= bit;
+            }
+            if !progressive
+                && (scan_components & decoded_components != 0
+                    || body[1 + count * 2..] != [0, 63, 0])
+            {
+                return Err(ErrorCode::Integrity);
+            }
+            // 모든 색상 성분의 최초 DC 스캔이 있어야 완전한 그림으로 처리함.
+            if body[1 + count * 2] == 0 && body[3 + count * 2] >> 4 == 0 {
+                decoded_components |= scan_components;
+            }
+        }
         seen_scan |= scanning;
         at = end;
         check.activity()?;

@@ -15,6 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 LICENSE_CHOICES = {
     ("png", "0.18.1"): "MIT",
     ("zune-jpeg", "0.5.15"): "MIT",
+    ("zipelo-jpeg", "0.5.15"): "MIT",
     ("zune-core", "0.5.3"): "MIT",
 }
 
@@ -181,8 +182,16 @@ def inventory(manifests, project_root=None, supplement_path=ROOT / "packaging/li
                 if (package["license"] != "MIT"
                         or not Path(package["manifest_path"]).resolve().is_relative_to(root)):
                     raise ValueError(f"프로젝트 라이선스 범위 확인 필요: {key}")
-                content = (root / "LICENSE").read_bytes()
-                files = [{"path": "project/LICENSE", "sha256": hashlib.sha256(content).hexdigest(),
+                license_file = root / "LICENSE"
+                if package.get("license_file"):
+                    package_root = Path(package["manifest_path"]).parent.resolve()
+                    license_file = package_root / package["license_file"]
+                    if (license_file.is_symlink()
+                            or not license_file.resolve().is_relative_to(package_root)):
+                        raise ValueError(f"프로젝트 라이선스 경로 이탈: {key}")
+                content = license_file.read_bytes()
+                files = [{"path": "project/" + license_file.relative_to(root).as_posix(),
+                          "sha256": hashlib.sha256(content).hexdigest(),
                           "text": content.decode("utf-8")}]
             if key in records:
                 if records[key]["license"] != package["license"]:

@@ -278,3 +278,82 @@ fn preview_jpeg_normalizes_gray_and_cmyk_to_rgba() {
         }
     }
 }
+
+#[test]
+fn preview_jpeg_rejects_missing_scan_pixels() {
+    let original = include_bytes!("fixtures/preview-baseline.jpg");
+    let mut missing = original[..623].to_vec();
+    missing.extend([0xff, 0xd9]);
+    assert!(matches!(
+        run(Kind::Jpeg, missing),
+        Err(ErrorCode::Integrity)
+    ));
+
+    let mut missing_rows = original.to_vec();
+    let sof = original.windows(2).position(|p| p == [0xff, 0xc0]).unwrap();
+    missing_rows[sof + 5..sof + 7].copy_from_slice(&32u16.to_be_bytes());
+    assert!(matches!(
+        run(Kind::Jpeg, missing_rows),
+        Err(ErrorCode::Integrity)
+    ));
+
+    let sos = original.windows(2).position(|p| p == [0xff, 0xda]).unwrap();
+    let mut missing_components = original.to_vec();
+    missing_components[sos + 2..sos + 4].copy_from_slice(&8u16.to_be_bytes());
+    missing_components[sos + 4] = 1;
+    missing_components.drain(sos + 7..sos + 11);
+    assert!(matches!(
+        jpeg_info(7, &missing_components, &mut || Ok(())),
+        Err(ErrorCode::Integrity)
+    ));
+}
+
+#[test]
+fn preview_png_rejects_complete_container_with_missing_pixel_rows() {
+    let mut missing = pixel();
+    missing[20..24].copy_from_slice(&2u32.to_be_bytes());
+    let crc = crc32(0, &missing[12..29]);
+    missing[29..33].copy_from_slice(&crc.to_be_bytes());
+    assert!(matches!(run(Kind::Png, missing), Err(ErrorCode::Integrity)));
+}
+
+#[test]
+fn preview_jpeg_validates_multiline_scans_and_restart_boundaries() {
+    for bytes in [
+        include_bytes!("fixtures/preview-rows-baseline.jpg").as_slice(),
+        include_bytes!("fixtures/preview-rows-progressive.jpg").as_slice(),
+        include_bytes!("fixtures/preview-rows-gray.jpg").as_slice(),
+        include_bytes!("fixtures/preview-rows-cmyk.jpg").as_slice(),
+        include_bytes!("fixtures/preview-rows-restart.jpg").as_slice(),
+    ] {
+        let (info, pixels) = run(Kind::Jpeg, bytes.to_vec()).unwrap();
+        assert_eq!((info.width, info.height), (31, 33));
+        assert_eq!(pixels.len(), 31 * 33 * 4);
+        assert!(pixels.chunks_exact(4).all(|pixel| pixel[3] == 255));
+        for (sos, _) in bytes
+            .windows(2)
+            .enumerate()
+            .filter(|(_, p)| *p == [0xff, 0xda])
+        {
+            let scan_start =
+                sos + 2 + usize::from(u16::from_be_bytes([bytes[sos + 2], bytes[sos + 3]]));
+            let mut missing = bytes[..scan_start].to_vec();
+            missing.extend([0xff, 0xd9]);
+            assert!(
+                matches!(run(Kind::Jpeg, missing), Err(ErrorCode::Integrity)),
+                "empty scan={sos}"
+            );
+        }
+        let sos = bytes.windows(2).position(|p| p == [0xff, 0xda]).unwrap();
+        let scan_start =
+            sos + 2 + usize::from(u16::from_be_bytes([bytes[sos + 2], bytes[sos + 3]]));
+        for cut in [scan_start + 1, scan_start + 2] {
+            let mut missing = bytes[..cut].to_vec();
+            missing.extend([0xff, 0xd9]);
+            assert!(
+                matches!(run(Kind::Jpeg, missing), Err(ErrorCode::Integrity)),
+                "cut={cut}"
+            );
+        }
+    }
+}

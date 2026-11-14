@@ -4661,9 +4661,16 @@ dependencies = [
  "sha2 0.10.9",
  "subtle",
  "zeroize",
+ "zipelo-jpeg",
  "zlib-rs",
  "zune-core",
- "zune-jpeg",
+]
+
+[[package]]
+name = "zipelo-jpeg"
+version = "0.5.15"
+dependencies = [
+ "zune-core",
 ]
 
 [[package]]

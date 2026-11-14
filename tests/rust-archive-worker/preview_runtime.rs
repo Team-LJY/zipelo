@@ -381,3 +381,18 @@ fn preview_rejects_directory_link_and_changed_source_object() {
     );
     assert_eq!(fs::read(s.0.join(&path)).unwrap(), b"changed");
 }
+
+#[test]
+fn preview_runtime_rejects_missing_image_scan_data() {
+    let original = include_bytes!("fixtures/preview-baseline.jpg");
+    let mut jpeg = original[..623].to_vec();
+    jpeg.extend([0xff, 0xd9]);
+    let mut png = png(1, 1);
+    png[20..24].copy_from_slice(&2u32.to_be_bytes());
+    let crc = zlib_rs::crc32::crc32(0, &png[12..29]);
+    png[29..33].copy_from_slice(&crc.to_be_bytes());
+    for (name, bytes) in [("missing.jpg", jpeg), ("missing.png", png)] {
+        let (s, path, list, id) = fixture("zip", name, &bytes);
+        no_result(&run(&s, request(&s, &path, list, id)), ErrorCode::Integrity);
+    }
+}

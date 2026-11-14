@@ -1,0 +1,28 @@
+[package]
+name = "zipelo-jpeg"
+version = "0.5.15"
+edition = "2021"
+license = "MIT"
+license-file = "LICENSE-MIT"
+authors = ["caleb <etemesicaleb@gmail.com>"]
+publish = false
+
+[lib]
+name = "zune_jpeg"
+path = "src/lib.rs"
+doctest = false
+
+[features]
+default = []
+std = ["zune-core/std"]
+x86 = []
+neon = []
+portable_simd = []
+log = ["zune-core/log"]
+
+[dependencies]
+zune-core = { version = "=0.5.3", default-features = false }
+
+[lints.rust.unexpected_cfgs]
+level = "warn"
+check-cfg = ["cfg(fuzzing)"]
