@@ -610,3 +610,120 @@ fn fake_eocd_in_archive_comment_keeps_real_central_directory() {
         }
     }
 }
+
+#[test]
+fn nested_central_directories_in_comments_cannot_hide_original_members() {
+    let source = include_bytes!("../zip-recovery-fixtures/broken-local-header.zip");
+    for entries in [1usize, 3, 6] {
+        let mut stop = 1372;
+        for _ in 0..entries {
+            stop += 46
+                + u16::from_le_bytes(source[stop + 28..stop + 30].try_into().unwrap()) as usize
+                + u16::from_le_bytes(source[stop + 30..stop + 32].try_into().unwrap()) as usize
+                + u16::from_le_bytes(source[stop + 32..stop + 34].try_into().unwrap()) as usize;
+        }
+        for depth in [1, 3] {
+            for locator in [false, true] {
+                for maximum_comment in [false, true] {
+                    let mut input = source.to_vec();
+                    let mut ends = vec![source.len() - 22];
+                    for _ in 0..depth {
+                        let cd = input.len();
+                        input.extend(&source[1372..stop]);
+                        if locator {
+                            input.extend(b"PK\x06\x07");
+                            input.extend([0; 16]);
+                        }
+                        let mut end = source[source.len() - 22..].to_vec();
+                        end[8..10].copy_from_slice(&(entries as u16).to_le_bytes());
+                        end[10..12].copy_from_slice(&(entries as u16).to_le_bytes());
+                        end[12..16].copy_from_slice(&((stop - 1372) as u32).to_le_bytes());
+                        end[16..20].copy_from_slice(&(cd as u32).to_le_bytes());
+                        ends.push(input.len());
+                        input.extend(end);
+                    }
+                    if maximum_comment {
+                        input.resize(source.len() + u16::MAX as usize, 0);
+                    }
+                    let len = input.len();
+                    for end in ends {
+                        input[end + 20..end + 22]
+                            .copy_from_slice(&((len - end - 22) as u16).to_le_bytes());
+                    }
+                    assert_full_comment_recovery(
+                        &input,
+                        &format!("{entries}/{depth}/{locator}/{maximum_comment}"),
+                    );
+                }
+            }
+        }
+    }
+}
+
+fn assert_full_comment_recovery(input: &[u8], case: &str) {
+    let s = Scratch::new();
+    fs::write(s.0.join("damaged.zip"), input).unwrap();
+    let events = execute(start(&s));
+    let terminal = terminal(&events);
+    assert_eq!(terminal.error, ErrorCode::None, "{case}");
+    assert_eq!(terminal.outcome, Outcome::Completed);
+    assert_eq!(terminal.publication, Publication::Complete);
+    assert_eq!(terminal.created_count, 1);
+    let summary = recovery_end(&events);
+    assert!(summary.complete());
+    assert_eq!(summary.mode, RecoveryMode::CentralDirectory);
+    assert_eq!(summary.known_entries, Some(6));
+    assert_eq!(summary.verified_entries, 6);
+    assert_eq!(
+        summary.source_sha256,
+        <[u8; 32]>::from(Sha256::digest(input))
+    );
+    assert_eq!(fs::read(s.0.join("damaged.zip")).unwrap(), input);
+    let checked = Command::new("python3")
+        .arg("-B")
+        .arg(
+            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("../../tests/zip-recovery-fixtures/verify.py"),
+        )
+        .args(["--recovered", "broken-local-header.zip"])
+        .arg(s.0.join("recovered.zip"))
+        .output()
+        .unwrap();
+    assert!(checked.status.success(), "{case}: {checked:?}");
+}
+
+#[test]
+fn nested_directory_in_central_entry_comment_is_not_an_outer_archive() {
+    let source = include_bytes!("../zip-recovery-fixtures/broken-local-header.zip");
+    for wraps_real_end in [false, true] {
+        let mut fake_cd = source[1372..1427].to_vec();
+        if wraps_real_end {
+            fake_cd[32..34].copy_from_slice(&22u16.to_le_bytes());
+        }
+        let mut input = source[..source.len() - 22].to_vec();
+        let last = input.windows(4).rposition(|w| w == b"PK\x01\x02").unwrap();
+        let comment_len = fake_cd.len() + if wraps_real_end { 0 } else { 22 };
+        input[last + 32..last + 34].copy_from_slice(&(comment_len as u16).to_le_bytes());
+        let fake_offset = input.len();
+        input.extend(&fake_cd);
+        let mut real_end = source[source.len() - 22..].to_vec();
+        real_end[12..16].copy_from_slice(&((340 + comment_len) as u32).to_le_bytes());
+        let mut fake_end = source[source.len() - 22..].to_vec();
+        fake_end[8..10].copy_from_slice(&1u16.to_le_bytes());
+        fake_end[10..12].copy_from_slice(&1u16.to_le_bytes());
+        fake_end[12..16].copy_from_slice(
+            &((fake_cd.len() + if wraps_real_end { 22 } else { 0 }) as u32).to_le_bytes(),
+        );
+        fake_end[16..20].copy_from_slice(&(fake_offset as u32).to_le_bytes());
+        if wraps_real_end {
+            real_end[20..22].copy_from_slice(&22u16.to_le_bytes());
+            input.extend(real_end);
+            input.extend(fake_end);
+        } else {
+            fake_end[20..22].copy_from_slice(&22u16.to_le_bytes());
+            input.extend(fake_end);
+            input.extend(real_end);
+        }
+        assert_full_comment_recovery(&input, &format!("central-comment/{wraps_real_end}"));
+    }
+}

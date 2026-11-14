@@ -197,6 +197,7 @@ fn end_record(
     tail_at: u64,
     check: &mut impl Monitor,
 ) -> Result<Option<usize>> {
+    let mut selected: Option<(usize, u64)> = None;
     for end in (0..=tail.len() - 22).rev() {
         if &tail[end..end + 4] != b"PK\x05\x06"
             || end + 22 + u16at(tail, end + 20) as usize != tail.len()
@@ -232,9 +233,16 @@ fn end_record(
         if !directory_span(source, offset, stop, check)? {
             continue;
         }
-        return Ok(Some(end));
+        let comment_at = at + 22;
+        // 선행 후보의 중앙 목록이나 주석에 속한 후행 목록은 선택하지 않음.
+        if selected.is_none_or(|(nested_end, nested_directory)| {
+            (offset < nested_directory && nested_directory < stop)
+                || (comment_at <= nested_directory && end + 22 <= nested_end)
+        }) {
+            selected = Some((end, offset));
+        }
     }
-    Ok(None)
+    Ok(selected.map(|(end, _)| end))
 }
 
 fn central(
