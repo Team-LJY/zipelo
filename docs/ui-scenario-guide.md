@@ -150,6 +150,7 @@ Ubuntu 제거 안내는 패키지 관리자 터미널 출력입니다. 이전 �
 
 ### 파일 미리보기
 
+- preview-catalog-bytes-approval: 전체 목록 크기가 16 GiB를 넘는 압축파일에서 7바이트 텍스트를 미리볼 때 새 승인을 요청. 미리보기 고유 상한은 유지.
 - preview-catalog-approval: 10,001개 목록에서 파일 하나를 미리볼 때 목록 전체 처리 예산의 새 승인을 요청. 텍스트 1 MiB와 이미지 8 MiB 고유 상한은 유지.
 - preview-loading: 미리보기 로딩 중 [취소] 또는 Esc로 닫기. 닫힌 결과는 늦게 도착해도 표시하지 않음.
 - preview-text: UTF-8 텍스트의 읽기 전용 표시와 스크롤.

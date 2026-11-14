@@ -21,6 +21,7 @@ macro_rules! catalog {
 }
 
 catalog! {
+    "preview-catalog-bytes-approval" => "16 GiB를 넘는 전체 목록의 미리보기 승인",
     "preview-catalog-approval" => "미리보기의 전체 목록 처리 예산 승인",
     "preview-loading" => "미리보기 로딩과 취소",
     "preview-text" => "읽기 전용 텍스트 미리보기",
@@ -289,8 +290,16 @@ impl Scenario {
                     })
                     .collect();
             }
+            if self.name == "preview-catalog-bytes-approval" {
+                app.model.entries.truncate(2);
+                app.model.entries[0].bytes = Some(16 * 1024 * 1024 * 1024);
+                app.model.entries[1].bytes = Some(7);
+            }
             app.begin_preview(&egui::Context::default());
-            if self.name == "preview-catalog-approval" {
+            if matches!(
+                self.name,
+                "preview-catalog-approval" | "preview-catalog-bytes-approval"
+            ) {
                 let mut state = state.borrow_mut();
                 state.frame(Event::Accepted { encryption: false });
                 state.frame(Event::ResourceRequired(ResourceChallenge {

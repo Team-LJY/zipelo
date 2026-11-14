@@ -500,13 +500,12 @@ impl Model {
                     .then(|| u32::try_from(sources.len()).ok())
                     .flatten();
             }
-            Start::Preview { entry_id, .. } => {
+            Start::Preview { .. } => {
                 usage.estimated_entries = u32::try_from(self.entries.len()).ok();
                 usage.estimated_bytes = self
                     .entries
                     .iter()
-                    .find(|e| e.id == *entry_id)
-                    .and_then(|e| e.bytes);
+                    .try_fold(0u64, |sum, e| sum.checked_add(e.bytes?));
             }
             Start::List { .. } => {}
         }
