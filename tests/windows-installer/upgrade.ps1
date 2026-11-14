@@ -2,7 +2,8 @@
     [Parameter(Mandatory = $true)][string]$Installer,
     [ValidateSet("Snapshot", "Compare", "Rollback", "Upgrade")][string]$Mode,
     [Parameter(Mandatory = $true)][string]$Evidence,
-    [string]$ExpectedVersion
+    [string]$ExpectedVersion,
+    [string]$Payload
 )
 $ErrorActionPreference = "Stop"
 $root = Join-Path $env:LOCALAPPDATA "Programs\Zipelo"
@@ -93,11 +94,17 @@ switch ($Mode) {
         foreach ($key in $after.registry.Keys) { if ($key -ne $versionKey[0]) { $afterRegistry[$key] = $after.registry[$key] } }
         AssertEqual $beforeRegistry $afterRegistry "업데이트가 기존 연결 또는 등록을 바꿈"
         AssertEqual $before.shortcut $after.shortcut "업데이트가 기존 바로가기를 바꿈"
-        # 버전을 지정하면 그 값으로 교체를 확인함. 같은 NSIS 스크립트의 제거 프로그램은 버전만 달라도 같을 수 있음.
-        if (-not $ExpectedVersion -and $before.files['Uninstall.exe'] -eq $after.files['Uninstall.exe']) {
+        if ($ExpectedVersion) {
+            # 버전만 바뀌고 파일이 그대로인 경우를 막기 위해 설치된 파일을 빌드 payload와 대조함.
+            if (-not $Payload) { throw "-ExpectedVersion에는 빌드 출력의 payload 폴더(-Payload)가 필요함" }
+            foreach ($name in @("Zipelo.exe", "zipelo-archive-worker.exe", "LICENSE", "THIRD-PARTY-LICENSES.txt", "BUILD-INFO.json")) {
+                $expected = (Get-FileHash (Join-Path $Payload $name) -Algorithm SHA256).Hash
+                if ($after.files[$name] -ne $expected) { throw "설치된 $name 이 payload와 다름" }
+            }
+        } elseif ($before.files['Uninstall.exe'] -eq $after.files['Uninstall.exe']) {
             throw "새 제거 프로그램으로 교체되지 않음"
         }
         $after | ConvertTo-Json -Depth 8 | Set-Content -Encoding UTF8 $Evidence
-        "upgrade_passed: version $($newVersion), preserved associations"
+        "upgrade_passed: version $($newVersion), files match payload or new uninstaller, preserved associations"
     }
 }
