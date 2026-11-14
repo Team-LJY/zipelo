@@ -243,6 +243,7 @@ pub struct ArchiveApp {
     list_focused: bool,
     marquee: Option<Marquee>,
     last_request: Option<Start>,
+    recovery_warning: Option<(PathBuf, String)>,
     targets: Option<BTreeSet<String>>,
     directories: BTreeSet<String>,
     dismissed: bool,
@@ -308,6 +309,7 @@ impl ArchiveApp {
             list_focused: false,
             marquee: None,
             last_request: None,
+            recovery_warning: None,
             targets: None,
             directories: BTreeSet::new(),
             dismissed: false,
@@ -450,6 +452,13 @@ impl ArchiveApp {
         if self.model.busy() {
             return;
         }
+        if self
+            .recovery_warning
+            .as_ref()
+            .is_some_and(|(path, _)| path != &archive)
+        {
+            self.recovery_warning = None;
+        }
         self.clear_password();
         self.destination = present::default_destination(&archive);
         self.automatic_destination = true;
@@ -467,6 +476,12 @@ impl ArchiveApp {
         // 파일 선택 창이 응답을 기다리는 동안에는 어느 창에서도 새 작업을 시작하지 않음.
         if self.picker.is_some() {
             return false;
+        }
+        if matches!(request, Start::RecoverZip { .. }) {
+            self.work = WorkWindow {
+                height: 480.0,
+                ..WorkWindow::default()
+            };
         }
         self.last_request = Some(request.clone());
         self.dismissed = false;
@@ -682,7 +697,7 @@ impl ArchiveApp {
         };
         let directory = match purpose {
             Purpose::SaveZip | Purpose::SaveSevenZip => self.zip_folder.clone(),
-            Purpose::Destination | Purpose::SaveGzip => self
+            Purpose::SaveRecoveryZip | Purpose::Destination | Purpose::SaveGzip => self
                 .model
                 .archive
                 .as_ref()
@@ -700,7 +715,16 @@ impl ArchiveApp {
         let request = DialogRequest {
             purpose,
             directory,
-            file_name: if matches!(purpose, Purpose::SaveGzip | Purpose::RetryGzip) {
+            file_name: if purpose == Purpose::SaveRecoveryZip {
+                let stem = self
+                    .model
+                    .archive
+                    .as_ref()
+                    .and_then(|p| p.file_stem())
+                    .unwrap_or_default()
+                    .to_string_lossy();
+                format!("{stem}-recovered.zip")
+            } else if matches!(purpose, Purpose::SaveGzip | Purpose::RetryGzip) {
                 self.gzip_name.clone()
             } else {
                 self.zip_name.clone()
@@ -734,6 +758,14 @@ impl ArchiveApp {
             Ok(Some(paths)) if !paths.is_empty() => {
                 let path = paths[0].clone();
                 match purpose {
+                    Purpose::SaveRecoveryZip => {
+                        if let Some(archive) = self.model.archive.clone() {
+                            self.start(Start::RecoverZip {
+                                archive,
+                                output_file: path,
+                            });
+                        }
+                    }
                     Purpose::Open => {
                         if std::fs::symlink_metadata(&path)
                             .is_ok_and(|m| m.is_file() && !m.file_type().is_symlink())
@@ -812,7 +844,7 @@ impl ArchiveApp {
         if let Some(request) = self.last_request.clone() {
             match request {
                 Start::List { archive } => self.open_path(archive),
-                Start::Preview { .. } => {}
+                Start::Preview { .. } | Start::RecoverZip { .. } => {}
                 Start::Extract {
                     selection,
                     gzip_output_name,
@@ -1066,6 +1098,9 @@ impl ArchiveApp {
                     .inner_margin(egui::Margin::ZERO),
             )
             .show(root, |ui| {
+                if let Some((_, warning)) = &self.recovery_warning {
+                    ui.colored_label(theme::WARNING, warning);
+                }
                 if self.model.archive.is_some() {
                     self.archive_list(ui);
                 } else {
@@ -1998,7 +2033,11 @@ impl ArchiveApp {
                     ) {
                         "저장 위치와 추가한 항목을 확인하세요"
                     } else {
-                        "풀 위치와 선택한 항목을 확인하세요"
+                        if matches!(self.last_request, Some(Start::RecoverZip { .. })) {
+                            "원본과 다른 새 복구본 저장 위치를 선택하세요"
+                        } else {
+                            "풀 위치와 선택한 항목을 확인하세요"
+                        }
                     }
                 },
             );
@@ -2006,6 +2045,20 @@ impl ArchiveApp {
     }
 
     fn progress(&mut self, ui: &mut egui::Ui) {
+        if matches!(self.last_request, Some(Start::RecoverZip { .. })) {
+            ui.strong("ZIP 복구 중");
+            ui.label(if self.model.recovery_end.is_some() {
+                "분석 완료 / 복구본 저장과 작업자 종료 확인 중"
+            } else {
+                "원본을 분석하고 있습니다. 전체 항목 수는 아직 알 수 없습니다."
+            });
+            ui.label(format!(
+                "확인한 항목 {}개",
+                self.model.recovery_entries.len()
+            ));
+            self.cancel_action(ui, false);
+            return;
+        }
         if self.model.resource.is_some() {
             ui.horizontal(|ui| {
                 ui.label("사용자 허용을 기다리고 있습니다");
@@ -2070,7 +2123,141 @@ impl ArchiveApp {
         });
     }
 
+    fn recovery_result(&mut self, ui: &mut egui::Ui) {
+        let t = self.model.terminal.as_ref();
+        let summary = self.model.recovery_end.as_ref();
+        let confirmed = self.model.confirmed && self.model.error.is_none();
+        let saved = confirmed
+            && t.is_some_and(|t| t.publication == Publication::Complete && t.created_count == 1)
+            && summary.is_some_and(|s| s.verified_entries > 0);
+        let partial = summary.is_some_and(|s| !s.complete());
+        let title = if !confirmed {
+            "복구 결과를 확정할 수 없음"
+        } else if saved && partial {
+            "일부 항목만 복구함"
+        } else if saved && t.is_some_and(|t| t.outcome == Outcome::Completed) {
+            "복구본 저장 완료"
+        } else if t.is_some_and(|t| t.error == Some(ErrorCode::RecoveryImpossible)) {
+            "복구 가능한 항목 없음"
+        } else if t.is_some_and(|t| t.outcome == Outcome::Cancelled) {
+            "복구를 취소했습니다"
+        } else {
+            "복구본 저장을 완료하지 못했습니다"
+        };
+        ui.heading(title);
+        ui.label(
+            "원본은 수정하지 않습니다. 검증 통과는 손상 전 내용과 동일하다는 보증이 아닙니다.",
+        );
+        let output = match &self.last_request {
+            Some(Start::RecoverZip { output_file, .. }) => output_file.clone(),
+            _ => return,
+        };
+        if saved || !self.model.outputs.is_empty() {
+            theme::bounded_text(ui, &output.display().to_string(), ui.available_width());
+        }
+        if let Some(error) = &self.model.error {
+            ui.colored_label(theme::WARNING, error);
+        }
+        if let Some(t) = t {
+            if let Some(code) = t.error {
+                ui.label(present::error_text(code));
+            }
+            for warning in present::publication_warnings(
+                Some(t),
+                self.model.confirmed,
+                Some(&BTreeSet::from([output
+                    .file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .into_owned()])),
+                &BTreeSet::new(),
+                &self.model.outputs,
+            ) {
+                ui.colored_label(theme::WARNING, warning);
+            }
+            if let Some(warning) = present::durability_warning(t.durability) {
+                ui.colored_label(theme::WARNING, warning);
+            }
+        }
+        let notice = summary.map(|s| {
+            format!(
+                "검증되어 포함됨 {}개 / 유실됨 {}개 / 무결성 미확인 {}개{}",
+                s.verified_entries,
+                s.lost_entries,
+                s.unverified_entries,
+                if s.unknown_loss {
+                    " / 전체 목록을 알 수 없어 추가 유실 여부를 확인할 수 없습니다"
+                } else {
+                    ""
+                }
+            )
+        });
+        if let Some(notice) = &notice {
+            ui.label(notice);
+        }
+        egui::ScrollArea::vertical()
+            .id_salt("recovery-findings")
+            .max_height(220.0)
+            .show_rows(ui, 24.0, self.model.recovery_entries.len(), |ui, rows| {
+                for entry in &self.model.recovery_entries[rows] {
+                    let status = match entry.status {
+                        RecoveryStatus::Verified => "검증되어 포함됨",
+                        RecoveryStatus::Lost => "유실됨",
+                        RecoveryStatus::Unverified => "무결성 미확인",
+                    };
+                    let reason = match entry.reason {
+                        RecoveryReason::None => "내용 검증 통과",
+                        RecoveryReason::HeaderRebuilt => "헤더 재구성",
+                        RecoveryReason::Truncated => "파일 절단",
+                        RecoveryReason::CrcMismatch => "CRC 불일치",
+                        RecoveryReason::DecodeFailure => "압축 데이터 손상",
+                        RecoveryReason::BoundaryUnknown => "항목 경계 불명",
+                        RecoveryReason::UnsupportedFeature => "지원하지 않는 기능",
+                        RecoveryReason::MetadataMissing => "메타정보 누락",
+                    };
+                    theme::bounded_text(
+                        ui,
+                        &format!(
+                            "{status} / {reason}: {}",
+                            entry.name.as_deref().unwrap_or("이름 확인 불가")
+                        ),
+                        ui.available_width(),
+                    );
+                }
+            });
+        if saved && theme::action(ui, "복구본 열기", true, true).clicked() {
+            self.recovery_warning = partial.then(|| (output.clone(), notice.unwrap_or_default()));
+            self.open_path(output);
+        }
+        if self.model.can_retry_expanded()
+            && theme::action(ui, "한도를 늘려 다시 시도", true, true).clicked()
+        {
+            self.model.retry_expanded(self.factory.as_mut());
+        }
+    }
+
     fn result(&mut self, ui: &mut egui::Ui) {
+        if matches!(self.last_request, Some(Start::RecoverZip { .. })) {
+            self.recovery_result(ui);
+            return;
+        }
+        if self.model.confirmed
+            && self.model.error.is_none()
+            && self
+                .model
+                .terminal
+                .as_ref()
+                .is_some_and(|t| t.error == Some(ErrorCode::Integrity))
+            && matches!(
+                self.last_request,
+                Some(Start::List { .. } | Start::Extract { .. })
+            )
+        {
+            ui.label("원본을 바꾸지 않고 새 ZIP 복구본을 만듭니다. 일부 항목은 복구되지 않을 수 있습니다.");
+            if theme::action(ui, "복구본 저장 위치 선택", true, true).clicked() {
+                self.open_picker(Purpose::SaveRecoveryZip);
+            }
+        }
         let t = self.model.terminal.clone();
         let listing = matches!(self.last_request, Some(Start::List { .. }));
         let creating = matches!(
@@ -2873,6 +3060,7 @@ impl ArchiveApp {
                     ActionKind::Extract => "압축 해제",
                     ActionKind::CreateZip => "ZIP 만들기",
                     ActionKind::CreateSevenZip => "7z 만들기",
+                    ActionKind::RecoverZip => "ZIP 복구",
                     ActionKind::Preview => "파일 미리보기",
                 });
                 if question.scope.ratio {

@@ -95,6 +95,27 @@ fn every_listed_scenario_draws_and_keeps_its_expected_screen() {
                 app.model.error
             );
             assert!(app.model.input_error.is_none(), "{}", scenario.name);
+            if scenario.name.starts_with("recovery-") {
+                let expected = match scenario.name {
+                    "recovery-complete" => "복구본 저장 완료",
+                    "recovery-partial" => "일부 항목만 복구함",
+                    "recovery-unknown" => "전체 목록을 알 수 없어",
+                    "recovery-impossible" => "복구 가능한 항목 없음",
+                    "recovery-save-error" => "복구본 저장을 완료하지 못했습니다",
+                    "recovery-cancelled" => "복구를 취소했습니다",
+                    "recovery-resource" => "이 작업 허용",
+                    _ => "ZIP 복구 중",
+                };
+                assert!(labels.contains(expected), "{}: {labels}", scenario.name);
+                assert_eq!(
+                    labels.contains("복구본 열기"),
+                    matches!(
+                        scenario.name,
+                        "recovery-complete" | "recovery-partial" | "recovery-unknown"
+                    )
+                );
+                assert!(!labels.contains("100%"));
+            }
             if scenario.name == "split-archive" {
                 assert!(app.model.list_id.as_ref().unwrap().is_split());
                 assert!(!app.model.can_preview());

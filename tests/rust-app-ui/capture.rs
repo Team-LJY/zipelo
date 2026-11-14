@@ -236,6 +236,9 @@ impl Connection for CaptureConnection {
                         durability: Durability::NotApplicable,
                         cleanup: Cleanup::Complete,
                     }),
+                    Start::RecoverZip { .. } => {
+                        return Err("복구 상황은 --ui-scenario로 확인함".into());
+                    }
                     Start::CreateSevenZip { output_file, .. } => {
                         self.create_name =
                             Some(output_file.file_name().unwrap().to_string_lossy().into());

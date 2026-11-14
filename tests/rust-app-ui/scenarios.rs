@@ -21,6 +21,15 @@ macro_rules! catalog {
 }
 
 catalog! {
+    "recovery-progress" => "ZIP 복구 분석과 저장 확인 전 대기",
+    "recovery-complete" => "전체 항목을 검증한 복구본 저장 완료",
+    "recovery-partial" => "유실 항목이 있는 복구본과 경고",
+    "recovery-unknown" => "전체 목록 불명의 추가 유실 경고",
+    "recovery-impossible" => "복구 가능한 항목 없음과 출력 없음",
+    "recovery-cancelled" => "복구 취소와 출력 없음",
+    "recovery-save-error" => "복구 분석 뒤 저장 실패",
+    "recovery-resource" => "복구 작업의 자원 승인",
+
     "create-sevenzip" => "7z 형식 선택과 LZMA2 및 암호 미지원 안내",
     "create-sevenzip-progress" => "7z 만들기 진행과 취소",
     "create-sevenzip-complete" => "7z 만들기 완료",
@@ -537,6 +546,135 @@ impl Scenario {
                 return app;
             }
             _ => {}
+        }
+        if self.name.starts_with("recovery-") {
+            let request = Start::RecoverZip {
+                archive,
+                output_file: base.join("복구본.zip"),
+            };
+            app.last_request = Some(request.clone());
+            app.model.begin(request, app.factory.as_mut());
+            let mut state = state.borrow_mut();
+            state.frame(Event::Accepted { encryption: false });
+            if self.name == "recovery-resource" {
+                state.frame(Event::ResourceRequired(ResourceChallenge {
+                    id: 1,
+                    action: ActionKind::RecoverZip,
+                    scope: ResourceScope {
+                        ratio: true,
+                        ..Default::default()
+                    },
+                    usage: ResourceUsage::default(),
+                    soft_limits: Limits::default(),
+                    ceiling: Limits::default(),
+                }));
+            } else if self.name == "recovery-progress" {
+                state.frame(Event::Progress {
+                    stage: Stage::Scan,
+                    processed: 1024,
+                    total: None,
+                    completed_entries: 1,
+                });
+            } else if self.name == "recovery-cancelled" {
+                state.finish(Outcome::Cancelled, Publication::None);
+            } else {
+                let impossible = self.name == "recovery-impossible";
+                let partial = self.name == "recovery-partial";
+                let unknown = self.name == "recovery-unknown";
+                let failed = self.name == "recovery-save-error";
+                state.frame(Event::RecoveryEntry(RecoveryEntry {
+                    candidate_id: 0,
+                    source_offset: 0,
+                    name: Some("읽어주세요.txt".into()),
+                    kind: Some(worker_protocol::protocol::EntryKind::File),
+                    status: if impossible {
+                        RecoveryStatus::Lost
+                    } else {
+                        RecoveryStatus::Verified
+                    },
+                    reason: if impossible {
+                        RecoveryReason::Truncated
+                    } else {
+                        RecoveryReason::HeaderRebuilt
+                    },
+                    declared_size: Some(4),
+                    verified_size: (!impossible).then_some(4),
+                    sha256: (!impossible).then_some([1; 32]),
+                }));
+                if partial {
+                    state.frame(Event::RecoveryEntry(RecoveryEntry {
+                        candidate_id: 1,
+                        source_offset: 128,
+                        name: Some("사진.png".into()),
+                        kind: Some(worker_protocol::protocol::EntryKind::File),
+                        status: RecoveryStatus::Lost,
+                        reason: RecoveryReason::CrcMismatch,
+                        declared_size: Some(10),
+                        verified_size: None,
+                        sha256: None,
+                    }));
+                }
+                state.frame(Event::RecoveryEnd(RecoveryEnd {
+                    mode: if unknown {
+                        RecoveryMode::LocalChain
+                    } else {
+                        RecoveryMode::CentralDirectory
+                    },
+                    source_bytes: 256,
+                    source_sha256: [2; 32],
+                    known_entries: (!unknown).then_some(if partial { 2 } else { 1 }),
+                    verified_entries: u32::from(!impossible),
+                    lost_entries: u32::from(impossible || partial),
+                    unverified_entries: 0,
+                    unknown_loss: unknown,
+                }));
+                if !impossible && !failed {
+                    state.frame(Event::Output {
+                        entry_id: None,
+                        relative_name: "복구본.zip".into(),
+                        disposition: Disposition::Created,
+                    });
+                }
+                state.frame(Event::Terminal(Terminal {
+                    outcome: if partial || unknown || impossible || failed {
+                        Outcome::Failed
+                    } else {
+                        Outcome::Completed
+                    },
+                    error: if failed {
+                        Some(ErrorCode::DiskFull)
+                    } else if impossible {
+                        Some(ErrorCode::RecoveryImpossible)
+                    } else if partial || unknown {
+                        Some(ErrorCode::RecoveryIncomplete)
+                    } else {
+                        None
+                    },
+                    publication: if impossible || failed {
+                        Publication::None
+                    } else {
+                        Publication::Complete
+                    },
+                    created_count: u64::from(!impossible && !failed),
+                    retained_partial_count: 0,
+                    durability: if impossible || failed {
+                        Durability::NotApplicable
+                    } else {
+                        Durability::Synced
+                    },
+                    cleanup: Cleanup::Complete,
+                }));
+                state.queue.extend([
+                    HostEvent::StdoutEof,
+                    HostEvent::StderrEof,
+                    HostEvent::Exited { success: true },
+                ]);
+            }
+            drop(state);
+            for _ in 0..30 {
+                app.model.poll();
+            }
+            return app;
         }
         let seven_zip = self.name.starts_with("create-sevenzip");
         let creating = self.name.starts_with("create-") || self.name == "password-create";

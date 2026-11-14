@@ -201,6 +201,15 @@ fn start_to_wire(start: ui::Start) -> wire::Start {
             entry_id,
             list_id: list_to_wire(list_id),
         },
+        ui::Start::RecoverZip {
+            archive,
+            output_file,
+        } => wire::Action::RecoverZip {
+            archive: wire::NativePath::from_path(&crate::archive_path::worker_path(&archive)),
+            output_file: wire::NativePath::from_path(&crate::archive_path::worker_path(
+                &output_file,
+            )),
+        },
         ui::Start::CreateSevenZip {
             sources,
             output_file,
@@ -253,6 +262,8 @@ fn start_to_wire(start: ui::Start) -> wire::Start {
 }
 fn error_to_ui(error: wire::ErrorCode) -> Option<ui::ErrorCode> {
     Some(match error {
+        wire::ErrorCode::RecoveryIncomplete => ui::ErrorCode::RecoveryIncomplete,
+        wire::ErrorCode::RecoveryImpossible => ui::ErrorCode::RecoveryImpossible,
         wire::ErrorCode::MissingVolume => ui::ErrorCode::MissingVolume,
         wire::ErrorCode::None => return None,
         wire::ErrorCode::Integrity => ui::ErrorCode::Integrity,
@@ -275,6 +286,12 @@ fn event_to_ui(
     expected: Option<wire::ActionKind>,
 ) -> Result<ui::Event, ()> {
     Ok(match message {
+        wire::Message::RecoveryEntry(entry) if expected == Some(wire::ActionKind::RecoverZip) => {
+            ui::Event::RecoveryEntry(entry)
+        }
+        wire::Message::RecoveryEnd(end) if expected == Some(wire::ActionKind::RecoverZip) => {
+            ui::Event::RecoveryEnd(end)
+        }
         wire::Message::VolumeProblem { reason, volume }
             if matches!(
                 expected,
