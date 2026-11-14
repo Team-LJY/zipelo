@@ -335,6 +335,13 @@ impl Plan {
         }
         Ok(())
     }
+    pub fn reserve_metadata(
+        &mut self,
+        bytes: usize,
+        check: &impl crate::resources::Monitor,
+    ) -> Result<()> {
+        self.budget.charge_bytes(bytes, check.metadata_limits())
+    }
     pub fn verify(&self, check: &mut impl crate::resources::Monitor) -> Result<()> {
         for item in &self.items {
             check.check()?;

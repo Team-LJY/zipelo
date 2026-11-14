@@ -346,10 +346,13 @@ impl Drop for Temporary {
 }
 
 #[test]
-fn pending_writer_and_unsupported_options_fail_before_questions_or_file_access() {
+fn unsupported_options_fail_before_questions_or_file_access() {
     let temporary = Temporary::new();
     for solid in [false, true] {
         for encryption in [Encryption::None, Encryption::Aes256] {
+            if !solid && encryption == Encryption::None {
+                continue;
+            }
             for kind in [1, 6, 7] {
                 let action = Action::CreateSevenZip {
                     sources: vec![Source {

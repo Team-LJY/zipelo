@@ -11,6 +11,7 @@ pub mod protocol;
 pub mod resources;
 pub mod runtime;
 mod seven_zip;
+mod seven_zip_create;
 mod space;
 mod split_seven_zip;
 mod spool;

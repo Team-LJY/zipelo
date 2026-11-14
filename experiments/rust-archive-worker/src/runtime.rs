@@ -41,6 +41,7 @@ struct Job<W> {
     remaining_choice: Option<ConflictChoice>,
     source_group: Option<crate::split_seven_zip::Group>,
     source_verified_for_publication: bool,
+    creation_plan: Option<crate::create::Plan>,
     started: Instant,
     terminal: Terminal,
     parent: crate::parent::Parent,
@@ -285,6 +286,11 @@ impl<W: Write> Job<W> {
     }
     fn verify_before_publication(&mut self) -> Result<()> {
         if !self.source_verified_for_publication {
+            if let Some(plan) = self.creation_plan.take() {
+                let result = plan.verify(self);
+                self.creation_plan = Some(plan);
+                result?;
+            }
             self.verify_split()?;
             self.source_verified_for_publication = true;
         }
@@ -296,6 +302,9 @@ impl<W: Write> Job<W> {
             filesystem::PublishStep::Activity => completed(Ok(()), self),
             filesystem::PublishStep::Commit => {
                 self.verify_before_publication()?;
+                if let Some(plan) = &self.creation_plan {
+                    self.progress(Stage::Commit, 0, None, plan.items.len() as u32)?;
+                }
                 if last { self.cutoff() } else { self.check() }
             }
         }
@@ -548,9 +557,19 @@ impl<W: Write> Job<W> {
             encryption: !matches!(start.action, Action::CreateSevenZip { .. }),
         })?;
         self.check()?;
-        // 작성기 구현 전에는 자원 승인과 파일 접근을 시작하지 않음.
-        if matches!(start.action, Action::CreateSevenZip { .. }) {
-            return Err(ErrorCode::UnsupportedFeature);
+        if let Action::CreateSevenZip {
+            sources,
+            solid,
+            encryption,
+            ..
+        } = &start.action
+        {
+            if *solid || *encryption != Encryption::None {
+                return Err(ErrorCode::UnsupportedFeature);
+            }
+            if sources.is_empty() {
+                return Err(ErrorCode::InvalidRequest);
+            }
         }
         if let Some(budget) = &self.budget {
             let scope = ResourceScope {
@@ -925,13 +944,50 @@ impl<W: Write> Job<W> {
                 self.output_reader(&root, &name, &mut data, length, None, true, None)?;
                 self.terminal.publication = Publication::Complete;
             }
-            Action::CreateSevenZip { .. } => return Err(ErrorCode::UnsupportedFeature),
+            Action::CreateSevenZip {
+                sources,
+                output_file,
+                ..
+            } => {
+                let output = output_file.to_path()?;
+                let leaf = output
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .ok_or(ErrorCode::InvalidRequest)?;
+                let name = archive::valid_name(leaf, false)?;
+                let root = completed(
+                    Dir::root(output.parent().ok_or(ErrorCode::InvalidRequest)?),
+                    self,
+                )?;
+                filesystem::preflight_mode_with(
+                    &root,
+                    &[(name.clone(), EntryKind::File)],
+                    false,
+                    self,
+                )?;
+                self.progress(Stage::Scan, 0, None, 0)?;
+                let mut plan = crate::create::plan(&sources, limits, self)?;
+                let (mut data, length) = crate::seven_zip_create::archive(&mut plan, limits, self)?;
+                filesystem::preflight_space_with(&root, &[(name.clone(), length)], None, self)?;
+                self.creation_plan = Some(plan);
+                self.output_reader(&root, &name, &mut data, length, None, true, None)?;
+                self.terminal.publication = Publication::Complete;
+            }
         }
         self.cutoff()?;
         Ok(())
     }
 }
 impl<W: Write> Monitor for Job<W> {
+    fn progress(
+        &mut self,
+        stage: Stage,
+        bytes: u64,
+        total: Option<u64>,
+        entries: u32,
+    ) -> Result<()> {
+        Job::progress(self, stage, bytes, total, entries)
+    }
     fn metadata_limits(&self) -> archive::MetadataLimits {
         self.budget
             .as_ref()
@@ -1113,6 +1169,7 @@ pub fn serve<R: Read + Send + 'static, W: Write + Send + 'static>(
         remaining_choice: None,
         source_group: None,
         source_verified_for_publication: false,
+        creation_plan: None,
         parent,
         started: Instant::now(),
         terminal: Terminal {

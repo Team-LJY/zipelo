@@ -3,6 +3,7 @@
 import importlib.util
 from pathlib import Path
 import unittest
+import tomllib
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -12,6 +13,17 @@ SPEC.loader.exec_module(LICENSES)
 
 
 class CompressedTarLicenses(unittest.TestCase):
+    def test_seven_zip_encoder_reuses_pure_rust_package(self):
+        manifest = ROOT / "experiments/rust-archive-worker/Cargo.toml"
+        dependency = tomllib.loads(manifest.read_text())["dependencies"]["lzma-rust2"]
+        self.assertEqual(dependency["version"], "=0.25.0")
+        self.assertFalse(dependency["default-features"])
+        self.assertEqual(set(dependency["features"]), {"std", "xz", "encoder"})
+        package = next(p for p in LICENSES.metadata(manifest) if p["name"] == "lzma-rust2")
+        original = tomllib.loads((Path(package["manifest_path"]).parent / "Cargo.toml.orig").read_text())
+        self.assertEqual(original["features"]["encoder"], [])
+        self.assertEqual(original["package"]["license"], "Apache-2.0")
+
     def test_registry_originals_are_in_generated_worker_notice(self):
         manifest = ROOT / "experiments/rust-archive-worker/Cargo.toml"
         records = LICENSES.inventory([manifest])
