@@ -1,5 +1,12 @@
 use std::path::{Path, PathBuf};
 
+pub const MAX_PREVIEW_TEXT_BYTES: u64 = 1024 * 1024;
+pub const MAX_PREVIEW_IMAGE_BYTES: u64 = 8 * 1024 * 1024;
+pub const MAX_PREVIEW_RGBA_BYTES: u64 = 64 * 1024 * 1024;
+pub const MAX_PREVIEW_DIMENSION: u32 = 8192;
+pub const MAX_PREVIEW_PIXELS: u64 = 16_000_000;
+pub const MAX_PREVIEW_CHUNK_BYTES: usize = 32 * 1024;
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum NativePath {
     Unix(Vec<u8>),
@@ -96,7 +103,12 @@ impl GuardedStart {
             && self.ceiling.output <= 64 * 1024 * 1024 * 1024
             && self.ceiling.entries >= self.start.limits.entries
             && self.ceiling.entries <= 200_000
-            && (!self.interactive || matches!(self.start.action, Action::Extract { .. }))
+            && (!self.interactive
+                || matches!(
+                    self.start.action,
+                    Action::Extract { .. } | Action::Preview { .. }
+                ))
+            && (!matches!(self.start.action, Action::Preview { .. }) || self.interactive)
     }
 }
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -185,12 +197,18 @@ pub enum Action {
         method: Method,
         encryption: Encryption,
     },
+    Preview {
+        archive: NativePath,
+        entry_id: u32,
+        list_id: ListId,
+    },
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ActionKind {
     List,
     Extract,
     CreateZip,
+    Preview,
 }
 impl Action {
     pub fn kind(&self) -> ActionKind {
@@ -198,6 +216,7 @@ impl Action {
             Self::List { .. } => ActionKind::List,
             Self::Extract { .. } => ActionKind::Extract,
             Self::CreateZip { .. } => ActionKind::CreateZip,
+            Self::Preview { .. } => ActionKind::Preview,
         }
     }
 }
@@ -221,6 +240,39 @@ pub struct Entry {
     pub size: u64,
     pub compressed_size: u64,
     pub encrypted: bool,
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PreviewFormat {
+    Utf8Text,
+    Rgba8,
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PreviewInfo {
+    pub entry_id: u32,
+    pub format: PreviewFormat,
+    pub total_bytes: u64,
+    pub width: u32,
+    pub height: u32,
+}
+impl PreviewInfo {
+    pub fn valid(&self) -> bool {
+        match self.format {
+            PreviewFormat::Utf8Text => {
+                self.width == 0 && self.height == 0 && self.total_bytes <= MAX_PREVIEW_TEXT_BYTES
+            }
+            PreviewFormat::Rgba8 => {
+                if !(1..=MAX_PREVIEW_DIMENSION).contains(&self.width)
+                    || !(1..=MAX_PREVIEW_DIMENSION).contains(&self.height)
+                {
+                    return false;
+                }
+                let pixels = u64::from(self.width) * u64::from(self.height);
+                pixels <= MAX_PREVIEW_PIXELS
+                    && pixels.checked_mul(4) == Some(self.total_bytes)
+                    && self.total_bytes <= MAX_PREVIEW_RGBA_BYTES
+            }
+        }
+    }
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Stage {
@@ -373,6 +425,17 @@ pub enum Message {
         entry_id: Option<u32>,
         relative_name: String,
         disposition: Disposition,
+    },
+    PreviewBegin(PreviewInfo),
+    PreviewChunk {
+        entry_id: u32,
+        offset: u64,
+        data: Vec<u8>,
+    },
+    PreviewEnd {
+        entry_id: u32,
+        total_bytes: u64,
+        sha256: [u8; 32],
     },
     Terminal(Terminal),
     CancelAck {

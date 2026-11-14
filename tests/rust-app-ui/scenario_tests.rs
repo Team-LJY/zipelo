@@ -96,6 +96,17 @@ fn every_listed_scenario_draws_and_keeps_its_expected_screen() {
             );
             assert!(app.model.input_error.is_none(), "{}", scenario.name);
             let expected = match scenario.name {
+                "preview-implicit-folder" => "자료",
+                "preview-catalog-approval" | "preview-catalog-bytes-approval" => {
+                    "큰 작업을 허용할까요?"
+                }
+                "preview-loading" => "미리보기를 불러오는 중입니다",
+                "preview-text" => "여행 준비 목록",
+                "preview-image" => "미리보기",
+                "preview-empty" => "빈 텍스트 파일입니다",
+                "preview-limit" => "미리보기 크기 또는 처리 한도를 초과했습니다",
+                "preview-damaged" => "파일이 손상됐거나 UTF-8 텍스트가 아닙니다",
+                "preview-unsupported" => "이 파일 형식은 미리보기를 지원하지 않습니다",
                 "resource-approval" => "큰 작업을 허용할까요?",
                 "resource-ratio" => "압축률이 매우 높습니다",
                 "resource-retry" => "한도를 늘려 다시 시도",
@@ -465,4 +476,82 @@ fn partial_limit_result_never_offers_expanded_retry() {
     }
     assert!(!text(&shapes).contains("한도를 늘려 다시 시도"));
     assert!(text(&shapes).contains("풀린 자료"));
+}
+
+#[test]
+fn preview_escape_discards_content_and_returns_to_list_without_changing_selection() {
+    for name in ["preview-text", "preview-image", "preview-loading"] {
+        let ctx = egui::Context::default();
+        let mut app = scenarios::parse(name).unwrap().build();
+        let selected = app.model.selected.clone();
+        for _ in 0..3 {
+            resource_frame(&mut app, &ctx, vec![]);
+        }
+        assert!(text(&resource_frame(&mut app, &ctx, vec![])).contains("미리보기"));
+        resource_frame(
+            &mut app,
+            &ctx,
+            vec![egui::Event::Key {
+                key: egui::Key::Escape,
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers: Default::default(),
+            }],
+        );
+        for _ in 0..3 {
+            resource_frame(&mut app, &ctx, vec![]);
+        }
+        assert!(app.model.preview.is_none());
+        assert_eq!(app.model.selected, selected);
+        if name == "preview-loading" {
+            assert!(app.model.cancellation_requested());
+        } else {
+            assert_eq!(
+                ctx.memory(|m| m.focused()),
+                Some(egui::Id::unique("archive-list"))
+            );
+        }
+    }
+}
+
+#[test]
+fn preview_image_respects_renderer_texture_limit() {
+    let ctx = egui::Context::default();
+    let mut app = scenarios::parse("preview-image").unwrap().build();
+    app.model.preview = Some(zipelo_ui_memory_app::archive_ui::Preview {
+        info: zipelo_ui_memory_app::archive_ui::PreviewInfo {
+            entry_id: 1,
+            format: zipelo_ui_memory_app::archive_ui::PreviewFormat::Rgba8,
+            width: 2048,
+            height: 1,
+            total_bytes: 8192,
+        },
+        data: vec![255; 8192],
+    });
+    let mut image_seen = false;
+    for _ in 0..3 {
+        let mut result = ctx.run_ui(
+            egui::RawInput {
+                max_texture_side: Some(1024),
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(760.0, 540.0),
+                )),
+                ..Default::default()
+            },
+            |ui| app.show(ui),
+        );
+        for (id, delta) in &result.textures_delta.set {
+            if *id == egui::TextureId::Managed(0) {
+                continue;
+            }
+            for image in delta {
+                assert!(image.image.size().iter().all(|n| *n <= 1024));
+            }
+            image_seen = true;
+        }
+        result.textures_delta.clear();
+    }
+    assert!(image_seen);
 }

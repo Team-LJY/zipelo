@@ -7,6 +7,9 @@ publish = false
 autotests = false
 
 [dependencies]
+png = "=0.18.1"
+zune-jpeg = { package = "zipelo-jpeg", path = "vendor/zune-jpeg", default-features = false, features = ["std"] }
+zune-core = { version = "=0.5.3", default-features = false, features = ["std"] }
 bzip2 = "=0.6.1"
 lzma-rust2 = { version = "=0.25.0", default-features = false, features = ["std", "xz"] }
 aes = { version = "=0.8.4", features = ["zeroize"] }
@@ -19,6 +22,7 @@ sha2 = "=0.10.9"
 zlib-rs = { version = "=0.6.8", default-features = false, features = ["rust-allocator"] }
 
 [workspace]
+exclude = ["vendor/zune-jpeg"]
 
 [[test]]
 name = "archive_worker"

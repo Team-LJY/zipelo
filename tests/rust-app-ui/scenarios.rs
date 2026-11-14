@@ -21,6 +21,17 @@ macro_rules! catalog {
 }
 
 catalog! {
+    "preview-catalog-bytes-approval" => "16 GiB를 넘는 전체 목록의 미리보기 승인",
+    "preview-catalog-approval" => "미리보기의 전체 목록 처리 예산 승인",
+    "preview-loading" => "미리보기 로딩과 취소",
+    "preview-text" => "읽기 전용 텍스트 미리보기",
+    "preview-image" => "정적 이미지 미리보기",
+    "preview-empty" => "빈 텍스트 미리보기",
+    "preview-limit" => "미리보기 한도 초과",
+    "preview-damaged" => "손상된 미리보기 파일",
+    "preview-unsupported" => "미지원 미리보기 형식",
+    "preview-implicit-folder" => "파일 하나를 포함한 가상 폴더의 미리보기 비활성화",
+    "preview-selection" => "폴더와 여러 항목의 미리보기 비활성화",
     "resource-approval" => "처리 전 큰 작업 승인",
     "resource-ratio" => "고압축 작업 경고와 미확인 값",
     "resource-retry" => "주 창 모달에서 출력 없는 한도 실패 후 확대 재시도",
@@ -251,6 +262,146 @@ impl Scenario {
             archive_sha256: [7; 32],
         });
         app.model.confirmed = true;
+        if self.name.starts_with("preview-") {
+            app.model.selected = BTreeSet::from([1]);
+            if self.name == "preview-implicit-folder" {
+                app.model.entries.truncate(1);
+                app.model.entries[0].id = 1;
+                app.model.entries[0].name = "자료/안내.txt".into();
+                app.model.entries[0].kind = Kind::File;
+                return app;
+            }
+            if self.name == "preview-selection" {
+                app.model.selected.insert(0);
+                return app;
+            }
+            if self.name == "preview-catalog-approval" {
+                let template = app.model.entries[1].clone();
+                app.model.entries = (0..10_001)
+                    .map(|id| Entry {
+                        id,
+                        name: if id == 1 {
+                            "읽어주세요.txt".into()
+                        } else {
+                            format!("{id}.bin")
+                        },
+                        bytes: Some(if id == 1 { 7 } else { 0 }),
+                        ..template.clone()
+                    })
+                    .collect();
+            }
+            if self.name == "preview-catalog-bytes-approval" {
+                app.model.entries.truncate(2);
+                app.model.entries[0].bytes = Some(16 * 1024 * 1024 * 1024);
+                app.model.entries[1].bytes = Some(7);
+            }
+            app.begin_preview(&egui::Context::default());
+            if matches!(
+                self.name,
+                "preview-catalog-approval" | "preview-catalog-bytes-approval"
+            ) {
+                let mut state = state.borrow_mut();
+                state.frame(Event::Accepted { encryption: false });
+                state.frame(Event::ResourceRequired(ResourceChallenge {
+                    id: 1,
+                    action: ActionKind::Preview,
+                    scope: ResourceScope {
+                        output: true,
+                        entries: true,
+                        ..ResourceScope::default()
+                    },
+                    usage: ResourceUsage::default(),
+                    soft_limits: Limits::default(),
+                    ceiling: Limits {
+                        input: u64::MAX,
+                        output: 64 * 1024 * 1024 * 1024,
+                        entries: 200_000,
+                    },
+                }));
+                drop(state);
+                for _ in 0..32 {
+                    app.model.poll();
+                }
+                return app;
+            }
+            {
+                let mut state = state.borrow_mut();
+                state.frame(Event::Accepted { encryption: false });
+                if self.name != "preview-loading" {
+                    let error = match self.name {
+                        "preview-limit" => Some(ErrorCode::Limit),
+                        "preview-damaged" => Some(ErrorCode::Integrity),
+                        "preview-unsupported" => Some(ErrorCode::UnsupportedFeature),
+                        _ => None,
+                    };
+                    if error.is_none() {
+                        use sha2::{Digest, Sha256};
+                        let image = self.name == "preview-image";
+                        let data = if image {
+                            (0..128 * 96)
+                                .flat_map(|i| {
+                                    if (i / 128 / 16 + i % 128 / 16) % 2 == 0 {
+                                        [37, 99, 235, 255]
+                                    } else {
+                                        [232, 240, 254, 255]
+                                    }
+                                })
+                                .collect::<Vec<_>>()
+                        } else if self.name == "preview-empty" {
+                            Vec::new()
+                        } else {
+                            "여행 준비 목록\n\n기차표 확인\n카메라 배터리 충전\n"
+                                .as_bytes()
+                                .to_vec()
+                        };
+                        let info = PreviewInfo {
+                            entry_id: 1,
+                            format: if image {
+                                PreviewFormat::Rgba8
+                            } else {
+                                PreviewFormat::Utf8Text
+                            },
+                            total_bytes: data.len() as u64,
+                            width: if image { 128 } else { 0 },
+                            height: if image { 96 } else { 0 },
+                        };
+                        state.frame(Event::PreviewBegin(info));
+                        for (offset, chunk) in data.chunks(32768).enumerate() {
+                            state.frame(Event::PreviewChunk {
+                                entry_id: 1,
+                                offset: (offset * 32768) as u64,
+                                data: chunk.to_vec(),
+                            });
+                        }
+                        state.frame(Event::PreviewEnd {
+                            entry_id: 1,
+                            total_bytes: info.total_bytes,
+                            sha256: Sha256::digest(&data).into(),
+                        });
+                    }
+                    state.frame(Event::Terminal(Terminal {
+                        outcome: if error.is_some() {
+                            Outcome::Failed
+                        } else {
+                            Outcome::Completed
+                        },
+                        error,
+                        publication: Publication::None,
+                        created_count: 0,
+                        retained_partial_count: 0,
+                        durability: Durability::NotApplicable,
+                        cleanup: Cleanup::Complete,
+                    }));
+                    state.queue.push_back(HostEvent::StdoutEof);
+                    state.queue.push_back(HostEvent::StderrEof);
+                    state.queue.push_back(HostEvent::Exited { success: true });
+                }
+            }
+            for _ in 0..32 {
+                app.model.poll();
+            }
+            return app;
+        }
         match self.name {
             "tar-bz2" | "tar-xz" => {
                 app.model.list_id.as_mut().unwrap().format = Format::Tar;

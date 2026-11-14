@@ -129,3 +129,49 @@ Python 표준 bz2, lzma와 tarfile로 독립 생성 및 해제한 결과의 SHA2
 직접 의존성은 기존 zlib-rs=0.6.8와 허용된 RustCrypto sha2=0.10.9입니다. 2026-11-11에 확인한 [zlib-rs RUSTSEC-2024-0401](https://rustsec.org/advisories/RUSTSEC-2024-0401.html)은 >=0.4.0, [sha2 RUSTSEC-2021-0100](https://rustsec.org/advisories/RUSTSEC-2021-0100.html)은 >=0.9.8을 수정 버전으로 명시합니다. 선택 버전은 이 수정 범위에 들어갑니다. 이는 전체 전이 의존성의 취약점 부재나 완전한 보안 감사를 의미하지 않습니다.
 
 암호 구현에 RustCrypto aes=0.8.4(zeroize 기능), hmac=0.12.1, pbkdf2=0.12.2, sha1=0.10.7, zeroize=1.9.1과 상수 시간 비교용 subtle=2.6.1을 추가했습니다. SHA-1은 ZIP 호환용 HMAC/KDF에만 사용합니다. 고정 버전과 전이 의존성은 Cargo.lock에 있습니다. 로컬 RustSec DB(1645308, 2026-10-23)의 해당 패키지 기록과 공개 RustSec 검색을 확인했지만 cargo-audit 명령이 없어 최신 DB 전체 자동 감사는 수행하지 못했습니다. 이 확인은 취약점 부재나 전체 보안 감사의 증거가 아닙니다.
+
+## 미리보기 계약
+
+상태: frontend와 backend의 계약 합의가 완료되었다. protocol.rs와 wire.rs에 공용 타입, 전송 규칙과 상한 검증을 반영했다. 작업자의 제한된 해제와 PNG/JPEG 디코더를 연결했다. 실제 압축파일을 사용하는 운영체제별 화면 검증과 독립 리뷰는 완료 전이다. 확정된 범위는 [PLANS 8.7](../../docs/PLANS.md)을 따른다. 8.8 분할 7z는 이 구현에서 제외한다.
+
+### 요청과 수명
+
+- 기존 프레임 헤더 버전 1과 본문 1 MiB 상한을 유지한다. Action과 ActionKind에 Preview(태그 3)를 추가하고 StartGuarded(kind 6)의 interactive=true로만 시작한다. 일반 Start와 StartInteractive에는 Preview를 허용하지 않는다. 기존 요청과 태그의 의미는 바꾸지 않으며 구버전 작업자가 거부하면 일반 해제로 자동 재시도하지 않는다.
+- Preview 요청은 archive NativePath, entry_id u32, 필수 list_id ListId 순서다. 목적지와 출력 파일 이름은 받지 않는다. 한 작업자 프로세스는 한 미리보기 요청만 처리하고 0이 아닌 기존 job_id로 구분한다. 앱은 별도로 단조 증가하는 화면 세대를 작업에 연결한다.
+- 입력 Snapshot과 ListId를 먼저 대조한다. 단일 일반 파일만 허용하고 폴더, 링크 및 유효하지 않은 항목 ID는 거부한다. 목록에서 보지 않은 입력이나 바뀐 입력의 이전 entry_id를 사용하지 않는다.
+- 전체 해독, solid 선행 처리, 입력 사본과 임시 공간에는 기존 기본/승인 자원 예산 및 압축률 감시를 유지한다. 확대 승인과 암호는 기존 질문/응답을 사용하고 충돌 질문과 목적지 게시는 없다. 승인 전 전체 300초, 승인 후 진행 없는 60초 및 질문 대기 제외를 유지한다.
+- 미리보기 고유의 텍스트/이미지 바이트와 픽셀 상한은 큰 작업 승인으로 늘어나지 않는다. 원본 검증과 필요한 압축 데이터의 무결성 검증, 선택 항목 및 디코딩 검증을 모두 마친 뒤에만 전송을 시작한다.
+
+### 결과와 흐름 제어
+
+아래 정수는 기존 little-endian 부호 없는 타입을 사용하며 필드 순서를 고정한다. kind 111~113을 새 선택적 확장으로 사용하며 별도 ACK 메시지를 추가하지 않는다. 원래 초안의 64 KiB 청크 및 kind 8 PreviewAck는 철회한다.
+
+- Message::PreviewBegin(PreviewInfo)(kind 111): PreviewInfo의 필드는 entry_id u32, format PreviewFormat, total_bytes u64, width u32, height u32 순서다. PreviewFormat::Utf8Text=0, PreviewFormat::Rgba8=1을 u8로 전송한다. Utf8Text는 완전히 검증한 UTF-8 텍스트이며 width=height=0, total_bytes<=1 MiB다. 선행 UTF-8 BOM만 제거하며 항목 바이트 상한에는 BOM도 포함한다.
+- PreviewFormat::Rgba8은 행 우선, 왼쪽 위 시작, 채널 순서 RGBA, 알파를 미리 곱하지 않은 RGBA8 픽셀이다. width/height는 각각 1~8192, width*height<=16,000,000, total_bytes=width*height*4<=64 MiB를 만족해야 한다. 모든 곱셈과 길이 변환은 검사한다.
+- Message::PreviewChunk { entry_id: u32, offset: u64, data: Vec<u8> }(kind 112): 직렬화 순서는 entry_id u32, offset u64, data_len u32, data 원시 바이트다. data_len은 1~32,768이며 offset은 0부터 직전 청크 끝과 정확히 이어져야 한다. 부가 필드를 포함한 본문은 1 MiB보다 작다. 빈 텍스트는 Begin과 End만 보낸다. 텍스트의 UTF-8 문자는 청크 경계에서 나뉠 수 있으므로 전체 재조립 후 문자열로 만든다.
+- 흐름 제어는 기존 크기 64 수신 큐와 파이프의 역압을 사용한다. 청크 payload 대기는 최대 64*32 KiB=2 MiB이며 프레임/이벤트 부가 비용과 현재 읽는 프레임은 별도다. 전송 중에도 기존 취소, 부모 종료와 시간 감시를 유지한다.
+- 앱 수신기는 Begin을 검증한 뒤 상한 이내에서만 재조립 공간을 준비한다. 일치하는 job_id/entry_id의 연속 청크만 복사한다. 총량 초과, 잘못된 순서, 중복 Begin/End 및 메타정보와 다른 결과는 Protocol로 중단한다.
+- Message::PreviewEnd { entry_id: u32, total_bytes: u64, sha256: [u8; 32] }(kind 113): 필드 순서는 entry_id, total_bytes, sha256이다. 앱은 실제 수신 길이, Begin/End 길이와 SHA256을 대조하고 UTF-8 또는 픽셀 레이아웃을 재검사한다. End만으로 표시하지 않고 기존 Terminal::Completed 및 정상 통신 종료/자식 회수를 확인한 뒤 현재 화면 세대의 결과만 표시한다.
+- Terminal의 publication=None, created_count=0, retained_partial_count=0, durability=NotApplicable를 유지하고 임시 정리 상태는 실제 결과대로 보고한다. 실패하거나 취소한 결과는 일부라도 표시하지 않는다.
+
+### 버퍼와 취소
+
+- 작업당 결과 재조립 버퍼는 텍스트 1 MiB 또는 RGBA 64 MiB 이하다. 별도 데이터 큐를 만들지 않고 기존 수신 큐의 청크 payload 최대 2 MiB를 지키며 수신 프레임의 기존 1 MiB 상한은 별도다. UI 전달 대기도 결과 한 개만 허용하고 이전 미리보기의 CPU 결과는 새 요청 전에 해제한다. 화면 렌더러와 GPU 복사 비용을 포함한 프로세스 전체 메모리 상한을 뜻하지 않는다.
+- 취소, 닫기와 선택 변경은 즉시 화면 세대를 무효화하고 누적 버퍼를 해제한 뒤 기존 Cancel을 보낸다. 미리보기 창을 닫아도 작업자 회수까지 수신 큐를 계속 비우며 해당 작업의 후속 Begin/Chunk/End와 늦은 완료를 모두 폐기한다. 큐를 비울 수 없어 연결을 중단할 때는 기존 종료/회수 절차를 수행하며 닫힌 화면 때문에 데이터 큐가 가득 찬 채 방치하지 않는다.
+- CancelAck가 TooLate 또는 Finished여도 취소한 화면의 결과는 복원하지 않는다. 다음 작업은 이전 자식을 회수한 후 새 job_id와 세대로 시작한다. 작업자 오류나 종료 지연은 기존 종료/회수 정책을 적용하고, 상한을 피하려고 사용자 폴더에 미리보기 파일을 쓰지 않는다.
+
+### 형식과 오류
+
+- 텍스트 확장자는 대소문자 구분 없이 .txt, .md, .log, .csv, .json이며 UTF-8 전체 검증을 통과해야 한다. 이미지 후보는 .png, .jpg, .jpeg이며 실제 PNG/JPEG 형식도 일치해야 한다. 일반 GZip은 입력 이름에서 .gz를 제거한 이름을 기준으로 하고 나머지는 카탈로그 항목 이름을 사용한다.
+- 선택 항목 해제 후 원본 바이트는 텍스트 1 MiB, 이미지 8 MiB 이하다. 실제 읽는 양에도 같은 상한을 적용하며 차원과 픽셀 수를 할당 전에 검사한다. APNG, 다른 애니메이션, 미지원 형식은 제외한다. 손상 입력을 복구하거나 부분 디코딩으로 성공 처리하지 않는다.
+- UnsupportedFormat/UnsupportedFeature는 형식/확장자 불일치와 미지원, Integrity는 잘못된 UTF-8과 손상, Limit는 바이트/픽셀 또는 공통 자원 상한을 뜻한다. SourceChanged, WrongPassword와 기존 I/O/Protocol 오류는 유지한다. 앱은 미리보기 Limit에 고유 상한 확대를 제안하지 않고 일반 해제를 별도 사용자 동작으로 안내한다.
+
+### 디코더와 담당
+
+- PNG는 png 0.18.1(MIT OR Apache-2.0), JPEG는 zune-jpeg 0.5.15와 zune-core 0.5.3(MIT OR Apache-2.0 OR Zlib)을 직접 사용하며 모두 MIT 조건을 선택한다. zune는 std 기능만 켜고 순수 Rust 디코더를 사용한다. strict 모드, 입력/출력 길이와 치수를 직접 제어하기 위해 공통 image 래퍼 대신 선택했다. packaging/licenses.py에서 선택한 MIT와 체크섬을 대조한 라이선스 원문을 배포 고지에 포함한다.
+- PNG는 모든 청크 CRC와 마지막 IEND를 검증하고 APNG를 거부한다. 텍스트와 ICC 메타데이터의 추가 해독은 끄고 16비트/팔레트/회색조를 RGBA8로 정규화한다. JPEG는 헤더와 스캔 경계를 먼저 확인해 단일 8비트 baseline/progressive 프레임만 해독한다. 회색조와 CMYK도 RGB 해독 뒤 같은 결과 버퍼에서 불투명 RGBA8로 변환한다. 산술 부호화, lossless JPEG와 MPO는 지원하지 않는다.
+- ZIP은 선택 항목만 해제하며 7z는 선택 항목이 속한 solid 블록 전체를 무결성 검증한다. TAR 계열과 GZip 컨테이너 해독, solid 블록 및 메타데이터에는 기존 공통 예산과 임시 공간 감시를 적용한다. 선택 항목을 결과 버퍼로 읽는 양은 텍스트/이미지 고유 상한을 넘지 않는다. PNG 입력 읽기, 변환 행과 결과 청크마다 취소를 확인한다. JPEG 라이브러리 호출은 전후에 취소를 확인하고 기존 자식 종료/회수 정책을 유지한다.
+- 2026-11-14 공개 RustSec DB의 crates 트리 86148de9e400d7460a03b8089d1de31af2d1e6c3에서 추가 의존성 10종 이름의 권고 기록이 없는 것을 확인했다. 이 확인은 전체 잠금 파일의 자동 감사나 취약점 부재를 보장하지 않는다.
+- PNG의 제한된 Decoder와 행/프레임 API는 [공식 문서](https://docs.rs/png/0.18.1/png/)를 참고한다. 라이브러리 내부 할당 제한을 작업자 전체 RSS의 강제 상한으로 표현하지 않는다. 엄격한 항목 길이, 치수와 결과 길이 검사를 별도로 적용한다.
+- backend는 작업자 protocol.rs, wire.rs, runtime 및 디코더, 작업자 시험과 packaging/licenses.py 고지를 맡는다. frontend는 앱 재조립/전송 제어, 화면과 앱 시험, --ui-scenario 및 가이드를 맡는다. 같은 원격 브랜치는 양쪽 결과를 확인하며 순차 갱신하고 공용 타입 변경은 이 계약 합의 후 backend가 반영한다.
+- 시험은 바이트/치수/픽셀 경계, UTF-8 청크 경계와 BOM, 형식 불일치/APNG/손상, 암호와 solid 예산, malformed/순서/중복/초과 전송, 64개 큐 역압과 디코딩 및 전송 중 취소, 늦은 완료 폐기와 정리 및 원본 해시 보존을 포함한다.

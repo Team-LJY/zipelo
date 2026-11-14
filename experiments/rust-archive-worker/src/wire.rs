@@ -138,7 +138,8 @@ macro_rules! enumeration { ($t:ident {$($v:ident=$n:expr),*$(,)?}) => { impl Wir
 enumeration!(Format{Zip=0,Tar=1,Gzip=2,TarGzip=3,SevenZip=4});
 enumeration!(Method{Store=0,Deflate=1});
 enumeration!(Encryption{None=0,Aes256=1});
-enumeration!(ActionKind{List=0,Extract=1,CreateZip=2});
+enumeration!(ActionKind{List=0,Extract=1,CreateZip=2,Preview=3});
+enumeration!(PreviewFormat{Utf8Text=0,Rgba8=1});
 enumeration!(EntryKind{File=0,Directory=1,Link=2,Other=3});
 enumeration!(Stage{Scan=0,Read=1,Decode=2,Write=3,Verify=4,Commit=5});
 enumeration!(Disposition{Created=0,PartialRetained=1,Removed=2,CommitUncertain=3});
@@ -166,6 +167,31 @@ structure!(ListId {
     archive_bytes,
     archive_sha256
 });
+impl Wire for PreviewInfo {
+    fn enc(&self, e: &mut Encoder) -> io::Result<()> {
+        if !self.valid() {
+            return Err(invalid());
+        }
+        self.entry_id.enc(e)?;
+        self.format.enc(e)?;
+        self.total_bytes.enc(e)?;
+        self.width.enc(e)?;
+        self.height.enc(e)
+    }
+    fn dec(d: &mut Decoder<'_>) -> io::Result<Self> {
+        let info = Self {
+            entry_id: Wire::dec(d)?,
+            format: Wire::dec(d)?,
+            total_bytes: Wire::dec(d)?,
+            width: Wire::dec(d)?,
+            height: Wire::dec(d)?,
+        };
+        if !info.valid() {
+            return Err(invalid());
+        }
+        Ok(info)
+    }
+}
 structure!(Source { path, archive_name });
 structure!(Start { action, limits });
 structure!(GuardedStart {
@@ -309,6 +335,16 @@ impl Wire for Action {
                 method.enc(e)?;
                 encryption.enc(e)
             }
+            Self::Preview {
+                archive,
+                entry_id,
+                list_id,
+            } => {
+                3u8.enc(e)?;
+                archive.enc(e)?;
+                entry_id.enc(e)?;
+                list_id.enc(e)
+            }
         }
     }
     fn dec(d: &mut Decoder<'_>) -> io::Result<Self> {
@@ -329,9 +365,20 @@ impl Wire for Action {
                 method: Wire::dec(d)?,
                 encryption: Wire::dec(d)?,
             }),
+            3 => Ok(Self::Preview {
+                archive: Wire::dec(d)?,
+                entry_id: Wire::dec(d)?,
+                list_id: Wire::dec(d)?,
+            }),
             _ => Err(invalid()),
         }
     }
+}
+fn valid_preview_chunk(offset: u64, length: usize) -> bool {
+    (1..=MAX_PREVIEW_CHUNK_BYTES).contains(&length)
+        && offset
+            .checked_add(length as u64)
+            .is_some_and(|end| end <= MAX_PREVIEW_RGBA_BYTES)
 }
 impl Message {
     fn encode(&self) -> io::Result<(u16, Vec<u8>)> {
@@ -341,6 +388,9 @@ impl Message {
         };
         let kind = match self {
             Self::Start(v) => {
+                if matches!(v.action, Action::Preview { .. }) {
+                    return Err(invalid());
+                }
                 v.enc(&mut e)?;
                 1
             }
@@ -456,6 +506,37 @@ impl Message {
                 disposition.enc(&mut e)?;
                 105
             }
+            Self::PreviewBegin(info) => {
+                info.enc(&mut e)?;
+                111
+            }
+            Self::PreviewChunk {
+                entry_id,
+                offset,
+                data,
+            } => {
+                if !valid_preview_chunk(*offset, data.len()) {
+                    return Err(invalid());
+                }
+                entry_id.enc(&mut e)?;
+                offset.enc(&mut e)?;
+                (data.len() as u32).enc(&mut e)?;
+                e.put(data)?;
+                112
+            }
+            Self::PreviewEnd {
+                entry_id,
+                total_bytes,
+                sha256,
+            } => {
+                if *total_bytes > MAX_PREVIEW_RGBA_BYTES {
+                    return Err(invalid());
+                }
+                entry_id.enc(&mut e)?;
+                total_bytes.enc(&mut e)?;
+                sha256.enc(&mut e)?;
+                113
+            }
             Self::Terminal(v) => {
                 if v.detail.len() > 4096 {
                     return Err(invalid());
@@ -509,7 +590,13 @@ impl Message {
             },
         };
         let m = match kind {
-            1 => Self::Start(Wire::dec(&mut d)?),
+            1 => {
+                let start = Start::dec(&mut d)?;
+                if matches!(start.action, Action::Preview { .. }) {
+                    return Err(invalid());
+                }
+                Self::Start(start)
+            }
             2 => {
                 let challenge_id = Wire::dec(&mut d)?;
                 let secret = Secret(Vec::<u8>::dec(&mut d)?);
@@ -585,6 +672,36 @@ impl Message {
                 relative_name: Wire::dec(&mut d)?,
                 disposition: Wire::dec(&mut d)?,
             },
+            111 => Self::PreviewBegin(Wire::dec(&mut d)?),
+            112 => {
+                let entry_id = Wire::dec(&mut d)?;
+                let offset = Wire::dec(&mut d)?;
+                let length = u32::dec(&mut d)? as usize;
+                if !valid_preview_chunk(offset, length) {
+                    return Err(invalid());
+                }
+                let bytes = d.take(length)?;
+                let mut data = Vec::new();
+                data.try_reserve_exact(length).map_err(|_| invalid())?;
+                data.extend_from_slice(bytes);
+                Self::PreviewChunk {
+                    entry_id,
+                    offset,
+                    data,
+                }
+            }
+            113 => {
+                let entry_id = Wire::dec(&mut d)?;
+                let total_bytes = u64::dec(&mut d)?;
+                if total_bytes > MAX_PREVIEW_RGBA_BYTES {
+                    return Err(invalid());
+                }
+                Self::PreviewEnd {
+                    entry_id,
+                    total_bytes,
+                    sha256: Wire::dec(&mut d)?,
+                }
+            }
             106 => {
                 let t = Terminal::dec(&mut d)?;
                 if t.detail.len() > 4096 {

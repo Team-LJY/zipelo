@@ -54,17 +54,38 @@ impl Catalog {
         password: Option<&[u8]>,
         check: &mut impl crate::resources::Monitor,
     ) -> Result<Self> {
+        Self::open_selected(source, len, limits, decode, password, None, check)
+    }
+    pub fn preview(
+        source: &mut File,
+        len: u64,
+        limits: Limits,
+        password: Option<&[u8]>,
+        entry_id: u32,
+        check: &mut impl crate::resources::Monitor,
+    ) -> Result<Self> {
+        Self::open_selected(source, len, limits, true, password, Some(entry_id), check)
+    }
+    fn open_selected(
+        source: &mut File,
+        len: u64,
+        limits: Limits,
+        decode: bool,
+        password: Option<&[u8]>,
+        selected: Option<u32>,
+        check: &mut impl crate::resources::Monitor,
+    ) -> Result<Self> {
         let mut magic = [0; 6];
         let n = len.min(6) as usize;
         at(source, 0, &mut magic[..n])?;
         if magic.starts_with(b"7z\xbc\xaf\x27\x1c") {
-            return crate::seven_zip::open(source, len, limits, decode, check);
+            return crate::seven_zip::open_selected(source, len, limits, decode, selected, check);
         }
         if magic.starts_with(b"PK\x03\x04")
             || magic.starts_with(b"PK\x05\x06")
             || magic.starts_with(b"PK\x06\x06")
         {
-            return zip(source, len, limits, decode, password, check);
+            return zip(source, len, limits, decode, password, selected, check);
         }
         let compression = if magic.starts_with(b"BZh") {
             Some(crate::compressed_tar::Compression::Bzip2)
@@ -425,6 +446,7 @@ fn zip(
     limits: Limits,
     decode: bool,
     password: Option<&[u8]>,
+    selected: Option<u32>,
     check: &mut impl crate::resources::Monitor,
 ) -> Result<Catalog> {
     if len < 22 {
@@ -712,13 +734,22 @@ fn zip(
     )?;
     let mut data = spool::temporary()?;
     if decode {
-        crate::space::ensure(&data, total)?;
+        let required = if let Some(id) = selected {
+            members
+                .get(id as usize)
+                .ok_or(ErrorCode::InvalidRequest)?
+                .entry
+                .size
+        } else {
+            total
+        };
+        crate::space::ensure(&data, required)?;
     }
     let mut offsets = Vec::new();
     for (member, packed) in members.iter().zip(packed) {
         check.check()?;
         offsets.push(io(data.stream_position())?);
-        if !decode {
+        if !decode || selected.is_some_and(|id| id != member.entry.entry_id) {
             crate::resources::completed(Ok(()), check)?;
             continue;
         }

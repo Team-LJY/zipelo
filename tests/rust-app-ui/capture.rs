@@ -227,6 +227,15 @@ impl Connection for CaptureConnection {
                             self.finish(false);
                         }
                     }
+                    Start::Preview { .. } => self.terminal(Terminal {
+                        outcome: Outcome::Failed,
+                        error: Some(ErrorCode::UnsupportedFeature),
+                        publication: Publication::None,
+                        created_count: 0,
+                        retained_partial_count: 0,
+                        durability: Durability::NotApplicable,
+                        cleanup: Cleanup::Complete,
+                    }),
                     Start::CreateZip {
                         output_file,
                         aes256,

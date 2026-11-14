@@ -186,6 +186,15 @@ fn start_to_wire(start: ui::Start) -> wire::Start {
             list_id: Some(list_to_wire(list_id)),
             gzip_output_name,
         },
+        ui::Start::Preview {
+            archive,
+            entry_id,
+            list_id,
+        } => wire::Action::Preview {
+            archive: wire::NativePath::from_path(&crate::archive_path::worker_path(&archive)),
+            entry_id,
+            list_id: list_to_wire(list_id),
+        },
         ui::Start::CreateZip {
             sources,
             output_file,
@@ -259,6 +268,27 @@ fn event_to_ui(
             soft_limits,
             ceiling,
         }),
+        wire::Message::PreviewBegin(info) if expected == Some(wire::ActionKind::Preview) => {
+            ui::Event::PreviewBegin(info)
+        }
+        wire::Message::PreviewChunk {
+            entry_id,
+            offset,
+            data,
+        } if expected == Some(wire::ActionKind::Preview) => ui::Event::PreviewChunk {
+            entry_id,
+            offset,
+            data,
+        },
+        wire::Message::PreviewEnd {
+            entry_id,
+            total_bytes,
+            sha256,
+        } if expected == Some(wire::ActionKind::Preview) => ui::Event::PreviewEnd {
+            entry_id,
+            total_bytes,
+            sha256,
+        },
         wire::Message::Entry(entry) => ui::Event::Entry(ui::Entry {
             id: entry.entry_id,
             name: entry.name,
@@ -536,7 +566,10 @@ impl ui::Connection for ProcessConnection {
                 } else {
                     wire::Limits::default()
                 };
-                let interactive = start.action.kind() == wire::ActionKind::Extract;
+                let interactive = matches!(
+                    start.action.kind(),
+                    wire::ActionKind::Extract | wire::ActionKind::Preview
+                );
                 wire::Message::StartGuarded(wire::GuardedStart {
                     start,
                     ceiling,

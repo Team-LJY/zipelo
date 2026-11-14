@@ -43,6 +43,11 @@ pub enum Start {
         list_id: ListId,
         gzip_output_name: Option<String>,
     },
+    Preview {
+        archive: PathBuf,
+        entry_id: u32,
+        list_id: ListId,
+    },
     CreateZip {
         sources: Vec<(PathBuf, String)>,
         output_file: PathBuf,
@@ -205,7 +210,52 @@ pub struct Terminal {
     pub durability: Durability,
     pub cleanup: Cleanup,
 }
-pub use worker_protocol::protocol::{ActionKind, Limits, ResourceScope, ResourceUsage};
+pub use worker_protocol::protocol::{
+    ActionKind, Limits, PreviewFormat, PreviewInfo, ResourceScope, ResourceUsage,
+};
+
+pub struct Preview {
+    pub info: PreviewInfo,
+    pub data: Vec<u8>,
+}
+
+struct PreviewBuffer {
+    info: PreviewInfo,
+    data: Vec<u8>,
+    ended: bool,
+}
+
+impl PreviewBuffer {
+    fn chunk(&mut self, entry_id: u32, offset: u64, data: Vec<u8>) -> bool {
+        if self.ended
+            || entry_id != self.info.entry_id
+            || offset != self.data.len() as u64
+            || data.is_empty()
+            || data.len() > 32 * 1024
+            || (data.len() as u64) > self.info.total_bytes.saturating_sub(offset)
+        {
+            return false;
+        }
+        self.data.extend_from_slice(&data);
+        true
+    }
+    fn end(&mut self, entry_id: u32, total_bytes: u64, sha256: [u8; 32]) -> bool {
+        use sha2::{Digest, Sha256};
+        if self.ended
+            || entry_id != self.info.entry_id
+            || total_bytes != self.info.total_bytes
+            || total_bytes != self.data.len() as u64
+            || Sha256::digest(&self.data)[..] != sha256
+            || (self.info.format == PreviewFormat::Utf8Text
+                && std::str::from_utf8(&self.data).is_err())
+        {
+            return false;
+        }
+        self.ended = true;
+        true
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct ResourceChallenge {
     pub id: u64,
@@ -218,6 +268,17 @@ pub struct ResourceChallenge {
 
 #[derive(Clone, Debug)]
 pub enum Event {
+    PreviewBegin(PreviewInfo),
+    PreviewChunk {
+        entry_id: u32,
+        offset: u64,
+        data: Vec<u8>,
+    },
+    PreviewEnd {
+        entry_id: u32,
+        total_bytes: u64,
+        sha256: [u8; 32],
+    },
     ResourceRequired(ResourceChallenge),
     Accepted {
         encryption: bool,
@@ -281,6 +342,8 @@ impl Factory for Unavailable {
     }
 }
 struct Running {
+    preview: Option<PreviewBuffer>,
+    preview_discarded: bool,
     id: u64,
     outgoing: u64,
     incoming: u64,
@@ -315,6 +378,7 @@ pub enum Close {
 #[derive(Default)]
 pub struct Model {
     running: Option<Running>,
+    pub preview: Option<Preview>,
     next_id: u64,
     pub archive: Option<PathBuf>,
     pub entries: Vec<Entry>,
@@ -352,6 +416,37 @@ impl Model {
             && self.list_id.is_some()
             && self.archive.is_some()
             && self.close == Close::Open
+    }
+    pub fn can_preview(&self) -> bool {
+        self.can_extract()
+            && self.selected.len() == 1
+            && self
+                .entries
+                .iter()
+                .any(|e| self.selected.contains(&e.id) && e.kind == Kind::File)
+    }
+    pub fn begin_preview(&mut self, factory: &mut dyn Factory) -> bool {
+        if !self.can_preview() {
+            return false;
+        }
+        self.begin(
+            Start::Preview {
+                archive: self.archive.clone().unwrap(),
+                entry_id: *self.selected.first().unwrap(),
+                list_id: self.list_id.clone().unwrap(),
+            },
+            factory,
+        )
+    }
+    pub fn dismiss_preview(&mut self) {
+        self.preview = None;
+        if let Some(run) = self.running.as_mut()
+            && matches!(run.start, Start::Preview { .. })
+        {
+            run.preview = None;
+            run.preview_discarded = true;
+            self.cancel();
+        }
     }
     pub fn begin(&mut self, start: Start, factory: &mut dyn Factory) -> bool {
         let expanded = self.needs_expansion(&start);
@@ -404,6 +499,13 @@ impl Model {
                     .all(|(path, _)| std::fs::symlink_metadata(path).is_ok_and(|m| m.is_file()))
                     .then(|| u32::try_from(sources.len()).ok())
                     .flatten();
+            }
+            Start::Preview { .. } => {
+                usage.estimated_entries = u32::try_from(self.entries.len()).ok();
+                usage.estimated_bytes = self
+                    .entries
+                    .iter()
+                    .try_fold(0u64, |sum, e| sum.checked_add(e.bytes?));
             }
             Start::List { .. } => {}
         }
@@ -471,6 +573,19 @@ impl Model {
             .collect();
         let validation = match &start {
             Start::List { archive } => archive.is_absolute(),
+            Start::Preview {
+                archive,
+                entry_id,
+                list_id,
+            } => {
+                archive.is_absolute()
+                    && self.archive.as_ref() == Some(archive)
+                    && self.list_id.as_ref() == Some(list_id)
+                    && self
+                        .entries
+                        .iter()
+                        .any(|e| e.id == *entry_id && e.kind == Kind::File)
+            }
             Start::Extract {
                 archive,
                 destination,
@@ -515,6 +630,7 @@ impl Model {
             self.error = Some("작업 ID 한도에 도달했습니다".into());
             return false;
         };
+        self.preview = None;
         let estimated = self.estimate(&start);
         let mut connection = match factory.connect(id) {
             Ok(c) => c,
@@ -557,6 +673,8 @@ impl Model {
         self.error = send_error;
         self.confirmed = false;
         self.running = Some(Running {
+            preview: None,
+            preview_discarded: false,
             id,
             outgoing: 1,
             incoming: 0,
@@ -686,6 +804,13 @@ impl Model {
         }
     }
     pub fn cancel(&mut self) {
+        self.preview = None;
+        if let Some(run) = self.running.as_mut()
+            && matches!(run.start, Start::Preview { .. })
+        {
+            run.preview = None;
+            run.preview_discarded = true;
+        }
         if self
             .running
             .as_ref()
@@ -730,18 +855,33 @@ impl Model {
         }
     }
     pub fn poll(&mut self) {
+        let changed = self.running.as_ref().is_some_and(|run| {
+            matches!(&run.start, Start::Preview { entry_id, .. }
+                if self.selected.len() != 1 || !self.selected.contains(entry_id))
+        });
+        if changed {
+            self.dismiss_preview();
+        }
         for _ in 0..128 {
             let Some(event) = self.running.as_mut().and_then(|r| r.connection.poll()) else {
                 break;
             };
             self.receive(event);
+            if self.error.is_some()
+                && self
+                    .running
+                    .as_ref()
+                    .is_some_and(|run| matches!(run.start, Start::Preview { .. }))
+            {
+                self.cancel();
+            }
         }
         let complete = self.running.as_ref().is_some_and(|r| {
             r.exit.is_some()
                 && ((r.stdout_eof && r.stderr_eof) || (r.transport_closed && self.error.is_some()))
         });
         if complete {
-            let run = self.running.take().unwrap();
+            let mut run = self.running.take().unwrap();
             self.confirmed =
                 self.terminal.is_some() && run.exit == Some(true) && self.error.is_none();
             if !self.confirmed {
@@ -769,6 +909,25 @@ impl Model {
                     }
                 }
             }
+            if matches!(run.start, Start::Preview { .. }) {
+                if self.confirmed
+                    && self
+                        .terminal
+                        .as_ref()
+                        .is_some_and(|t| t.outcome == Outcome::Completed)
+                    && !run.preview_discarded
+                {
+                    if let Some(buffer) = run.preview.take().filter(|b| b.ended) {
+                        self.preview = Some(Preview {
+                            info: buffer.info,
+                            data: buffer.data,
+                        });
+                    } else {
+                        self.error = Some("미리보기 완료 정보가 일치하지 않습니다".into());
+                        self.confirmed = false;
+                    }
+                }
+            }
             if self
                 .terminal
                 .as_ref()
@@ -777,7 +936,8 @@ impl Model {
                 self.list_id = None;
                 self.selected.clear();
             }
-            self.retry_start = if !run.expanded
+            self.retry_start = if !matches!(run.start, Start::Preview { .. })
+                && !run.expanded
                 && run.cancel_sequence.is_none()
                 && self.confirmed
                 && self.terminal.as_ref().is_some_and(|t| {
@@ -831,6 +991,65 @@ impl Model {
                     return;
                 }
                 match event {
+                    Event::PreviewBegin(info) => {
+                        if run.preview_discarded {
+                            return;
+                        }
+                        if !matches!(run.start, Start::Preview { entry_id, .. } if entry_id == info.entry_id)
+                            || run.preview.is_some()
+                            || !info.valid()
+                            || self.error.is_some()
+                        {
+                            self.error = Some("미리보기 메타정보가 유효하지 않습니다".into());
+                        } else {
+                            let mut data = Vec::new();
+                            if data.try_reserve_exact(info.total_bytes as usize).is_err() {
+                                self.error = Some("미리보기 메모리를 확보하지 못했습니다".into());
+                            } else {
+                                run.preview = Some(PreviewBuffer {
+                                    info,
+                                    data,
+                                    ended: false,
+                                });
+                            }
+                        }
+                    }
+                    Event::PreviewChunk {
+                        entry_id,
+                        offset,
+                        data,
+                    } => {
+                        if run.preview_discarded {
+                            return;
+                        }
+                        if self.error.is_some()
+                            || !run
+                                .preview
+                                .as_mut()
+                                .is_some_and(|b| b.chunk(entry_id, offset, data))
+                        {
+                            run.preview = None;
+                            self.error =
+                                Some("미리보기 데이터 순서나 크기가 일치하지 않습니다".into());
+                        }
+                    }
+                    Event::PreviewEnd {
+                        entry_id,
+                        total_bytes,
+                        sha256,
+                    } => {
+                        if run.preview_discarded {
+                            return;
+                        }
+                        if !run
+                            .preview
+                            .as_mut()
+                            .is_some_and(|b| b.end(entry_id, total_bytes, sha256))
+                        {
+                            run.preview = None;
+                            self.error = Some("미리보기 내용 검증에 실패했습니다".into());
+                        }
+                    }
                     Event::Accepted { encryption } => {
                         if run.accepted {
                             self.error = Some("작업 승인 중복".into());
@@ -895,6 +1114,7 @@ impl Model {
                             Start::List { .. } => ActionKind::List,
                             Start::Extract { .. } => ActionKind::Extract,
                             Start::CreateZip { .. } => ActionKind::CreateZip,
+                            Start::Preview { .. } => ActionKind::Preview,
                         };
                         let hard = Limits {
                             input: u64::MAX,
@@ -980,6 +1200,10 @@ impl Model {
                         disposition,
                         ..
                     } => {
+                        if matches!(run.start, Start::Preview { .. }) {
+                            self.error = Some("미리보기 중 파일 출력이 보고됐습니다".into());
+                            return;
+                        }
                         if self.outputs.len()
                             < if run.granted.any() {
                                 // 암묵적 상위 폴더도 출력되므로 작업자 노드 예산과 맞춤
@@ -1005,6 +1229,17 @@ impl Model {
                         }
                     }
                     Event::Terminal(t) => {
+                        if matches!(run.start, Start::Preview { .. })
+                            && (t.publication != Publication::None
+                                || t.created_count != 0
+                                || t.retained_partial_count != 0
+                                || t.durability != Durability::NotApplicable)
+                        {
+                            self.error = Some("미리보기 종료 상태가 유효하지 않습니다".into());
+                        }
+                        if t.outcome != Outcome::Completed {
+                            run.preview = None;
+                        }
                         self.challenge = None;
                         self.conflict = None;
                         self.terminal = Some(t);

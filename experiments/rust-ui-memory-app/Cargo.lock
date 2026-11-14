@@ -4656,11 +4656,21 @@ dependencies = [
  "hmac",
  "lzma-rust2",
  "pbkdf2",
+ "png",
  "sha1",
  "sha2 0.10.9",
  "subtle",
  "zeroize",
+ "zipelo-jpeg",
  "zlib-rs",
+ "zune-core",
+]
+
+[[package]]
+name = "zipelo-jpeg"
+version = "0.5.15"
+dependencies = [
+ "zune-core",
 ]
 
 [[package]]
@@ -4693,6 +4703,7 @@ dependencies = [
  "eframe",
  "pollster 0.4.0",
  "rfd",
+ "sha2 0.10.9",
  "wgpu",
  "zipelo-app-core-memory",
  "zipelo-archive-worker",
