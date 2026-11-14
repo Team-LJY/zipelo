@@ -176,9 +176,9 @@ Python 표준 bz2, lzma와 tarfile로 독립 생성 및 해제한 결과의 SHA2
 - backend는 작업자 protocol.rs, wire.rs, runtime 및 디코더, 작업자 시험과 packaging/licenses.py 고지를 맡는다. frontend는 앱 재조립/전송 제어, 화면과 앱 시험, --ui-scenario 및 가이드를 맡는다. 같은 원격 브랜치는 양쪽 결과를 확인하며 순차 갱신하고 공용 타입 변경은 이 계약 합의 후 backend가 반영한다.
 - 시험은 바이트/치수/픽셀 경계, UTF-8 청크 경계와 BOM, 형식 불일치/APNG/손상, 암호와 solid 예산, malformed/순서/중복/초과 전송, 64개 큐 역압과 디코딩 및 전송 중 취소, 늦은 완료 폐기와 정리 및 원본 해시 보존을 포함한다.
 
-## 분할 7z 계약 초안
+## 분할 7z 계약
 
-상태: frontend 합의 대기. [PLANS 8.8](../../docs/PLANS.md)의 구현 전 계약 합의를 위한 제안이며 아직 타입, 코덱과 제품 동작에 반영하지 않았다. 기준은 main ecad460이다. 아래 합의 뒤 backend가 공용 타입과 작업자를 반영하고 frontend가 같은 PR에서 화면과 상황별 디버깅 명령을 연결한다.
+상태: 2026-11-14 frontend 합의 완료. [PLANS 8.8](../../docs/PLANS.md)의 공용 타입과 코덱에 묶음 ListId, MissingVolume 및 VolumeProblem을 반영했다. 조각 탐색과 캡처 및 실제 목록/해제, 앱 수신과 화면 연동은 구현 대기다. 기준은 main ecad460이며 frontend가 같은 PR에서 화면과 상황별 디버깅 명령을 연결한다.
 
 ### 지원 범위와 조각 탐색
 
@@ -200,7 +200,7 @@ Python 표준 bz2, lzma와 tarfile로 독립 생성 및 해제한 결과의 SHA2
 
 ### 묶음 ListId와 바이트 계약
 
-프레임 헤더 버전 1, 본문 1 MiB 상한과 기존 필드 및 태그는 유지한다. 아래 확장은 합의 뒤 공용 타입과 코덱에 추가한다. 구버전 작업자 거부 시 단일 파일 요청이나 일반 해제로 자동 재시도하지 않는다.
+프레임 헤더 버전 1, 본문 1 MiB 상한과 기존 필드 및 태그는 유지한다. 아래 확장을 공용 타입과 코덱에 추가했다. 구버전 작업자 거부 시 단일 파일 요청이나 일반 해제로 자동 재시도하지 않는다.
 
 - SourceObject에 SplitSevenZip { manifest_sha256: [u8; 32] }를 태그 3으로 추가한다. Unix=1과 Windows=2는 유지한다. 분할 7z의 ListId는 catalog_version=2, format=SevenZip, source_object=SplitSevenZip이어야 한다. archive_bytes는 모든 조각의 길이 합계이고 archive_sha256은 번호 순서로 이어진 논리 입력 바이트의 SHA256이다.
 - 기존 단일 입력은 catalog_version=1과 Unix 또는 Windows 식별자를 그대로 사용한다. 버전, 형식과 SourceObject의 허용 조합을 코덱과 수신기에서 검증하고 그 밖의 조합은 Protocol로 거부한다. 첫 조각 하나의 식별자나 해시를 묶음 식별자로 사용하지 않는다.

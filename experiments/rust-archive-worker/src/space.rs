@@ -7,6 +7,7 @@ pub(crate) fn volume(file: &File) -> Result<u64> {
     Ok(match crate::filesystem::object(file)? {
         SourceObject::Unix { device, .. } => device,
         SourceObject::Windows { volume_serial, .. } => volume_serial,
+        SourceObject::SplitSevenZip { .. } => return Err(ErrorCode::Protocol),
     })
 }
 
