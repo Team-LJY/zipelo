@@ -1631,3 +1631,6 @@ mod seven_zip_create;
 mod seven_zip_create_runtime;
 
 mod recovery;
+
+#[cfg(target_os = "linux")]
+mod partial_output;
