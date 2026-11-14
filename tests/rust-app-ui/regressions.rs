@@ -4,6 +4,7 @@ mod dialogs;
 mod fake;
 #[cfg(feature = "ui")]
 mod native_dialogs;
+mod preview;
 use fake::*;
 use std::path::PathBuf;
 use zipelo_ui_memory_app::archive_ui::*;

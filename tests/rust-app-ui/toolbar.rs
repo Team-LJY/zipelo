@@ -523,3 +523,69 @@ fn failed_zip_creation_shows_save_location_and_no_extraction_copy() {
             .any(|(text, _)| text.contains("풀 위치") || text.contains("풀지 않았습니다"))
     );
 }
+
+#[test]
+fn preview_opens_by_keyboard_and_returns_focus_to_its_button() {
+    let scratch = Folder::new();
+    let factory = FakeFactory::default();
+    let mut app = loaded(&scratch, &factory);
+    app.model.selected.insert(0);
+    let ctx = egui::Context::default();
+    policy_focus(&ctx, &mut app, "미리보기");
+    let before = ctx.memory(|memory| memory.focused());
+    policy_render(&ctx, &mut app, vec![key(egui::Key::Enter)]);
+    for _ in 0..24 {
+        policy_render(&ctx, &mut app, vec![]);
+    }
+    assert!(matches!(
+        factory.state.borrow().starts.last(),
+        Some(Start::Preview { entry_id: 0, .. })
+    ));
+    assert!(app.model.preview.is_some());
+    policy_render(&ctx, &mut app, vec![key(egui::Key::Escape)]);
+    for _ in 0..3 {
+        policy_render(&ctx, &mut app, vec![]);
+    }
+    assert!(app.model.preview.is_none());
+    assert_eq!(ctx.memory(|memory| memory.focused()), before);
+    assert_eq!(app.model.selected, [0].into_iter().collect());
+}
+
+#[test]
+fn open_preview_blocks_dropped_archives_until_closed() {
+    #[derive(Debug)]
+    struct DropFile(PathBuf);
+    impl egui::DroppedFile for DropFile {
+        fn path(&self) -> &std::path::Path {
+            &self.0
+        }
+        fn bytes(&self) -> Result<Vec<u8>, String> {
+            panic!("화면이 파일을 읽으면 안 됨")
+        }
+    }
+    let scratch = Folder::new();
+    let factory = FakeFactory::default();
+    let mut app = loaded(&scratch, &factory);
+    app.model.selected.insert(0);
+    let ctx = egui::Context::default();
+    policy_click(&ctx, &mut app, "미리보기");
+    for _ in 0..24 {
+        policy_render(&ctx, &mut app, vec![]);
+    }
+    let before = factory.state.borrow().starts.len();
+    let archive = scratch.0.join("replacement.zip");
+    let mut output = ctx.run_ui(
+        egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(
+                egui::Pos2::ZERO,
+                egui::vec2(1060.0, 720.0),
+            )),
+            dropped_files: vec![std::sync::Arc::new(DropFile(archive))],
+            ..Default::default()
+        },
+        |ui| app.show(ui),
+    );
+    output.textures_delta.clear();
+    assert_eq!(factory.state.borrow().starts.len(), before);
+    assert!(app.model.preview.is_some());
+}

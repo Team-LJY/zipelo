@@ -4693,6 +4693,7 @@ dependencies = [
  "eframe",
  "pollster 0.4.0",
  "rfd",
+ "sha2 0.10.9",
  "wgpu",
  "zipelo-app-core-memory",
  "zipelo-archive-worker",

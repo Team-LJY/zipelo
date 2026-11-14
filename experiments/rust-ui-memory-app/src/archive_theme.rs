@@ -477,6 +477,7 @@ pub fn indeterminate(ui: &mut egui::Ui) {
     });
 }
 
+pub const PREVIEW: &str = include_str!("assets/icons/preview-file.svg");
 pub const OPEN: &str = include_str!("assets/icons/open-archive.svg");
 pub const CREATE: &str = include_str!("assets/icons/create-zip.svg");
 pub const EXTRACT: &str = include_str!("assets/icons/extract-archive.svg");

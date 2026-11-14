@@ -92,6 +92,39 @@ impl State {
                 });
                 self.finish(Outcome::Completed, Publication::None);
             }
+            Start::Preview { entry_id, .. } => {
+                use sha2::{Digest, Sha256};
+                let data = "미리보기 내용".as_bytes().to_vec();
+                self.frame(Event::PreviewBegin(PreviewInfo {
+                    entry_id,
+                    format: PreviewFormat::Utf8Text,
+                    total_bytes: data.len() as u64,
+                    width: 0,
+                    height: 0,
+                }));
+                self.frame(Event::PreviewChunk {
+                    entry_id,
+                    offset: 0,
+                    data: data.clone(),
+                });
+                self.frame(Event::PreviewEnd {
+                    entry_id,
+                    total_bytes: data.len() as u64,
+                    sha256: Sha256::digest(&data).into(),
+                });
+                self.frame(Event::Terminal(Terminal {
+                    outcome: Outcome::Completed,
+                    error: None,
+                    publication: Publication::None,
+                    created_count: 0,
+                    retained_partial_count: 0,
+                    durability: Durability::NotApplicable,
+                    cleanup: Cleanup::Complete,
+                }));
+                self.queue.push_back(HostEvent::StdoutEof);
+                self.queue.push_back(HostEvent::StderrEof);
+                self.queue.push_back(HostEvent::Exited { success: true });
+            }
             _ => {
                 self.frame(Event::Progress {
                     stage: Stage::Write,

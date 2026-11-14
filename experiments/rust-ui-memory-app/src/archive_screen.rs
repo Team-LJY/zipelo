@@ -210,6 +210,12 @@ pub struct ArchiveApp {
     method: Method,
     dialogs: Box<dyn Dialogs>,
     picker: Option<(Purpose, std::sync::mpsc::Receiver<DialogAnswer>)>,
+    preview_open: bool,
+    preview_name: String,
+    preview_text: String,
+    preview_texture: Option<egui::TextureHandle>,
+    preview_return_focus: Option<egui::Id>,
+    preview_initial_focus: bool,
     work: WorkWindow,
     create_win: WorkWindow,
     /// ZIP 만들기 창에서 보고 있는 폴더 (고른 폴더 기준 상대 경로, 비어 있으면 최상위).
@@ -273,6 +279,12 @@ impl ArchiveApp {
             method: Method::Deflate,
             dialogs: Box::new(NativeDialogs),
             picker: None,
+            preview_open: false,
+            preview_name: String::new(),
+            preview_text: String::new(),
+            preview_texture: None,
+            preview_return_focus: None,
+            preview_initial_focus: false,
             work: WorkWindow::default(),
             create_win: WorkWindow::default(),
             create_folder: String::new(),
@@ -776,6 +788,7 @@ impl ArchiveApp {
         if let Some(request) = self.last_request.clone() {
             match request {
                 Start::List { archive } => self.open_path(archive),
+                Start::Preview { .. } => {}
                 Start::Extract {
                     selection,
                     gzip_output_name,
@@ -800,7 +813,7 @@ impl ArchiveApp {
     }
 
     fn on_drop(&mut self, paths: Vec<PathBuf>) {
-        if self.model.busy() || paths.is_empty() {
+        if self.preview_open || self.model.busy() || paths.is_empty() {
             return;
         }
         if paths.len() == 1 && !self.create && !paths[0].is_dir() {
@@ -848,6 +861,7 @@ impl ArchiveApp {
             self.initialized = true;
         }
         self.poll();
+        let preview_was_open = self.preview_open;
         self.poll_picker();
         if self.model.challenge.is_some_and(|(_, _, encrypt)| encrypt)
             && let Some(password) = self.pending_zip_password.take()
@@ -950,6 +964,17 @@ impl ArchiveApp {
                     {
                         self.open_picker(Purpose::Open);
                     }
+                    if theme::tool(
+                        ui,
+                        "미리보기",
+                        theme::PREVIEW,
+                        idle && self.model.can_preview() && !self.preview_open,
+                        false,
+                    )
+                    .clicked()
+                    {
+                        self.begin_preview(ui.ctx());
+                    }
                     if theme::tool(ui, "압축하기", theme::CREATE, idle, false).clicked() {
                         self.choose_zip_folder();
                     }
@@ -1011,6 +1036,7 @@ impl ArchiveApp {
                 }
             });
         self.forget_password_history(&ctx);
+        self.preview_dialog(&ctx);
         self.work_window(&ctx);
         self.limit_result_dialog(&ctx);
         self.create_window(&ctx);
@@ -1023,6 +1049,13 @@ impl ArchiveApp {
         }
         self.close_dialog(&ctx);
         self.picker_notice(&ctx);
+        if !preview_was_open
+            && !self.preview_open
+            && !self.model.busy()
+            && let Some(id) = self.preview_return_focus.take()
+        {
+            ctx.memory_mut(|m| m.request_focus(id));
+        }
         if self.custom_frame {
             window_frame::edges(&ctx, true);
         }
@@ -1208,7 +1241,8 @@ impl ArchiveApp {
 
         // 열 제목 줄 없이 바로 목록을 보여 줌. 이름과 크기는 내용으로 구분됨.
         let name_width = (ui.available_width() - 16.0 - 28.0 - 96.0 - 40.0).max(120.0);
-        let active = !self.model.busy()
+        let active = !self.preview_open
+            && !self.model.busy()
             && !self.create
             && self.model.challenge.is_none()
             && self.model.close == Close::Open;
@@ -1567,6 +1601,10 @@ impl ArchiveApp {
 
     fn result_visible(&self) -> bool {
         !self.dismissed
+            && !self
+                .last_request
+                .as_ref()
+                .is_some_and(|r| matches!(r, Start::Preview { .. }))
             && !self.model.busy()
             && self.last_request.as_ref().is_some_and(|request| {
                 !matches!(request, Start::List { .. })
@@ -1577,6 +1615,158 @@ impl ArchiveApp {
                         .as_ref()
                         .is_some_and(|t| t.outcome != Outcome::Completed)
             })
+    }
+
+    fn begin_preview(&mut self, ctx: &egui::Context) {
+        if !self.model.can_preview() || self.picker.is_some() {
+            return;
+        }
+        self.preview_texture = None;
+        self.preview_text.clear();
+        self.preview_name = self
+            .model
+            .entries
+            .iter()
+            .find(|e| self.model.selected.contains(&e.id))
+            .unwrap()
+            .name
+            .clone();
+        self.preview_return_focus = Some(
+            ctx.memory(|m| m.focused())
+                .unwrap_or_else(|| egui::Id::unique("archive-list")),
+        );
+        self.preview_initial_focus = true;
+        let request = Start::Preview {
+            archive: self.model.archive.clone().unwrap(),
+            entry_id: *self.model.selected.first().unwrap(),
+            list_id: self.model.list_id.clone().unwrap(),
+        };
+        self.preview_open = true;
+        self.start(request);
+    }
+
+    fn close_preview(&mut self) {
+        self.preview_open = false;
+        self.model.dismiss_preview();
+        self.preview_texture = None;
+        self.preview_text.clear();
+        self.dismissed = true;
+    }
+
+    fn preview_dialog(&mut self, ctx: &egui::Context) {
+        if !self.preview_open
+            || self.model.challenge.is_some()
+            || self.model.resource.is_some()
+            || self.model.close != Close::Open
+        {
+            return;
+        }
+        if let Some(preview) = self.model.preview.as_mut()
+            && (!preview.data.is_empty() || preview.info.total_bytes == 0)
+        {
+            match preview.info.format {
+                PreviewFormat::Utf8Text => {
+                    self.preview_text =
+                        String::from_utf8(std::mem::take(&mut preview.data)).unwrap_or_default();
+                }
+                PreviewFormat::Rgba8 => {
+                    let width = preview.info.width as usize;
+                    let height = preview.info.height as usize;
+                    let limit = ctx.input(|i| i.max_texture_side).max(1);
+                    let step = width.div_ceil(limit).max(height.div_ceil(limit)).max(1);
+                    let size = [width.div_ceil(step), height.div_ceil(step)];
+                    let mut colors = Vec::with_capacity(size[0] * size[1]);
+                    for y in (0..height).step_by(step) {
+                        for x in (0..width).step_by(step) {
+                            let index = (y * width + x) * 4;
+                            colors.push(egui::Color32::from_rgba_unmultiplied(
+                                preview.data[index],
+                                preview.data[index + 1],
+                                preview.data[index + 2],
+                                preview.data[index + 3],
+                            ));
+                        }
+                    }
+                    let pixels = egui::ColorImage::new(size, colors);
+                    preview.data = Vec::new();
+                    self.preview_texture = Some(ctx.load_texture(
+                        "archive-preview",
+                        pixels,
+                        egui::TextureOptions::LINEAR,
+                    ));
+                }
+            }
+        }
+        let mut close = false;
+        let modal = egui::Modal::new(egui::Id::unique("archive-preview")).show(ctx, |ui| {
+            ui.set_width((ctx.content_rect().width() - 64.0).clamp(240.0, 760.0));
+            ui.horizontal(|ui| {
+                ui.heading("미리보기");
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    let button = theme::flat_icon_button(
+                        ui,
+                        "미리보기 닫기",
+                        theme::CLOSE,
+                        true,
+                        egui::vec2(36.0, 36.0),
+                    );
+                    if self.preview_initial_focus {
+                        button.request_focus();
+                        self.preview_initial_focus = false;
+                    }
+                    close |= button.clicked();
+                });
+            });
+            ui.add(egui::Label::new(&self.preview_name).truncate())
+                .on_hover_text(&self.preview_name);
+            let max_height = (ctx.content_rect().height() - 220.0).clamp(100.0, 560.0);
+            if self.model.busy() {
+                ui.label("미리보기를 불러오는 중입니다");
+                if ui.button("취소").clicked() {
+                    close = true;
+                }
+            } else if let Some(error) = self.model.error.as_ref() {
+                Self::error_notice(ui, error);
+            } else if let Some(texture) = self.preview_texture.as_ref() {
+                ui.add(
+                    egui::Image::new(texture)
+                        .max_size(egui::vec2(ui.available_width(), max_height))
+                        .shrink_to_fit(),
+                );
+            } else if self.model.preview.is_some() {
+                egui::ScrollArea::both()
+                    .id_salt("preview-text")
+                    .max_height(max_height)
+                    .show(ui, |ui| {
+                        let mut text = self.preview_text.as_str();
+                        ui.add(
+                            egui::TextEdit::multiline(&mut text)
+                                .desired_width(ui.available_width())
+                                .desired_rows(12)
+                                .frame(egui::Frame::NONE),
+                        );
+                    });
+                if self.preview_text.is_empty() {
+                    ui.label("빈 텍스트 파일입니다");
+                }
+            } else {
+                let code = self.model.terminal.as_ref().and_then(|t| t.error);
+                ui.label(match code {
+                    Some(ErrorCode::Limit) => "미리보기 크기 또는 처리 한도를 초과했습니다.",
+                    Some(ErrorCode::Integrity) => "파일이 손상됐거나 UTF-8 텍스트가 아닙니다.",
+                    Some(ErrorCode::UnsupportedFormat | ErrorCode::UnsupportedFeature) => {
+                        "이 파일 형식은 미리보기를 지원하지 않습니다."
+                    }
+                    Some(ErrorCode::SourceChanged) => "압축파일이 변경됐습니다. 다시 열어 주세요.",
+                    Some(ErrorCode::WrongPassword) => "암호가 올바르지 않습니다.",
+                    _ => "미리보기를 불러오지 못했습니다.",
+                });
+                ui.label("닫은 뒤 파일을 선택하고 [압축해제]를 사용할 수 있습니다.");
+            }
+        });
+        if close || modal.should_close() {
+            self.close_preview();
+        }
     }
 
     fn limit_result_visible(&self) -> bool {
@@ -1612,7 +1802,13 @@ impl ArchiveApp {
     }
 
     fn work_visible(&self) -> bool {
-        self.model.busy() || self.result_visible() || (self.ui_error.is_some() && !self.create)
+        !self
+            .last_request
+            .as_ref()
+            .is_some_and(|r| matches!(r, Start::Preview { .. }))
+            && (self.model.busy()
+                || self.result_visible()
+                || (self.ui_error.is_some() && !self.create))
     }
 
     /// 메인 창 가운데에 모달(암호 입력, 종료 확인, 파일 선택 안내)이나 같은 자리에 뜨는
@@ -2537,6 +2733,7 @@ impl ArchiveApp {
                     ActionKind::List => "압축파일 목록 열기",
                     ActionKind::Extract => "압축 해제",
                     ActionKind::CreateZip => "ZIP 만들기",
+                    ActionKind::Preview => "파일 미리보기",
                 });
                 if question.scope.ratio {
                     ui.label("작은 압축파일도 많은 저장 공간을 사용할 수 있습니다.");
