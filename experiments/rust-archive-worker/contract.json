@@ -26,7 +26,7 @@
         "archive_names": "Separate validated UTF-8 relative names; entry IDs are opaque ordinal u32, not paths."
     },
     "commands": {
-        "Start": "Exactly once: List{archive}, Extract{archive,destination,selection:All|EntryIds{ids:[u32]},list_id:optional<ListId>,gzip_output_name:optional<UTF8>}, CreateZip{sources:[source_path,archive_name],output_file,method:Store|Deflate,encryption:None|Aes256}. App supplies job_id; caller can lower worker hard limits. Extract destination is always an absolute output directory. EntryIds requires list_id; All may supply list_id to bind extraction to a displayed list.",
+        "Start": "Exactly once: List{archive}, Extract{archive,destination,selection:All|EntryIds{ids:[u32]},list_id:optional<ListId>,gzip_output_name:optional<UTF8>}, CreateZip{sources:[source_path,archive_name],output_file,method:Store|Deflate,encryption:None|Aes256}. App supplies job_id; caller can lower worker hard limits. Extract destination is always an absolute output directory. EntryIds requires list_id; All may supply list_id to bind extraction to a displayed list. CreateSevenZip{sources:[Source{path:NativePath,archive_name:UTF8}],output_file:NativePath,method:SevenZipMethod,solid:bool,encryption:Encryption} appends action tag 4. Shared types and codec are implemented; the pending writer returns UnsupportedFeature after Accepted before file access or questions.",
         "Password": "Matching outstanding challenge_id:u64 and max1024 UTF-8 bytes; never log, Debug, echo or persist secrets.",
         "Cancel": "Matching header job_id and empty body; command header sequence identifies the request. See CancelAck. Request acceptance is separate from final outcome. EOF alone is not successful cancellation.",
         "StartInteractive": "Kind 4, body identical to Start with action restricted to Extract. Exactly one initial Start or StartInteractive. Invalid non-Extract action is rejected by the shared encoder and decoder. Opt in to interactive regular-file conflicts; never retry through legacy Start or an older worker automatically. Worker runtime supports the agreed choices; client activation and native UI integration are verified separately.",
@@ -35,7 +35,7 @@
         "ResourceReply": "Kind 7: challenge_id:u64,scope:ResourceScope,allow:bool. Frame job_id and exact outstanding challenge_id/scope must match once. Reject premature, stale, duplicate and cross-kind replies as Protocol. False cancels the job without further processing."
     },
     "events": {
-        "Accepted": "Action and capabilities; encryption capability is true for implemented ZipCrypto extraction and WinZip AES-256 extraction/creation.",
+        "Accepted": "Action and capabilities; encryption capability is true for implemented ZipCrypto extraction and WinZip AES-256 extraction/creation. CreateSevenZip explicitly reports encryption=false; existing action capabilities are unchanged.",
         "Entry": "entry_id, name, kind File|Directory|Link|Other, declared sizes, encrypted; ordinal u32 IDs belong to this List job only until its ListEnd token and Completed Terminal are confirmed. Metadata only, no CRC success claim.",
         "ListEnd": "entry_count:u32 and list_id:ListId for a complete listing. Entry IDs are deterministic zero-based ordinals in archive traversal order. App associates this token with this job entries only after Completed Terminal, both stream EOFs and successful child wait/exit.",
         "PasswordRequired": "challenge_id, attempt and purpose Decrypt|Encrypt; no secret diagnostics.",
@@ -229,7 +229,7 @@
     "guarded_resources": {
         "status": "worker-and-client-implemented; native Windows/Wayland verification pending",
         "agreement": "Frontend flow agreement 6fe5a494-7d5a-4bda-a7d3-831fb43e9238 and manager policy b3a743d2-10de-495c-8fdb-ecf2a5f3b453. Frame version 1, revision 3 messages and enum tags remain unchanged; this is an explicit opt-in extension.",
-        "admission": "After Accepted, request the output and/or entries scopes that ceiling increases above Start limits before capturing input or planning sources. Usage estimates and actuals are unknown at this point; report current staging-volume free space. The caller must show the requested ceilings and unknown values, not invent estimates. An earlier confirmation is needed because input capture itself can exceed 300 seconds. Each granted scope is confined to this job.",
+        "admission": "After Accepted, request the output and/or entries scopes that ceiling increases above Start limits before capturing input or planning sources. Usage estimates and actuals are unknown at this point; report current staging-volume free space. The caller must show the requested ceilings and unknown values, not invent estimates. An earlier confirmation is needed because input capture itself can exceed 300 seconds. Each granted scope is confined to this job. Exception during CreateSevenZip writer development: safe UnsupportedFeature refusal precedes all resource questions and temporary-file access; this is not an implementation of creation.",
         "ratio": "Request ratio scope separately when expanded bytes are at least 256 MiB and strictly exceed compressed bytes times 1000. Check ZIP members and aggregate payload totals, 7z solid folders and totals, and complete compressed TAR/GZip streams. Use u128 arithmetic; unknown compressed length does not become zero. No ratio warning for legacy requests.",
         "accounting": "Monitor declared catalog sums and counts, real decoded bytes, per-stream ratios and source-plan sums. Decoders must match verified declared lengths before publication. For compressed TAR/GZip the expanded stream includes headers/padding. ZIP creation ceiling counts source logical bytes; ZIP/container/encryption overhead is separately space-checked.",
         "disk": "Continue staging/destination volume preflight and per-chunk space checks after approval. available_bytes is advisory free space on the current observation storage volume, not a reservation or all-volume total. Unknown storage is None. Preserve DiskFull, partial publication, durability and cleanup semantics.",
@@ -239,5 +239,32 @@
         "metadata": "Only after a valid ResourceReply(allow=true) for this job, select 64 MiB MetadataBudget and 262144 nodes, including ZIP/TAR/7z parsing, decoded 7z headers, XZ index/block bounds, member/path validation, implicit output parents and source planning. Legacy Start/StartInteractive, unapproved guarded jobs and slice APIs keep 8 MiB and 32768 nodes. Merely requesting expanded ceilings does not grant a larger budget. Names and source paths still consume checked byte budgets and implicit parents consume nodes, so long/deep paths can hit the metadata cap before 200000 entries. Approved source-path/pending-name copies consume bytes without duplicating their entry node. Expanded metadata jobs do not retain a universal 64 MiB RSS target.",
         "client": "Normal app jobs use StartGuarded with the existing 16 GiB and 10000-entry limits. Known selection/file estimates request expanded ceilings before processing. After a Limit result, offer an explicit expanded retry only after Terminal, both EOFs and child reap, with Publication::None, zero created/partial counts and complete cleanup. Retry uses a new job ID and requires fresh approval; existing or uncertain output instead shows the saved location and detailed result. App output records, including implicit parent directories, grow to 262144 nodes after any valid resource approval. Catalog entries grow to 200000 only for jobs granted the entries scope. Unapproved output records and catalogs without an entries grant retain their existing 100000 caps. Resource approval, ratio, retry and partial-output UI scenarios, tests and docs/ui-scenario-guide.md are implemented. Native Windows/Wayland verification remains separate.",
         "tests": "Use numeric 16/64 GiB and 10000/200000 policy boundaries, scaled worker limits, a compressed 257 MiB zero stream, and a virtual clock for the 60-second stall. Include client approval/retry tests in tests/rust-app-ui/guarded.rs and real-worker flows in tests/rust-app-real-worker/guarded_flows.rs. Do not write 64 GiB in tests."
+    },
+    "action_tags": {
+        "List": 0,
+        "Extract": 1,
+        "CreateZip": 2,
+        "Preview": 3,
+        "CreateSevenZip": 4
+    },
+    "seven_zip_method_tags": {
+        "Lzma2": 0
+    },
+    "seven_zip_create": {
+        "status": "shared-types-codec-and-safe-refusal-implemented; writer-and-app-integration-pending",
+        "agreement": {
+            "frontend_message_id": "770f1004-0a2b-4fc6-aafd-7f705c8f6c9e",
+            "frontend_review": "https://github.com/Team-LJY/zipelo/pull/127#pullrequestreview-5903269732",
+            "design_review": "https://github.com/Team-LJY/zipelo/pull/127#pullrequestreview-5903282961"
+        },
+        "request": "Append Action::CreateSevenZip and ActionKind::CreateSevenZip=4. Field order: sources:Vec<Source>,output_file:NativePath,method:SevenZipMethod(u8 Lzma2=0),solid:bool,encryption:Encryption(u8 None=0,Aes256=1). Source remains path:NativePath,archive_name:UTF8. Preserve ZIP Method Store=0,Deflate=1, all previous tags, frame version and fields.",
+        "admission": "Start and StartGuarded(interactive=false) are valid. Shared encoder and decoder reject StartInteractive and guarded interactive=true. Sources, native path vectors and strings retain the 32768 item/UTF8-byte bounds and the 1 MiB frame bound even with an expanded ceiling. No automatic fallback to ZIP, Start or an older worker.",
+        "options": "Target support is single-file .7z with LZMA2, non-solid and no body/header encryption. Structurally valid solid=true or Aes256 requests must fail UnsupportedFeature after Accepted, before source enumeration, resource/password/conflict questions or outputs. Unknown enum/bool tags and trailing fields are protocol errors.",
+        "implementation_boundary": "Until the writer is implemented, every CreateSevenZip request, including Lzma2/solid=false/None, takes this same safe UnsupportedFeature path before resource admission and temporary-file creation. Accepted is not a creation capability or success claim. Do not release the format selector as a working feature yet.",
+        "events": "Accepted.action and future ResourceRequired.action use tag 4; Accepted.encryption=false. Future writer reuses Progress Scan/Read/Write/Verify/Commit and guarded resource approval. Unknown totals remain None. No PasswordRequired or ConflictRequired. Exactly one normal Output Created for the published archive, entry_id=None and relative_name=actual destination leaf; not one Output per archive member.",
+        "publication": "Future writer uses ZIP source planning, consistency checks, private file-backed staging and exclusive publication (replace=None). Existing or newly appeared destination returns Conflict without overwrite. Completed requires publication Complete and created_count=1. Prepublication failure/cancel has publication None and zero created/retained counts unless owned temporary cleanup actually failed. Preserve actual postpublication errors, durability, cleanup and uncertain state.",
+        "lifecycle": "Reuse Cancel/CancelAck/Terminal and matching job/challenge/sequence validation. CancelAck is not completion; app requires Terminal, both stream EOFs and owned child wait. No synthetic rollback after publication.",
+        "dependencies": "No dependency or feature change in the common-types handoff. lzma-rust2 encoder selection, notices, current advisory applicability and actual compatibility require writer implementation and validation.",
+        "design": "docs/sevenzip-create-design.md"
     }
 }

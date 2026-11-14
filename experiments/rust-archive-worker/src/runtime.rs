@@ -545,9 +545,13 @@ impl<W: Write> Job<W> {
         let limits = self.budget.as_ref().map_or(start.limits, |b| b.ceiling);
         self.event(Message::Accepted {
             action: start.action.kind(),
-            encryption: true,
+            encryption: !matches!(start.action, Action::CreateSevenZip { .. }),
         })?;
         self.check()?;
+        // 작성기 구현 전에는 자원 승인과 파일 접근을 시작하지 않음.
+        if matches!(start.action, Action::CreateSevenZip { .. }) {
+            return Err(ErrorCode::UnsupportedFeature);
+        }
         if let Some(budget) = &self.budget {
             let scope = ResourceScope {
                 output: budget.ceiling.output > budget.soft.output,
@@ -921,6 +925,7 @@ impl<W: Write> Job<W> {
                 self.output_reader(&root, &name, &mut data, length, None, true, None)?;
                 self.terminal.publication = Publication::Complete;
             }
+            Action::CreateSevenZip { .. } => return Err(ErrorCode::UnsupportedFeature),
         }
         self.cutoff()?;
         Ok(())

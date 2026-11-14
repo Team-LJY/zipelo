@@ -201,6 +201,10 @@ pub enum Method {
     Deflate,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SevenZipMethod {
+    Lzma2,
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Encryption {
     None,
     Aes256,
@@ -233,6 +237,13 @@ pub enum Action {
         entry_id: u32,
         list_id: ListId,
     },
+    CreateSevenZip {
+        sources: Vec<Source>,
+        output_file: NativePath,
+        method: SevenZipMethod,
+        solid: bool,
+        encryption: Encryption,
+    },
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ActionKind {
@@ -240,6 +251,7 @@ pub enum ActionKind {
     Extract,
     CreateZip,
     Preview,
+    CreateSevenZip,
 }
 impl Action {
     pub fn kind(&self) -> ActionKind {
@@ -248,6 +260,7 @@ impl Action {
             Self::Extract { .. } => ActionKind::Extract,
             Self::CreateZip { .. } => ActionKind::CreateZip,
             Self::Preview { .. } => ActionKind::Preview,
+            Self::CreateSevenZip { .. } => ActionKind::CreateSevenZip,
         }
     }
 }

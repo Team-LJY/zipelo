@@ -1,6 +1,6 @@
 # Rust archive worker
 
-별도 프로세스의 stdin/stdout으로 revision 3 요청을 처리합니다. 제품 앱이 공유 codec으로 연결하며 프로세스 분리는 OS sandbox를 뜻하지 않습니다. 암호 기능은 capability=true이며 ZipCrypto 해제, WinZip AES-256 AE-1/AE-2 해제와 AE-2 생성을 지원합니다.
+별도 프로세스의 stdin/stdout으로 revision 3 요청을 처리합니다. 제품 앱이 공유 codec으로 연결하며 프로세스 분리는 OS sandbox를 뜻하지 않습니다. 기존 작업의 암호 기능은 capability=true이며 ZipCrypto 해제, WinZip AES-256 AE-1/AE-2 해제와 AE-2 생성을 지원합니다.
 
 - ZIP32/ZIP64 Store/Deflate 목록과 해제, ZIP32/ZIP64 생성, 기본 TAR/USTAR, GZ, TAR.GZ, TAR.BZ2, TAR.XZ, 비암호화 7z 해제를 지원합니다. GZ 연결 멤버는 하나의 논리 스트림으로 합칩니다. 다중 볼륨, UTF-8로 해석할 수 없는 ZIP 이름, PAX/GNU 확장과 특수 항목 해제는 미지원입니다.
 - ZIP 이름: UTF-8 플래그(비트 11)가 있으면 이름이 UTF-8이어야 하며 아니면 Integrity입니다. 플래그가 없으면 CRC가 원래 이름과 맞는 Info-ZIP Unicode Path 확장 필드(0x7075, 버전 1)를 우선 쓰고, 다음으로 UTF-8로 유효한 이름 바이트를 그대로 씁니다(Linux/macOS 도구의 기본 동작). CRC가 다르거나 버전이 다른 확장 필드는 무시합니다. 그 밖의 CP437/CP949 등 레거시 이름은 코드 페이지를 추측하지 않고 UnsupportedFeature로 거부합니다. 어느 경로로 얻은 이름이든 같은 경로 안전성 검사와 충돌 검사를 거칩니다.
@@ -68,6 +68,16 @@ Python 표준 bz2, lzma와 tarfile로 독립 생성 및 해제한 결과의 SHA2
 대용량 7z 표본은 Python LZMA로 실행 시 생성하고 Linux 시스템 libarchive의 스트리밍 판독으로 내용과 CRC를 먼저 확인합니다. libarchive는 시험에만 사용합니다.
 
 7z의 Copy/LZMA/LZMA2 입력과 solid 출력은 고정 버퍼와 임시 파일로 처리합니다. 모든 폴더와 하위 스트림의 CRC와 크기 검증이 끝난 뒤 기존 게시 경로를 사용합니다. ZIP 생성의 압축 및 AES 처리도 64 KiB 버퍼를 사용하며 여유 공간 사전 검사와 실제 쓰기의 DiskFull 구분을 적용합니다. 공간 예약을 보장하지 않으므로 다른 프로세스와의 경쟁으로 쓰기가 실패할 수 있습니다.
+
+## 7z 생성 계약과 구현 상태
+
+[합의된 설계](../../docs/sevenzip-create-design.md)에 따라 공용 타입과 codec을 추가했습니다. 실제 7z 작성기와 앱 형식 선택은 아직 미구현입니다. 현재 CreateSevenZip 요청은 Accepted(encryption=false) 뒤 UnsupportedFeature로 종료하며 원본, 목적지와 임시 파일을 열거나 자원/암호/충돌 질문을 보내지 않습니다. 정상 옵션도 이 경로로 명시적으로 실패하며 ZIP으로 우회하지 않습니다.
+
+- Action과 ActionKind의 CreateSevenZip tag는 4입니다. 필드 순서는 sources:Vec<Source>, output_file:NativePath, method:SevenZipMethod, solid:bool, encryption:Encryption입니다. Source는 기존 path와 archive_name 순서이며 SevenZipMethod는 Lzma2=0만 정의합니다. ZIP Method의 Store=0, Deflate=1과 기존 모든 tag/프레임은 유지합니다.
+- Start 또는 StartGuarded(interactive=false)에 허용합니다. StartInteractive와 guarded interactive=true는 양방향 codec에서 거부합니다. 확대 ceiling도 sources/경로 Vec의 32,768개, String의 32,768 UTF-8 바이트와 1 MiB 프레임 전송 상한을 늘리지 않습니다. ResourceRequired.action도 새 tag 4를 전송할 수 있지만 현재 미구현 작성기는 질문 전에 실패합니다.
+- 구현 목표는 LZMA2, non-solid, 본문/헤더 암호화 없음입니다. solid=true와 Aes256은 구조상 유효하지만 Supported로 간주하지 않으며 질문/출력 전 UnsupportedFeature입니다. 알 수 없는 enum/bool과 잔여 본문은 codec 오류입니다. 구버전이나 다른 형식으로 자동 재시도하지 않습니다.
+- 향후 작성기는 ZIP과 같은 원본 계획, 취소, 자원 승인, 비공개 스테이징과 배타적 게시 경로를 재사용합니다. 기존 목적지를 덮어쓰지 않으며 성공에는 최종 아카이브 하나의 Output Created와 Complete/created_count=1이 필요합니다. 앱의 확정 조건은 기존 Terminal, 양쪽 EOF와 자식 회수 그대로입니다. 실제 게시 후 오류와 정리 실패를 성공/무출력으로 바꾸지 않습니다.
+- tests/rust-archive-worker/seven_zip_create.rs는 요청 바이트, Unix/Windows 경로, tag/옵션/전송 경계와 현재 미지원 동작의 무질문/무게시 및 기존 파일 보존을 검증합니다. 실제 인코딩, 독립 도구 호환과 OS 화면 시험의 근거는 아닙니다. 의존성/encoder 기능은 이 인계에서 바꾸지 않습니다.
 
 ## ZIP 생성 입력
 
