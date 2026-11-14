@@ -133,6 +133,16 @@ int fstatvfs(int fd, struct statvfs *value) {
 int fsync(int fd) {
     const char *fault = getenv("ZIPELO_TEST_FAULT");
     struct stat st;
+    if (fault && !strcmp(fault, "move-on-sync") && output_file(fd)) {
+        char link[64], path[4096], moved[4112];
+        snprintf(link, sizeof(link), "/proc/self/fd/%d", fd);
+        ssize_t count = readlink(link, path, sizeof(path) - 1);
+        if (count < 0) { errno = EIO; return -1; }
+        path[count] = 0;
+        snprintf(moved, sizeof(moved), "%s.owned", path);
+        if (rename(path, moved)) { errno = EIO; return -1; }
+        return real_fsync(fd);
+    }
     int directory_full = fault && !strcmp(fault, "dir-sync-full")
         && !fstat(fd, &st) && S_ISDIR(st.st_mode);
     if (directory_full || (fault && !strcmp(fault, "sync-full") && output_file(fd))) {
@@ -172,6 +182,21 @@ int unlinkat(int fd, const char *path, int flags) {
     }
     int (*real_unlinkat)(int, const char *, int) = dlsym(RTLD_NEXT, "unlinkat");
     return real_unlinkat(fd, path, flags);
+}
+
+int linkat(int oldfd, const char *oldname, int newfd, const char *newname, int flags) {
+    int (*real_linkat)(int, const char *, int, const char *, int) = dlsym(RTLD_NEXT, "linkat");
+    const char *fault = getenv("ZIPELO_TEST_FAULT");
+    if (fault && !strcmp(fault, "swap-on-link") && !strncmp(oldname, ".zipelo-", 8)) {
+        char moved[512];
+        snprintf(moved, sizeof(moved), "%s.owned", oldname);
+        if (renameat(oldfd, oldname, oldfd, moved)) return -1;
+        int replacement = real_openat(oldfd, oldname, O_CREAT | O_EXCL | O_WRONLY, 0600);
+        if (replacement < 0) return -1;
+        real_write(replacement, "unrelated replacement", 21);
+        close(replacement);
+    }
+    return real_linkat(oldfd, oldname, newfd, newname, flags);
 }
 
 int renameat(int oldfd, const char *oldname, int newfd, const char *newname) {

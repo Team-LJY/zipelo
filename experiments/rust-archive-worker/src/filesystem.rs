@@ -842,7 +842,7 @@ pub(crate) fn publish_reader_steps(
         }
         if !temp_consumed {
             match dir.existing(&temp) {
-                Ok(None) => {}
+                Ok(None) => result.cleanup = Cleanup::Unconfirmed,
                 Ok(Some(current)) if Some(&current.object) == identity.as_ref() => {
                     if dir.remove(&temp) {
                         publication_activity(&mut finish, check);
@@ -870,6 +870,23 @@ pub(crate) fn publish_reader_steps(
                 finish = Err(error);
             } else {
                 publication_activity(&mut finish, check);
+            }
+        }
+        if result.created {
+            // 이름 기반 게시 뒤에도 결과가 생성한 파일인지 확인함.
+            let verified = match dir.existing(&leaf) {
+                Ok(Some(current)) if Some(&current.object) == identity.as_ref() => Ok(()),
+                Ok(_) => Err(ErrorCode::Conflict),
+                Err(error) => Err(error),
+            };
+            if let Err(error) = verified {
+                result.created = false;
+                result.uncertain = true;
+                result.durability = Durability::Unconfirmed;
+                if result.cleanup == Cleanup::Complete {
+                    result.cleanup = Cleanup::Unconfirmed;
+                }
+                finish = Err(error);
             }
         }
         finish

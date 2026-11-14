@@ -316,3 +316,82 @@ fn cleanup_does_not_delete_a_replacement_at_the_temporary_name() {
         }
     }
 }
+
+#[test]
+fn late_temporary_name_swap_is_never_reported_as_created_output() {
+    for operation in ["extract", "extract-nested", "seven-zip", "recovery"] {
+        let s = Scratch::new();
+        let (request, output) = prepare(&s, operation);
+        let original = fs::read(s.0.join("archive")).ok();
+        let events = run(&s, request, "swap-on-link");
+        let end = terminal(&events);
+        assert_eq!(end.outcome, Outcome::Failed, "{operation}: {events:?}");
+        assert_eq!(end.created_count, 0, "{operation}: {events:?}");
+        assert_eq!(end.error, ErrorCode::Conflict);
+        assert_eq!(end.publication, Publication::Uncertain);
+        assert_eq!(end.durability, Durability::Unconfirmed);
+        assert_eq!(end.cleanup, Cleanup::Unconfirmed);
+        assert_eq!(end.retained_partial_count, 0);
+        assert!(!events.iter().any(|e| matches!(
+            e,
+            Message::Output {
+                disposition: Disposition::Created,
+                ..
+            }
+        )));
+        assert_eq!(
+            events
+                .iter()
+                .filter(|e| matches!(
+                    e,
+                    Message::Output {
+                        disposition: Disposition::CommitUncertain,
+                        ..
+                    }
+                ))
+                .count(),
+            1
+        );
+        assert_eq!(fs::read(&output).unwrap(), b"unrelated replacement");
+        assert_eq!(fs::read(s.0.join("source")).unwrap(), SOURCE);
+        assert_eq!(fs::read(s.0.join("archive")).ok(), original);
+        let replacements: Vec<_> = fs::read_dir(output.parent().unwrap())
+            .unwrap()
+            .map(|e| e.unwrap().path())
+            .filter(|p| p.file_name().unwrap().to_string_lossy().ends_with(".tmp"))
+            .collect();
+        assert_eq!(replacements.len(), 1);
+        assert_eq!(
+            fs::read(&replacements[0]).unwrap(),
+            b"unrelated replacement"
+        );
+    }
+}
+
+#[test]
+fn moved_temporary_file_is_not_reported_cleaned() {
+    for operation in ["extract", "extract-nested", "seven-zip", "recovery"] {
+        let s = Scratch::new();
+        let (request, output) = prepare(&s, operation);
+        let events = run(&s, request, "move-on-sync");
+        let end = terminal(&events);
+        assert!(!output.exists());
+        assert_eq!(end.outcome, Outcome::Failed, "{operation}: {events:?}");
+        assert_eq!(end.error, ErrorCode::Conflict);
+        assert_eq!(end.publication, Publication::None);
+        assert_eq!(end.created_count, 0);
+        let owned: Vec<_> = fs::read_dir(output.parent().unwrap())
+            .unwrap()
+            .map(|e| e.unwrap().path())
+            .filter(|p| p.file_name().unwrap().to_string_lossy().ends_with(".owned"))
+            .collect();
+        assert_eq!(owned.len(), 1);
+        assert!(!fs::read(&owned[0]).unwrap().is_empty());
+        if operation.starts_with("extract") {
+            assert_eq!(fs::read(&owned[0]).unwrap(), SOURCE);
+        }
+        assert_eq!(end.cleanup, Cleanup::Unconfirmed, "{events:?}");
+        assert_eq!(end.retained_partial_count, 0);
+        assert_eq!(fs::read(s.0.join("source")).unwrap(), SOURCE);
+    }
+}
