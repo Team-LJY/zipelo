@@ -19,6 +19,9 @@ pub const FOLDER_ERROR: &str = "풀 위치 폴더를 만들 수 없습니다. �
 
 pub fn error_text(code: ErrorCode) -> &'static str {
     match code {
+        ErrorCode::MissingVolume => {
+            "분할 압축파일의 조각이 없습니다. 모든 조각을 같은 폴더에 모은 뒤 .001을 다시 여세요"
+        }
         ErrorCode::Integrity => "압축파일이 손상됐습니다",
         ErrorCode::UnsupportedFormat => "지원하지 않는 압축 형식입니다",
         ErrorCode::UnsupportedFeature => "아직 지원하지 않는 기능입니다",
@@ -424,4 +427,53 @@ pub fn operation_text(text: &str, creating: bool) -> String {
     } else {
         text.to_owned()
     }
+}
+
+pub fn volume_problem_text(problem: &VolumeProblem) -> String {
+    fn visible(c: char) -> String {
+        if c.is_control() || matches!(c, '\u{202a}'..='\u{202e}' | '\u{2066}'..='\u{2069}') {
+            c.escape_unicode().to_string()
+        } else {
+            c.to_string()
+        }
+    }
+    let name = match &problem.volume {
+        NativePath::Unix(bytes) => bytes
+            .utf8_chunks()
+            .map(|chunk| {
+                let mut text = chunk.valid().chars().map(visible).collect::<String>();
+                for byte in chunk.invalid() {
+                    text.push_str(&format!("\\x{byte:02x}"));
+                }
+                text
+            })
+            .collect::<String>(),
+        NativePath::Windows(units) => char::decode_utf16(units.iter().copied())
+            .map(|c| {
+                c.map(visible)
+                    .unwrap_or_else(|e| format!("\\u{{{:04x}}}", e.unpaired_surrogate()))
+            })
+            .collect::<String>(),
+    };
+    match problem.reason {
+        VolumeProblemReason::FirstVolumeRequired => format!("첫 조각 {name}을 선택해 다시 여세요."),
+        VolumeProblemReason::MissingVolume => {
+            format!("{name} 조각이 없습니다. 모든 조각을 같은 폴더에 모은 뒤 .001을 다시 여세요.")
+        }
+        VolumeProblemReason::IncompleteSet => format!(
+            "{name}의 분할 묶음이 불완전하거나 손상됐습니다. 모든 조각의 존재와 손상을 확인한 뒤 .001을 다시 여세요."
+        ),
+    }
+}
+
+pub const SPLIT_SUPPORT: &str =
+    "분할 7z는 .7z.001부터 열 수 있습니다. 분할 ZIP과 RAR, 분할 압축 만들기는 지원하지 않습니다.";
+
+pub fn excluded_split(path: &Path) -> bool {
+    let name = path
+        .file_name()
+        .unwrap_or_default()
+        .to_string_lossy()
+        .to_ascii_lowercase();
+    name.ends_with(".zip.001") || name.ends_with(".z01") || name.ends_with(".rar")
 }

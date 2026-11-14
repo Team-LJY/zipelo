@@ -135,6 +135,9 @@ fn list_to_wire(id: ui::ListId) -> wire::ListId {
         catalog_version: id.catalog_version,
         format: format_to_wire(id.format),
         source_object: match id.source_object {
+            ui::SourceObject::SplitSevenZip { manifest_sha256 } => {
+                wire::SourceObject::SplitSevenZip { manifest_sha256 }
+            }
             ui::SourceObject::Unix { device, inode } => wire::SourceObject::Unix { device, inode },
             ui::SourceObject::Windows { volume, file_id } => wire::SourceObject::Windows {
                 volume_serial: volume,
@@ -150,6 +153,9 @@ fn list_to_ui(id: wire::ListId) -> ui::ListId {
         catalog_version: id.catalog_version,
         format: format_to_ui(id.format),
         source_object: match id.source_object {
+            wire::SourceObject::SplitSevenZip { manifest_sha256 } => {
+                ui::SourceObject::SplitSevenZip { manifest_sha256 }
+            }
             wire::SourceObject::Unix { device, inode } => ui::SourceObject::Unix { device, inode },
             wire::SourceObject::Windows {
                 volume_serial,
@@ -229,6 +235,7 @@ fn start_to_wire(start: ui::Start) -> wire::Start {
 }
 fn error_to_ui(error: wire::ErrorCode) -> Option<ui::ErrorCode> {
     Some(match error {
+        wire::ErrorCode::MissingVolume => ui::ErrorCode::MissingVolume,
         wire::ErrorCode::None => return None,
         wire::ErrorCode::Integrity => ui::ErrorCode::Integrity,
         wire::ErrorCode::UnsupportedFormat => ui::ErrorCode::UnsupportedFormat,
@@ -250,6 +257,14 @@ fn event_to_ui(
     expected: Option<wire::ActionKind>,
 ) -> Result<ui::Event, ()> {
     Ok(match message {
+        wire::Message::VolumeProblem { reason, volume }
+            if matches!(
+                expected,
+                Some(wire::ActionKind::List | wire::ActionKind::Extract)
+            ) =>
+        {
+            ui::Event::VolumeProblem(ui::VolumeProblem { reason, volume })
+        }
         wire::Message::Accepted { action, encryption } if expected == Some(action) => {
             ui::Event::Accepted { encryption }
         }

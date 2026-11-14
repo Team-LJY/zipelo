@@ -12,6 +12,7 @@ pub enum Format {
 pub enum SourceObject {
     Unix { device: u64, inode: u64 },
     Windows { volume: u64, file_id: [u8; 16] },
+    SplitSevenZip { manifest_sha256: [u8; 32] },
 }
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ListId {
@@ -20,6 +21,26 @@ pub struct ListId {
     pub source_object: SourceObject,
     pub archive_bytes: u64,
     pub archive_sha256: [u8; 32],
+}
+impl ListId {
+    pub fn valid(&self) -> bool {
+        matches!(
+            (self.catalog_version, self.format, &self.source_object),
+            (
+                1,
+                _,
+                SourceObject::Unix { .. } | SourceObject::Windows { .. }
+            ) | (2, Format::SevenZip, SourceObject::SplitSevenZip { .. })
+        )
+    }
+    pub fn is_split(&self) -> bool {
+        matches!(self.source_object, SourceObject::SplitSevenZip { .. })
+    }
+}
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct VolumeProblem {
+    pub reason: VolumeProblemReason,
+    pub volume: NativePath,
 }
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Selection {
@@ -159,6 +180,7 @@ pub enum Outcome {
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ErrorCode {
+    MissingVolume,
     Integrity,
     UnsupportedFormat,
     UnsupportedFeature,
@@ -211,7 +233,8 @@ pub struct Terminal {
     pub cleanup: Cleanup,
 }
 pub use worker_protocol::protocol::{
-    ActionKind, Limits, PreviewFormat, PreviewInfo, ResourceScope, ResourceUsage,
+    ActionKind, Limits, NativePath, PreviewFormat, PreviewInfo, ResourceScope, ResourceUsage,
+    VolumeProblemReason,
 };
 
 pub struct Preview {
@@ -268,6 +291,7 @@ pub struct ResourceChallenge {
 
 #[derive(Clone, Debug)]
 pub enum Event {
+    VolumeProblem(VolumeProblem),
     PreviewBegin(PreviewInfo),
     PreviewChunk {
         entry_id: u32,
@@ -342,6 +366,7 @@ impl Factory for Unavailable {
     }
 }
 struct Running {
+    volume_problem: Option<VolumeProblem>,
     preview: Option<PreviewBuffer>,
     preview_discarded: bool,
     id: u64,
@@ -377,6 +402,7 @@ pub enum Close {
 }
 #[derive(Default)]
 pub struct Model {
+    pub volume_problem: Option<VolumeProblem>,
     running: Option<Running>,
     pub preview: Option<Preview>,
     next_id: u64,
@@ -419,6 +445,7 @@ impl Model {
     }
     pub fn can_preview(&self) -> bool {
         self.can_extract()
+            && self.list_id.as_ref().is_some_and(|id| !id.is_split())
             && self.selected.len() == 1
             && self
                 .entries
@@ -579,6 +606,8 @@ impl Model {
                 list_id,
             } => {
                 archive.is_absolute()
+                    && list_id.valid()
+                    && !list_id.is_split()
                     && self.archive.as_ref() == Some(archive)
                     && self.list_id.as_ref() == Some(list_id)
                     && self
@@ -632,6 +661,7 @@ impl Model {
         };
         self.preview = None;
         let estimated = self.estimate(&start);
+        self.volume_problem = None;
         let mut connection = match factory.connect(id) {
             Ok(c) => c,
             Err(e) => {
@@ -661,6 +691,7 @@ impl Model {
         }
         self.next_id = id;
         self.terminal = None;
+        self.volume_problem = None;
         self.retry_start = None;
         self.resource = None;
         self.challenge = None;
@@ -673,6 +704,7 @@ impl Model {
         self.error = send_error;
         self.confirmed = false;
         self.running = Some(Running {
+            volume_problem: None,
             preview: None,
             preview_discarded: false,
             id,
@@ -928,13 +960,17 @@ impl Model {
                     }
                 }
             }
-            if self
-                .terminal
-                .as_ref()
-                .is_some_and(|t| t.error == Some(ErrorCode::SourceChanged))
-            {
+            if self.terminal.as_ref().is_some_and(|t| {
+                matches!(
+                    t.error,
+                    Some(ErrorCode::SourceChanged | ErrorCode::MissingVolume)
+                )
+            }) {
                 self.list_id = None;
                 self.selected.clear();
+            }
+            if self.confirmed && run.cancel_sequence.is_none() {
+                self.volume_problem = run.volume_problem.take();
             }
             self.retry_start = if !matches!(run.start, Start::Preview { .. })
                 && !run.expanded
@@ -991,6 +1027,19 @@ impl Model {
                     return;
                 }
                 match event {
+                    Event::VolumeProblem(problem) => {
+                        if run.cancel_sequence.is_some() {
+                            return;
+                        }
+                        if run.volume_problem.is_some()
+                            || !matches!(run.start, Start::List { .. } | Start::Extract { .. })
+                            || !problem.volume.is_basename()
+                        {
+                            self.error = Some("분할 조각 오류 응답이 유효하지 않습니다".into());
+                        } else {
+                            run.volume_problem = Some(problem);
+                        }
+                    }
                     Event::PreviewBegin(info) => {
                         if run.preview_discarded {
                             return;
@@ -1080,7 +1129,7 @@ impl Model {
                     } => {
                         if !matches!(run.start, Start::List { .. })
                             || run.list_end.is_some()
-                            || list_id.catalog_version != 1
+                            || !list_id.valid()
                         {
                             self.error = Some("목록 완료 응답이 유효하지 않습니다".into());
                         } else {
@@ -1229,6 +1278,26 @@ impl Model {
                         }
                     }
                     Event::Terminal(t) => {
+                        if run.cancel_sequence.is_none()
+                            && run.volume_problem.as_ref().is_some_and(|problem| {
+                                t.outcome != Outcome::Failed
+                                    || t.error
+                                        != match problem.reason {
+                                            VolumeProblemReason::FirstVolumeRequired => {
+                                                Some(ErrorCode::InvalidRequest)
+                                            }
+                                            VolumeProblemReason::MissingVolume => {
+                                                Some(ErrorCode::MissingVolume)
+                                            }
+                                            VolumeProblemReason::IncompleteSet => {
+                                                Some(ErrorCode::Integrity)
+                                            }
+                                        }
+                            })
+                        {
+                            self.error =
+                                Some("분할 조각 오류와 종료 상태가 일치하지 않습니다".into());
+                        }
                         if matches!(run.start, Start::Preview { .. })
                             && (t.publication != Publication::None
                                 || t.created_count != 0
@@ -1380,6 +1449,7 @@ pub fn terminal_lines(t: &Terminal) -> Vec<String> {
     if let Some(error) = t.error {
         lines.push(
             match error {
+                ErrorCode::MissingVolume => "분할 압축파일의 조각이 없습니다. 모든 조각을 같은 폴더에 모은 뒤 첫 조각을 다시 여세요",
                 ErrorCode::Integrity => "압축파일이 손상됐습니다",
                 ErrorCode::UnsupportedFormat => "지원하지 않는 압축 형식입니다",
                 ErrorCode::UnsupportedFeature => "아직 지원하지 않는 기능입니다",

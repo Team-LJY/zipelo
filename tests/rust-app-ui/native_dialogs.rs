@@ -10,9 +10,9 @@ fn archive_filter_contains_every_case_variant_and_all_files_option() {
     assert_eq!(filters.len(), 2);
     assert_eq!(filters[0].0, "압축파일");
     let expected = [
-        "zip", "ziP", "zIp", "zIP", "Zip", "ZiP", "ZIp", "ZIP", "7z", "7Z", "tar", "taR", "tAr",
-        "tAR", "Tar", "TaR", "TAr", "TAR", "gz", "gZ", "Gz", "GZ", "tgz", "tgZ", "tGz", "tGZ",
-        "Tgz", "TgZ", "TGz", "TGZ",
+        "zip", "ziP", "zIp", "zIP", "Zip", "ZiP", "ZIp", "ZIP", "7z", "7Z", "7z.001", "7Z.001",
+        "tar", "taR", "tAr", "tAR", "Tar", "TaR", "TAr", "TAR", "gz", "gZ", "Gz", "GZ", "tgz",
+        "tgZ", "tGz", "tGZ", "Tgz", "TgZ", "TGz", "TGZ",
     ]
     .into_iter()
     .map(str::to_owned)

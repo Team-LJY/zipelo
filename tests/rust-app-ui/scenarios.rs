@@ -21,6 +21,12 @@ macro_rules! catalog {
 }
 
 catalog! {
+    "split-archive" => "분할 7z 목록과 미리보기 비활성화",
+    "split-first-volume" => "첫 조각의 정확한 파일명 안내",
+    "split-missing-volume" => "누락 조각 파일명과 재시도 안내",
+    "split-incomplete" => "누락 이름을 단정하지 않는 불완전 묶음 안내",
+    "split-unsupported" => "분할 ZIP과 RAR 및 분할 생성 미지원 안내",
+    "split-source-changed" => "목록 이후 분할 조각 변경 안내",
     "preview-catalog-bytes-approval" => "16 GiB를 넘는 전체 목록의 미리보기 승인",
     "preview-catalog-approval" => "미리보기의 전체 목록 처리 예산 승인",
     "preview-loading" => "미리보기 로딩과 취소",
@@ -262,6 +268,70 @@ impl Scenario {
             archive_sha256: [7; 32],
         });
         app.model.confirmed = true;
+        if self.name.starts_with("split-") {
+            let archive = base.join(if self.name == "split-unsupported" {
+                "여행.zip.001"
+            } else {
+                "여행.7z.001"
+            });
+            app.model.archive = Some(archive.clone());
+            app.model.list_id = Some(ListId {
+                catalog_version: 2,
+                format: Format::SevenZip,
+                source_object: SourceObject::SplitSevenZip {
+                    manifest_sha256: [9; 32],
+                },
+                archive_bytes: 2_700_000,
+                archive_sha256: [7; 32],
+            });
+            if self.name == "split-archive" {
+                app.model.selected.insert(1);
+                return app;
+            }
+            app.start(Start::List { archive });
+            let mut state = state.borrow_mut();
+            state.frame(Event::Accepted { encryption: false });
+            let reason = match self.name {
+                "split-first-volume" => Some(VolumeProblemReason::FirstVolumeRequired),
+                "split-missing-volume" => Some(VolumeProblemReason::MissingVolume),
+                "split-incomplete" => Some(VolumeProblemReason::IncompleteSet),
+                _ => None,
+            };
+            let error = match reason {
+                Some(VolumeProblemReason::FirstVolumeRequired) => ErrorCode::InvalidRequest,
+                Some(VolumeProblemReason::MissingVolume) => ErrorCode::MissingVolume,
+                Some(VolumeProblemReason::IncompleteSet) => ErrorCode::Integrity,
+                None if self.name == "split-source-changed" => ErrorCode::SourceChanged,
+                None => ErrorCode::UnsupportedFormat,
+            };
+            if let Some(reason) = reason {
+                state.frame(Event::VolumeProblem(VolumeProblem {
+                    reason,
+                    volume: NativePath::Unix(if reason == VolumeProblemReason::MissingVolume {
+                        "여행.7z.003".as_bytes().to_vec()
+                    } else {
+                        "여행.7z.001".as_bytes().to_vec()
+                    }),
+                }));
+            }
+            state.frame(Event::Terminal(Terminal {
+                outcome: Outcome::Failed,
+                error: Some(error),
+                publication: Publication::None,
+                created_count: 0,
+                retained_partial_count: 0,
+                durability: Durability::NotApplicable,
+                cleanup: Cleanup::Complete,
+            }));
+            state.queue.push_back(HostEvent::StdoutEof);
+            state.queue.push_back(HostEvent::StderrEof);
+            state.queue.push_back(HostEvent::Exited { success: true });
+            drop(state);
+            for _ in 0..32 {
+                app.model.poll();
+            }
+            return app;
+        }
         if self.name.starts_with("preview-") {
             app.model.selected = BTreeSet::from([1]);
             if self.name == "preview-implicit-folder" {
