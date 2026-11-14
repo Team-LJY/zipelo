@@ -142,10 +142,16 @@ impl Input {
         Ok(())
     }
     fn open_child(&self, path: &Path, name: &str) -> Result<Self> {
+        self.open_named(path, std::ffi::OsStr::new(name))
+    }
+    pub(crate) fn open_named(&self, path: &Path, name: &std::ffi::OsStr) -> Result<Self> {
+        if !NativePath::from_path(Path::new(name)).is_basename() {
+            return Err(ErrorCode::UnsafePath);
+        }
         #[cfg(target_os = "linux")]
         {
             let _ = path;
-            let file = Self::read(Self::child(&self.file, std::ffi::OsStr::new(name))?)?;
+            let file = Self::read(Self::child(&self.file, name)?)?;
             Self::validate(&file)?;
             Ok(Self { file })
         }
@@ -154,7 +160,7 @@ impl Input {
             Self::open(&path.join(name))
         }
     }
-    fn children(&self, path: &Path) -> Result<fs::ReadDir> {
+    pub(crate) fn children(&self, path: &Path) -> Result<fs::ReadDir> {
         #[cfg(target_os = "linux")]
         {
             use std::os::fd::AsRawFd;

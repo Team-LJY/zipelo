@@ -1,0 +1,215 @@
+{
+    "tool": "7-Zip (a) 26.00 (x64) : Copyright (c) 1999-2026 Igor Pavlov : 2026-02-12",
+    "source": "Ubuntu 7zip 26.00+dfsg-1",
+    "payload_sha256": {
+        "folder/hello.txt": "8f4e947bcb198177be3ee37336bcfad91ea6ac7e8ba574822ad9992594e25402",
+        "second.bin": "689388892d665f3bd6fcfbd95b3e92bb101ef323d81e85d55b8f2ac0dc341686"
+    },
+    "fixtures": {
+        "reference": {
+            "arguments": [
+                "a",
+                "-t7z",
+                "-m0=LZMA2",
+                "-md=1m",
+                "-ms=on",
+                "-mhc=off",
+                "-mta=off",
+                "-mtc=off",
+                "-mtm=off",
+                "-v64b"
+            ],
+            "parts": [
+                {
+                    "name": "reference.7z.001",
+                    "bytes": 64,
+                    "sha256": "926cc1eccf417dc04de359b88be8e45f988a69de1cec76e1b996b04658b6a839"
+                },
+                {
+                    "name": "reference.7z.002",
+                    "bytes": 64,
+                    "sha256": "dcbe0ab8bb6e25fd65917ecd2fee5bd433cacd8b446b8dcac3b4b74e2bf0b48a"
+                },
+                {
+                    "name": "reference.7z.003",
+                    "bytes": 64,
+                    "sha256": "221ab44a6acbb1f1dfcf61b3b591ecf97b6b539fe54affdcf1e69f467a5a6386"
+                },
+                {
+                    "name": "reference.7z.004",
+                    "bytes": 64,
+                    "sha256": "8f5574b9e8ce6ed7e8279c7ef3cc4ef95a1a798fef34e7b46dcc5f03b4d07f8f"
+                },
+                {
+                    "name": "reference.7z.005",
+                    "bytes": 64,
+                    "sha256": "75abd8ed00ba5456353886a0fba0c8b84e80779bb739c2367f8e326ab7d064d6"
+                },
+                {
+                    "name": "reference.7z.006",
+                    "bytes": 64,
+                    "sha256": "c25b47c4c2dba64e4b29d6f404d2b56e4588547beaf270fa05af256daad480e6"
+                },
+                {
+                    "name": "reference.7z.007",
+                    "bytes": 64,
+                    "sha256": "81f2ee1ab21b6e102cb9b1ea2d22f94214bd77876b2e1ff9cecff47f9d02b805"
+                },
+                {
+                    "name": "reference.7z.008",
+                    "bytes": 64,
+                    "sha256": "c0577df6e2af28ea14628147893be75d11c653e10a0df1281c234c87d6edf5e9"
+                },
+                {
+                    "name": "reference.7z.009",
+                    "bytes": 41,
+                    "sha256": "509db208d2a0370d94cff9348cba5342752a0e4af32bf254acc281a0866a4cce"
+                }
+            ],
+            "logical_sha256": "66f0c5bba96b0eaa53b15c12cc233f2954df4ea5f3a7c01ae096f911dd2bfd6b"
+        },
+        "encrypted-header": {
+            "arguments": [
+                "a",
+                "-t7z",
+                "-m0=LZMA2",
+                "-md=1m",
+                "-ms=on",
+                "-mhc=off",
+                "-mta=off",
+                "-mtc=off",
+                "-mtm=off",
+                "-v64b",
+                "-pzipelo-split-test",
+                "-mhe=on"
+            ],
+            "parts": [
+                {
+                    "name": "encrypted-header.7z.001",
+                    "bytes": 64,
+                    "sha256": "f1e82f9bc81de9f7930353e2ea3405e1861079a928b7293a8131d540ea44605c"
+                },
+                {
+                    "name": "encrypted-header.7z.002",
+                    "bytes": 64,
+                    "sha256": "ef59571335763e52ab8c05cc902d10889a963b3ac9496c3bb397d6b0bd54a761"
+                },
+                {
+                    "name": "encrypted-header.7z.003",
+                    "bytes": 64,
+                    "sha256": "f9dc1be239cf45306bf8980fa7ad63e89260f0f4502085688c028905eeada0f5"
+                },
+                {
+                    "name": "encrypted-header.7z.004",
+                    "bytes": 64,
+                    "sha256": "4b64ed14cd8e659cbd154796ead55384bab5ab8a88f94ce308720f649b03cf48"
+                },
+                {
+                    "name": "encrypted-header.7z.005",
+                    "bytes": 64,
+                    "sha256": "204ac069bcabfc0420450a619e4fd37d620bc1e25269162069c9c0978688a9ef"
+                },
+                {
+                    "name": "encrypted-header.7z.006",
+                    "bytes": 64,
+                    "sha256": "698d9f22cfb818f6ffa7da166e763a0189f652d8fd765c4549cf2512c3869d17"
+                },
+                {
+                    "name": "encrypted-header.7z.007",
+                    "bytes": 64,
+                    "sha256": "5c76cc10923601e5512ac60092945890cabe57112242d5c06c834353f9490966"
+                },
+                {
+                    "name": "encrypted-header.7z.008",
+                    "bytes": 64,
+                    "sha256": "c08af61ef1f3c549e6c5bccc581549054e724ef02b5369dc152596bb1e4c6018"
+                },
+                {
+                    "name": "encrypted-header.7z.009",
+                    "bytes": 64,
+                    "sha256": "f31af00c7cf084ce7be451f12e5deb4e6a32d843b49666e1dadf59dcd0c9bacf"
+                },
+                {
+                    "name": "encrypted-header.7z.010",
+                    "bytes": 64,
+                    "sha256": "76ba20a1b63b7d2dbf59553bd923d621f190d18594732e0ac823d47b5d243b07"
+                },
+                {
+                    "name": "encrypted-header.7z.011",
+                    "bytes": 1,
+                    "sha256": "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d"
+                }
+            ],
+            "logical_sha256": "d194a02a1d24154c6e2f7e3c959b23c20a330955c6496247d57412f262d278ae"
+        },
+        "encrypted-body": {
+            "arguments": [
+                "a",
+                "-t7z",
+                "-m0=LZMA2",
+                "-md=1m",
+                "-ms=on",
+                "-mhc=off",
+                "-mta=off",
+                "-mtc=off",
+                "-mtm=off",
+                "-v64b",
+                "-pzipelo-split-test",
+                "-mhe=off"
+            ],
+            "parts": [
+                {
+                    "name": "encrypted-body.7z.001",
+                    "bytes": 64,
+                    "sha256": "e3e135f63bd6e4c5fb2a463987811ca0e295745904b4876f2d41e90be1edbd9b"
+                },
+                {
+                    "name": "encrypted-body.7z.002",
+                    "bytes": 64,
+                    "sha256": "aedca6078c99f24c83f83b03f1fa48b1c2be5477871f0b16d23baa00c6237d3c"
+                },
+                {
+                    "name": "encrypted-body.7z.003",
+                    "bytes": 64,
+                    "sha256": "0b812094951519250385c46d51e8ec25f78cd2343f659db517c45c592a0b25cf"
+                },
+                {
+                    "name": "encrypted-body.7z.004",
+                    "bytes": 64,
+                    "sha256": "0e6a28d1553cb74fd3c7a2870332b6d49b98bf9357d3bfd48b04712fc7e105ca"
+                },
+                {
+                    "name": "encrypted-body.7z.005",
+                    "bytes": 64,
+                    "sha256": "2bee9f4c138ae71ad35af650253768a778c3aacc0d34f6f1319213c59627cb5e"
+                },
+                {
+                    "name": "encrypted-body.7z.006",
+                    "bytes": 64,
+                    "sha256": "6ceacdee4bff8191c4d0d96e8c59ba9a8d73a77c66aea0cf883019800dec175f"
+                },
+                {
+                    "name": "encrypted-body.7z.007",
+                    "bytes": 64,
+                    "sha256": "73e7ce72aeee468967c3f4e5985eff4c650fa28082a715b5b229bdbc0c94f9ac"
+                },
+                {
+                    "name": "encrypted-body.7z.008",
+                    "bytes": 64,
+                    "sha256": "dfee6881d0d0d06b6c90ac6afc38ea346e8577466963530d634bb51afd398848"
+                },
+                {
+                    "name": "encrypted-body.7z.009",
+                    "bytes": 64,
+                    "sha256": "6744ff37e50ff527da6ce80515b582028e5a72e248a0aa1823737f56e6989a9e"
+                },
+                {
+                    "name": "encrypted-body.7z.010",
+                    "bytes": 10,
+                    "sha256": "87d64a26149d54109ecd0e122979863a0488ab35e468dce5f061084480d5a1a8"
+                }
+            ],
+            "logical_sha256": "931110c31e093301c19ed6fc40fa18f58fc9502b14d4a0fd9fdbb1f7879e5a93"
+        }
+    }
+}

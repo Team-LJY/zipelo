@@ -50,3 +50,60 @@ fn conflict_adapter_preserves_sizes_names_ids_and_choices() {
         }
     }
 }
+
+#[test]
+fn split_list_id_adapter_round_trip_preserves_manifest_and_logical_input() {
+    let id = ui::ListId {
+        catalog_version: 2,
+        format: ui::Format::SevenZip,
+        source_object: ui::SourceObject::SplitSevenZip {
+            manifest_sha256: [0xa5; 32],
+        },
+        archive_bytes: u64::MAX,
+        archive_sha256: [0x5a; 32],
+    };
+    let wire_id = list_to_wire(id.clone());
+    assert!(wire_id.valid());
+    assert_eq!(list_to_ui(wire_id), id);
+}
+#[test]
+fn volume_problem_adapter_preserves_native_filename_and_rejects_other_actions() {
+    for volume in [
+        wire::NativePath::Unix(vec![0xff, 46, 55, 122]),
+        wire::NativePath::Windows(vec![0xd800, 46, 55, 122]),
+    ] {
+        for action in [
+            Some(wire::ActionKind::List),
+            Some(wire::ActionKind::Extract),
+            Some(wire::ActionKind::Preview),
+            Some(wire::ActionKind::CreateZip),
+            None,
+        ] {
+            let event = event_to_ui(
+                wire::Message::VolumeProblem {
+                    reason: wire::VolumeProblemReason::MissingVolume,
+                    volume: volume.clone(),
+                },
+                action,
+            );
+            if matches!(
+                action,
+                Some(wire::ActionKind::List | wire::ActionKind::Extract)
+            ) {
+                match event.unwrap() {
+                    ui::Event::VolumeProblem(problem) => {
+                        assert_eq!(problem.volume, volume);
+                        assert_eq!(problem.reason, wire::VolumeProblemReason::MissingVolume);
+                    }
+                    _ => panic!("조각 오류 변환 누락"),
+                }
+            } else {
+                assert!(event.is_err());
+            }
+        }
+    }
+    assert_eq!(
+        error_to_ui(wire::ErrorCode::MissingVolume),
+        Some(ui::ErrorCode::MissingVolume)
+    );
+}

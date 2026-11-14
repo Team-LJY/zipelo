@@ -95,7 +95,17 @@ fn every_listed_scenario_draws_and_keeps_its_expected_screen() {
                 app.model.error
             );
             assert!(app.model.input_error.is_none(), "{}", scenario.name);
+            if scenario.name == "split-archive" {
+                assert!(app.model.list_id.as_ref().unwrap().is_split());
+                assert!(!app.model.can_preview());
+            }
             let expected = match scenario.name {
+                "split-archive" => "읽어주세요.txt",
+                "split-first-volume" => "첫 조각 여행.7z.001을 선택해 다시 여세요.",
+                "split-missing-volume" => "여행.7z.003 조각이 없습니다",
+                "split-incomplete" => "분할 묶음이 불완전하거나 손상됐습니다",
+                "split-unsupported" => "분할 ZIP과 RAR",
+                "split-source-changed" => "원본 파일이 바뀌었습니다",
                 "preview-implicit-folder" => "자료",
                 "preview-catalog-approval" | "preview-catalog-bytes-approval" => {
                     "큰 작업을 허용할까요?"
@@ -554,4 +564,90 @@ fn preview_image_respects_renderer_texture_limit() {
         result.textures_delta.clear();
     }
     assert!(image_seen);
+}
+
+#[test]
+fn split_errors_use_main_modal_without_native_child() {
+    for name in [
+        "split-first-volume",
+        "split-missing-volume",
+        "split-incomplete",
+        "split-unsupported",
+    ] {
+        let scenario = scenarios::parse(name).unwrap();
+        let mut app = scenario.build();
+        let ctx = egui::Context::default();
+        ctx.set_embed_viewports(false);
+        let mut labels = String::new();
+        for _ in 0..3 {
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(1060.0, 720.0),
+                    )),
+                    ..Default::default()
+                },
+                |ui| scenario.show(&mut app, ui),
+            );
+            labels = text(&output.shapes);
+            output.textures_delta.clear();
+            assert!(
+                output
+                    .viewport_output
+                    .keys()
+                    .all(|id| *id == egui::ViewportId::ROOT),
+                "{name}"
+            );
+        }
+        assert!(labels.contains("작업 결과"), "{name}: {labels}");
+    }
+}
+
+#[test]
+fn excluded_split_errors_show_support_guidance_in_main_modal() {
+    use zipelo_ui_memory_app::archive_ui::ErrorCode;
+
+    for code in [ErrorCode::UnsupportedFeature, ErrorCode::UnsupportedFormat] {
+        for archive in ["sample.zip.001", "sample.z01", "sample.rar", "sample.7z"] {
+            let scenario = scenarios::parse("split-unsupported").unwrap();
+            let mut app = scenario.build();
+            let ctx = egui::Context::default();
+            ctx.set_embed_viewports(false);
+            let input = || egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(1060.0, 720.0),
+                )),
+                ..Default::default()
+            };
+            for _ in 0..3 {
+                let mut output = ctx.run_ui(input(), |ui| scenario.show(&mut app, ui));
+                output.textures_delta.clear();
+            }
+            assert_eq!(
+                app.model.terminal.as_ref().unwrap().error,
+                Some(ErrorCode::UnsupportedFeature)
+            );
+            app.model.terminal.as_mut().unwrap().error = Some(code);
+            app.model.archive = Some(archive.into());
+            let mut output = ctx.run_ui(input(), |ui| scenario.show(&mut app, ui));
+            let labels = text(&output.shapes);
+            output.textures_delta.clear();
+            if archive == "sample.7z" {
+                assert!(!labels.contains("분할 ZIP과 RAR"));
+            } else {
+                assert!(
+                    labels.contains("분할 ZIP과 RAR"),
+                    "{code:?} {archive}: {labels}"
+                );
+                assert!(
+                    output
+                        .viewport_output
+                        .keys()
+                        .all(|id| *id == egui::ViewportId::ROOT)
+                );
+            }
+        }
+    }
 }

@@ -25,6 +25,22 @@ impl NativePath {
             Self::Windows(path.as_os_str().encode_wide().collect())
         }
     }
+    pub fn is_basename(&self) -> bool {
+        match self {
+            Self::Unix(bytes) => {
+                !bytes.is_empty()
+                    && bytes != b"."
+                    && bytes != b".."
+                    && !bytes.iter().any(|byte| matches!(*byte, 0 | b'/' | b'\\'))
+            }
+            Self::Windows(units) => {
+                !units.is_empty()
+                    && units != &[b'.' as u16]
+                    && units != &[b'.' as u16, b'.' as u16]
+                    && !units.iter().any(|unit| matches!(*unit, 0 | 47 | 92 | 58))
+            }
+        }
+    }
     pub fn to_path(&self) -> Result<PathBuf, ErrorCode> {
         #[cfg(unix)]
         if let Self::Unix(bytes) = self {
@@ -150,6 +166,9 @@ pub enum SourceObject {
         volume_serial: u64,
         file_id: [u8; 16],
     },
+    SplitSevenZip {
+        manifest_sha256: [u8; 32],
+    },
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ListId {
@@ -158,6 +177,18 @@ pub struct ListId {
     pub source_object: SourceObject,
     pub archive_bytes: u64,
     pub archive_sha256: [u8; 32],
+}
+impl ListId {
+    pub fn valid(&self) -> bool {
+        matches!(
+            (self.catalog_version, self.format, &self.source_object),
+            (
+                1,
+                _,
+                SourceObject::Unix { .. } | SourceObject::Windows { .. }
+            ) | (2, Format::SevenZip, SourceObject::SplitSevenZip { .. })
+        )
+    }
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Selection {
@@ -312,6 +343,22 @@ pub enum ErrorCode {
     SourceChanged,
     InvalidRequest,
     DiskFull,
+    MissingVolume,
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum VolumeProblemReason {
+    FirstVolumeRequired,
+    MissingVolume,
+    IncompleteSet,
+}
+impl VolumeProblemReason {
+    pub fn terminal_error(self) -> ErrorCode {
+        match self {
+            Self::FirstVolumeRequired => ErrorCode::InvalidRequest,
+            Self::MissingVolume => ErrorCode::MissingVolume,
+            Self::IncompleteSet => ErrorCode::Integrity,
+        }
+    }
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Publication {
@@ -436,6 +483,10 @@ pub enum Message {
         entry_id: u32,
         total_bytes: u64,
         sha256: [u8; 32],
+    },
+    VolumeProblem {
+        reason: VolumeProblemReason,
+        volume: NativePath,
     },
     Terminal(Terminal),
     CancelAck {

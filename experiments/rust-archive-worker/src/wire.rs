@@ -144,7 +144,8 @@ enumeration!(EntryKind{File=0,Directory=1,Link=2,Other=3});
 enumeration!(Stage{Scan=0,Read=1,Decode=2,Write=3,Verify=4,Commit=5});
 enumeration!(Disposition{Created=0,PartialRetained=1,Removed=2,CommitUncertain=3});
 enumeration!(Outcome{Completed=0,Failed=1,Cancelled=2});
-enumeration!(ErrorCode{None=0,Integrity=1,UnsupportedFormat=2,UnsupportedFeature=3,WrongPassword=4,UnsafePath=5,Conflict=6,Limit=7,Io=8,Protocol=9,Internal=10,SourceChanged=11,InvalidRequest=12,DiskFull=13});
+enumeration!(ErrorCode{None=0,Integrity=1,UnsupportedFormat=2,UnsupportedFeature=3,WrongPassword=4,UnsafePath=5,Conflict=6,Limit=7,Io=8,Protocol=9,Internal=10,SourceChanged=11,InvalidRequest=12,DiskFull=13,MissingVolume=14});
+enumeration!(VolumeProblemReason{FirstVolumeRequired=0,MissingVolume=1,IncompleteSet=2});
 enumeration!(Publication{None=0,Partial=1,Complete=2,Uncertain=3});
 enumeration!(Durability{NotApplicable=0,Synced=1,Unconfirmed=2,Failed=3});
 enumeration!(Cleanup{Complete=0,Failed=1,Unconfirmed=2});
@@ -160,13 +161,31 @@ structure!(Limits {
     output,
     entries
 });
-structure!(ListId {
-    catalog_version,
-    format,
-    source_object,
-    archive_bytes,
-    archive_sha256
-});
+impl Wire for ListId {
+    fn enc(&self, e: &mut Encoder) -> io::Result<()> {
+        if !self.valid() {
+            return Err(invalid());
+        }
+        self.catalog_version.enc(e)?;
+        self.format.enc(e)?;
+        self.source_object.enc(e)?;
+        self.archive_bytes.enc(e)?;
+        self.archive_sha256.enc(e)
+    }
+    fn dec(d: &mut Decoder<'_>) -> io::Result<Self> {
+        let id = Self {
+            catalog_version: Wire::dec(d)?,
+            format: Wire::dec(d)?,
+            source_object: Wire::dec(d)?,
+            archive_bytes: Wire::dec(d)?,
+            archive_sha256: Wire::dec(d)?,
+        };
+        if !id.valid() {
+            return Err(invalid());
+        }
+        Ok(id)
+    }
+}
 impl Wire for PreviewInfo {
     fn enc(&self, e: &mut Encoder) -> io::Result<()> {
         if !self.valid() {
@@ -268,6 +287,10 @@ impl Wire for SourceObject {
                 volume_serial.enc(e)?;
                 file_id.enc(e)
             }
+            Self::SplitSevenZip { manifest_sha256 } => {
+                3u8.enc(e)?;
+                manifest_sha256.enc(e)
+            }
         }
     }
     fn dec(d: &mut Decoder<'_>) -> io::Result<Self> {
@@ -280,9 +303,26 @@ impl Wire for SourceObject {
                 volume_serial: Wire::dec(d)?,
                 file_id: Wire::dec(d)?,
             }),
+            3 => Ok(Self::SplitSevenZip {
+                manifest_sha256: Wire::dec(d)?,
+            }),
             _ => Err(invalid()),
         }
     }
+}
+pub(crate) fn encode_source_object(value: &SourceObject) -> io::Result<Vec<u8>> {
+    encode_component(value)
+}
+pub(crate) fn encode_native_path(value: &NativePath) -> io::Result<Vec<u8>> {
+    encode_component(value)
+}
+fn encode_component(value: &impl Wire) -> io::Result<Vec<u8>> {
+    let mut encoder = Encoder {
+        bytes: Vec::new(),
+        selection_limit: LEGACY_VECTOR_ITEMS,
+    };
+    value.enc(&mut encoder)?;
+    Ok(encoder.bytes)
 }
 impl Wire for Selection {
     fn enc(&self, e: &mut Encoder) -> io::Result<()> {
@@ -537,6 +577,14 @@ impl Message {
                 sha256.enc(&mut e)?;
                 113
             }
+            Self::VolumeProblem { reason, volume } => {
+                if !volume.is_basename() {
+                    return Err(invalid());
+                }
+                reason.enc(&mut e)?;
+                volume.enc(&mut e)?;
+                114
+            }
             Self::Terminal(v) => {
                 if v.detail.len() > 4096 {
                     return Err(invalid());
@@ -701,6 +749,14 @@ impl Message {
                     total_bytes,
                     sha256: Wire::dec(&mut d)?,
                 }
+            }
+            114 => {
+                let reason = Wire::dec(&mut d)?;
+                let volume = NativePath::dec(&mut d)?;
+                if !volume.is_basename() {
+                    return Err(invalid());
+                }
+                Self::VolumeProblem { reason, volume }
             }
             106 => {
                 let t = Terminal::dec(&mut d)?;

@@ -39,6 +39,8 @@ struct Job<W> {
     budget: Option<Budget>,
     watchdog: Watchdog,
     remaining_choice: Option<ConflictChoice>,
+    source_group: Option<crate::split_seven_zip::Group>,
+    source_verified_for_publication: bool,
     started: Instant,
     terminal: Terminal,
     parent: crate::parent::Parent,
@@ -249,6 +251,55 @@ impl<W: Write> Job<W> {
             ErrorCode::Io
         })
     }
+    fn split_result<T>(
+        &mut self,
+        result: std::result::Result<T, crate::split_seven_zip::Failure>,
+    ) -> Result<T> {
+        match result {
+            Ok(value) => Ok(value),
+            Err(failure) => {
+                self.check()?;
+                if let Some((reason, volume)) = failure.problem {
+                    self.event(Message::VolumeProblem { reason, volume })?;
+                }
+                Err(failure.error)
+            }
+        }
+    }
+    fn verify_split(&mut self) -> Result<()> {
+        let Some(group) = self.source_group.take() else {
+            return Ok(());
+        };
+        let result = (|| {
+            self.progress(Stage::Verify, 0, None, 0)?;
+            group.verify(&mut |step| match step {
+                crate::spool::Step::Check => self.check(),
+                crate::spool::Step::Activity => completed(Ok(()), self),
+                crate::spool::Step::Read { bytes, total } => {
+                    self.progress(Stage::Verify, bytes, Some(total), 0)
+                }
+            })
+        })();
+        self.source_group = Some(group);
+        self.split_result(result)
+    }
+    fn verify_before_publication(&mut self) -> Result<()> {
+        if !self.source_verified_for_publication {
+            self.verify_split()?;
+            self.source_verified_for_publication = true;
+        }
+        Ok(())
+    }
+    fn publication_step(&mut self, step: filesystem::PublishStep, last: bool) -> Result<()> {
+        match step {
+            filesystem::PublishStep::Check => self.check(),
+            filesystem::PublishStep::Activity => completed(Ok(()), self),
+            filesystem::PublishStep::Commit => {
+                self.verify_before_publication()?;
+                if last { self.cutoff() } else { self.check() }
+            }
+        }
+    }
     fn check(&mut self) -> Result<()> {
         self.parent.check()?;
         let state = self.state.lock().map_err(|_| ErrorCode::Internal)?;
@@ -301,12 +352,7 @@ impl<W: Write> Job<W> {
             self.terminal.created_count as u32,
         )?;
         let p = filesystem::publish_reader_steps(root, name, data, length, replace, &mut |step| {
-            match step {
-                filesystem::PublishStep::Check => self.check(),
-                filesystem::PublishStep::Activity => completed(Ok(()), self),
-                filesystem::PublishStep::Commit if last => self.cutoff(),
-                filesystem::PublishStep::Commit => self.check(),
-            }
+            self.publication_step(step, last)
         });
         self.terminal.retained_partial_count += p.retained;
         if p.cleanup != Cleanup::Complete {
@@ -362,6 +408,12 @@ impl<W: Write> Job<W> {
         use sha2::{Digest, Sha256};
         use std::io::{Read, Seek, SeekFrom};
         let path = archive.to_path()?;
+        if crate::split_seven_zip::is_split(&path)
+            || crate::split_seven_zip::unsupported_split(&path)
+            || matches!(expected.source_object, SourceObject::SplitSevenZip { .. })
+        {
+            return Err(ErrorCode::UnsupportedFeature);
+        }
         self.progress(Stage::Read, 0, None, 0)?;
         let mut snapshot =
             crate::spool::Snapshot::open_reporting(&path, limits.input, &mut |step| match step {
@@ -517,8 +569,38 @@ impl<W: Write> Job<W> {
             } => {
                 let extract = matches!(start.action, Action::Extract { .. });
                 let path = source.to_path()?;
-                self.progress(Stage::Read, 0, None, 0)?;
-                let mut snapshot =
+                self.progress(
+                    if crate::split_seven_zip::is_split(&path) {
+                        Stage::Scan
+                    } else {
+                        Stage::Read
+                    },
+                    0,
+                    None,
+                    0,
+                )?;
+                let expected = match &start.action {
+                    Action::Extract { list_id, .. } => list_id.as_ref(),
+                    _ => None,
+                };
+                let metadata_limits = self.metadata_limits();
+                let captured = crate::split_seven_zip::open(
+                    &path,
+                    expected,
+                    limits.input,
+                    metadata_limits,
+                    &mut |step| match step {
+                        crate::spool::Step::Check => self.check(),
+                        crate::spool::Step::Activity => completed(Ok(()), self),
+                        crate::spool::Step::Read { bytes, total } => {
+                            self.progress(Stage::Read, bytes, Some(total), 0)
+                        }
+                    },
+                );
+                let mut snapshot = if let Some(captured) = self.split_result(captured)? {
+                    self.source_group = Some(captured.group);
+                    captured.snapshot
+                } else {
                     crate::spool::Snapshot::open_reporting(&path, limits.input, &mut |step| {
                         match step {
                             crate::spool::Step::Check => self.check(),
@@ -527,13 +609,14 @@ impl<W: Write> Job<W> {
                                 self.progress(Stage::Read, bytes, Some(total), 0)
                             }
                         }
-                    })?;
+                    })?
+                };
                 if let Action::Extract {
                     list_id: Some(expected),
                     ..
                 } = &start.action
                 {
-                    if expected.catalog_version != 1
+                    if expected.catalog_version != if self.source_group.is_some() { 2 } else { 1 }
                         || expected.source_object != snapshot.object
                         || expected.archive_bytes != snapshot.len
                         || expected.archive_sha256 != snapshot.hash
@@ -551,7 +634,7 @@ impl<W: Write> Job<W> {
                     self,
                 )?;
                 let list_id = ListId {
-                    catalog_version: 1,
+                    catalog_version: if self.source_group.is_some() { 2 } else { 1 },
                     format: catalog.format,
                     source_object: snapshot.object,
                     archive_bytes: snapshot.len,
@@ -562,6 +645,7 @@ impl<W: Write> Job<W> {
                         self.check()?;
                         completed(self.event(Message::Entry(member.entry.clone())), self)?;
                     }
+                    self.verify_split()?;
                     completed(
                         self.event(Message::ListEnd {
                             entry_count: catalog.members.len() as u32,
@@ -708,7 +792,9 @@ impl<W: Write> Job<W> {
                     for name in dirs {
                         self.check()?;
                         let (created, durability, sync_error) =
-                            filesystem::directory_with(&root, &name, self)?;
+                            filesystem::directory_steps(&root, &name, &mut |step| {
+                                self.publication_step(step, false)
+                            })?;
                         if created {
                             self.terminal.created_count += 1;
                             self.terminal.publication = Publication::Partial;
@@ -778,6 +864,8 @@ impl<W: Write> Job<W> {
                             replace,
                         )?;
                     }
+                    // 건너뛰기 등 실제 게시가 없을 때도 완료 전에 원본을 확인함.
+                    self.verify_before_publication()?;
                     if !self.interactive || self.terminal.created_count != 0 {
                         self.terminal.publication = Publication::Complete;
                     }
@@ -1018,6 +1106,8 @@ pub fn serve<R: Read + Send + 'static, W: Write + Send + 'static>(
         budget,
         watchdog: Watchdog::new(),
         remaining_choice: None,
+        source_group: None,
+        source_verified_for_publication: false,
         parent,
         started: Instant::now(),
         terminal: Terminal {

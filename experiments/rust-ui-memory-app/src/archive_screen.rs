@@ -971,6 +971,13 @@ impl ArchiveApp {
                         idle && self.can_preview() && !self.preview_open,
                         false,
                     )
+                    .on_disabled_hover_text(
+                        if self.model.list_id.as_ref().is_some_and(ListId::is_split) {
+                            "분할 압축파일은 미리보기를 지원하지 않습니다"
+                        } else {
+                            "일반 파일 하나를 선택하세요"
+                        },
+                    )
                     .clicked()
                     {
                         self.begin_preview(ui.ctx());
@@ -1778,11 +1785,18 @@ impl ArchiveApp {
 
     fn limit_result_visible(&self) -> bool {
         self.result_visible()
-            && self
-                .model
-                .terminal
-                .as_ref()
-                .is_some_and(|terminal| terminal.error == Some(ErrorCode::Limit))
+            && (self.model.volume_problem.is_some()
+                || self.model.terminal.as_ref().is_some_and(|terminal| {
+                    terminal.error == Some(ErrorCode::Limit)
+                        || (matches!(
+                            terminal.error,
+                            Some(ErrorCode::UnsupportedFormat | ErrorCode::UnsupportedFeature)
+                        ) && self
+                            .model
+                            .archive
+                            .as_ref()
+                            .is_some_and(|p| present::excluded_split(p)))
+                }))
     }
 
     fn limit_result_dialog(&mut self, ctx: &egui::Context) {
@@ -2128,12 +2142,27 @@ impl ArchiveApp {
                             _ => format!("{} 폴더에 저장했습니다.", self.destination.display()),
                         };
                         theme::bounded_text(ui, &path, ui.available_width());
+                    } else if let Some(problem) = &self.model.volume_problem {
+                        ui.add(egui::Label::new(present::volume_problem_text(problem)).wrap());
                     } else if let Some(code) = t.as_ref().and_then(|t| t.error) {
-                        ui.label(if creating && code == ErrorCode::SourceChanged {
-                            "묶을 파일이 바뀌었습니다. 파일을 확인한 뒤 다시 만드세요".to_owned()
-                        } else {
-                            present::operation_text(present::error_text(code), creating)
-                        });
+                        ui.label(
+                            if matches!(
+                                code,
+                                ErrorCode::UnsupportedFormat | ErrorCode::UnsupportedFeature
+                            ) && self
+                                .model
+                                .archive
+                                .as_ref()
+                                .is_some_and(|p| present::excluded_split(p))
+                            {
+                                present::SPLIT_SUPPORT.to_owned()
+                            } else if creating && code == ErrorCode::SourceChanged {
+                                "묶을 파일이 바뀌었습니다. 파일을 확인한 뒤 다시 만드세요"
+                                    .to_owned()
+                            } else {
+                                present::operation_text(present::error_text(code), creating)
+                            },
+                        );
                     } else if let Some(error) = &self.model.error {
                         ui.label(present::operation_text(
                             present::client_error_text(error),

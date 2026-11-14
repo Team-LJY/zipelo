@@ -37,7 +37,9 @@ pub trait Dialogs {
 
 pub fn archive_filters() -> Vec<(&'static str, Vec<String>)> {
     let mut extensions = Vec::new();
-    for extension in ["zip", "7z", "tar", "gz", "tgz", "tar.bz2", "tar.xz"] {
+    for extension in [
+        "zip", "7z", "7z.001", "tar", "gz", "tgz", "tar.bz2", "tar.xz",
+    ] {
         let mut variants = vec![String::new()];
         for character in extension.chars() {
             let mut next = Vec::new();
