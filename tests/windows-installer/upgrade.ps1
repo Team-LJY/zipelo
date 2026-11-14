@@ -1,7 +1,8 @@
 ﻿param(
     [Parameter(Mandatory = $true)][string]$Installer,
     [ValidateSet("Snapshot", "Compare", "Rollback", "Upgrade")][string]$Mode,
-    [Parameter(Mandatory = $true)][string]$Evidence
+    [Parameter(Mandatory = $true)][string]$Evidence,
+    [string]$ExpectedVersion
 )
 $ErrorActionPreference = "Stop"
 $root = Join-Path $env:LOCALAPPDATA "Programs\Zipelo"
@@ -75,12 +76,21 @@ switch ($Mode) {
         $code = RunInstaller
         if ($code -ne 0) { throw "업데이트 실패: $code" }
         $after = Snapshot
+        # 정상 업데이트는 DisplayVersion만 바꾸므로 따로 확인하고 나머지 등록을 비교함.
+        $versionKey = @($after.registry.Keys | Where-Object { $_ -match '\\Uninstall\\Zipelo\\DisplayVersion$' })
+        if ($versionKey.Count -ne 1) { throw "DisplayVersion 등록을 찾지 못함" }
+        $newVersion = $after.registry[$versionKey[0]]
+        if ($ExpectedVersion -and $newVersion -cne $ExpectedVersion) {
+            throw "업데이트 후 DisplayVersion이 $ExpectedVersion 이 아님: $newVersion"
+        }
+        $before.registry.Remove($versionKey[0])
+        $after.registry.Remove($versionKey[0])
         AssertEqual $before.registry $after.registry "업데이트가 기존 연결 또는 등록을 바꿈"
         AssertEqual $before.shortcut $after.shortcut "업데이트가 기존 바로가기를 바꿈"
         if ($before.files['Uninstall.exe'] -eq $after.files['Uninstall.exe']) {
             throw "새 제거 프로그램으로 교체되지 않음"
         }
         $after | ConvertTo-Json -Depth 8 | Set-Content -Encoding UTF8 $Evidence
-        "upgrade_passed: new_uninstaller_and_preserved_associations"
+        "upgrade_passed: version $($newVersion), new uninstaller, preserved associations"
     }
 }
