@@ -1,0 +1,288 @@
+{
+    "schema_version": 1,
+    "worker_execution_verified": false,
+    "description": "자체 생성 표본임. oracle_states는 원본을 아는 시험의 기대값이며 제품 보고 계약이 아님",
+    "source_entries": [
+        {
+            "name": "hello.txt",
+            "kind": "file",
+            "bytes": 26,
+            "sha256": "29020da72fa4030c58e0303f558b922f6ed5b6766600e67d79e0abf13971f9da",
+            "crc32": "aecbd261",
+            "method": 0,
+            "local_offset": 0,
+            "data_offset": 39,
+            "compressed_bytes": 26
+        },
+        {
+            "name": "한글/자료.txt",
+            "kind": "file",
+            "bytes": 432,
+            "sha256": "3fd2605633caf264a9cf9eb1fc23abc4a60b3191fc808a6a0f71863c64690be5",
+            "crc32": "24d6d829",
+            "method": 8,
+            "local_offset": 65,
+            "data_offset": 112,
+            "compressed_bytes": 37
+        },
+        {
+            "name": "empty.txt",
+            "kind": "file",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "crc32": "00000000",
+            "method": 0,
+            "local_offset": 149,
+            "data_offset": 188,
+            "compressed_bytes": 0
+        },
+        {
+            "name": "empty-dir/",
+            "kind": "directory",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "crc32": "00000000",
+            "method": 0,
+            "local_offset": 188,
+            "data_offset": 228,
+            "compressed_bytes": 0
+        },
+        {
+            "name": "middle.bin",
+            "kind": "file",
+            "bytes": 1024,
+            "sha256": "785b0751fc2c53dc14a4ce3d800e69ef9ce1009eb327ccf458afe09c242c26c9",
+            "crc32": "b70b4c26",
+            "method": 0,
+            "local_offset": 228,
+            "data_offset": 268,
+            "compressed_bytes": 1024
+        },
+        {
+            "name": "after.txt",
+            "kind": "file",
+            "bytes": 39,
+            "sha256": "7ea5f891c2d1be8db73893862b433f6680e33e11a7246baeea0addd8d296975c",
+            "crc32": "f77deae0",
+            "method": 8,
+            "local_offset": 1292,
+            "data_offset": 1331,
+            "compressed_bytes": 41
+        }
+    ],
+    "samples": [
+        {
+            "file": "control.zip",
+            "category": "control",
+            "bytes": 1734,
+            "sha256": "f780e050079a18994de13da479e355312bc5bb23f14320f50f7d862df0184343",
+            "mutations_from_control": [],
+            "expected": {
+                "publish_archive": false,
+                "warning_required": false,
+                "must_not_claim_complete_original": false,
+                "must_preserve_source_sha256": "f780e050079a18994de13da479e355312bc5bb23f14320f50f7d862df0184343",
+                "verified_entries": [
+                    "hello.txt",
+                    "한글/자료.txt",
+                    "empty.txt",
+                    "empty-dir/",
+                    "middle.bin",
+                    "after.txt"
+                ],
+                "excluded_entries": [],
+                "oracle_states": {
+                    "hello.txt": "verified",
+                    "한글/자료.txt": "verified",
+                    "empty.txt": "verified",
+                    "empty-dir/": "verified",
+                    "middle.bin": "verified",
+                    "after.txt": "verified"
+                }
+            }
+        },
+        {
+            "file": "missing-directory.zip",
+            "category": "header_damage",
+            "bytes": 1372,
+            "sha256": "e461b3ce3cf1e1147405869c9fae5392897da76c34625f57f2bc67e0082171ba",
+            "mutations_from_control": [
+                {
+                    "operation": "truncate",
+                    "offset": 1372
+                }
+            ],
+            "expected": {
+                "publish_archive": true,
+                "warning_required": true,
+                "must_not_claim_complete_original": true,
+                "must_preserve_source_sha256": "e461b3ce3cf1e1147405869c9fae5392897da76c34625f57f2bc67e0082171ba",
+                "verified_entries": [
+                    "hello.txt",
+                    "한글/자료.txt",
+                    "empty.txt",
+                    "empty-dir/",
+                    "middle.bin",
+                    "after.txt"
+                ],
+                "excluded_entries": [],
+                "oracle_states": {
+                    "hello.txt": "verified",
+                    "한글/자료.txt": "verified",
+                    "empty.txt": "verified",
+                    "empty-dir/": "verified",
+                    "middle.bin": "verified",
+                    "after.txt": "verified"
+                }
+            }
+        },
+        {
+            "file": "broken-eocd.zip",
+            "category": "header_damage",
+            "bytes": 1734,
+            "sha256": "e878201237d799ce7a5883552dbb6d2213a7c3c62bc3765123f449577e6bc880",
+            "mutations_from_control": [
+                {
+                    "operation": "replace",
+                    "offset": 1712,
+                    "hex": "42414421"
+                }
+            ],
+            "expected": {
+                "publish_archive": true,
+                "warning_required": true,
+                "must_not_claim_complete_original": true,
+                "must_preserve_source_sha256": "e878201237d799ce7a5883552dbb6d2213a7c3c62bc3765123f449577e6bc880",
+                "verified_entries": [
+                    "hello.txt",
+                    "한글/자료.txt",
+                    "empty.txt",
+                    "empty-dir/",
+                    "middle.bin",
+                    "after.txt"
+                ],
+                "excluded_entries": [],
+                "oracle_states": {
+                    "hello.txt": "verified",
+                    "한글/자료.txt": "verified",
+                    "empty.txt": "verified",
+                    "empty-dir/": "verified",
+                    "middle.bin": "verified",
+                    "after.txt": "verified"
+                }
+            }
+        },
+        {
+            "file": "middle-truncated.zip",
+            "category": "middle_truncation",
+            "bytes": 780,
+            "sha256": "552a613fef94076591c0243cf43e24a576a1b9588cf51522c2bab44160f30eab",
+            "mutations_from_control": [
+                {
+                    "operation": "truncate",
+                    "offset": 780
+                }
+            ],
+            "expected": {
+                "publish_archive": true,
+                "warning_required": true,
+                "must_not_claim_complete_original": true,
+                "must_preserve_source_sha256": "552a613fef94076591c0243cf43e24a576a1b9588cf51522c2bab44160f30eab",
+                "verified_entries": [
+                    "hello.txt",
+                    "한글/자료.txt",
+                    "empty.txt",
+                    "empty-dir/"
+                ],
+                "excluded_entries": [
+                    "middle.bin",
+                    "after.txt"
+                ],
+                "oracle_states": {
+                    "hello.txt": "verified",
+                    "한글/자료.txt": "verified",
+                    "empty.txt": "verified",
+                    "empty-dir/": "verified",
+                    "middle.bin": "truncated",
+                    "after.txt": "not_observable"
+                }
+            }
+        },
+        {
+            "file": "body-corrupt.zip",
+            "category": "payload_corruption",
+            "bytes": 1372,
+            "sha256": "8989c2bb0b7f2d3c05adc2b8c9e5a305ebe8c4c939b7cd1f08b8a906a1c44849",
+            "mutations_from_control": [
+                {
+                    "operation": "truncate",
+                    "offset": 1372
+                },
+                {
+                    "operation": "xor",
+                    "offset": 285,
+                    "value": 128
+                }
+            ],
+            "expected": {
+                "publish_archive": true,
+                "warning_required": true,
+                "must_not_claim_complete_original": true,
+                "must_preserve_source_sha256": "8989c2bb0b7f2d3c05adc2b8c9e5a305ebe8c4c939b7cd1f08b8a906a1c44849",
+                "verified_entries": [
+                    "hello.txt",
+                    "한글/자료.txt",
+                    "empty.txt",
+                    "empty-dir/",
+                    "after.txt"
+                ],
+                "excluded_entries": [
+                    "middle.bin"
+                ],
+                "oracle_states": {
+                    "hello.txt": "verified",
+                    "한글/자료.txt": "verified",
+                    "empty.txt": "verified",
+                    "empty-dir/": "verified",
+                    "middle.bin": "integrity_failed",
+                    "after.txt": "verified"
+                }
+            }
+        },
+        {
+            "file": "unrecoverable.zip",
+            "category": "unrecoverable",
+            "bytes": 20,
+            "sha256": "688bb3935cffb5a6686a912a4bccc75b8a99fa63f25b98dc6ddee6cfd9a752d9",
+            "mutations_from_control": [
+                {
+                    "operation": "truncate",
+                    "offset": 20
+                }
+            ],
+            "expected": {
+                "publish_archive": false,
+                "warning_required": true,
+                "must_not_claim_complete_original": true,
+                "must_preserve_source_sha256": "688bb3935cffb5a6686a912a4bccc75b8a99fa63f25b98dc6ddee6cfd9a752d9",
+                "verified_entries": [],
+                "excluded_entries": [
+                    "hello.txt",
+                    "한글/자료.txt",
+                    "empty.txt",
+                    "empty-dir/",
+                    "middle.bin",
+                    "after.txt"
+                ],
+                "oracle_states": {
+                    "hello.txt": "not_observable",
+                    "한글/자료.txt": "not_observable",
+                    "empty.txt": "not_observable",
+                    "empty-dir/": "not_observable",
+                    "middle.bin": "not_observable",
+                    "after.txt": "not_observable"
+                }
+            }
+        }
+    ]
+}
