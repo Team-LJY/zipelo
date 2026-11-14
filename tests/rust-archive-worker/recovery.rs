@@ -727,3 +727,46 @@ fn nested_directory_in_central_entry_comment_is_not_an_outer_archive() {
         assert_full_comment_recovery(&input, &format!("central-comment/{wraps_real_end}"));
     }
 }
+
+#[test]
+fn fake_directory_and_eocd_in_member_payload_cannot_hide_members() {
+    let helper = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../tests/rust-archive-worker/payload_eocd.py");
+    for variant in (0..32).chain([32]) {
+        let s = Scratch::new();
+        let generated = Command::new("python3")
+            .arg("-B")
+            .arg(&helper)
+            .arg("create")
+            .arg(&s.0)
+            .arg(variant.to_string())
+            .output()
+            .unwrap();
+        assert!(generated.status.success(), "{generated:?}");
+        let input = fs::read(s.0.join("damaged.zip")).unwrap();
+        let events = execute(start(&s));
+        let terminal = terminal(&events);
+        assert_eq!(terminal.error, ErrorCode::None, "variant {variant}");
+        assert_eq!(terminal.outcome, Outcome::Completed);
+        assert_eq!(terminal.publication, Publication::Complete);
+        assert_eq!(terminal.created_count, 1);
+        let summary = recovery_end(&events);
+        assert!(summary.complete());
+        assert_eq!(summary.mode, RecoveryMode::CentralDirectory);
+        assert_eq!(summary.known_entries, Some(2));
+        assert_eq!(summary.verified_entries, 2);
+        assert_eq!(
+            summary.source_sha256,
+            <[u8; 32]>::from(Sha256::digest(&input))
+        );
+        assert_eq!(fs::read(s.0.join("damaged.zip")).unwrap(), input);
+        let checked = Command::new("python3")
+            .arg("-B")
+            .arg(&helper)
+            .arg("verify")
+            .arg(&s.0)
+            .output()
+            .unwrap();
+        assert!(checked.status.success(), "variant {variant}: {checked:?}");
+    }
+}

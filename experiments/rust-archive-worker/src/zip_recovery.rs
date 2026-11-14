@@ -191,13 +191,89 @@ fn directory_span(
     Ok(true)
 }
 
+struct EndRecord {
+    index: usize,
+    at: u64,
+    directory: u64,
+    directory_end: u64,
+}
+
+fn metadata_overlaps_member(
+    source: &mut File,
+    owner: &EndRecord,
+    nested: &EndRecord,
+    check: &mut impl Monitor,
+) -> Result<bool> {
+    let mut at = owner.directory;
+    while at < owner.directory_end {
+        check.check()?;
+        let h = bytes(source, at, 46, owner.directory_end)?;
+        let nn = u16at(&h, 28) as usize;
+        let ne = u16at(&h, 30) as usize;
+        let next = add(at, 46 + nn as u64 + ne as u64 + u16at(&h, 32) as u64)?;
+        let offset = u32at(&h, 42) as u64;
+        let packed = u32at(&h, 20);
+        let size = u32at(&h, 24);
+        if nn > 0
+            && nn <= 4096
+            && packed > 0
+            && packed != u32::MAX
+            && size != u32::MAX
+            && offset.checked_add(30).is_some_and(|n| n <= owner.directory)
+        {
+            let local = bytes(source, offset, 30, owner.directory)?;
+            let start = add(
+                offset,
+                30 + u16at(&local, 26) as u64 + u16at(&local, 28) as u64,
+            )?;
+            let stop = add(start, packed as u64)?;
+            let overlaps = (start < nested.directory_end && nested.directory < stop)
+                || (start < nested.at + 22 && nested.at < stop);
+            let flags = u16at(&h, 8);
+            if overlaps
+                && stop <= owner.directory
+                && nn == u16at(&local, 26) as usize
+                && flags == u16at(&local, 6)
+                && u16at(&h, 10) == u16at(&local, 8)
+                && bytes(source, at + 46, nn, owner.directory_end)?
+                    == bytes(source, offset + 30, nn, owner.directory)?
+            {
+                // 두 목록이 주장한 범위보다 로컬 필드와 일치한 본문 경계를 우선함.
+                if flags & 8 == 0 {
+                    if packed == u32at(&local, 18) && size == u32at(&local, 22) {
+                        return Ok(true);
+                    }
+                } else if stop.checked_add(12).is_some_and(|n| n <= owner.directory) {
+                    let descriptor = bytes(source, stop, 12, owner.directory)?;
+                    let skip = if &descriptor[..4] == b"PK\x07\x08" {
+                        4
+                    } else {
+                        0
+                    };
+                    if (stop + skip + 12) <= owner.directory {
+                        let d = bytes(source, stop + skip, 12, owner.directory)?;
+                        if u32at(&d, 0) == u32at(&h, 16)
+                            && u32at(&d, 4) == packed
+                            && u32at(&d, 8) == size
+                        {
+                            return Ok(true);
+                        }
+                    }
+                }
+            }
+        }
+        at = next;
+    }
+    Ok(false)
+}
+
 fn end_record(
     source: &mut File,
     tail: &[u8],
     tail_at: u64,
     check: &mut impl Monitor,
 ) -> Result<Option<usize>> {
-    let mut selected: Option<(usize, u64)> = None;
+    let mut selected: Option<EndRecord> = None;
     for end in (0..=tail.len() - 22).rev() {
         if &tail[end..end + 4] != b"PK\x05\x06"
             || end + 22 + u16at(tail, end + 20) as usize != tail.len()
@@ -233,16 +309,32 @@ fn end_record(
         if !directory_span(source, offset, stop, check)? {
             continue;
         }
-        let comment_at = at + 22;
-        // 선행 후보의 중앙 목록이나 주석에 속한 후행 목록은 선택하지 않음.
-        if selected.is_none_or(|(nested_end, nested_directory)| {
-            (offset < nested_directory && nested_directory < stop)
-                || (comment_at <= nested_directory && end + 22 <= nested_end)
-        }) {
-            selected = Some((end, offset));
+        let current = EndRecord {
+            index: end,
+            at,
+            directory: offset,
+            directory_end: stop,
+        };
+        if let Some(previous) = &selected {
+            let current_in_member = metadata_overlaps_member(source, previous, &current, check)?;
+            let previous_in_member = metadata_overlaps_member(source, &current, previous, check)?;
+            if current_in_member && previous_in_member {
+                return Err(ErrorCode::Integrity);
+            }
+            if current_in_member {
+                continue;
+            }
+            // 본문 안의 메타데이터를 제거한 뒤 중앙 주석과 파일 주석의 소속을 비교함.
+            if !previous_in_member
+                && !(offset < previous.directory && previous.directory < stop)
+                && !(at + 22 <= previous.directory && end + 22 <= previous.index)
+            {
+                continue;
+            }
         }
+        selected = Some(current);
     }
-    Ok(selected.map(|(end, _)| end))
+    Ok(selected.map(|record| record.index))
 }
 
 fn central(
