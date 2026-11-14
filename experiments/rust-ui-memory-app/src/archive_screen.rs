@@ -968,7 +968,7 @@ impl ArchiveApp {
                         ui,
                         "미리보기",
                         theme::PREVIEW,
-                        idle && self.model.can_preview() && !self.preview_open,
+                        idle && self.can_preview() && !self.preview_open,
                         false,
                     )
                     .clicked()
@@ -1617,8 +1617,15 @@ impl ArchiveApp {
             })
     }
 
+    fn can_preview(&self) -> bool {
+        self.model.can_preview()
+            && browser::rows(&self.model.entries, &self.folder, &self.search)
+                .iter()
+                .any(|row| !row.directory && row.ids == self.model.selected)
+    }
+
     fn begin_preview(&mut self, ctx: &egui::Context) {
-        if !self.model.can_preview() || self.picker.is_some() {
+        if !self.can_preview() || self.picker.is_some() {
             return;
         }
         self.preview_texture = None;

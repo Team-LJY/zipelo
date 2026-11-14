@@ -96,6 +96,7 @@ fn every_listed_scenario_draws_and_keeps_its_expected_screen() {
             );
             assert!(app.model.input_error.is_none(), "{}", scenario.name);
             let expected = match scenario.name {
+                "preview-implicit-folder" => "자료",
                 "preview-loading" => "미리보기를 불러오는 중입니다",
                 "preview-text" => "여행 준비 목록",
                 "preview-image" => "미리보기",

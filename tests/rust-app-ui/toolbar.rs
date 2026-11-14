@@ -589,3 +589,33 @@ fn open_preview_blocks_dropped_archives_until_closed() {
     assert_eq!(factory.state.borrow().starts.len(), before);
     assert!(app.model.preview.is_some());
 }
+
+#[test]
+fn implicit_folder_with_one_file_cannot_start_preview() {
+    let scratch = Folder::new();
+    let factory = FakeFactory::default();
+    let mut app = loaded(&scratch, &factory);
+    app.model.entries.truncate(1);
+    app.model.entries[0].name = "implicit/only.txt".into();
+    app.model.selected.insert(0);
+    let ctx = egui::Context::default();
+    let before = factory.state.borrow().starts.len();
+    policy_click(&ctx, &mut app, "미리보기");
+    for _ in 0..24 {
+        policy_render(&ctx, &mut app, vec![]);
+    }
+    assert_eq!(factory.state.borrow().starts.len(), before);
+    assert!(app.model.preview.is_none());
+
+    app.browse_folder("implicit");
+    app.model.selected.insert(0);
+    policy_click(&ctx, &mut app, "미리보기");
+    for _ in 0..24 {
+        policy_render(&ctx, &mut app, vec![]);
+    }
+    assert!(matches!(
+        factory.state.borrow().starts.last(),
+        Some(Start::Preview { entry_id: 0, .. })
+    ));
+    assert!(app.model.preview.is_some());
+}

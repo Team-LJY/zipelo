@@ -28,6 +28,7 @@ catalog! {
     "preview-limit" => "미리보기 한도 초과",
     "preview-damaged" => "손상된 미리보기 파일",
     "preview-unsupported" => "미지원 미리보기 형식",
+    "preview-implicit-folder" => "파일 하나를 포함한 가상 폴더의 미리보기 비활성화",
     "preview-selection" => "폴더와 여러 항목의 미리보기 비활성화",
     "resource-approval" => "처리 전 큰 작업 승인",
     "resource-ratio" => "고압축 작업 경고와 미확인 값",
@@ -261,6 +262,13 @@ impl Scenario {
         app.model.confirmed = true;
         if self.name.starts_with("preview-") {
             app.model.selected = BTreeSet::from([1]);
+            if self.name == "preview-implicit-folder" {
+                app.model.entries.truncate(1);
+                app.model.entries[0].id = 1;
+                app.model.entries[0].name = "자료/안내.txt".into();
+                app.model.entries[0].kind = Kind::File;
+                return app;
+            }
             if self.name == "preview-selection" {
                 app.model.selected.insert(0);
                 return app;

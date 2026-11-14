@@ -157,6 +157,7 @@ Ubuntu 제거 안내는 패키지 관리자 터미널 출력입니다. 이전 �
 - preview-limit: 크기 또는 처리 한도 초과 안내. 미리보기 상한을 늘리는 버튼은 제공하지 않음.
 - preview-damaged: 손상 또는 잘못된 UTF-8 안내.
 - preview-unsupported: 지원하지 않는 형식 안내.
+- preview-implicit-folder: 디렉터리 항목 없이 파일 하나만 포함한 가상 폴더 선택 시 [미리보기] 비활성화. 폴더 안에서 파일을 선택하면 활성화.
 - preview-selection: 폴더 또는 여러 항목 선택 시 [미리보기] 비활성화.
 
 `--ui-scenario` 화면은 기존 규칙대로 입력을 받지 않는 디자인 점검용이다.
