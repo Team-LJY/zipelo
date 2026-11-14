@@ -90,7 +90,7 @@ def build(args):
     shutil.copyfile(Path(__file__).with_name("installer.nsi"), output / "installer.nsi")
     shutil.copyfile(ROOT / "experiments/rust-ui-memory-app/src/assets/icons/zipelo.ico", output / "zipelo.ico")
     subprocess.run(["makensis", "-WX", "installer.nsi"], cwd=output, check=True)
-    installer = output / "Zipelo-0.1.0-windows-x64-setup.exe"
+    installer = output / "Zipelo-0.2.0-windows-x64-setup.exe"
     if pe_machine(installer) not in (0x14C, 0x8664):
         raise ValueError("NSIS 설치 실행 파일이 아님")
     print(installer)

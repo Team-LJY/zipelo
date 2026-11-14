@@ -53,7 +53,7 @@ def build(args):
     control = stage / "DEBIAN"
     control.mkdir()
     (control / "control").write_text("""Package: zipelo
-Version: 0.1.0
+Version: 0.2.0
 Architecture: amd64
 Maintainer: Zipelo contributors <hoshinohinata.dev@gmail.com>
 Section: utils
@@ -65,7 +65,7 @@ Description: Lightweight Rust archive application
     for script in ("postinst", "prerm", "postrm"):
         shutil.copyfile(Path(__file__).with_name(script), control / script)
         (control / script).chmod(0o755)
-    package = output / "zipelo_0.1.0_amd64.deb"
+    package = output / "zipelo_0.2.0_amd64.deb"
     subprocess.run(["dpkg-deb", "--root-owner-group", "--build", str(stage), str(package)], check=True)
     print(package)
     print("SHA-256 " + hashlib.sha256(package.read_bytes()).hexdigest())
