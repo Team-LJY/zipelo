@@ -269,7 +269,7 @@
         "validation": "Round-trip SHA256 and structure in Zipelo and independent 7-Zip 26.00 with ZIPELO_TEST_7ZIP set; 1 GiB creation RSS regression; cancellation, metadata/byte limits, encoder finish/header write/seek/patch failures, destination write/sync and postpublication sync failures. Results and platform limits are recorded in PR127."
     },
     "zip_recovery_proposal": {
-        "status": "proposal-only; awaiting-frontend-agreement-and-fixture-review; no-product-implementation",
+        "status": "proposal-only; frontend-agreed-result-semantics; awaiting-corrected-error-tag-agreement; no-product-implementation",
         "design": "docs/zip-recovery-design.md",
         "basis": "PLANS 8.10. Never modify the source; reconstruct only separately validated members into a new archive. Existing active tags and revision 3 remain unchanged until joint agreement.",
         "request": {
@@ -308,8 +308,8 @@
                 "MetadataMissing": 7
             },
             "ErrorCode": {
-                "RecoveryIncomplete": 14,
-                "RecoveryImpossible": 15
+                "RecoveryIncomplete": 15,
+                "RecoveryImpossible": 16
             },
             "event_kinds": {
                 "RecoveryEntry": 115,
@@ -373,16 +373,18 @@
         "client": "Explicit recovery-copy action and native ZIP save dialog; never weaken or silently retry ordinary List/Extract. Show Verified/Lost/Unverified with typed reasons and distinguish unknown inventory from zero loss. Keep recovery findings separate from the ordinary catalog; read a saved copy in a new explicit job with a fresh ListId. Retain partial-warning context when opening a copy, and do not present an ordinary later ZIP listing as proof that all original data was recovered. Result details are job data, not an authenticated permanent recovery certificate.",
         "lifecycle": "Preserve job/sequence/challenge validation, resource approval, CancelAck and exactly one final Terminal. Confirm results only after matching Terminal, both EOFs and owned-child wait. No new security settings or dependency changes. Product implementation, UI scenarios and native integration require prior frontend agreement.",
         "fixtures": {
-            "basis_commit": "384417036d1223fd33fee259fe13c3e6c4354123",
+            "basis_commit": "d525c7c23796b06048180c3b3d2bbaee8075989e",
             "manifest": "tests/zip-recovery-fixtures/expectations.json",
             "static_expected_verified_counts": {
                 "missing-directory.zip": 6,
                 "broken-eocd.zip": 6,
                 "middle-truncated.zip": 4,
                 "body-corrupt.zip": 5,
-                "unrecoverable.zip": 0
+                "unrecoverable.zip": 0,
+                "broken-local-header.zip": 6
             },
-            "comparison": "Read-only comparison of the published fixture contract, not worker execution. All damaged samples lack a usable central inventory and retain unknown_loss. An intact-central/local-header-only damage case is still needed to exercise complete recovery."
-        }
+            "comparison": "Read-only comparison of fixture expectations, not worker execution. The intact-central broken-local-header.zip expects CentralDirectory, known_entries=6 and unknown_loss=false. The other damaged samples lack a usable central inventory and retain unknown_loss."
+        },
+        "tag_correction": "The initial error proposal reused live wire MissingVolume=14, omitted from the historical root error_tags index. Preserve MissingVolume=14 and propose RecoveryIncomplete=15 and RecoveryImpossible=16. Result semantics and all other proposed tags are unchanged. Await renewed frontend agreement before product types/codec activation."
     }
 }

@@ -1,6 +1,6 @@
 # ZIP 손상 복구 설계와 작업자 계약안
 
-상태: 계약 동의와 손상 표본 리뷰 전의 제안이며 제품 구현은 시작하지 않았다. [PLANS 8.10](PLANS.md#810-손상-파일-복구)과 [8.13](PLANS.md#813-진행과-완료-판단)을 따른다. 기계 판독용 제안은 [작업자 계약](../experiments/rust-archive-worker/contract.json)의 zip_recovery_proposal이다. 기존 revision 3, 활성 태그와 일반 목록/해제의 엄격한 무결성 검사를 바꾸지 않는다.
+상태: 히나타가 8e178e0의 결과/경고 의미에 동의했고 카논이 d525c7c의 표본 대조를 마쳤다. 활성 wire의 MissingVolume=14와 초기 제안이 충돌해 복구 오류 태그를 15/16으로 정정 제안하며, 이 숫자의 재합의 전에는 제품 타입/codec을 활성화하지 않는다. 제품 구현은 시작하지 않았다. [PLANS 8.10](PLANS.md#810-손상-파일-복구)과 [8.13](PLANS.md#813-진행과-완료-판단)을 따른다. 기계 판독용 제안은 [작업자 계약](../experiments/rust-archive-worker/contract.json)의 zip_recovery_proposal이다. 기존 revision 3, 활성 태그와 일반 목록/해제의 엄격한 무결성 검사를 바꾸지 않는다.
 
 ## 1. 복구 범위와 한계
 
@@ -51,7 +51,7 @@
 
 ## 4. 앱과 작업자 계약 제안
 
-이 절의 숫자는 합의 전 제안이며 활성 codec에 아직 추가하지 않는다. Frame version=1, 32바이트 헤더, 1 MiB body, 방향별 sequence, 32768 문자열/벡터 전송 상한과 기존 revision 3를 유지한다. 기존 Preview kind 111~113과 VolumeProblem kind 114를 재사용하지 않는다.
+이 절의 숫자는 합의 전 제안이며 활성 codec에 아직 추가하지 않는다. Frame version=1, 32바이트 헤더, 1 MiB body, 방향별 sequence, 32768 문자열/벡터 전송 상한과 기존 revision 3를 유지한다. 기존 Preview kind 111~113과 VolumeProblem kind 114를 재사용하지 않는다. 실제 wire의 MissingVolume=14도 유지한다. 기존 contract.json의 error_tags 색인은 이 오류를 누락하므로 새 태그 검사는 문서 색인뿐 아니라 활성 wire와 대조한다. 초기 제안의 복구 오류 14/15는 충돌하므로 아래 15/16으로 정정하며 결과 의미와 다른 숫자는 동일하다.
 
 ### 요청과 이벤트
 
@@ -66,9 +66,9 @@
 ### 최종 결과와 게시
 
 - 복구본 하나의 실제 Output Created는 entry_id=None, relative_name=목적지 기본 이름이다. 멤버별 Output은 보내지 않는다. 원본 전체 목록을 알고 모든 알려진 항목을 검증했으며 유실/미확인/unknown_loss가 없고 게시/마무리가 성공한 경우에만 Completed/None, publication=Complete, created_count=1이다.
-- 검증된 항목이 하나 이상이지만 유실, 미확인 또는 불명 전체 목록이 있으면 복구본을 저장한 뒤 Failed/RecoveryIncomplete(새 ErrorCode=14), publication=Complete, created_count=1로 끝낸다. 여기서 Complete는 ZIP 파일 하나의 게시 완료이지 원본 전체의 완전 복구가 아니다. UI는 실패 일반 문구로 복구본을 숨기거나 완전 복구 성공으로 바꾸지 않는다.
+- 검증된 항목이 하나 이상이지만 유실, 미확인 또는 불명 전체 목록이 있으면 복구본을 저장한 뒤 Failed/RecoveryIncomplete(새 ErrorCode=15), publication=Complete, created_count=1로 끝낸다. 여기서 Complete는 ZIP 파일 하나의 게시 완료이지 원본 전체의 완전 복구가 아니다. UI는 실패 일반 문구로 복구본을 숨기거나 완전 복구 성공으로 바꾸지 않는다.
 - 원본이 엄격한 일반 판독/내용 검증까지 통과하고 재구성할 헤더 손상이 없으면 복구 대상이 아니다. RecoverZip을 직접 요청했더라도 InvalidRequest와 출력 0개로 끝내며 정상 control.zip을 자동 재작성하지 않는다.
-- 검증된 항목이 하나도 없으면 Failed/RecoveryImpossible(새 ErrorCode=15), publication=None, created_count=0으로 끝내고 빈 복구본을 만들지 않는다. 저장/경로/자원/변경/프로토콜 오류와 취소가 생기면 그 실제 오류가 부분 복구 업무 결과보다 우선한다.
+- 검증된 항목이 하나도 없으면 Failed/RecoveryImpossible(새 ErrorCode=16), publication=None, created_count=0으로 끝내고 빈 복구본을 만들지 않는다. 저장/경로/자원/변경/프로토콜 오류와 취소가 생기면 그 실제 오류가 부분 복구 업무 결과보다 우선한다.
 - 게시 전 실패/취소에는 완성 파일이 없으며 소유 임시 파일 정리 실패만 기존 PartialRetained/cleanup/retained 집계로 보고한다. 게시 후 오류에는 기존 Failed와 실제 Output, durability/cleanup, CommitUncertain/Uncertain을 유지한다. Terminal은 마지막 프레임 하나이고 CancelAck는 완료 증거가 아니다.
 - 앱은 일치하는 Terminal, stdout/stderr EOF와 소유 자식 회수가 모두 끝난 뒤 결과를 확정한다. 부분 복구본이 있거나 게시/정리가 불명확하면 대형 한도 자동 재시도/닫기 후 자동 재실행을 하지 않는다. 취소 cutoff 뒤 TooLate와 실제 게시 결과도 기존대로 존중한다.
 
@@ -82,7 +82,7 @@
 
 ## 6. 손상 표본과 수용 기준
 
-카논이 같은 features/zip-recovery 브랜치의 [손상 표본과 기대 manifest](../tests/zip-recovery-fixtures/README.md)를 담당한다. 3844170의 README와 expectations.json을 읽어 설계 분류를 대조했다. missing-directory.zip과 broken-eocd.zip은 각 6개, middle-truncated.zip은 앞 4개, body-corrupt.zip은 CRC 실패 항목을 제외한 5개, unrecoverable.zip은 0개가 기대값이다. 이 손상 표본의 유효 항목은 LocalChain 조건으로 처리하므로 전체 목록 불명 경고를 유지한다. control.zip은 정상 열기 대조군이며 복구본을 게시하지 않는다. 이는 기대값의 정적 대조이며 제품 실행이나 표본 시험 통과를 대신하지 않는다. backend는 담당 표본을 동시에 작성하거나 수정하지 않는다. 중앙 목록이 정상이고 로컬 헤더만 손상된 완전 복구 판정 표본은 후속 보완이 필요하다.
+카논이 같은 features/zip-recovery 브랜치의 [손상 표본과 기대 manifest](../tests/zip-recovery-fixtures/README.md)를 담당한다. 3844170의 README와 expectations.json을 읽어 설계 분류를 대조했다. missing-directory.zip과 broken-eocd.zip은 각 6개, middle-truncated.zip은 앞 4개, body-corrupt.zip은 CRC 실패 항목을 제외한 5개, unrecoverable.zip은 0개가 기대값이다. 이 손상 표본의 유효 항목은 LocalChain 조건으로 처리하므로 전체 목록 불명 경고를 유지한다. control.zip은 정상 열기 대조군이며 복구본을 게시하지 않는다. 이는 기대값의 정적 대조이며 제품 실행이나 표본 시험 통과를 대신하지 않는다. backend는 담당 표본을 동시에 작성하거나 수정하지 않는다. d525c7c의 broken-local-header.zip은 중앙 목록/EOCD와 본문을 보존하고 로컬 서명만 손상했다. 6개 검증 항목, CentralDirectory, known_entries=6과 unknown_loss=false를 기대하는 완전 복구 판정 표본이며 기대값을 읽어 대조했다. 카논의 표본 검증과 실제 작업자 복구 실행은 별개다.
 
 - 헤더 손상: 중앙 목록/EOCD 손상은 LocalChain으로 검증된 파일이 기대 SHA256/구조와 맞아도 unknown_loss 경고를 유지한다. 온전한 중앙 목록과 로컬 CRC/서명/크기 손상은 모든 항목 검증 시 완전한 복구본 저장 판정이 가능하다.
 - 중간 절단: 절단 전 온전한 항목만 포함하고 잘린 항목/이후 불명 부분을 정상으로 세지 않는다. 본문 손상: 온전한 중앙 목록의 다른 항목만 포함하며 CRC 불일치를 Lost로 보고한다. 복구 불가: 검증 항목 0개, 완성 출력 0개다.
