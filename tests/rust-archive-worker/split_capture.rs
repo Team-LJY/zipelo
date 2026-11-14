@@ -4,15 +4,27 @@ static NEXT: AtomicU64 = AtomicU64::new(0);
 struct Scratch(PathBuf);
 impl Scratch {
     fn new() -> Self {
-        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../../tests/rust-archive-worker/split-runs")
-            .join(format!(
-                "{}-{}",
-                std::process::id(),
-                NEXT.fetch_add(1, Ordering::Relaxed)
-            ));
-        std::fs::create_dir_all(&path).unwrap();
-        Self(path.canonicalize().unwrap())
+        let root = std::env::var_os("TMPDIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| {
+                PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/work/tmp")
+            });
+        std::fs::create_dir_all(&root).unwrap();
+        let path = root.canonicalize().unwrap().join(format!(
+            "zipelo-split-capture-{}-{}",
+            std::process::id(),
+            NEXT.fetch_add(1, Ordering::Relaxed)
+        ));
+        let builder = std::fs::DirBuilder::new();
+        #[cfg(unix)]
+        let mut builder = builder;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::DirBuilderExt;
+            builder.mode(0o700);
+        }
+        builder.create(&path).unwrap();
+        Self(path)
     }
     fn split(&self, count: usize) -> Vec<u8> {
         let bytes = include_bytes!("fixtures/7z/copy.7z");
@@ -42,7 +54,7 @@ impl Scratch {
 }
 impl Drop for Scratch {
     fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
+        std::fs::remove_dir_all(&self.0).expect("분할 조각 임시 폴더 정리에 실패함");
     }
 }
 fn code<T>(result: Result<T>) -> ErrorCode {
@@ -403,4 +415,71 @@ fn disappearing_known_tail_is_a_source_change_before_reopen() {
         ),
         ErrorCode::SourceChanged
     );
+}
+
+#[test]
+fn scratch_uses_tmpdir_and_cleans_all_split_parts() {
+    let root = std::env::var_os("TMPDIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/work/tmp"));
+    let path = {
+        let s = Scratch::new();
+        let root = root.canonicalize().unwrap();
+        assert_eq!(s.0.parent(), Some(root.as_path()));
+        s.split(11);
+        assert_eq!(std::fs::read_dir(&s.0).unwrap().count(), 11);
+        s.0.clone()
+    };
+    assert!(!path.exists());
+}
+
+#[test]
+fn scratch_exit_child() {
+    if std::env::var_os("ZIPELO_SPLIT_SCRATCH_EXIT_TEST").is_none() {
+        return;
+    }
+    let s = Scratch::new();
+    s.split(3);
+    // Drop이 실행되지 않는 종료를 재현함.
+    std::process::exit(73);
+}
+
+#[test]
+fn scratch_abrupt_exit_leaves_parts_only_under_tmpdir() {
+    let path = {
+        let s = Scratch::new();
+        let status = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "split_seven_zip::tests::scratch_exit_child",
+                "--test-threads=1",
+            ])
+            .env("TMPDIR", &s.0)
+            .env("ZIPELO_SPLIT_SCRATCH_EXIT_TEST", "1")
+            .output()
+            .unwrap();
+        assert_eq!(status.status.code(), Some(73), "{status:?}");
+        let entries = std::fs::read_dir(&s.0)
+            .unwrap()
+            .collect::<std::io::Result<Vec<_>>>()
+            .unwrap();
+        assert_eq!(entries.len(), 1);
+        let leftover = entries[0].path();
+        assert_eq!(leftover.parent(), Some(s.0.as_path()));
+        assert!(
+            leftover
+                .file_name()
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .starts_with("zipelo-split-capture-")
+        );
+        assert_eq!(std::fs::read_dir(&leftover).unwrap().count(), 3);
+        assert_eq!(
+            std::fs::read(leftover.join("sample.7z.001")).unwrap().len(),
+            include_bytes!("fixtures/7z/copy.7z").len() / 3
+        );
+        s.0.clone()
+    };
+    assert!(!path.exists());
 }

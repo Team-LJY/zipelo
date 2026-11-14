@@ -780,6 +780,8 @@ pub(crate) fn publish_reader_steps(
             &mut PublicationMonitor(check),
         );
         let mut finish = written.and(closed).and_then(|_| {
+            check(PublishStep::Commit)?;
+            // 긴 원본 재검증 중 바뀐 대상은 교체 직전에 거부함.
             if let Some(expected) = replace {
                 if completed(dir.existing(&leaf), &mut PublicationMonitor(check))?.as_ref()
                     != Some(expected)
@@ -787,7 +789,7 @@ pub(crate) fn publish_reader_steps(
                     return Err(ErrorCode::Conflict);
                 }
             }
-            check(PublishStep::Commit)
+            Ok(())
         });
         let mut temp_consumed = false;
         if finish.is_ok() {

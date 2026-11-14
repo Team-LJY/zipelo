@@ -807,3 +807,185 @@ fn split_publication_changed_source_stops_before_creating_the_first_directory() 
     assert_eq!(fs::read_dir(s.0.join("output")).unwrap().count(), 0);
     assert_ne!(hashes(&paths), before);
 }
+
+#[test]
+fn split_publication_target_changes_during_verification_are_preserved() {
+    use std::io::{Cursor, Read};
+    use std::sync::{Arc, Mutex, mpsc};
+    const USER_EDIT: &[u8] = b"new user edit after overwrite approval";
+    struct Input {
+        receive: mpsc::Receiver<Vec<u8>>,
+        pending: Cursor<Vec<u8>>,
+    }
+    impl Read for Input {
+        fn read(&mut self, bytes: &mut [u8]) -> std::io::Result<usize> {
+            if bytes.is_empty() {
+                return Ok(0);
+            }
+            loop {
+                let count = self.pending.read(bytes)?;
+                if count != 0 {
+                    return Ok(count);
+                }
+                match self
+                    .receive
+                    .recv_timeout(std::time::Duration::from_secs(20))
+                {
+                    Ok(frame) => self.pending = Cursor::new(frame),
+                    Err(mpsc::RecvTimeoutError::Disconnected) => return Ok(0),
+                    Err(error) => return Err(std::io::Error::other(error)),
+                }
+            }
+        }
+    }
+    struct Reply {
+        send: mpsc::Sender<Vec<u8>>,
+        pending: Vec<u8>,
+    }
+    impl Write for Reply {
+        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+            self.pending.extend_from_slice(bytes);
+            Ok(bytes.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            self.send
+                .send(std::mem::take(&mut self.pending))
+                .map_err(std::io::Error::other)
+        }
+    }
+    struct ChangingOutput {
+        frame: Vec<u8>,
+        output: Arc<Mutex<Vec<u8>>>,
+        reply: Option<Writer<Reply>>,
+        target: PathBuf,
+        mode: u8,
+        modified: Option<std::time::SystemTime>,
+        changed: bool,
+    }
+    impl Write for ChangingOutput {
+        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+            self.frame.extend_from_slice(bytes);
+            Ok(bytes.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            let event = {
+                let mut output = self.output.lock().unwrap();
+                output.extend_from_slice(&self.frame);
+                let mut reader = Reader::new(output.as_slice());
+                let mut last = None;
+                while let Some((_, _, event)) = reader.read()? {
+                    last = Some(event);
+                }
+                last.unwrap()
+            };
+            match event {
+                Message::ConflictRequired { challenge_id, .. } => {
+                    self.reply.as_mut().unwrap().send(&Message::ConflictReply {
+                        challenge_id,
+                        choice: ConflictChoice::Overwrite,
+                        apply_to_remaining: false,
+                    })?;
+                }
+                Message::Progress {
+                    stage: Stage::Verify,
+                    processed_bytes: 0,
+                    total_bytes: None,
+                    ..
+                } if !self.changed => {
+                    // 재해시 시작과 동기화해 승인 이후 대상 변경을 재현함.
+                    match self.mode {
+                        0 => {
+                            fs::write(&self.target, USER_EDIT)?;
+                            fs::File::options()
+                                .write(true)
+                                .open(&self.target)?
+                                .set_times(fs::FileTimes::new().set_modified(
+                                    self.modified.unwrap() + std::time::Duration::from_secs(2),
+                                ))?;
+                        }
+                        1 => {
+                            let old = self.target.with_file_name("approved-old");
+                            fs::rename(&self.target, &old)?;
+                            fs::write(&self.target, USER_EDIT)?;
+                            fs::File::options()
+                                .write(true)
+                                .open(&self.target)?
+                                .set_times(
+                                    fs::FileTimes::new().set_modified(self.modified.unwrap()),
+                                )?;
+                            fs::remove_file(old)?;
+                        }
+                        2 => fs::remove_file(&self.target)?,
+                        3 => fs::write(&self.target, USER_EDIT)?,
+                        _ => unreachable!(),
+                    }
+                    self.changed = true;
+                }
+                Message::Terminal(_) => self.reply = None,
+                _ => {}
+            }
+            self.frame.clear();
+            Ok(())
+        }
+    }
+    for mode in 0..4 {
+        let s = Scratch::new();
+        let paths = publication_fixture(&s, true, true);
+        let before = hashes(&paths);
+        let target = s.0.join("output/payload.bin");
+        let modified = if mode == 3 {
+            None
+        } else {
+            fs::write(&target, vec![b'o'; USER_EDIT.len()]).unwrap();
+            Some(fs::metadata(&target).unwrap().modified().unwrap())
+        };
+        let (send, receive) = mpsc::channel();
+        let mut reply = Writer::new(
+            Reply {
+                send,
+                pending: Vec::new(),
+            },
+            17,
+        );
+        reply
+            .send(&Message::StartGuarded(publication_request(&s)))
+            .unwrap();
+        let output = Arc::new(Mutex::new(Vec::new()));
+        zipelo_archive_worker::runtime::serve(
+            Input {
+                receive,
+                pending: Cursor::new(Vec::new()),
+            },
+            ChangingOutput {
+                frame: Vec::new(),
+                output: Arc::clone(&output),
+                reply: Some(reply),
+                target: target.clone(),
+                mode,
+                modified,
+                changed: false,
+            },
+        )
+        .unwrap();
+        let output = output.lock().unwrap();
+        let mut reader = Reader::new(output.as_slice());
+        let mut events = Vec::new();
+        while let Some((_, _, event)) = reader.read().unwrap() {
+            events.push(event);
+        }
+        failure(&events, ErrorCode::Conflict);
+        assert_eq!(publication_verifications(&events).len(), 1);
+        assert_eq!(terminal(&events).cleanup, Cleanup::Complete);
+        assert_eq!(terminal(&events).retained_partial_count, 0);
+        if mode == 2 {
+            assert!(!target.exists());
+        } else {
+            assert_eq!(fs::read(&target).unwrap(), USER_EDIT);
+        }
+        assert_eq!(
+            fs::read_dir(s.0.join("output")).unwrap().count(),
+            if mode == 2 { 16 } else { 17 }
+        );
+        assert_eq!(hashes(&paths), before);
+    }
+}
