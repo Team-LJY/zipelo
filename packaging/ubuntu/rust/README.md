@@ -4,7 +4,7 @@ Ubuntu 26.04 amd64에서 현재 저장소의 실제 앱과 작업자를 빌드�
 
 ```sh
 python3 packaging/ubuntu/rust/build.py --target-dir tests/ci/package-target --output tests/release-packages/runs/ubuntu
-sudo dpkg -i tests/release-packages/runs/ubuntu/zipelo_0.2.0_amd64.deb
+sudo apt install ./tests/release-packages/runs/ubuntu/zipelo_0.2.0_amd64.deb
 zipelo /path/to/archive.zip
 sudo dpkg -r zipelo
 ```
