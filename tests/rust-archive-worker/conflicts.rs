@@ -542,7 +542,10 @@ fn links_and_special_entries_are_not_interactive() {
             0 => symlink(s.0.join("outside"), s.0.join("output/a")).unwrap(),
             1 => symlink(s.0.join("missing"), s.0.join("output/a")).unwrap(),
             _ => {
-                listener = UnixListener::bind(s.0.join("output/a")).unwrap();
+                use std::os::fd::AsRawFd;
+                let directory = fs::File::open(s.0.join("output")).unwrap();
+                listener = UnixListener::bind(format!("/proc/self/fd/{}/a", directory.as_raw_fd()))
+                    .unwrap();
                 let _ = &listener;
             }
         }

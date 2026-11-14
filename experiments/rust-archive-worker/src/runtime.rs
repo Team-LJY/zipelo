@@ -42,6 +42,7 @@ struct Job<W> {
     source_group: Option<crate::split_seven_zip::Group>,
     source_verified_for_publication: bool,
     creation_plan: Option<crate::create::Plan>,
+    recovery: Option<crate::zip_recovery::Recovery>,
     started: Instant,
     terminal: Terminal,
     parent: crate::parent::Parent,
@@ -295,6 +296,11 @@ impl<W: Write> Job<W> {
                     None => plan.verify(self),
                 };
                 self.creation_plan = Some(plan);
+                result?;
+            }
+            if let Some(mut recovery) = self.recovery.take() {
+                let result = recovery.verify_source(self);
+                self.recovery = Some(recovery);
                 result?;
             }
             self.verify_split()?;
@@ -560,7 +566,10 @@ impl<W: Write> Job<W> {
         let limits = self.budget.as_ref().map_or(start.limits, |b| b.ceiling);
         self.event(Message::Accepted {
             action: start.action.kind(),
-            encryption: !matches!(start.action, Action::CreateSevenZip { .. }),
+            encryption: !matches!(
+                start.action,
+                Action::CreateSevenZip { .. } | Action::RecoverZip { .. }
+            ),
         })?;
         self.check()?;
         if let Action::CreateSevenZip {
@@ -589,6 +598,46 @@ impl<W: Write> Job<W> {
             }
         }
         match start.action {
+            Action::RecoverZip {
+                archive: source,
+                output_file,
+            } => {
+                let source = source.to_path()?;
+                let output = output_file.to_path()?;
+                let leaf = output
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .ok_or(ErrorCode::InvalidRequest)?;
+                let name = archive::valid_name(leaf, false)?;
+                let root = completed(
+                    Dir::root(output.parent().ok_or(ErrorCode::InvalidRequest)?),
+                    self,
+                )?;
+                filesystem::preflight_mode_with(
+                    &root,
+                    &[(name.clone(), EntryKind::File)],
+                    false,
+                    self,
+                )?;
+                self.progress(Stage::Scan, 0, None, 0)?;
+                let mut recovery = crate::zip_recovery::Recovery::open(&source, limits, self)?;
+                for finding in &recovery.findings {
+                    self.event(Message::RecoveryEntry(finding.clone()))?;
+                }
+                self.event(Message::RecoveryEnd(recovery.summary.clone()))?;
+                if recovery.summary.verified_entries == 0 {
+                    return Err(ErrorCode::RecoveryImpossible);
+                }
+                let incomplete = !recovery.summary.complete();
+                let (mut data, length) = recovery.build(limits, self)?;
+                filesystem::preflight_space_with(&root, &[(name.clone(), length)], None, self)?;
+                self.recovery = Some(recovery);
+                self.output_reader(&root, &name, &mut data, length, None, true, None)?;
+                self.terminal.publication = Publication::Complete;
+                if incomplete {
+                    return Err(ErrorCode::RecoveryIncomplete);
+                }
+            }
             Action::List {
                 archive: ref source,
             }
@@ -1176,6 +1225,7 @@ pub fn serve<R: Read + Send + 'static, W: Write + Send + 'static>(
         source_group: None,
         source_verified_for_publication: false,
         creation_plan: None,
+        recovery: None,
         parent,
         started: Instant::now(),
         terminal: Terminal {

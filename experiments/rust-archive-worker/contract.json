@@ -26,7 +26,7 @@
         "archive_names": "Separate validated UTF-8 relative names; entry IDs are opaque ordinal u32, not paths."
     },
     "commands": {
-        "Start": "Exactly once: List{archive}, Extract{archive,destination,selection:All|EntryIds{ids:[u32]},list_id:optional<ListId>,gzip_output_name:optional<UTF8>}, CreateZip{sources:[source_path,archive_name],output_file,method:Store|Deflate,encryption:None|Aes256}. App supplies job_id; caller can lower worker hard limits. Extract destination is always an absolute output directory. EntryIds requires list_id; All may supply list_id to bind extraction to a displayed list. CreateSevenZip{sources:[Source{path:NativePath,archive_name:UTF8}],output_file:NativePath,method:SevenZipMethod,solid:bool,encryption:Encryption} appends action tag 4. Shared types, codec and the LZMA2 non-solid writer are implemented. Unsupported solid/encryption options fail after Accepted before file access or questions.",
+        "Start": "Exactly once: List{archive}, Extract{archive,destination,selection:All|EntryIds{ids:[u32]},list_id:optional<ListId>,gzip_output_name:optional<UTF8>}, CreateZip{sources:[source_path,archive_name],output_file,method:Store|Deflate,encryption:None|Aes256}. App supplies job_id; caller can lower worker hard limits. Extract destination is always an absolute output directory. EntryIds requires list_id; All may supply list_id to bind extraction to a displayed list. CreateSevenZip{sources:[Source{path:NativePath,archive_name:UTF8}],output_file:NativePath,method:SevenZipMethod,solid:bool,encryption:Encryption} appends action tag 4. Shared types, codec and the LZMA2 non-solid writer are implemented. Unsupported solid/encryption options fail after Accepted before file access or questions. RecoverZip{archive:NativePath,output_file:NativePath} appends action tag 5; Start and noninteractive StartGuarded only.",
         "Password": "Matching outstanding challenge_id:u64 and max1024 UTF-8 bytes; never log, Debug, echo or persist secrets.",
         "Cancel": "Matching header job_id and empty body; command header sequence identifies the request. See CancelAck. Request acceptance is separate from final outcome. EOF alone is not successful cancellation.",
         "StartInteractive": "Kind 4, body identical to Start with action restricted to Extract. Exactly one initial Start or StartInteractive. Invalid non-Extract action is rejected by the shared encoder and decoder. Opt in to interactive regular-file conflicts; never retry through legacy Start or an older worker automatically. Worker runtime supports the agreed choices; client activation and native UI integration are verified separately.",
@@ -35,7 +35,7 @@
         "ResourceReply": "Kind 7: challenge_id:u64,scope:ResourceScope,allow:bool. Frame job_id and exact outstanding challenge_id/scope must match once. Reject premature, stale, duplicate and cross-kind replies as Protocol. False cancels the job without further processing."
     },
     "events": {
-        "Accepted": "Action and capabilities; encryption capability is true for implemented ZipCrypto extraction and WinZip AES-256 extraction/creation. CreateSevenZip explicitly reports encryption=false; existing action capabilities are unchanged.",
+        "Accepted": "Action and capabilities; encryption capability is true for implemented ZipCrypto extraction and WinZip AES-256 extraction/creation. CreateSevenZip explicitly reports encryption=false; existing action capabilities are unchanged. RecoverZip also reports encryption=false.",
         "Entry": "entry_id, name, kind File|Directory|Link|Other, declared sizes, encrypted; ordinal u32 IDs belong to this List job only until its ListEnd token and Completed Terminal are confirmed. Metadata only, no CRC success claim.",
         "ListEnd": "entry_count:u32 and list_id:ListId for a complete listing. Entry IDs are deterministic zero-based ordinals in archive traversal order. App associates this token with this job entries only after Completed Terminal, both stream EOFs and successful child wait/exit.",
         "PasswordRequired": "challenge_id, attempt and purpose Decrypt|Encrypt; no secret diagnostics.",
@@ -43,7 +43,7 @@
         "Output": "entry_id:optional, relative_name, disposition Created|PartialRetained|Removed|CommitUncertain; only this job outputs.",
         "Terminal": {
             "outcome": "Completed|Failed|Cancelled",
-            "error": "None|Integrity|UnsupportedFormat|UnsupportedFeature|WrongPassword|UnsafePath|Conflict|Limit|Io|Protocol|Internal|SourceChanged|InvalidRequest|DiskFull",
+            "error": "None|Integrity|UnsupportedFormat|UnsupportedFeature|WrongPassword|UnsafePath|Conflict|Limit|Io|Protocol|Internal|SourceChanged|InvalidRequest|DiskFull|MissingVolume|RecoveryIncomplete|RecoveryImpossible",
             "publication": "None|Partial|Complete|Uncertain",
             "created_count": "u64",
             "retained_partial_count": "u64",
@@ -62,7 +62,51 @@
         },
         "ConflictRequired": "Kind 108: challenge_id:u64, entry_id:u32, relative_name:UTF8, incoming_size:u64, existing_size:u64. One ordinary-file conflict at a time, after complete archive integrity validation. All three choices are permitted; links and file/directory type conflicts remain rejected.",
         "ConflictResolved": "Kind 109: entry_id:u32, relative_name:UTF8, choice:ConflictChoice(u8). Emit for every resolved conflict, including automatically applied choices. This records the action and resolved name, not successful publication; successful overwrite or rename also requires Output Created. Skip emits no Output Created.",
-        "ResourceRequired": "Kind 110: challenge_id:u64,action:ActionKind,scope:ResourceScope,usage:ResourceUsage,soft_limits:Limits,ceiling:Limits. ResourceScope is output:bool,entries:bool,ratio:bool. ResourceUsage fields in order are estimated_bytes:Option<u64>,actual_bytes:Option<u64>,estimated_entries:Option<u32>,actual_entries:Option<u32>,compressed_bytes:Option<u64>,ratio_output_bytes:Option<u64>,available_bytes:Option<u64>. None is unknown, not zero."
+        "ResourceRequired": "Kind 110: challenge_id:u64,action:ActionKind,scope:ResourceScope,usage:ResourceUsage,soft_limits:Limits,ceiling:Limits. ResourceScope is output:bool,entries:bool,ratio:bool. ResourceUsage fields in order are estimated_bytes:Option<u64>,actual_bytes:Option<u64>,estimated_entries:Option<u32>,actual_entries:Option<u32>,compressed_bytes:Option<u64>,ratio_output_bytes:Option<u64>,available_bytes:Option<u64>. None is unknown, not zero.",
+        "RecoveryEntry": {
+            "fields_in_order": [
+                "candidate_id:u32",
+                "source_offset:u64",
+                "name:Option<UTF8>",
+                "kind:Option<EntryKind>",
+                "status:RecoveryStatus",
+                "reason:RecoveryReason",
+                "declared_size:Option<u64>",
+                "verified_size:Option<u64>",
+                "sha256:Option<[u8;32]>"
+            ],
+            "constraints": "One stable zero-based ordinal per known candidate, ordered by source local offset, with no duplicates. IDs are not List EntryIds. Name is absent rather than invented if unknown; strings/frame budgets remain unchanged. Only Some(File), Some(Directory) or unknown None; Verified requires a known kind. Never invent a type for an unknown candidate. Verified file has exact sizes and SHA256, directory has size zero and no hash. Lost/Unverified have no verified_size or hash. Unknown enum/field combinations are Protocol. Findings before final result are not saved outputs. Verified requires a known name and equal declared/verified sizes; verified directories have both sizes zero and no hash. Validate the explicit status/reason matrix. Source offsets strictly increase and must fall within source_bytes at summary validation; sums use checked arithmetic.",
+            "valid_reasons": {
+                "Verified": [
+                    "None",
+                    "HeaderRebuilt",
+                    "MetadataMissing"
+                ],
+                "Lost": [
+                    "Truncated",
+                    "CrcMismatch",
+                    "DecodeFailure"
+                ],
+                "Unverified": [
+                    "BoundaryUnknown",
+                    "UnsupportedFeature",
+                    "MetadataMissing"
+                ]
+            }
+        },
+        "RecoveryEnd": {
+            "fields_in_order": [
+                "mode:RecoveryMode",
+                "source_bytes:u64",
+                "source_sha256:[u8;32]",
+                "known_entries:Option<u32>",
+                "verified_entries:u32",
+                "lost_entries:u32",
+                "unverified_entries:u32",
+                "unknown_loss:bool"
+            ],
+            "constraints": "At most one summary after completed analysis and before publication. Counts equal emitted findings. Only a central inventory with one-to-one contiguous complete local coverage has known_entries equal to the count sum and unknown_loss=false. Missing inventory, gaps or ambiguous spans give known_entries=None and unknown_loss=true, including in CentralDirectory mode. LocalChain always has None/true. Unknown bytes never create a fabricated candidate or zero loss claim. No ListEnd/ListId or ordinary Entry/preview frames for recovery. A summary alone is not success or proof that a file exists."
+        }
     },
     "lifecycle": [
         "Exactly one Start or StartInteractive; no automatic retry or fallback. Password/Cancel remain readable during work. ConflictReply is accepted only for a matching outstanding interactive conflict.",
@@ -189,7 +233,10 @@
         "Internal": 10,
         "SourceChanged": 11,
         "InvalidRequest": 12,
-        "DiskFull": 13
+        "DiskFull": 13,
+        "MissingVolume": 14,
+        "RecoveryIncomplete": 15,
+        "RecoveryImpossible": 16
     },
     "disk_full_extension": {
         "agreement_message_id": "3b01f4c4-c9b4-4c72-a9a0-b3df39979ea1",
@@ -245,7 +292,8 @@
         "Extract": 1,
         "CreateZip": 2,
         "Preview": 3,
-        "CreateSevenZip": 4
+        "CreateSevenZip": 4,
+        "RecoverZip": 5
     },
     "seven_zip_method_tags": {
         "Lzma2": 0
@@ -269,9 +317,9 @@
         "validation": "Round-trip SHA256 and structure in Zipelo and independent 7-Zip 26.00 with ZIPELO_TEST_7ZIP set; 1 GiB creation RSS regression; cancellation, metadata/byte limits, encoder finish/header write/seek/patch failures, destination write/sync and postpublication sync failures. Results and platform limits are recorded in PR127."
     },
     "zip_recovery_proposal": {
-        "status": "proposal-only; frontend-agreed-result-semantics; awaiting-corrected-error-tag-agreement; no-product-implementation",
+        "status": "jointly-agreed; shared-types-codec-and-worker-implemented; frontend-integration-and-independent-implementation-review-pending",
         "design": "docs/zip-recovery-design.md",
-        "basis": "PLANS 8.10. Never modify the source; reconstruct only separately validated members into a new archive. Existing active tags and revision 3 remain unchanged until joint agreement.",
+        "basis": "PLANS 8.10. Joint result/warning and corrected tag agreement complete. RecoverZip=5, RecoveryEntry/End=115/116 and errors 15/16 are active; preserve MissingVolume=14 and all other existing tags, frame version 1 and revision 3.",
         "request": {
             "action": "RecoverZip",
             "proposed_action_tag": 5,
@@ -371,7 +419,7 @@
         "source_and_publication": "Capture read-only through pinned safe handles into one private snapshot with full source SHA256. All parsing uses that snapshot. Revalidate source identity/length/metadata and full hash once before publication; detected changes abort SourceChanged. Never open the original or any preexisting destination for write/truncate. Same-path/hard-link/existing/newly appeared destination conflicts are never replaced. Reuse existing publication cutoff, fsync/close, owned temporary cleanup and post-verification destination checks.",
         "resources": "Recovery-only source input cap is min(caller input quota, 4 GiB). More than 4 GiB is outside initial recovery support and returns UnsupportedFeature with no expanded retry; exceeding a lower caller quota keeps Limit. Resource approval cannot expand source input. Reuse existing 16 GiB/10000 decoded-byte/candidate defaults and explicit guarded ceilings up to 64 GiB/200000. Count lost/unverified candidates and bytes actually decoded before failure. Include result records, names, spans, staging indexes and implicit parents in metadata budgets before allocation: 8 MiB/32768 nodes, or 64 MiB/262144 after a valid grant. Use 64 KiB chunks, checked u64 ranges, bounded strings/frames, ZIP ratio challenges and the existing 300-second/60-second/parent lifetime policies. No per-byte candidate restarts. Disk accounting includes input snapshot, verified member spools, built ZIP and destination temp by actual volume; permission or advisory space checks do not reserve storage.",
         "client": "Explicit recovery-copy action and native ZIP save dialog; never weaken or silently retry ordinary List/Extract. Show Verified/Lost/Unverified with typed reasons and distinguish unknown inventory from zero loss. Keep recovery findings separate from the ordinary catalog; read a saved copy in a new explicit job with a fresh ListId. Retain partial-warning context when opening a copy, and do not present an ordinary later ZIP listing as proof that all original data was recovered. Result details are job data, not an authenticated permanent recovery certificate.",
-        "lifecycle": "Preserve job/sequence/challenge validation, resource approval, CancelAck and exactly one final Terminal. Confirm results only after matching Terminal, both EOFs and owned-child wait. No new security settings or dependency changes. Product implementation, UI scenarios and native integration require prior frontend agreement.",
+        "lifecycle": "Preserve job/sequence/challenge validation, resource approval, CancelAck and exactly one final Terminal. Confirm results only after matching Terminal, both EOFs and owned-child wait. No new security settings or dependency changes. Frontend agreement is recorded; UI scenarios and native integration remain frontend work.",
         "fixtures": {
             "basis_commit": "d525c7c23796b06048180c3b3d2bbaee8075989e",
             "manifest": "tests/zip-recovery-fixtures/expectations.json",
@@ -385,6 +433,11 @@
             },
             "comparison": "Read-only comparison of fixture expectations, not worker execution. The intact-central broken-local-header.zip expects CentralDirectory, known_entries=6 and unknown_loss=false. The other damaged samples lack a usable central inventory and retain unknown_loss."
         },
-        "tag_correction": "The initial error proposal reused live wire MissingVolume=14, omitted from the historical root error_tags index. Preserve MissingVolume=14 and propose RecoveryIncomplete=15 and RecoveryImpossible=16. Result semantics and all other proposed tags are unchanged. Await renewed frontend agreement before product types/codec activation."
+        "tag_correction": "Initial errors 14/15 collided with live MissingVolume=14. Joint correction preserves MissingVolume=14 and activates RecoveryIncomplete=15 and RecoveryImpossible=16. Regression checks consult live wire, not only the historical contract index.",
+        "agreement": {
+            "frontend_result_review": "https://github.com/Team-LJY/zipelo/pull/128#pullrequestreview-5904112564",
+            "frontend_corrected_tag_review": "https://github.com/Team-LJY/zipelo/pull/128#pullrequestreview-5904158997"
+        },
+        "validation": "Backend tests cover all six damaged fixtures against independent expected SHA256, Python ZIP verification, source byte preservation, healthy/control rejection, exact Deflate/descriptor boundaries, input/output/candidate caps, source and destination changes, cancellation, staging/publication ENOSPC/IO/sync errors, and decoded bytes before errors. Full local/native results are recorded in PR128."
     }
 }

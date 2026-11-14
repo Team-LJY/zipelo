@@ -1,6 +1,8 @@
 # ZIP 손상 복구 설계와 작업자 계약안
 
-상태: 히나타가 8e178e0의 결과/경고 의미에 동의했고 카논이 d525c7c의 표본 대조를 마쳤다. 활성 wire의 MissingVolume=14와 초기 제안이 충돌해 복구 오류 태그를 15/16으로 정정 제안하며, 이 숫자의 재합의 전에는 제품 타입/codec을 활성화하지 않는다. 제품 구현은 시작하지 않았다. [PLANS 8.10](PLANS.md#810-손상-파일-복구)과 [8.13](PLANS.md#813-진행과-완료-판단)을 따른다. 기계 판독용 제안은 [작업자 계약](../experiments/rust-archive-worker/contract.json)의 zip_recovery_proposal이다. 기존 revision 3, 활성 태그와 일반 목록/해제의 엄격한 무결성 검사를 바꾸지 않는다.
+상태: 히나타가 결과/경고 의미와 오류 태그 15/16에 재동의했다. 공용 타입, codec과 ZIP32 복구 작업자를 구현했으며 frontend 연동과 독립 구현 리뷰는 남아 있다. [PLANS 8.10](PLANS.md#810-손상-파일-복구)과 [8.13](PLANS.md#813-진행과-완료-판단)을 따른다. [작업자 계약](../experiments/rust-archive-worker/contract.json)의 zip_recovery_proposal 키는 초기 문서와의 연결을 위해 유지하지만 status에 명시한 태그는 활성 상태다. Frame version 1, revision 3와 기존 태그 및 일반 목록/해제의 엄격한 검사는 유지한다.
+
+결과 계약 [동의](https://github.com/Team-LJY/zipelo/pull/128#pullrequestreview-5904112564)와 오류 숫자 [재동의](https://github.com/Team-LJY/zipelo/pull/128#pullrequestreview-5904158997)를 확인했다. 초기 14/15 제안이 기존 MissingVolume=14와 충돌한 기록은 보존하며 실제 활성 값은 RecoveryIncomplete=15, RecoveryImpossible=16이다.
 
 ## 1. 복구 범위와 한계
 
@@ -51,11 +53,11 @@
 
 ## 4. 앱과 작업자 계약 제안
 
-이 절의 숫자는 합의 전 제안이며 활성 codec에 아직 추가하지 않는다. Frame version=1, 32바이트 헤더, 1 MiB body, 방향별 sequence, 32768 문자열/벡터 전송 상한과 기존 revision 3를 유지한다. 기존 Preview kind 111~113과 VolumeProblem kind 114를 재사용하지 않는다. 실제 wire의 MissingVolume=14도 유지한다. 기존 contract.json의 error_tags 색인은 이 오류를 누락하므로 새 태그 검사는 문서 색인뿐 아니라 활성 wire와 대조한다. 초기 제안의 복구 오류 14/15는 충돌하므로 아래 15/16으로 정정하며 결과 의미와 다른 숫자는 동일하다.
+이 절의 숫자와 결과 의미는 공동 합의되었고 공용 타입과 codec에 반영했다. Frame version=1, 32바이트 헤더, 1 MiB body, 방향별 sequence, 32768 문자열/벡터 전송 상한과 기존 revision 3를 유지한다. 기존 Preview kind 111~113과 VolumeProblem kind 114를 재사용하지 않는다. 실제 wire의 MissingVolume=14도 유지한다. 기존 contract.json의 error_tags 색인은 이 오류를 누락하므로 새 태그 검사는 문서 색인뿐 아니라 활성 wire와 대조한다. 초기 제안의 복구 오류 14/15는 충돌하여 아래 15/16으로 정정하고 재합의했다. 결과 의미와 다른 숫자는 동일하다.
 
 ### 요청과 이벤트
 
-- Action::RecoverZip 및 ActionKind::RecoverZip=5를 제안한다. 요청 필드 순서는 archive:NativePath, output_file:NativePath다. Start(kind 1)와 StartGuarded(kind 6, interactive=false)에 허용하며 StartInteractive 및 interactive=true는 양쪽 codec에서 거부한다. Accepted.encryption=false이고 PasswordRequired/ConflictRequired를 보내지 않는다. 기존 ResourceRequired.action에 같은 새 태그를 사용한다.
+- Action::RecoverZip 및 ActionKind::RecoverZip=5를 사용한다. 요청 필드 순서는 archive:NativePath, output_file:NativePath다. Start(kind 1)와 StartGuarded(kind 6, interactive=false)에 허용하며 StartInteractive 및 interactive=true는 양쪽 codec에서 거부한다. Accepted.encryption=false이고 PasswordRequired/ConflictRequired를 보내지 않는다. 기존 ResourceRequired.action에 같은 새 태그를 사용한다.
 - RecoveryEntry(kind 115): candidate_id:u32, source_offset:u64, name:Option<UTF8>, kind:Option<EntryKind>, status:RecoveryStatus, reason:RecoveryReason, declared_size:Option<u64>, verified_size:Option<u64>, sha256:Option<[u8;32]> 순서다. 중앙 목록의 후보도 로컬 오프셋 순으로 정렬한 0 기반 ID를 한 번씩 보낸다. 일반 Entry/ListEnd/ListId나 preview 프레임은 보내지 않는다.
 - RecoveryMode는 CentralDirectory=0, LocalChain=1이다. RecoveryStatus는 Verified=0, Lost=1, Unverified=2다. RecoveryReason은 None=0, HeaderRebuilt=1, Truncated=2, CrcMismatch=3, DecodeFailure=4, BoundaryUnknown=5, UnsupportedFeature=6, MetadataMissing=7이다. 유효 reason은 Verified에서 None/HeaderRebuilt/MetadataMissing, Lost에서 Truncated/CrcMismatch/DecodeFailure, Unverified에서 BoundaryUnknown/UnsupportedFeature/MetadataMissing다. 서로 모순되는 조합은 Protocol이다.
 - Verified에는 확정된 이름이 필요하다. Verified 파일은 declared_size와 verified_size가 같고 SHA256을 가지며 Verified 폴더는 두 크기 0, 해시 None이다. Lost/Unverified에는 verified_size나 SHA256을 싣지 않는다. 불명 이름은 None이며 불명 크기를 0으로 만들지 않는다. kind는 Some(File)/Some(Directory)만 허용하고 판별 불가 후보는 None이다. Verified에는 확정된 kind가 필요하며 링크/특수 종류를 일반 파일로 위장하지 않는다. 이름은 평문 UI에서만 제한 길이로 렌더링하고 경로나 markup으로 실행하지 않는다.
@@ -78,7 +80,7 @@
 - 결과는 검증되어 포함됨, 유실됨, 무결성 미확인을 각각 표시하고 사유를 구분한다. 모르는 파일명/원래 총수는 알 수 없음으로 표시하며 유실 0개나 진행률 100%를 추측하지 않는다. 완전한 목록이 있을 때도 파일별 CRC 검증을 원본 진위 보증으로 표현하지 않는다.
 - 정상 완료는 복구본 저장 완료, 부분 결과는 일부 항목만 복구함과 전체 목록/무결성 미확인 경고 및 실제 저장 위치를 보여준다. 복구 불가는 복구 가능한 항목 없음으로 구분한다. 세부 결과를 일반 파일 목록 선택과 섞지 않는다.
 - 복구본은 일반 ZIP이며 별도 sidecar 보고서나 영구 인증서를 자동 생성하지 않는다. 이번 작업의 경고를 결과 화면과 명시적 복구본 열기 전환에 유지한다. 나중의 독립적인 일반 ZIP 목록은 원본에서 무엇이 유실됐는지 증명하지 않으며 완전 복구 판정으로 다시 사용하지 않는다.
-- frontend 구현 시 --ui-scenario에 복구 진행, 완전/부분/불가 결과, 미확인 목록, 취소, 저장 실패와 자원 질문을 추가하고 해당 시험 및 docs/ui-scenario-guide.md를 같은 PR에서 갱신한다. 이번 설계 PR 자체는 UI 변경 없음이다.
+- frontend 구현 시 --ui-scenario에 복구 진행, 완전/부분/불가 결과, 미확인 목록, 취소, 저장 실패와 자원 질문을 추가하고 해당 시험 및 docs/ui-scenario-guide.md를 같은 PR에서 갱신한다. 현재 backend 변경에는 UI 변경 없음이다. frontend의 화면/시나리오 연동은 같은 PR의 후속 작업이다.
 
 ## 6. 손상 표본과 수용 기준
 
@@ -89,13 +91,20 @@
 - 모든 표본에서 원본의 작업 전/후 SHA256 및 실제 원본 바이트가 같아야 한다. 복구 가능한 파일은 손상 전 독립 기대 manifest와 비교하고 Zipelo 및 독립 도구로 복구본을 풀어 파일 해시/상대 구조를 대조한다. 새로 계산한 결과 해시만으로 원본과 같다고 판단하지 않는다.
 - PK 바이트가 든 본문, 위조 EOCD/중앙 목록, 겹친 범위/잘못된 길이, UTF-8/한글/빈 항목, data descriptor 경계, ZIP64/암호/분할/SFX 제외, unsafe path/충돌/링크와 프레임/후보 수/메타데이터 제한을 포함한다. 이름 추측이나 본문 내 서명 재탐색 없이 실패/부분 결과가 결정돼야 한다.
 - 취소/부모 종료/원본 변경, 기존 및 검증 중 나타난 목적지, 쓰기/close/sync/부모 sync/정리 오류를 주입하고 실제 파일/Terminal/Output/내구성과 맞는지 확인한다. 손상과 무관한 Limit/DiskFull 등을 Lost로 가려 게시해서는 안 된다.
-- 계약 동의 뒤 backend 회귀와 python3 tests/ci/run_rust.py local 전체 결과, frontend 화면/시나리오 시험, Windows/Wayland 실기 및 독립 구현 리뷰를 PR 본문에 기록한다. 이번 문서 작성에는 제품 실행/성능/복구 시험을 수행하지 않는다.
+- 계약 동의 뒤 backend 회귀와 python3 tests/ci/run_rust.py local 전체 결과, frontend 화면/시나리오 시험, Windows/Wayland 실기 및 독립 구현 리뷰를 PR 본문에 기록한다. 현재 직접 검증한 backend 회귀에는 6종 실제 작업자 복구와 독립 Python ZIP 검증, 원본 보존 및 실패 주입이 포함된다. 전체 local 결과와 미실행 Windows/Wayland 실기는 PR 본문에서 구분한다. 성능/RSS의 별도 복구 전용 대용량 실기는 아직 수행하지 않았다.
 
 ## 7. 구현 순서와 문서 관리
 
-1. 하나는 이 설계와 contract.json의 제안만 올린다. 히나타의 결과/경고 계약 동의를 확인하기 전 제품 타입/codec/탐색기/작성기를 바꾸지 않는다. 병행하는 카논의 표본 대조 리뷰는 설계와 구현 수용 시험에 반영한다.
-2. 동의 뒤 공용 타입/codec 커밋과 작업 경로를 전달하고 backend 구현과 frontend 결과 화면의 파일 범위를 나눈다. 프레임 숫자와 결과 조합이 바뀌면 다시 함께 합의한다.
+1. 결과 계약과 오류 숫자의 재합의를 확인하여 제품 타입/codec/탐색기/작성기를 구현했다. 카논의 표본 대조 리뷰와 독립 기대 해시를 backend 수용 시험에 반영했다.
+2. 공용 타입/codec과 backend 커밋 및 작업 경로를 전달하며 frontend 결과 화면과 해당 시나리오/시험은 히나타가 담당한다. 프레임 숫자와 결과 조합이 바뀌면 다시 함께 합의한다.
 3. 표본 기대 결과를 변경할 필요가 생기면 작성자와 근거를 먼저 합의한다. 실패를 숨기려고 표본이나 기존 엄격한 파서를 약화하지 않는다.
 4. 구현/실기 증거가 모인 뒤에만 README/릴리스 노트의 실제 지원 범위를 갱신하고 총관리자의 리뷰/병합 절차를 따른다. 원본 수정과 모든 손상 복구 보장은 완료 기준에 포함하지 않는다.
 
 작업 사본은 tests/work/zip-recovery/r이다. 캐시/임시/검증 자료는 사본 밖 tests/work/zip-recovery 한 곳에만 두고, 이후 실행 시 TMPDIR과 CARGO_TARGET_DIR을 그 하위로 지정한다. PR 병합/종료 뒤 만든 사람이 작업 폴더를 정리하며 진행 중인 다른 담당자 자료는 지우지 않는다.
+
+## 8. 구현과 검증 위치
+
+- backend 탐색/검증/원본 재확인은 zip_recovery.rs, Store 출력은 create.rs의 ZIP64 필드/중앙 목록 마무리를 재사용한다. 검증된 payload는 하나의 비공개 spool로 모으고 손상 항목의 임시 바이트는 되돌린다. CRC 또는 디코더 실패 전에 처리한 바이트도 자원 사용량에 남긴다.
+- 결과 파일을 일반 streaming 판독기로 다시 검증하고 항목 SHA256을 대조한다. 이 재검증/복사는 논리 해제량을 중복 과금하지 않으며 취소와 실제 진행 검사는 유지한다. 원본 변경 검사는 마지막 게시 callback 안에서 수행한다.
+- 제품 회귀는 tests/rust-archive-worker/recovery.rs와 recovery_checks.rs에 있다. tests/ci/test_zip_recovery_contract.py의 텍스트 읽기는 UTF-8을 명시하며 기존 오류 및 새 태그를 실제 wire와 비교한다. 기존 시험의 미등록 태그 경계는 새 할당 뒤 값으로 조정했다. 긴 소켓 시험은 열린 출력 폴더의 proc fd 경로로 같은 객체를 만들어 SUN_LEN에 의존하지 않는다.
+- frontend의 메시지 처리, 결과 화면, --ui-scenario/가이드와 Windows/Wayland 실제 실행은 별도 담당 검증이며 backend 시험 통과로 완료를 대신 선언하지 않는다.

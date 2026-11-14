@@ -31,8 +31,8 @@ class ZipRecoveryContractTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         worker = ROOT / "experiments" / "rust-archive-worker"
-        cls.wire = (worker / "src" / "wire.rs").read_text()
-        cls.contract = json.loads((worker / "contract.json").read_text())
+        cls.wire = (worker / "src" / "wire.rs").read_text(encoding="utf-8")
+        cls.contract = json.loads((worker / "contract.json").read_text(encoding="utf-8"))
         cls.proposal = cls.contract["zip_recovery_proposal"]
 
     def test_error_tags_are_checked_against_live_wire(self):

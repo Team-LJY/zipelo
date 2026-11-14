@@ -375,7 +375,7 @@ fn volume_problem_keeps_native_path_limits_and_strict_body_lengths() {
 }
 
 #[test]
-fn missing_volume_terminal_uses_tag_14_and_rejects_unknown_tag_15() {
+fn missing_volume_terminal_uses_tag_14_and_rejects_unknown_tag_17() {
     let message = Message::Terminal(Terminal {
         outcome: Outcome::Failed,
         error: ErrorCode::MissingVolume,
@@ -390,6 +390,6 @@ fn missing_volume_terminal_uses_tag_14_and_rejects_unknown_tag_15() {
     assert_eq!(&bytes[6..8], &106u16.to_le_bytes());
     assert_eq!(bytes[33], 14);
     assert!(matches!(decoded(&bytes), Message::Terminal(t) if t.error == ErrorCode::MissingVolume));
-    bytes[33] = 15;
+    bytes[33] = 17;
     reject_decode(&bytes);
 }
