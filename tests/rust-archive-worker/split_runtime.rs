@@ -553,3 +553,257 @@ fn encrypted_seven_zip_volumes_keep_the_existing_unsupported_policy() {
         assert_eq!(hashes(&paths), before);
     }
 }
+
+fn publication_fixture(s: &Scratch, existing: bool, with_file: bool) -> Vec<PathBuf> {
+    assert!(
+        Command::new("python3")
+            .env("PYTHONDONTWRITEBYTECODE", "1")
+            .arg(
+                PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                    .join("../../tests/rust-archive-worker/split_publication_cases.py")
+            )
+            .arg(&s.0)
+            .arg(if with_file { "file" } else { "directories" })
+            .status()
+            .unwrap()
+            .success()
+    );
+    directory(s, "output");
+    if existing {
+        for index in 0..16 {
+            directory(s, &format!("output/d{index:03}"));
+        }
+    }
+    (1..=5)
+        .map(|index| s.0.join(format!("sample.7z.{index:03}")))
+        .take_while(|path| path.is_file())
+        .collect()
+}
+fn publication_verifications(events: &[Message]) -> Vec<usize> {
+    events
+        .iter()
+        .enumerate()
+        .filter_map(|(index, event)| {
+            matches!(
+                event,
+                Message::Progress {
+                    stage: Stage::Verify,
+                    processed_bytes: 0,
+                    total_bytes: None,
+                    ..
+                }
+            )
+            .then_some(index)
+        })
+        .collect()
+}
+fn publication_request(s: &Scratch) -> GuardedStart {
+    GuardedStart {
+        start: request(s, None, Selection::All),
+        ceiling: Limits::default(),
+        interactive: true,
+    }
+}
+
+#[test]
+fn split_publication_verifies_once_for_fresh_or_many_existing_directories() {
+    for existing in [false, true] {
+        let s = Scratch::new();
+        let paths = publication_fixture(&s, existing, true);
+        let before = hashes(&paths);
+        let events = guarded::run(&s, publication_request(&s), |_| None);
+        assert_eq!(terminal(&events).outcome, Outcome::Completed, "{events:?}");
+        let verifies = publication_verifications(&events);
+        assert_eq!(verifies.len(), 1, "existing={existing}: {events:?}");
+        let first_output = events
+            .iter()
+            .position(|event| matches!(event, Message::Output { .. }))
+            .unwrap();
+        assert!(verifies[0] < first_output);
+        if existing {
+            let write = events
+                .iter()
+                .position(|event| {
+                    matches!(
+                        event,
+                        Message::Progress {
+                            stage: Stage::Write,
+                            ..
+                        }
+                    )
+                })
+                .unwrap();
+            assert!(write < verifies[0]);
+        }
+        assert_eq!(
+            terminal(&events).created_count,
+            if existing { 1 } else { 17 }
+        );
+        assert_eq!(
+            fs::read(s.0.join("output/payload.bin")).unwrap(),
+            (0..=255u8).cycle().take(1024 * 1024).collect::<Vec<_>>()
+        );
+        assert_eq!(hashes(&paths), before);
+    }
+}
+
+#[test]
+fn split_publication_existing_directories_do_not_cache_before_conflict_changes() {
+    let s = Scratch::new();
+    let paths = publication_fixture(&s, true, true);
+    fs::write(s.0.join("output/payload.bin"), b"keep").unwrap();
+    let mut changed = None;
+    let events = guarded::run(&s, publication_request(&s), |event| {
+        if let Message::ConflictRequired { challenge_id, .. } = event {
+            let mut data = fs::read(&paths[1]).unwrap();
+            data[0] ^= 1;
+            fs::write(&paths[1], data).unwrap();
+            changed = Some(hashes(&paths));
+            return Some(vec![Message::ConflictReply {
+                challenge_id: *challenge_id,
+                choice: ConflictChoice::Overwrite,
+                apply_to_remaining: false,
+            }]);
+        }
+        None
+    });
+    failure(&events, ErrorCode::SourceChanged);
+    let verifies = publication_verifications(&events);
+    assert_eq!(verifies.len(), 1, "{events:?}");
+    let conflict = events
+        .iter()
+        .position(|event| matches!(event, Message::ConflictRequired { .. }))
+        .unwrap();
+    assert!(conflict < verifies[0]);
+    assert_eq!(fs::read(s.0.join("output/payload.bin")).unwrap(), b"keep");
+    assert_eq!(fs::read_dir(s.0.join("output")).unwrap().count(), 17);
+    assert_eq!(hashes(&paths), changed.unwrap());
+    assert_eq!(terminal(&events).cleanup, Cleanup::Complete);
+}
+
+#[test]
+fn split_publication_no_outputs_verify_once_and_cancel_does_not_rehash() {
+    for mode in 0..3 {
+        let s = Scratch::new();
+        let paths = publication_fixture(&s, true, mode != 0);
+        let before = hashes(&paths);
+        if mode != 0 {
+            fs::write(s.0.join("output/payload.bin"), b"keep").unwrap();
+        }
+        let events = guarded::run(&s, publication_request(&s), |event| {
+            if let Message::ConflictRequired { challenge_id, .. } = event {
+                return Some(if mode == 2 {
+                    vec![Message::Cancel]
+                } else {
+                    vec![Message::ConflictReply {
+                        challenge_id: *challenge_id,
+                        choice: ConflictChoice::Skip,
+                        apply_to_remaining: false,
+                    }]
+                });
+            }
+            None
+        });
+        assert_eq!(
+            terminal(&events).outcome,
+            if mode == 2 {
+                Outcome::Cancelled
+            } else {
+                Outcome::Completed
+            },
+            "{events:?}"
+        );
+        assert_eq!(
+            publication_verifications(&events).len(),
+            usize::from(mode != 2),
+            "{events:?}"
+        );
+        assert_eq!(terminal(&events).publication, Publication::None);
+        assert_eq!(terminal(&events).created_count, 0);
+        assert!(
+            !events
+                .iter()
+                .any(|event| matches!(event, Message::Output { .. }))
+        );
+        if mode != 0 {
+            assert_eq!(fs::read(s.0.join("output/payload.bin")).unwrap(), b"keep");
+        }
+        assert_eq!(hashes(&paths), before);
+    }
+}
+
+#[test]
+fn split_publication_changed_source_stops_before_creating_the_first_directory() {
+    use std::sync::{Arc, Mutex};
+    struct ChangingOutput {
+        frame: Vec<u8>,
+        output: Arc<Mutex<Vec<u8>>>,
+        path: PathBuf,
+        changed: bool,
+    }
+    impl Write for ChangingOutput {
+        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+            self.frame.extend_from_slice(bytes);
+            Ok(bytes.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            let event = {
+                let mut output = self.output.lock().unwrap();
+                output.extend_from_slice(&self.frame);
+                let mut reader = Reader::new(output.as_slice());
+                let mut last = None;
+                while let Some((_, _, event)) = reader.read()? {
+                    last = Some(event);
+                }
+                last.unwrap()
+            };
+            if !self.changed
+                && matches!(
+                    event,
+                    Message::Progress {
+                        stage: Stage::Verify,
+                        processed_bytes: 0,
+                        total_bytes: None,
+                        ..
+                    }
+                )
+            {
+                // 검증 시작 프레임을 보낼 때 바꿔 스케줄링 경합 없이 생성 직전을 재현함.
+                let mut data = fs::read(&self.path)?;
+                data[0] ^= 1;
+                fs::write(&self.path, data)?;
+                self.changed = true;
+            }
+            self.frame.clear();
+            Ok(())
+        }
+    }
+    let s = Scratch::new();
+    let paths = publication_fixture(&s, false, true);
+    let before = hashes(&paths);
+    let mut input = Vec::new();
+    Writer::new(&mut input, 17)
+        .send(&Message::Start(request(&s, None, Selection::All)))
+        .unwrap();
+    let output = Arc::new(Mutex::new(Vec::new()));
+    zipelo_archive_worker::runtime::serve(
+        std::io::Cursor::new(input),
+        ChangingOutput {
+            frame: Vec::new(),
+            output: Arc::clone(&output),
+            path: paths[1].clone(),
+            changed: false,
+        },
+    )
+    .unwrap();
+    let output = output.lock().unwrap();
+    let mut reader = Reader::new(output.as_slice());
+    let mut events = Vec::new();
+    while let Some((_, _, event)) = reader.read().unwrap() {
+        events.push(event);
+    }
+    failure(&events, ErrorCode::SourceChanged);
+    assert_eq!(publication_verifications(&events).len(), 1);
+    assert_eq!(fs::read_dir(s.0.join("output")).unwrap().count(), 0);
+    assert_ne!(hashes(&paths), before);
+}

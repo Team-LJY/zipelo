@@ -614,17 +614,29 @@ pub(crate) fn directory_with(
     name: &str,
     check: &mut impl Monitor,
 ) -> Result<(bool, Durability, Option<ErrorCode>)> {
-    let (d, leaf) = parent_with(root, name, false, check)?.ok_or(ErrorCode::Io)?;
-    if completed(d.child(&leaf, false), check)?.is_some() {
+    directory_steps(root, name, &mut |step| match step {
+        PublishStep::Check | PublishStep::Commit => check.check(),
+        PublishStep::Activity => check.activity(),
+    })
+}
+pub(crate) fn directory_steps(
+    root: &Dir,
+    name: &str,
+    check: &mut impl FnMut(PublishStep) -> Result<()>,
+) -> Result<(bool, Durability, Option<ErrorCode>)> {
+    let (d, leaf) =
+        parent_with(root, name, false, &mut PublicationMonitor(check))?.ok_or(ErrorCode::Io)?;
+    if completed(d.child(&leaf, false), &mut PublicationMonitor(check))?.is_some() {
         return Ok((false, Durability::NotApplicable, None));
     }
+    check(PublishStep::Commit)?;
     d.child(&leaf, true)?.ok_or(ErrorCode::Io)?;
-    let progress_error = completed(Ok(()), check).err();
+    let progress_error = completed(Ok(()), &mut PublicationMonitor(check)).err();
     Ok(match d.sync_checked() {
         Ok(durability) => (
             true,
             durability,
-            progress_error.or_else(|| completed(Ok(()), check).err()),
+            progress_error.or_else(|| completed(Ok(()), &mut PublicationMonitor(check)).err()),
         ),
         Err(error) => (true, Durability::Failed, Some(error)),
     })

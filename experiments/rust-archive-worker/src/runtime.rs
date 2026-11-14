@@ -40,6 +40,7 @@ struct Job<W> {
     watchdog: Watchdog,
     remaining_choice: Option<ConflictChoice>,
     source_group: Option<crate::split_seven_zip::Group>,
+    source_verified_for_publication: bool,
     started: Instant,
     terminal: Terminal,
     parent: crate::parent::Parent,
@@ -282,6 +283,23 @@ impl<W: Write> Job<W> {
         self.source_group = Some(group);
         self.split_result(result)
     }
+    fn verify_before_publication(&mut self) -> Result<()> {
+        if !self.source_verified_for_publication {
+            self.verify_split()?;
+            self.source_verified_for_publication = true;
+        }
+        Ok(())
+    }
+    fn publication_step(&mut self, step: filesystem::PublishStep, last: bool) -> Result<()> {
+        match step {
+            filesystem::PublishStep::Check => self.check(),
+            filesystem::PublishStep::Activity => completed(Ok(()), self),
+            filesystem::PublishStep::Commit => {
+                self.verify_before_publication()?;
+                if last { self.cutoff() } else { self.check() }
+            }
+        }
+    }
     fn check(&mut self) -> Result<()> {
         self.parent.check()?;
         let state = self.state.lock().map_err(|_| ErrorCode::Internal)?;
@@ -334,16 +352,7 @@ impl<W: Write> Job<W> {
             self.terminal.created_count as u32,
         )?;
         let p = filesystem::publish_reader_steps(root, name, data, length, replace, &mut |step| {
-            match step {
-                filesystem::PublishStep::Check => self.check(),
-                filesystem::PublishStep::Activity => completed(Ok(()), self),
-                filesystem::PublishStep::Commit => {
-                    if self.terminal.created_count == 0 {
-                        self.verify_split()?;
-                    }
-                    if last { self.cutoff() } else { self.check() }
-                }
-            }
+            self.publication_step(step, last)
         });
         self.terminal.retained_partial_count += p.retained;
         if p.cleanup != Cleanup::Complete {
@@ -782,11 +791,10 @@ impl<W: Write> Job<W> {
                         .collect::<Result<BTreeSet<_>>>()?;
                     for name in dirs {
                         self.check()?;
-                        if self.terminal.created_count == 0 {
-                            self.verify_split()?;
-                        }
                         let (created, durability, sync_error) =
-                            filesystem::directory_with(&root, &name, self)?;
+                            filesystem::directory_steps(&root, &name, &mut |step| {
+                                self.publication_step(step, false)
+                            })?;
                         if created {
                             self.terminal.created_count += 1;
                             self.terminal.publication = Publication::Partial;
@@ -856,9 +864,8 @@ impl<W: Write> Job<W> {
                             replace,
                         )?;
                     }
-                    if self.terminal.created_count == 0 {
-                        self.verify_split()?;
-                    }
+                    // 건너뛰기 등 실제 게시가 없을 때도 완료 전에 원본을 확인함.
+                    self.verify_before_publication()?;
                     if !self.interactive || self.terminal.created_count != 0 {
                         self.terminal.publication = Publication::Complete;
                     }
@@ -1100,6 +1107,7 @@ pub fn serve<R: Read + Send + 'static, W: Write + Send + 'static>(
         watchdog: Watchdog::new(),
         remaining_choice: None,
         source_group: None,
+        source_verified_for_publication: false,
         parent,
         started: Instant::now(),
         terminal: Terminal {
