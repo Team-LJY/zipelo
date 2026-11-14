@@ -730,9 +730,30 @@ fn nested_directory_in_central_entry_comment_is_not_an_outer_archive() {
 
 #[test]
 fn fake_directory_and_eocd_in_member_payload_cannot_hide_members() {
+    assert_payload_recovery_cases((0..32).chain([32]));
+}
+
+#[test]
+fn local_size_damage_and_payload_eocd_preserve_complete_inventory() {
+    let cases = (1..=5)
+        .flat_map(|size_mode| (0..32).map(move |base| (size_mode << 6) | base))
+        .chain([
+            32 | (3 << 6),
+            512 | (3 << 6),
+            512 | (3 << 6) | 4,
+            1024 | (3 << 6),
+            2048 | (3 << 6),
+            2048 | (3 << 6) | 4,
+            2048 | 512 | (3 << 6),
+            2048 | 1024 | (3 << 6),
+        ]);
+    assert_payload_recovery_cases(cases);
+}
+
+fn assert_payload_recovery_cases(cases: impl IntoIterator<Item = u32>) {
     let helper = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/rust-archive-worker/payload_eocd.py");
-    for variant in (0..32).chain([32]) {
+    for variant in cases {
         let s = Scratch::new();
         let generated = Command::new("python3")
             .arg("-B")
@@ -768,5 +789,43 @@ fn fake_directory_and_eocd_in_member_payload_cannot_hide_members() {
             .output()
             .unwrap();
         assert!(checked.status.success(), "variant {variant}: {checked:?}");
+    }
+}
+
+#[test]
+fn candidate_body_probes_do_not_bypass_recovery_quotas() {
+    let helper = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../tests/rust-archive-worker/payload_eocd.py");
+    let output_limit = Limits::default().output;
+    for (variant, entries, output) in [
+        (192, 1, output_limit),
+        (1216, 1, output_limit),
+        (1216, 10000, 12),
+    ] {
+        let s = Scratch::new();
+        let generated = Command::new("python3")
+            .arg("-B")
+            .arg(&helper)
+            .arg("create")
+            .arg(&s.0)
+            .arg(variant.to_string())
+            .output()
+            .unwrap();
+        assert!(generated.status.success(), "{generated:?}");
+        let input = fs::read(s.0.join("damaged.zip")).unwrap();
+        let mut request = start(&s);
+        request.limits.entries = entries;
+        request.limits.output = output;
+        let events = execute(request);
+        let terminal = terminal(&events);
+        assert_eq!(
+            terminal.error,
+            ErrorCode::Limit,
+            "{variant}/{entries}/{output}"
+        );
+        assert_eq!(terminal.publication, Publication::None);
+        assert_eq!(terminal.created_count, 0);
+        assert!(!s.0.join("recovered.zip").exists());
+        assert_eq!(fs::read(s.0.join("damaged.zip")).unwrap(), input);
     }
 }

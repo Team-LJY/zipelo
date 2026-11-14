@@ -261,3 +261,67 @@ fn structurally_valid_zip64_end_records_are_not_downgraded_to_local_recovery() {
         assert_eq!(std::fs::read(s.path()).unwrap(), input);
     }
 }
+
+#[test]
+fn validation_only_decode_preserves_exact_stream_limits_and_cancellation() {
+    let original = include_bytes!("../zip-recovery-fixtures/control.zip");
+    for mode in 0..7 {
+        let s = Scratch::new(original);
+        let mut input = File::open(s.path()).unwrap();
+        input.seek(SeekFrom::Start(112)).unwrap();
+        let mut limits = Limits::default();
+        if mode == 4 {
+            limits.output = 431;
+        }
+        struct Check(u32);
+        impl Monitor for Check {
+            fn check(&mut self) -> Result<()> {
+                if self.0 == 5 {
+                    Err(ErrorCode::None)
+                } else {
+                    Ok(())
+                }
+            }
+            fn observe(&mut self, _: ResourceUsage, storage: Option<&File>) -> Result<()> {
+                assert!(storage.is_none());
+                if self.0 == 6 {
+                    Err(ErrorCode::Limit)
+                } else {
+                    self.check()
+                }
+            }
+        }
+        let mut used = 0;
+        let result = decode_to(
+            &mut input,
+            match mode {
+                1 => 38,
+                2 => 36,
+                _ => 37,
+            },
+            8,
+            if mode == 3 { 431 } else { 432 },
+            None,
+            &mut used,
+            limits,
+            &mut Check(mode),
+        );
+        match mode {
+            0 => {
+                let (size, crc, hash) = result.unwrap();
+                assert_eq!(size, 432);
+                assert_eq!(used, 432);
+                assert_eq!(crc, u32at(original, 65 + 14));
+                assert_eq!(
+                    hash.iter().map(|b| format!("{b:02x}")).collect::<String>(),
+                    "3fd2605633caf264a9cf9eb1fc23abc4a60b3191fc808a6a0f71863c64690be5"
+                );
+            }
+            1..=3 => assert!(matches!(result, Err(ErrorCode::Integrity))),
+            4 | 6 => assert!(matches!(result, Err(ErrorCode::Limit))),
+            _ => assert!(matches!(result, Err(ErrorCode::None))),
+        }
+        assert_eq!(std::fs::read(s.path()).unwrap(), original);
+        assert_eq!(std::fs::read_dir(&s.0).unwrap().count(), 1);
+    }
+}

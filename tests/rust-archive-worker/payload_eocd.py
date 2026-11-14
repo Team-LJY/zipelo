@@ -29,7 +29,9 @@ def create(folder, variant):
             members = [("first.txt", first_data), ("second.bin", payload)]
             for name, data in members:
                 info = zipfile.ZipInfo(name, (2024, 1, 1, 0, 0, 0))
-                writer.writestr(info, data)
+                if name == "second.bin" and variant & 2048:
+                    info.compress_type = zipfile.ZIP_DEFLATED
+                writer.writestr(info, data, compresslevel=0)
         return bytearray(buffer.getvalue())
 
     original = archive(b"")
@@ -43,6 +45,10 @@ def create(folder, variant):
     local = struct.unpack_from("<I", original, directory + first_len + 42)[0]
     name_len, extra_len = struct.unpack_from("<HH", original, local + 26)
     data_at = local + 30 + name_len + extra_len
+    if variant & 2048:
+        prefix = b"\x01" + struct.pack("<HH", payload_size, payload_size ^ 0xFFFF)
+        assert original[data_at : data_at + 5] == prefix
+        data_at += 5
     fake_cd = original[directory : directory + first_len]
     fake_end = bytearray(original[real_end : real_end + 22])
     comment_cd_bytes = fake_cd
@@ -63,6 +69,10 @@ def create(folder, variant):
         data_at + padding,
         len(original) + comment_size - data_at - payload_size,
     )
+    if variant & 1024:
+        first_data_at = 30 + len("first.txt")
+        fake_packed = data_at + padding - first_data_at
+        struct.pack_into("<II", fake_cd, 20, fake_packed, fake_packed)
     payload = bytes(padding) + fake_cd + fake_end
     original = archive(payload)
     if nested_comment:
@@ -77,6 +87,19 @@ def create(folder, variant):
     original[damaged : damaged + 4] = b"BAD!"
     if variant & 16:
         struct.pack_into("<I", original, local + 14, 0x12345678)
+    size_mode = (variant >> 6) & 7
+    if size_mode == 1:
+        struct.pack_into("<I", original, local + 18, 0)
+    elif size_mode == 2:
+        struct.pack_into("<I", original, local + 22, 0)
+    elif size_mode == 3:
+        struct.pack_into("<II", original, local + 18, 0, 0)
+    elif size_mode == 4:
+        struct.pack_into("<II", original, local + 18, 1, 1)
+    elif size_mode == 5:
+        struct.pack_into("<II", original, local + 18, 0x00FFFFFF, 0x00FFFFFF)
+    if variant & 512:
+        struct.pack_into("<I", original, local + 14, 0)
     (folder / "damaged.zip").write_bytes(original)
     expected = {
         "first.txt": hashlib.sha256(first_data).hexdigest(),

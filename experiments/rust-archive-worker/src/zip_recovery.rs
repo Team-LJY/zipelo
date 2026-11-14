@@ -202,6 +202,7 @@ fn metadata_overlaps_member(
     source: &mut File,
     owner: &EndRecord,
     nested: &EndRecord,
+    limits: Limits,
     check: &mut impl Monitor,
 ) -> Result<bool> {
     let mut at = owner.directory;
@@ -243,6 +244,29 @@ fn metadata_overlaps_member(
                     if packed == u32at(&local, 18) && size == u32at(&local, 22) {
                         return Ok(true);
                     }
+                    // 로컬 크기 대신 중앙 목록의 본문을 끝까지 검증함.
+                    if flags & !0x080e == 0 && matches!(u16at(&h, 10), 0 | 8) {
+                        io(source.seek(SeekFrom::Start(start)))?;
+                        let decoded = decode_to(
+                            source,
+                            packed as u64,
+                            u16at(&h, 10),
+                            size as u64,
+                            None,
+                            &mut 0,
+                            limits,
+                            check,
+                        );
+                        match decoded {
+                            Ok((actual, crc, _))
+                                if actual == size as u64 && crc == u32at(&h, 16) =>
+                            {
+                                return Ok(true);
+                            }
+                            Ok(_) | Err(ErrorCode::Integrity) => {}
+                            Err(error) => return Err(error),
+                        }
+                    }
                 } else if stop.checked_add(12).is_some_and(|n| n <= owner.directory) {
                     let descriptor = bytes(source, stop, 12, owner.directory)?;
                     let skip = if &descriptor[..4] == b"PK\x07\x08" {
@@ -271,6 +295,7 @@ fn end_record(
     source: &mut File,
     tail: &[u8],
     tail_at: u64,
+    limits: Limits,
     check: &mut impl Monitor,
 ) -> Result<Option<usize>> {
     let mut selected: Option<EndRecord> = None;
@@ -316,8 +341,10 @@ fn end_record(
             directory_end: stop,
         };
         if let Some(previous) = &selected {
-            let current_in_member = metadata_overlaps_member(source, previous, &current, check)?;
-            let previous_in_member = metadata_overlaps_member(source, &current, previous, check)?;
+            let current_in_member =
+                metadata_overlaps_member(source, previous, &current, limits, check)?;
+            let previous_in_member =
+                metadata_overlaps_member(source, &current, previous, limits, check)?;
             if current_in_member && previous_in_member {
                 return Err(ErrorCode::Integrity);
             }
@@ -350,7 +377,7 @@ fn central(
     metadata.charge_bytes(len.min(65557) as usize, check.metadata_limits())?;
     let tail_at = len.saturating_sub(65557);
     let tail = bytes(source, tail_at, (len - tail_at) as usize, len)?;
-    let Some(end) = end_record(source, &tail, tail_at, check)? else {
+    let Some(end) = end_record(source, &tail, tail_at, limits, check)? else {
         return Ok(None);
     };
     let h = &tail[end..];
@@ -874,6 +901,28 @@ fn decode(
     limits: Limits,
     check: &mut impl Monitor,
 ) -> Result<(u64, u32, [u8; 32])> {
+    decode_to(
+        input,
+        length,
+        method,
+        declared,
+        Some(output),
+        used,
+        limits,
+        check,
+    )
+}
+
+fn decode_to(
+    input: &mut File,
+    length: u64,
+    method: u16,
+    declared: u64,
+    mut output: Option<&mut File>,
+    used: &mut u64,
+    limits: Limits,
+    check: &mut impl Monitor,
+) -> Result<(u64, u32, [u8; 32])> {
     let mut input = input.take(length);
     let mut stream = Inflate::new(false, 15);
     let mut buffer = [0; 65536];
@@ -929,15 +978,17 @@ fn decode(
                 ratio_output_bytes: Some(total),
                 ..ResourceUsage::default()
             },
-            Some(output),
+            output.as_deref(),
         )?;
         if corrupt || total > declared {
             return Err(ErrorCode::Integrity);
         }
         crc = crc32(crc, &plain[..n]);
         hash.update(&plain[..n]);
-        crate::space::ensure(output, n as u64)?;
-        completed(io(output.write_all(&plain[..n])), check)?;
+        if let Some(file) = output.as_deref_mut() {
+            crate::space::ensure(file, n as u64)?;
+            completed(io(file.write_all(&plain[..n])), check)?;
+        }
         if status == Status::StreamEnd {
             if input.limit() != 0 || at != have {
                 return Err(ErrorCode::Integrity);
