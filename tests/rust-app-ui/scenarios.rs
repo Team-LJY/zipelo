@@ -21,6 +21,13 @@ macro_rules! catalog {
 }
 
 catalog! {
+    "create-sevenzip" => "7z 형식 선택과 LZMA2 및 암호 미지원 안내",
+    "create-sevenzip-progress" => "7z 만들기 진행과 취소",
+    "create-sevenzip-complete" => "7z 만들기 완료",
+    "create-sevenzip-error" => "7z 만들기 저장 실패",
+    "create-sevenzip-cancelled" => "7z 만들기 취소 완료",
+    "create-sevenzip-resource" => "7z 만들기의 큰 작업 승인",
+
     "split-archive" => "분할 7z 목록과 미리보기 비활성화",
     "split-first-volume" => "첫 조각의 정확한 파일명 안내",
     "split-missing-volume" => "누락 조각 파일명과 재시도 안내",
@@ -511,7 +518,7 @@ impl Scenario {
                 }
                 return app;
             }
-            "create" | "create-encrypted" => {
+            "create" | "create-encrypted" | "create-sevenzip" => {
                 app.sources = vec![base.join("읽어주세요.txt"), base.join("사진")];
                 app.scenario_sources = Some(std::rc::Rc::new(vec![
                     SourceRow {
@@ -526,10 +533,12 @@ impl Scenario {
                     },
                 ]));
                 app.show_create(self.name == "create-encrypted");
+                app.set_seven_zip(self.name == "create-sevenzip");
                 return app;
             }
             _ => {}
         }
+        let seven_zip = self.name.starts_with("create-sevenzip");
         let creating = self.name.starts_with("create-") || self.name == "password-create";
         let listing_error = matches!(self.name, "unsupported" | "damaged");
         if matches!(self.name, "gzip-conflict" | "gzip-conflict-choice") {
@@ -544,7 +553,12 @@ impl Scenario {
             }];
             app.gzip_name = "여행 자료".into();
         }
-        let request = if creating {
+        let request = if seven_zip {
+            Start::CreateSevenZip {
+                sources: vec![(base.join("사진"), "사진".into())],
+                output_file: base.join("여행 자료.7z"),
+            }
+        } else if creating {
             Start::CreateZip {
                 sources: vec![(base.join("사진"), "사진".into())],
                 output_file: base.join("여행 자료.zip"),
@@ -564,7 +578,12 @@ impl Scenario {
             }
         };
         app.targets = Some(if creating {
-            BTreeSet::from(["여행 자료.zip".into()])
+            BTreeSet::from([if seven_zip {
+                "여행 자료.7z"
+            } else {
+                "여행 자료.zip"
+            }
+            .into()])
         } else if matches!(self.name, "gzip-conflict" | "gzip-conflict-choice") {
             BTreeSet::from(["여행 자료".into()])
         } else {
@@ -588,13 +607,19 @@ impl Scenario {
         assert!(app.start(request));
         {
             let mut state = state.borrow_mut();
-            state.frame(Event::Accepted { encryption: true });
+            state.frame(Event::Accepted {
+                encryption: !seven_zip,
+            });
             match self.name {
-                "resource-approval" | "resource-ratio" => {
-                    let expanded = self.name == "resource-approval";
+                "resource-approval" | "resource-ratio" | "create-sevenzip-resource" => {
+                    let expanded = self.name != "resource-ratio";
                     state.frame(Event::ResourceRequired(ResourceChallenge {
                         id: 1,
-                        action: ActionKind::Extract,
+                        action: if seven_zip {
+                            ActionKind::CreateSevenZip
+                        } else {
+                            ActionKind::Extract
+                        },
                         scope: ResourceScope {
                             output: expanded,
                             entries: expanded,
@@ -723,7 +748,10 @@ impl Scenario {
                         encrypt: self.name == "password-create",
                     })
                 }
-                "extract-complete" | "create-complete" | "extract-unsynced" => {
+                "extract-complete"
+                | "create-complete"
+                | "create-sevenzip-complete"
+                | "extract-unsynced" => {
                     let names = app.targets.as_ref().unwrap();
                     for name in names {
                         state.frame(Event::Output {
@@ -751,7 +779,9 @@ impl Scenario {
                         HostEvent::Exited { success: true },
                     ]);
                 }
-                "extract-cancelled" => state.finish(Outcome::Cancelled, Publication::None),
+                "extract-cancelled" | "create-sevenzip-cancelled" => {
+                    state.finish(Outcome::Cancelled, Publication::None)
+                }
                 "extract-partial" | "extract-uncertain" => {
                     let partial = self.name == "extract-partial";
                     if partial {
@@ -780,14 +810,19 @@ impl Scenario {
                         HostEvent::Exited { success: true },
                     ]);
                 }
-                "conflict" | "gzip-conflict" | "unsupported" | "damaged" | "source-changed"
-                | "create-error" => {
+                "conflict"
+                | "gzip-conflict"
+                | "unsupported"
+                | "damaged"
+                | "source-changed"
+                | "create-error"
+                | "create-sevenzip-error" => {
                     state.frame(Event::Terminal(Terminal {
                         outcome: Outcome::Failed,
                         error: Some(match self.name {
                             "conflict" | "gzip-conflict" => ErrorCode::Conflict,
                             "source-changed" => ErrorCode::SourceChanged,
-                            "create-error" => ErrorCode::DiskFull,
+                            "create-error" | "create-sevenzip-error" => ErrorCode::DiskFull,
                             "unsupported" => ErrorCode::UnsupportedFormat,
                             _ => ErrorCode::Integrity,
                         }),

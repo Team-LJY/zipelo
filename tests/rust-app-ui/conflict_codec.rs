@@ -107,3 +107,36 @@ fn volume_problem_adapter_preserves_native_filename_and_rejects_other_actions() 
         Some(ui::ErrorCode::MissingVolume)
     );
 }
+
+#[test]
+fn sevenzip_creation_adapter_preserves_paths_and_fixed_options() {
+    let source = std::env::current_dir().unwrap().join("원본");
+    let output = source.with_file_name("결과.7z");
+    let converted = start_to_wire(ui::Start::CreateSevenZip {
+        sources: vec![(source.clone(), "원본".into())],
+        output_file: output.clone(),
+    });
+    match converted.action {
+        wire::Action::CreateSevenZip {
+            sources,
+            output_file,
+            method,
+            solid,
+            encryption,
+        } => {
+            assert_eq!(sources[0].archive_name, "원본");
+            assert_eq!(
+                sources[0].path,
+                wire::NativePath::from_path(&crate::archive_path::worker_path(&source))
+            );
+            assert_eq!(
+                output_file,
+                wire::NativePath::from_path(&crate::archive_path::worker_path(&output))
+            );
+            assert_eq!(method, wire::SevenZipMethod::Lzma2);
+            assert!(!solid);
+            assert_eq!(encryption, wire::Encryption::None);
+        }
+        other => panic!("잘못된 생성 형식: {other:?}"),
+    }
+}

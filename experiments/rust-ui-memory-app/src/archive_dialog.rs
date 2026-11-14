@@ -8,6 +8,7 @@ pub enum Purpose {
     Destination,
     Retry,
     SaveZip,
+    SaveSevenZip,
     SaveGzip,
     RetryGzip,
 }
@@ -110,6 +111,7 @@ fn choose_portal(request: DialogRequest) -> Result<Option<Vec<PathBuf>>, String>
     let filters = match request.purpose {
         Purpose::Open => archive_filters(),
         Purpose::SaveZip => vec![("ZIP 압축파일", vec!["zip".into()])],
+        Purpose::SaveSevenZip => vec![("7z 압축파일", vec!["7z".into()])],
         _ => Vec::new(),
     }
     .into_iter()
@@ -128,18 +130,22 @@ fn choose_portal(request: DialogRequest) -> Result<Option<Vec<PathBuf>>, String>
     .collect::<Vec<_>>();
     portal_response(pollster::block_on(async move {
         let selected = match request.purpose {
-            Purpose::SaveZip | Purpose::SaveGzip | Purpose::RetryGzip => SaveFileRequest::default()
-                .title(if request.purpose == Purpose::SaveZip {
-                    "ZIP 파일 저장"
-                } else {
-                    "압축 해제 파일 저장"
-                })
-                .current_name(Some(request.file_name.as_str()))
-                .filters(filters)
-                .current_folder::<&PathBuf>(Some(&request.directory))?
-                .send()
-                .await?
-                .response()?,
+            Purpose::SaveZip | Purpose::SaveSevenZip | Purpose::SaveGzip | Purpose::RetryGzip => {
+                SaveFileRequest::default()
+                    .title(if request.purpose == Purpose::SaveSevenZip {
+                        "7z 파일 저장"
+                    } else if request.purpose == Purpose::SaveZip {
+                        "ZIP 파일 저장"
+                    } else {
+                        "압축 해제 파일 저장"
+                    })
+                    .current_name(Some(request.file_name.as_str()))
+                    .filters(filters)
+                    .current_folder::<&PathBuf>(Some(&request.directory))?
+                    .send()
+                    .await?
+                    .response()?
+            }
             purpose => OpenFileRequest::default()
                 .title(match purpose {
                     Purpose::Open => "압축파일 열기",
@@ -192,6 +198,12 @@ fn choose_native(request: DialogRequest) -> Result<Option<Vec<PathBuf>>, String>
         Purpose::SaveGzip | Purpose::RetryGzip => dialog
             .set_title("압축 해제 파일 저장")
             .set_file_name(request.file_name)
+            .save_file()
+            .map(|path| vec![path]),
+        Purpose::SaveSevenZip => dialog
+            .set_title("7z 파일 저장")
+            .set_file_name(request.file_name)
+            .add_filter("7z 압축파일", &["7z"])
             .save_file()
             .map(|path| vec![path]),
         Purpose::SaveZip => dialog

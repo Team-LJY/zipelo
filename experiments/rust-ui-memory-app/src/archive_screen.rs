@@ -22,7 +22,7 @@ use std::{
 const WORK_WIDTH: f32 = 480.0;
 const CREATE_WIDTH: f32 = 560.0;
 /// 처음 열 때의 높이. 그다음부터는 내용 높이에 맞춤.
-const CREATE_MIN_HEIGHT: f32 = 300.0;
+const CREATE_MIN_HEIGHT: f32 = 560.0;
 const CREATE_LIST_HEIGHT: f32 = 288.0;
 
 /// ZIP 만들기 창 목록의 한 행. 디스크에서 읽은 파일이나 폴더임.
@@ -208,6 +208,7 @@ pub struct ArchiveApp {
     create: bool,
     selected_only: bool,
     method: Method,
+    seven_zip: bool,
     dialogs: Box<dyn Dialogs>,
     picker: Option<(Purpose, std::sync::mpsc::Receiver<DialogAnswer>)>,
     preview_open: bool,
@@ -277,6 +278,7 @@ impl ArchiveApp {
             create: false,
             selected_only: false,
             method: Method::Deflate,
+            seven_zip: false,
             dialogs: Box::new(NativeDialogs),
             picker: None,
             preview_open: false,
@@ -342,7 +344,7 @@ impl ArchiveApp {
     pub fn show_create(&mut self, encrypted: bool) {
         if !self.model.busy() {
             self.create = true;
-            self.aes256 = encrypted;
+            self.aes256 = encrypted && !self.seven_zip;
             self.ui_error = None;
         }
     }
@@ -517,7 +519,11 @@ impl ArchiveApp {
                 } else {
                     first.file_stem()
                 };
-                self.zip_name = format!("{}.zip", name.unwrap_or_default().to_string_lossy());
+                self.zip_name = format!(
+                    "{}.{}",
+                    name.unwrap_or_default().to_string_lossy(),
+                    if self.seven_zip { "7z" } else { "zip" }
+                );
             }
         }
         for path in paths {
@@ -596,11 +602,12 @@ impl ArchiveApp {
         if self.sources.is_empty() {
             return;
         }
-        if !self.zip_name.to_ascii_lowercase().ends_with(".zip") {
-            self.zip_name.push_str(".zip");
+        let extension = if self.seven_zip { ".7z" } else { ".zip" };
+        if !self.zip_name.to_ascii_lowercase().ends_with(extension) {
+            self.zip_name.push_str(extension);
         }
         if !valid_leaf(&self.zip_name) {
-            self.ui_error = Some("ZIP 파일 이름을 확인하세요".into());
+            self.ui_error = Some("압축파일 이름을 확인하세요".into());
             return;
         }
         let output_file = self.zip_folder.join(&self.zip_name);
@@ -619,6 +626,15 @@ impl ArchiveApp {
             };
             sources.push((path.clone(), name.to_owned()));
         }
+        if self.seven_zip
+            && (self.aes256
+                || !self.zip_password.is_empty()
+                || !self.zip_password_confirm.is_empty())
+        {
+            self.ui_error =
+                Some("7z는 암호를 지원하지 않습니다. 암호가 필요하면 ZIP을 선택하세요".into());
+            return;
+        }
         if !self.zip_password_ready() {
             self.ui_error = Some("두 암호가 같은지 확인하세요".into());
             return;
@@ -627,12 +643,20 @@ impl ArchiveApp {
         self.directories.clear();
         // 암호는 ZIP 만들기 창에서 받아 두었다가 작업자가 요청하면 넘김.
         let password = self.aes256.then(|| std::mem::take(&mut self.zip_password));
-        if self.start(Start::CreateZip {
-            sources,
-            output_file,
-            method: self.method,
-            aes256: self.aes256,
-        }) {
+        let request = if self.seven_zip {
+            Start::CreateSevenZip {
+                sources,
+                output_file,
+            }
+        } else {
+            Start::CreateZip {
+                sources,
+                output_file,
+                method: self.method,
+                aes256: self.aes256,
+            }
+        };
+        if self.start(request) {
             self.create = false;
             self.create_win = WorkWindow::default();
             self.clear_zip_password();
@@ -657,7 +681,7 @@ impl ArchiveApp {
             _ => purpose,
         };
         let directory = match purpose {
-            Purpose::SaveZip => self.zip_folder.clone(),
+            Purpose::SaveZip | Purpose::SaveSevenZip => self.zip_folder.clone(),
             Purpose::Destination | Purpose::SaveGzip => self
                 .model
                 .archive
@@ -769,8 +793,8 @@ impl ArchiveApp {
                         }
                     }
                     // 저장 위치를 고르는 사이 ZIP 만들기 창을 닫았으면 아무 작업도 시작하지 않음.
-                    Purpose::SaveZip if !self.create => {}
-                    Purpose::SaveZip => {
+                    Purpose::SaveZip | Purpose::SaveSevenZip if !self.create => {}
+                    Purpose::SaveZip | Purpose::SaveSevenZip => {
                         if let Some(name) = path.file_name().and_then(|name| name.to_str()) {
                             self.zip_name = name.to_owned();
                             self.zip_folder = path.parent().unwrap_or(Path::new("/")).to_path_buf();
@@ -799,7 +823,13 @@ impl ArchiveApp {
                     }
                     self.extract_selection(selection);
                 }
+                Start::CreateSevenZip { .. } => {
+                    self.set_seven_zip(true);
+                    self.create = true;
+                    self.begin_zip();
+                }
                 Start::CreateZip { aes256, .. } => {
+                    self.set_seven_zip(false);
                     self.create = true;
                     if aes256 {
                         // 암호는 보관하지 않으므로 ZIP 만들기 창에서 다시 받음.
@@ -1867,7 +1897,10 @@ impl ArchiveApp {
         let title = if self.model.busy() {
             present::activity_text(
                 &self.model,
-                matches!(self.last_request, Some(Start::CreateZip { .. })),
+                matches!(
+                    self.last_request,
+                    Some(Start::CreateZip { .. } | Start::CreateSevenZip { .. })
+                ),
             )
             .to_owned()
         } else {
@@ -1959,7 +1992,10 @@ impl ArchiveApp {
                 if error.starts_with("암호는") {
                     error.as_str()
                 } else {
-                    if matches!(self.last_request, Some(Start::CreateZip { .. })) {
+                    if matches!(
+                        self.last_request,
+                        Some(Start::CreateZip { .. } | Start::CreateSevenZip { .. })
+                    ) {
                         "저장 위치와 추가한 항목을 확인하세요"
                     } else {
                         "풀 위치와 선택한 항목을 확인하세요"
@@ -1977,7 +2013,10 @@ impl ArchiveApp {
             });
             return;
         }
-        let creating = matches!(self.last_request, Some(Start::CreateZip { .. }));
+        let creating = matches!(
+            self.last_request,
+            Some(Start::CreateZip { .. } | Start::CreateSevenZip { .. })
+        );
         let cancelling = self.model.cancellation_requested() || self.model.cancel.is_some();
         let title = present::activity_text(&self.model, creating);
         ui.strong(title);
@@ -2034,7 +2073,10 @@ impl ArchiveApp {
     fn result(&mut self, ui: &mut egui::Ui) {
         let t = self.model.terminal.clone();
         let listing = matches!(self.last_request, Some(Start::List { .. }));
-        let creating = matches!(self.last_request, Some(Start::CreateZip { .. }));
+        let creating = matches!(
+            self.last_request,
+            Some(Start::CreateZip { .. } | Start::CreateSevenZip { .. })
+        );
         let resolved_targets = present::resolved_targets(
             self.targets.as_ref(),
             &self.model.entries,
@@ -2087,7 +2129,11 @@ impl ArchiveApp {
             self.model.confirmed && t.as_ref().is_some_and(|t| t.outcome == Outcome::Cancelled);
         let title = if success {
             if creating {
-                "ZIP 파일을 만들었습니다"
+                if matches!(self.last_request, Some(Start::CreateSevenZip { .. })) {
+                    "7z 파일을 만들었습니다"
+                } else {
+                    "ZIP 파일을 만들었습니다"
+                }
             } else if skipped > 0 && t.as_ref().is_some_and(|t| t.created_count == 0) {
                 "모든 파일을 건너뛰었습니다"
             } else {
@@ -2098,7 +2144,11 @@ impl ArchiveApp {
         } else if listing {
             "압축파일을 열지 못했습니다"
         } else if creating {
-            "ZIP 파일을 만들지 못했습니다"
+            if matches!(self.last_request, Some(Start::CreateSevenZip { .. })) {
+                "7z 파일을 만들지 못했습니다"
+            } else {
+                "ZIP 파일을 만들지 못했습니다"
+            }
         } else {
             "압축을 풀지 못했습니다"
         };
@@ -2136,9 +2186,10 @@ impl ArchiveApp {
                 .show(ui, |ui| {
                     if success && t.as_ref().is_some_and(|t| t.created_count > 0) {
                         let path = match self.last_request.as_ref() {
-                            Some(Start::CreateZip { output_file, .. }) => {
-                                output_file.display().to_string()
-                            }
+                            Some(
+                                Start::CreateZip { output_file, .. }
+                                | Start::CreateSevenZip { output_file, .. },
+                            ) => output_file.display().to_string(),
                             _ => format!("{} 폴더에 저장했습니다.", self.destination.display()),
                         };
                         theme::bounded_text(ui, &path, ui.available_width());
@@ -2204,7 +2255,11 @@ impl ArchiveApp {
                         )
                     {
                         ui.label(if creating {
-                            "ZIP 파일을 만들지 않았습니다"
+                            if matches!(self.last_request, Some(Start::CreateSevenZip { .. })) {
+                                "7z 파일을 만들지 않았습니다"
+                            } else {
+                                "ZIP 파일을 만들지 않았습니다"
+                            }
                         } else {
                             "아무 파일도 풀지 않았습니다"
                         });
@@ -2376,9 +2431,10 @@ impl ArchiveApp {
         }
         if folder {
             let path = match self.last_request.as_ref() {
-                Some(Start::CreateZip { output_file, .. }) => {
-                    output_file.parent().unwrap_or(Path::new("/"))
-                }
+                Some(
+                    Start::CreateZip { output_file, .. }
+                    | Start::CreateSevenZip { output_file, .. },
+                ) => output_file.parent().unwrap_or(Path::new("/")),
                 _ => self.destination.as_path(),
             };
             match present::folder_command(path).spawn() {
@@ -2432,7 +2488,11 @@ impl ArchiveApp {
             let modal = egui::Modal::new(egui::Id::unique("create-zip")).show(ctx, |ui| {
                 ui.set_width((ctx.content_rect().width() - 64.0).min(CREATE_WIDTH));
                 ui.horizontal(|ui| {
-                    ui.heading("ZIP 만들기");
+                    ui.heading(if self.seven_zip {
+                        "7z 만들기"
+                    } else {
+                        "ZIP 만들기"
+                    });
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                         let button = theme::icon_button(ui, "닫기", theme::CLOSE, true);
                         close = button.clicked();
@@ -2448,7 +2508,11 @@ impl ArchiveApp {
             return;
         }
         let id = egui::ViewportId::from_hash_of("archive-create");
-        let title = "ZIP 만들기 — Zipelo";
+        let title = if self.seven_zip {
+            "7z 만들기 — Zipelo"
+        } else {
+            "ZIP 만들기 — Zipelo"
+        };
         let custom_frame = self.custom_frame;
         if !self.create_win.open {
             self.create_win.height = self.create_win.height.max(CREATE_MIN_HEIGHT);
@@ -2531,7 +2595,38 @@ impl ArchiveApp {
             .inner
     }
 
+    fn set_seven_zip(&mut self, selected: bool) {
+        if self.seven_zip == selected {
+            return;
+        }
+        self.seven_zip = selected;
+        self.aes256 = false;
+        self.clear_zip_password();
+        self.ui_error = None;
+        let name = self.zip_name.clone();
+        let lower = name.to_ascii_lowercase();
+        let stem = if lower.ends_with(".zip") {
+            &name[..name.len() - 4]
+        } else if lower.ends_with(".7z") {
+            &name[..name.len() - 3]
+        } else {
+            &name
+        };
+        self.zip_name = format!("{stem}{}", if selected { ".7z" } else { ".zip" });
+    }
+
     fn create_contents(&mut self, ui: &mut egui::Ui) -> bool {
+        let mut selected = self.seven_zip;
+        ui.horizontal(|ui| {
+            ui.label("형식");
+            ui.selectable_value(&mut selected, false, "ZIP");
+            ui.selectable_value(&mut selected, true, "7z");
+            if selected {
+                ui.label("LZMA2");
+            }
+        });
+        self.set_seven_zip(selected);
+
         let rows = self.create_rows();
         let root = self.create_root();
 
@@ -2670,6 +2765,10 @@ impl ArchiveApp {
         }
 
         // 암호: 체크하면 바로 아래에 암호와 암호 확인 칸을 보여 줌.
+        if self.seven_zip {
+            ui.label("7z는 암호를 지원하지 않습니다. 암호가 필요하면 ZIP을 선택하세요");
+            return false;
+        }
         let check = ui.checkbox(&mut self.aes256, "암호로 보호하기");
         theme::pointer(&check);
         theme::focus(&check);
@@ -2743,7 +2842,11 @@ impl ArchiveApp {
             })
             .inner;
         if compress {
-            self.open_picker(Purpose::SaveZip);
+            self.open_picker(if self.seven_zip {
+                Purpose::SaveSevenZip
+            } else {
+                Purpose::SaveZip
+            });
         }
         cancel
     }
@@ -2769,6 +2872,7 @@ impl ArchiveApp {
                     ActionKind::List => "압축파일 목록 열기",
                     ActionKind::Extract => "압축 해제",
                     ActionKind::CreateZip => "ZIP 만들기",
+                    ActionKind::CreateSevenZip => "7z 만들기",
                     ActionKind::Preview => "파일 미리보기",
                 });
                 if question.scope.ratio {

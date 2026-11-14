@@ -875,3 +875,81 @@ mod presentation;
 mod windows_paths;
 
 mod guarded;
+
+#[test]
+fn sevenzip_creation_rejects_password_prompts_and_encrypted_acceptance() {
+    for encrypted in [false, true] {
+        let mut f = FakeFactory::default();
+        f.state.borrow_mut().manual = true;
+        let mut m = Model::default();
+        assert!(m.begin(
+            Start::CreateSevenZip {
+                sources: vec![(path("source"), "source".into())],
+                output_file: path("output.7z"),
+            },
+            &mut f
+        ));
+        f.state.borrow_mut().frame(Event::Accepted {
+            encryption: encrypted,
+        });
+        if !encrypted {
+            f.state.borrow_mut().frame(Event::PasswordRequired {
+                challenge_id: 1,
+                attempt: 1,
+                encrypt: true,
+            });
+        }
+        for _ in 0..10 {
+            m.poll();
+        }
+        assert!(m.error.is_some());
+        assert!(m.challenge.is_none());
+    }
+}
+
+#[test]
+fn sevenzip_creation_waits_for_both_eofs_and_child_reap() {
+    let mut f = FakeFactory::default();
+    f.state.borrow_mut().manual = true;
+    let mut m = Model::default();
+    assert!(m.begin(
+        Start::CreateSevenZip {
+            sources: vec![(path("source"), "source".into())],
+            output_file: path("output.7z"),
+        },
+        &mut f
+    ));
+    {
+        let mut s = f.state.borrow_mut();
+        s.frame(Event::Accepted { encryption: false });
+        s.frame(Event::Output {
+            entry_id: None,
+            relative_name: "output.7z".into(),
+            disposition: Disposition::Created,
+        });
+        s.frame(Event::Terminal(Terminal {
+            outcome: Outcome::Completed,
+            error: None,
+            publication: Publication::Complete,
+            created_count: 1,
+            retained_partial_count: 0,
+            durability: Durability::Synced,
+            cleanup: Cleanup::Complete,
+        }));
+    }
+    m.poll();
+    assert!(!m.confirmed);
+    f.state.borrow_mut().queue.push_back(HostEvent::StdoutEof);
+    m.poll();
+    assert!(!m.confirmed);
+    f.state.borrow_mut().queue.push_back(HostEvent::StderrEof);
+    m.poll();
+    assert!(!m.confirmed);
+    f.state
+        .borrow_mut()
+        .queue
+        .push_back(HostEvent::Exited { success: true });
+    pump(&mut m);
+    assert!(m.confirmed);
+    assert!(m.error.is_none());
+}
