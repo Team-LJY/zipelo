@@ -267,5 +267,122 @@
         "dependencies": "Existing lzma-rust2 =0.25.0 enables std,xz,encoder with default features disabled. No new lockfile package; encoder=[] adds no transitive dependency. Apache-2.0 originals and hashes are checked through packaging/licenses.py. OSV query on 2026-11-14 returned no advisory for this package/version; this is not a full dependency audit or a vulnerability-free claim.",
         "design": "docs/sevenzip-create-design.md",
         "validation": "Round-trip SHA256 and structure in Zipelo and independent 7-Zip 26.00 with ZIPELO_TEST_7ZIP set; 1 GiB creation RSS regression; cancellation, metadata/byte limits, encoder finish/header write/seek/patch failures, destination write/sync and postpublication sync failures. Results and platform limits are recorded in PR127."
+    },
+    "zip_recovery_proposal": {
+        "status": "proposal-only; awaiting-frontend-agreement-and-fixture-review; no-product-implementation",
+        "design": "docs/zip-recovery-design.md",
+        "basis": "PLANS 8.10. Never modify the source; reconstruct only separately validated members into a new archive. Existing active tags and revision 3 remain unchanged until joint agreement.",
+        "request": {
+            "action": "RecoverZip",
+            "proposed_action_tag": 5,
+            "fields_in_order": [
+                "archive:NativePath",
+                "output_file:NativePath"
+            ],
+            "admission": "Start or StartGuarded(interactive=false). Reject StartInteractive or interactive=true in both codec directions. Accepted.encryption=false. Reuse existing resource questions; no password/conflict question and no automatic fallback."
+        },
+        "input_scope": "Initial input support: single-volume non-SFX ZIP32, unencrypted Store or Deflate. ZIP64 input, split/SFX, central encryption, unsupported compression and encrypted-only archives are outside initial repair scope. Existing ordinary list/extract support is unchanged. A clearly identified archive-wide unsupported feature fails UnsupportedFeature without downgrade.",
+        "discovery": {
+            "CentralDirectory": "Use only a fully bounded EOCD/central inventory with exact counts, structural/name validation and nonoverlapping member spans. Repair local signature, CRC or size fields only if the central inventory and intact local name/extra lengths, flags/method/name determine one payload range. Data descriptors require this inventory and exact supported descriptor validation. A complete original inventory additionally requires one-to-one, contiguous local spans from offset zero to the central-directory start. Unaccounted gaps or ambiguous spans force unknown_loss=true and known_entries=None even when the known central entries verify.",
+            "LocalChain": "If there is no usable central inventory, walk complete local records consecutively from offset zero using known ZIP32 lengths and bit3=false. Skip a corrupt payload only when its complete range is known. Stop at a truncated/ambiguous header or unknown descriptor boundary. Never scan payload bytes for a new PK signature or guess names/sizes. Inventory completeness is unknown even when every observed member verifies. Emit a finding only for a structurally established candidate; unrecognized tail bytes create no synthetic entry or count and remain unknown_loss."
+        },
+        "verification": "Only export supported regular-file or empty-directory candidates with stable safe names and exact bounded lengths. Deflate must reach its real stream end and consume exactly its compressed range; decoded length and CRC32 must match independent header evidence. Compute SHA256 of verified file bytes for result/fixture comparison; a new hash or recomputed CRC cannot make corrupt data valid. CRC evidence is not cryptographic authenticity. Never export raw or partial corrupt bytes.",
+        "proposed_tags": {
+            "RecoveryMode": {
+                "CentralDirectory": 0,
+                "LocalChain": 1
+            },
+            "RecoveryStatus": {
+                "Verified": 0,
+                "Lost": 1,
+                "Unverified": 2
+            },
+            "RecoveryReason": {
+                "None": 0,
+                "HeaderRebuilt": 1,
+                "Truncated": 2,
+                "CrcMismatch": 3,
+                "DecodeFailure": 4,
+                "BoundaryUnknown": 5,
+                "UnsupportedFeature": 6,
+                "MetadataMissing": 7
+            },
+            "ErrorCode": {
+                "RecoveryIncomplete": 14,
+                "RecoveryImpossible": 15
+            },
+            "event_kinds": {
+                "RecoveryEntry": 115,
+                "RecoveryEnd": 116
+            }
+        },
+        "RecoveryEntry": {
+            "fields_in_order": [
+                "candidate_id:u32",
+                "source_offset:u64",
+                "name:Option<UTF8>",
+                "kind:Option<EntryKind>",
+                "status:RecoveryStatus",
+                "reason:RecoveryReason",
+                "declared_size:Option<u64>",
+                "verified_size:Option<u64>",
+                "sha256:Option<[u8;32]>"
+            ],
+            "constraints": "One stable zero-based ordinal per known candidate, ordered by source local offset, with no duplicates. IDs are not List EntryIds. Name is absent rather than invented if unknown; strings/frame budgets remain unchanged. Only Some(File), Some(Directory) or unknown None; Verified requires a known kind. Never invent a type for an unknown candidate. Verified file has exact sizes and SHA256, directory has size zero and no hash. Lost/Unverified have no verified_size or hash. Unknown enum/field combinations are Protocol. Findings before final result are not saved outputs. Verified requires a known name and equal declared/verified sizes; verified directories have both sizes zero and no hash. Validate the explicit status/reason matrix. Source offsets strictly increase and must fall within source_bytes at summary validation; sums use checked arithmetic.",
+            "valid_reasons": {
+                "Verified": [
+                    "None",
+                    "HeaderRebuilt",
+                    "MetadataMissing"
+                ],
+                "Lost": [
+                    "Truncated",
+                    "CrcMismatch",
+                    "DecodeFailure"
+                ],
+                "Unverified": [
+                    "BoundaryUnknown",
+                    "UnsupportedFeature",
+                    "MetadataMissing"
+                ]
+            }
+        },
+        "RecoveryEnd": {
+            "fields_in_order": [
+                "mode:RecoveryMode",
+                "source_bytes:u64",
+                "source_sha256:[u8;32]",
+                "known_entries:Option<u32>",
+                "verified_entries:u32",
+                "lost_entries:u32",
+                "unverified_entries:u32",
+                "unknown_loss:bool"
+            ],
+            "constraints": "At most one summary after completed analysis and before publication. Counts equal emitted findings. Only a central inventory with one-to-one contiguous complete local coverage has known_entries equal to the count sum and unknown_loss=false. Missing inventory, gaps or ambiguous spans give known_entries=None and unknown_loss=true, including in CentralDirectory mode. LocalChain always has None/true. Unknown bytes never create a fabricated candidate or zero loss claim. No ListEnd/ListId or ordinary Entry/preview frames for recovery. A summary alone is not success or proof that a file exists."
+        },
+        "output": "Build one new nonencrypted ZIP using Store and the existing safe ZIP/ZIP64 writer, safe normalized relative names, verified file bytes and explicit regular/directory attributes. Do not copy comments, unknown extra fields, symlink/permission attributes or signatures. ZIP64 output is permitted when reconstructed Store sizes require it; ZIP64 input repair remains unsupported initially. Verify the completed private output with the strict reader and per-file hashes before exclusive publication. Do not create a sidecar report or silently extract/reopen it.",
+        "terminal": {
+            "complete": "Completed/None only with a complete central inventory, all known members verified, no loss/unverified count or unknown_loss, one actual Output Created, publication Complete and successful finalization. Display this as a saved recovery copy, not a modified original.",
+            "incomplete_saved": "If at least one verified item is published but any known loss/unverified item or unknown inventory remains: Failed/RecoveryIncomplete, publication Complete, created_count=1. Complete describes the one ZIP artifact publication only, never full source recovery. Keep the artifact and show the warning; do not offer automatic large-limit retry or rollback.",
+            "impossible": "No verified items: Failed/RecoveryImpossible, publication None, zero created/retained outputs unless owned temporary cleanup actually failed.",
+            "fatal_or_cancel": "Limit, UnsafePath, SourceChanged, DiskFull, Io, Conflict, Protocol or cancellation override recovery business summaries. Before publication keep no complete output; preserve actual cleanup/retained/uncertain state. After publication preserve actual Output/durability/cleanup and never synthesize absence or rollback.",
+            "healthy_source": "If the strict normal parser and content verification pass without any header reconstruction needed, reject an explicitly requested RecoverZip with InvalidRequest and zero outputs. A healthy control ZIP remains the normal-list control and is never silently rewritten."
+        },
+        "source_and_publication": "Capture read-only through pinned safe handles into one private snapshot with full source SHA256. All parsing uses that snapshot. Revalidate source identity/length/metadata and full hash once before publication; detected changes abort SourceChanged. Never open the original or any preexisting destination for write/truncate. Same-path/hard-link/existing/newly appeared destination conflicts are never replaced. Reuse existing publication cutoff, fsync/close, owned temporary cleanup and post-verification destination checks.",
+        "resources": "Recovery-only source input cap is min(caller input quota, 4 GiB). More than 4 GiB is outside initial recovery support and returns UnsupportedFeature with no expanded retry; exceeding a lower caller quota keeps Limit. Resource approval cannot expand source input. Reuse existing 16 GiB/10000 decoded-byte/candidate defaults and explicit guarded ceilings up to 64 GiB/200000. Count lost/unverified candidates and bytes actually decoded before failure. Include result records, names, spans, staging indexes and implicit parents in metadata budgets before allocation: 8 MiB/32768 nodes, or 64 MiB/262144 after a valid grant. Use 64 KiB chunks, checked u64 ranges, bounded strings/frames, ZIP ratio challenges and the existing 300-second/60-second/parent lifetime policies. No per-byte candidate restarts. Disk accounting includes input snapshot, verified member spools, built ZIP and destination temp by actual volume; permission or advisory space checks do not reserve storage.",
+        "client": "Explicit recovery-copy action and native ZIP save dialog; never weaken or silently retry ordinary List/Extract. Show Verified/Lost/Unverified with typed reasons and distinguish unknown inventory from zero loss. Keep recovery findings separate from the ordinary catalog; read a saved copy in a new explicit job with a fresh ListId. Retain partial-warning context when opening a copy, and do not present an ordinary later ZIP listing as proof that all original data was recovered. Result details are job data, not an authenticated permanent recovery certificate.",
+        "lifecycle": "Preserve job/sequence/challenge validation, resource approval, CancelAck and exactly one final Terminal. Confirm results only after matching Terminal, both EOFs and owned-child wait. No new security settings or dependency changes. Product implementation, UI scenarios and native integration require prior frontend agreement.",
+        "fixtures": {
+            "basis_commit": "384417036d1223fd33fee259fe13c3e6c4354123",
+            "manifest": "tests/zip-recovery-fixtures/expectations.json",
+            "static_expected_verified_counts": {
+                "missing-directory.zip": 6,
+                "broken-eocd.zip": 6,
+                "middle-truncated.zip": 4,
+                "body-corrupt.zip": 5,
+                "unrecoverable.zip": 0
+            },
+            "comparison": "Read-only comparison of the published fixture contract, not worker execution. All damaged samples lack a usable central inventory and retain unknown_loss. An intact-central/local-header-only damage case is still needed to exercise complete recovery."
+        }
     }
 }
