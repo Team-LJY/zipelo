@@ -582,3 +582,158 @@ fn direct_reader_detects_transient_change_during_final_verification() {
     assert!(changed);
     assert_eq!(code(result), ErrorCode::SourceChanged);
 }
+
+#[cfg(target_os = "linux")]
+#[test]
+fn direct_reader_low_fd_child() {
+    if std::env::var_os("ZIPELO_SPLIT_LOW_FD_CHILD").is_none() {
+        return;
+    }
+    use std::io::SeekFrom;
+    let s = Scratch::new();
+    let original = s.split(11);
+    let mut copied = s.capture();
+    let expected = token(&copied);
+    let catalog = crate::seven_zip::open(
+        &mut copied.snapshot.file,
+        expected.archive_bytes,
+        Limits::default(),
+        false,
+        &mut || Ok(()),
+    )
+    .unwrap();
+    let entries = catalog
+        .members
+        .iter()
+        .map(|m| m.entry.clone())
+        .collect::<Vec<_>>();
+    drop((catalog, copied));
+    let mut direct = open_direct(&s.first(), u64::MAX, Default::default(), &mut |_| Ok(()))
+        .unwrap()
+        .unwrap();
+    assert_eq!(direct.hash, expected.archive_sha256);
+    assert_eq!(direct.object().unwrap(), expected.source_object);
+    assert_eq!(direct.len(), expected.archive_bytes);
+    let mut bytes = Vec::new();
+    direct.read_to_end(&mut bytes).unwrap();
+    assert_eq!(bytes, original);
+    direct.seek(SeekFrom::End(-12)).unwrap();
+    let mut last = [0; 12];
+    direct.read_exact(&mut last).unwrap();
+    assert_eq!(last, original[original.len() - 12..]);
+    let catalog = crate::seven_zip::open(
+        &mut direct,
+        expected.archive_bytes,
+        Limits::default(),
+        false,
+        &mut || Ok(()),
+    )
+    .unwrap();
+    assert_eq!(
+        catalog
+            .members
+            .iter()
+            .map(|m| m.entry.clone())
+            .collect::<Vec<_>>(),
+        entries
+    );
+    drop(catalog);
+    direct.verify(&mut |_| Ok(())).unwrap();
+    assert_eq!(std::fs::read_dir(&s.0).unwrap().count(), 11);
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn direct_reader_with_sixteen_file_descriptors_lists_eleven_volumes() {
+    use std::os::unix::process::CommandExt;
+    #[repr(C)]
+    struct Limit {
+        soft: u64,
+        hard: u64,
+    }
+    unsafe extern "C" {
+        fn setrlimit(resource: i32, limit: *const Limit) -> i32;
+    }
+    let s = Scratch::new();
+    let mut command = std::process::Command::new(std::env::current_exe().unwrap());
+    command
+        .args([
+            "--exact",
+            "split_seven_zip::tests::direct_reader_low_fd_child",
+            "--test-threads=1",
+        ])
+        .env("TMPDIR", &s.0)
+        .env("ZIPELO_SPLIT_LOW_FD_CHILD", "1");
+    // 자식 프로세스의 파일 핸들 상한만 16으로 제한함.
+    unsafe {
+        command.pre_exec(|| {
+            if setrlimit(7, &Limit { soft: 16, hard: 16 }) == 0 {
+                Ok(())
+            } else {
+                Err(std::io::Error::last_os_error())
+            }
+        });
+    }
+    let result = command.output().unwrap();
+    assert!(
+        result.status.success(),
+        "stdout={} stderr={}",
+        String::from_utf8_lossy(&result.stdout),
+        String::from_utf8_lossy(&result.stderr)
+    );
+    assert_eq!(std::fs::read_dir(&s.0).unwrap().count(), 0);
+}
+
+#[test]
+fn direct_reader_reopens_volumes_and_rejects_same_content_replacement_before_read() {
+    use std::io::SeekFrom;
+    let s = Scratch::new();
+    let original = s.split(11);
+    let mut direct = open_direct(&s.first(), u64::MAX, Default::default(), &mut |_| Ok(()))
+        .unwrap()
+        .unwrap();
+    let path = s.0.join("sample.7z.006");
+    let bytes = std::fs::read(&path).unwrap();
+    let modified = std::fs::metadata(&path).unwrap().modified().unwrap();
+    std::fs::rename(&path, s.0.join("previous")).unwrap();
+    std::fs::write(&path, bytes).unwrap();
+    std::fs::OpenOptions::new()
+        .write(true)
+        .open(&path)
+        .unwrap()
+        .set_times(std::fs::FileTimes::new().set_modified(modified))
+        .unwrap();
+    direct
+        .seek(SeekFrom::Start((5 * original.len() / 11) as u64))
+        .unwrap();
+    assert!(direct.read(&mut [0; 1]).is_err());
+    assert_eq!(
+        code(direct.verify(&mut |_| Ok(()))),
+        ErrorCode::SourceChanged
+    );
+}
+
+#[test]
+fn direct_reader_classifies_non_file_replacement_as_source_changed() {
+    let s = Scratch::new();
+    s.split(11);
+    let direct = open_direct(&s.first(), u64::MAX, Default::default(), &mut |_| Ok(()))
+        .unwrap()
+        .unwrap();
+    let path = s.0.join("sample.7z.006");
+    std::fs::rename(&path, s.0.join("previous")).unwrap();
+    std::fs::create_dir(&path).unwrap();
+    assert_eq!(
+        code(direct.verify(&mut |_| Ok(()))),
+        ErrorCode::SourceChanged
+    );
+    #[cfg(unix)]
+    {
+        std::fs::remove_dir(&path).unwrap();
+        std::os::unix::fs::symlink(s.0.join("previous"), &path).unwrap();
+        assert_eq!(
+            code(direct.verify(&mut |_| Ok(()))),
+            ErrorCode::SourceChanged
+        );
+    }
+}

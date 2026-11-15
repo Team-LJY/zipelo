@@ -605,7 +605,6 @@ pub(crate) fn open(
 
 pub(crate) struct Direct {
     group: Group,
-    inputs: Vec<Input>,
     changes: Vec<Option<(i64, i64)>>,
     position: u64,
     pub hash: [u8; 32],
@@ -619,17 +618,44 @@ impl Direct {
             manifest_sha256: self.group.manifest()?,
         })
     }
+    fn matches(&self, index: usize, input: &Input) -> Result<()> {
+        let part = &self.group.parts[index];
+        let data = input.file.metadata().map_err(crate::space::io_error)?;
+        if !data.is_file()
+            || filesystem::object(&input.file)? != part.object
+            || data.len() != part.length
+            || data.modified().map_err(crate::space::io_error)? != part.modified
+            || crate::spool::change_stamp(&data) != self.changes[index]
+        {
+            return Err(ErrorCode::SourceChanged.into());
+        }
+        Ok(())
+    }
+    fn open_checked(
+        &self,
+        index: usize,
+        step: &mut impl FnMut(Step) -> std::result::Result<(), ErrorCode>,
+    ) -> Result<Input> {
+        let input = self
+            .group
+            .open_part(&self.group.parts[index].name, step)
+            .map_err(|failure| {
+                if failure.error == ErrorCode::UnsafePath {
+                    ErrorCode::SourceChanged.into()
+                } else {
+                    failure
+                }
+            })?;
+        self.matches(index, &input)?;
+        Ok(input)
+    }
     fn unchanged(
         &self,
         step: &mut impl FnMut(Step) -> std::result::Result<(), ErrorCode>,
     ) -> Result<()> {
-        for ((part, input), changed) in self.group.parts.iter().zip(&self.inputs).zip(&self.changes)
-        {
-            self.group.matches(part, input)?;
-            if crate::spool::change_stamp(&metadata(&input.file)?) != *changed {
-                return Err(ErrorCode::SourceChanged.into());
-            }
+        for index in 0..self.group.parts.len() {
             step(Step::Check)?;
+            self.open_checked(index, step)?;
         }
         Ok(())
     }
@@ -645,15 +671,27 @@ impl Direct {
 impl Read for Direct {
     fn read(&mut self, output: &mut [u8]) -> std::io::Result<usize> {
         let mut start = 0;
-        for (part, input) in self.group.parts.iter().zip(&mut self.inputs) {
+        if output.is_empty() {
+            return Ok(0);
+        }
+        let source_error = |failure: Failure| {
+            std::io::Error::other(format!("분할 원본 읽기 실패: {:?}", failure.error))
+        };
+        for (index, part) in self.group.parts.iter().enumerate() {
             let end = start + part.length;
             if self.position < end {
                 let count = (end - self.position).min(output.len() as u64) as usize;
+                // 필요한 조각만 열어 핸들 사용량이 조각 수에 비례하지 않게 함.
+                let mut input = self
+                    .open_checked(index, &mut |_| Ok(()))
+                    .map_err(source_error)?;
                 input
                     .file
                     .seek(std::io::SeekFrom::Start(self.position - start))?;
-                let count = input.file.read(&mut output[..count])?;
-                if count == 0 && !output.is_empty() {
+                let read = input.file.read(&mut output[..count]);
+                self.matches(index, &input).map_err(source_error)?;
+                let count = read?;
+                if count == 0 {
                     return Err(std::io::Error::new(
                         std::io::ErrorKind::UnexpectedEof,
                         "분할 원본이 변경됨",
@@ -689,13 +727,11 @@ pub(crate) fn open_direct(
     let Some(mut group) = discover(path, None, limit, metadata_limits, step)? else {
         return Ok(None);
     };
-    let mut inputs = Vec::new();
     let mut changes = Vec::new();
     for part in &group.parts {
         let input = group.open_part(&part.name, step)?;
         group.matches(part, &input)?;
         changes.push(crate::spool::change_stamp(&metadata(&input.file)?));
-        inputs.push(input);
     }
     let mut whole = Sha256::new();
     let mut processed = 0;
@@ -716,7 +752,6 @@ pub(crate) fn open_direct(
     })?;
     let mut direct = Direct {
         group,
-        inputs,
         changes,
         position: 0,
         hash: whole.finalize().into(),
