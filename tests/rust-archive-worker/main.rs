@@ -1634,3 +1634,6 @@ mod recovery;
 
 #[cfg(target_os = "linux")]
 mod partial_output;
+
+#[cfg(target_os = "linux")]
+mod spool_location;

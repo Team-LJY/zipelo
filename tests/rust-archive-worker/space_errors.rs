@@ -4,6 +4,10 @@ use std::io::{Error, ErrorKind};
 #[test]
 fn storage_full_is_distinct_from_other_io_errors() {
     assert_eq!(io_error(ErrorKind::StorageFull.into()), ErrorCode::DiskFull);
+    assert_eq!(
+        io_error(ErrorKind::QuotaExceeded.into()),
+        ErrorCode::DiskFull
+    );
     for kind in [
         ErrorKind::PermissionDenied,
         ErrorKind::Other,
@@ -17,6 +21,8 @@ fn storage_full_is_distinct_from_other_io_errors() {
 #[test]
 fn native_linux_enospc_is_disk_full() {
     assert_eq!(io_error(Error::from_raw_os_error(28)), ErrorCode::DiskFull);
+    // EDQUOT: tmpfs usrquota 등 사용자 할당량 초과도 권한 오류로 안내하지 않음.
+    assert_eq!(io_error(Error::from_raw_os_error(122)), ErrorCode::DiskFull);
     for code in [5, 13, 39, 112] {
         assert_eq!(io_error(Error::from_raw_os_error(code)), ErrorCode::Io);
     }
@@ -25,7 +31,7 @@ fn native_linux_enospc_is_disk_full() {
 #[cfg(windows)]
 #[test]
 fn native_windows_disk_full_codes_are_distinct_from_access_denied() {
-    for code in [39, 112] {
+    for code in [39, 112, 1295] {
         assert_eq!(
             io_error(Error::from_raw_os_error(code)),
             ErrorCode::DiskFull

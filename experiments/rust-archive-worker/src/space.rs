@@ -123,13 +123,17 @@ pub(crate) fn available(file: &File) -> Result<u128> {
     Ok(free as u128)
 }
 
-// 공간 부족만 전용 오류로 변환함.
+// 공간 부족만 전용 오류로 변환함. 사용자 디스크 할당량 초과(EDQUOT, Windows 1295)도
+// 쓸 수 있는 공간이 없다는 뜻이므로 권한 오류가 아니라 공간 부족으로 알림.
 pub(crate) fn io_error(error: std::io::Error) -> ErrorCode {
     #[cfg(windows)]
-    if matches!(error.raw_os_error(), Some(39 | 112)) {
+    if matches!(error.raw_os_error(), Some(39 | 112 | 1295)) {
         return ErrorCode::DiskFull;
     }
-    if error.kind() == std::io::ErrorKind::StorageFull {
+    if matches!(
+        error.kind(),
+        std::io::ErrorKind::StorageFull | std::io::ErrorKind::QuotaExceeded
+    ) {
         ErrorCode::DiskFull
     } else {
         ErrorCode::Io
