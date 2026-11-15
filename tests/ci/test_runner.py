@@ -24,6 +24,27 @@ class RunnerTests(unittest.TestCase):
                 run_rust.work_directory(run_rust.ROOT, name)
         self.assertEqual(run_rust.work_directory(run_rust.ROOT, os.environ["ZIPELO_CI_JOB"]), TEST_WORK)
 
+    def test_work_directory_rejects_symlinked_parents_before_creation(self):
+        for link_name in ("tests", "tests/work"):
+            with self.subTest(link_name=link_name), tempfile.TemporaryDirectory(
+                dir=TEST_WORK
+            ) as directory:
+                base = Path(directory)
+                project = base / "project"
+                project.mkdir()
+                outside = base / "outside"
+                outside.mkdir()
+                link = project / link_name
+                link.parent.mkdir(parents=True, exist_ok=True)
+                link.symlink_to(outside, target_is_directory=True)
+                with patch.object(
+                    run_rust.subprocess, "check_output", return_value=str(project / ".git")
+                ):
+                    with self.assertRaisesRegex(ValueError, "안전한 작업 디렉터리"):
+                        run_rust.work_directory(project, "task")
+                self.assertFalse((outside / "task").exists())
+                self.assertFalse((outside / "work").exists())
+
     def test_output_paths_reject_symlinks_outside_job(self):
         with tempfile.TemporaryDirectory(dir=TEST_WORK) as directory:
             work = Path(directory)
@@ -188,6 +209,28 @@ class RunnerTests(unittest.TestCase):
                     run_rust.os.environ["CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER"],
                     str(binaries / "x86_64-w64-mingw32-gcc-posix"),
                 )
+
+    @unittest.skipUnless(sys.platform == "linux", "Linux MinGW 실행 파일 탐색 시험임")
+    def test_default_checkout_reuses_existing_setup_tools(self):
+        with tempfile.TemporaryDirectory(dir=TEST_WORK) as directory:
+            root = Path(directory)
+            tools = root / "tests/ci/tools"
+            binaries = tools / "mingw/usr/bin"
+            binaries.mkdir(parents=True)
+            executable = binaries / "x86_64-w64-mingw32-gcc-posix"
+            executable.write_text("#!/bin/sh\nexit 0\n")
+            executable.chmod(0o700)
+            rustup = tools / "rustup"
+            (rustup / "toolchains/1.99.1-x86_64-unknown-linux-gnu").mkdir(parents=True)
+            with (
+                patch.dict(run_rust.os.environ, {"PATH": ""}, clear=True),
+                patch.object(run_rust.subprocess, "check_output", return_value=str(root / ".git")),
+            ):
+                run_rust.prepare_tools(root)
+                self.assertEqual(run_rust.os.environ["RUSTUP_HOME"], str(rustup))
+                self.assertTrue(run_rust.os.environ["PATH"].startswith(str(binaries)))
+                self.assertEqual(run_rust.shutil.which("x86_64-w64-mingw32-gcc-posix"),
+                                 str(executable))
 
     def test_local_bootstraps_missing_cross_tools_and_reloads_paths(self):
         for root in (Path("/repo"), PurePosixPath("/repo"), PureWindowsPath("C:/repo")):

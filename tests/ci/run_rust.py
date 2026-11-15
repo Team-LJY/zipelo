@@ -31,8 +31,15 @@ def work_directory(root, name):
         cwd=root, text=True,
     ).strip()).resolve()
     project = common.parent if common.name == ".git" else root.resolve()
-    base = project / "tests/work"
-    base.mkdir(parents=True, exist_ok=True)
+    tests = project / "tests"
+    base = tests / "work"
+    if tests.is_symlink() or not tests.is_dir():
+        raise ValueError(f"안전한 작업 디렉터리가 필요함: {tests}")
+    if base.is_symlink() or (base.exists() and not base.is_dir()):
+        raise ValueError(f"안전한 작업 디렉터리가 필요함: {base}")
+    base.mkdir(mode=0o700, exist_ok=True)
+    if base.resolve() != base:
+        raise ValueError(f"안전한 작업 디렉터리가 필요함: {base}")
     path = base / name
     if path.is_symlink() or (path.exists() and not path.is_dir()):
         raise ValueError(f"안전한 작업 디렉터리가 필요함: {path}")
@@ -165,8 +172,8 @@ def prepare_tools(root):
             ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
             cwd=root, text=True,
         ).strip())
-        # 같은 저장소의 기본 worktree에 준비한 도구만 재사용함.
-        if common.name == ".git" and common.parent != root:
+        # 같은 저장소의 기본 worktree에 준비한 도구를 재사용함.
+        if common.name == ".git":
             directories.append(common.parent / "tests/ci/tools")
     for tools in directories:
         if (tools / "rustup/toolchains/1.99.1-x86_64-unknown-linux-gnu").is_dir():
