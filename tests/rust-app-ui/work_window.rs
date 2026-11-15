@@ -694,3 +694,132 @@ fn partial_limit_result_is_visible_in_main_modal_without_native_child() {
     assert!(!shown.iter().any(|(text, _)| text == "한도를 늘려 다시 시도"));
     assert_eq!(WORK_CHILD.with(|child| child.borrow().rendered), 0);
 }
+
+#[test]
+fn startup_work_window_is_above_parent_before_focus_is_reported() {
+    let factory = FakeFactory::manual();
+    let mut app = ArchiveApp::new(Box::new(factory.clone()), Some("/sample.zip".into()), false);
+    let ctx = egui::Context::default();
+    ctx.set_embed_viewports(false);
+    install_work_child_renderer();
+    let mut raw = egui::RawInput {
+        screen_rect: Some(egui::Rect::from_min_size(
+            egui::Pos2::ZERO,
+            egui::vec2(1060.0, 720.0),
+        )),
+        ..Default::default()
+    };
+    raw.viewports
+        .insert(egui::ViewportId::ROOT, egui::ViewportInfo::default());
+    let _ = ctx.run_ui(raw, |ui| app.show(ui));
+    WORK_CHILD.with(|child| {
+        let child = child.borrow();
+        let (_, builder) = child
+            .builders
+            .iter()
+            .find(|(id, _)| *id == egui::ViewportId::from_hash_of("archive-work"))
+            .expect("작업 창이 처음부터 보여야 함");
+        assert_eq!(builder.window_level, Some(egui::WindowLevel::AlwaysOnTop));
+    });
+}
+
+#[test]
+fn native_work_window_follows_app_focus_without_covering_other_apps() {
+    let factory = FakeFactory::manual();
+    let mut app = ArchiveApp::new(Box::new(factory), Some("/sample.zip".into()), false);
+    let ctx = egui::Context::default();
+    ctx.set_embed_viewports(false);
+    install_work_child_renderer();
+    let id = egui::ViewportId::from_hash_of("archive-work");
+    for (parent, child, level) in [
+        (None, None, egui::WindowLevel::AlwaysOnTop),
+        (Some(true), Some(false), egui::WindowLevel::AlwaysOnTop),
+        (Some(false), Some(true), egui::WindowLevel::AlwaysOnTop),
+        (Some(false), Some(false), egui::WindowLevel::Normal),
+        (Some(true), Some(false), egui::WindowLevel::AlwaysOnTop),
+    ] {
+        let mut raw = egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(
+                egui::Pos2::ZERO,
+                egui::vec2(1060.0, 720.0),
+            )),
+            ..Default::default()
+        };
+        for (id, focus) in [(egui::ViewportId::ROOT, parent), (id, child)] {
+            raw.viewports.insert(
+                id,
+                egui::ViewportInfo {
+                    focused: focus,
+                    ..Default::default()
+                },
+            );
+        }
+        let _ = ctx.run_ui(raw, |ui| app.show(ui));
+        WORK_CHILD.with(|child| {
+            let child = child.borrow();
+            let (_, builder) = child
+                .builders
+                .iter()
+                .rev()
+                .find(|(window, _)| *window == id)
+                .unwrap();
+            assert_eq!(builder.window_level, Some(level));
+        });
+    }
+}
+
+#[test]
+fn hosted_work_window_stays_in_parent_and_hides_for_native_picker() {
+    let factory = FakeFactory::manual();
+    let mut app = ArchiveApp::new(Box::new(factory.clone()), Some("/sample.zip".into()), false);
+    app.set_work_window_in_parent(true);
+    let ctx = egui::Context::default();
+    ctx.set_embed_viewports(false);
+    install_work_child_renderer();
+    for _ in 0..3 {
+        policy_render(&ctx, &mut app, vec![]);
+    }
+    let shown = policy_render(&ctx, &mut app, vec![]);
+    assert!(
+        shown.iter().any(|(text, _)| text == "압축파일을 읽는 중"),
+        "{shown:?}"
+    );
+    assert!(shown.iter().any(|(text, _)| text == "취소"));
+    assert!(WORK_CHILD.with(|child| child.borrow().builders.is_empty()));
+    {
+        let mut worker = factory.state.borrow_mut();
+        worker.finish(Outcome::Failed, Publication::None);
+        for event in &mut worker.queue {
+            if let HostEvent::Frame {
+                event: Event::Terminal(terminal),
+                ..
+            } = event
+            {
+                terminal.error = Some(ErrorCode::Io);
+            }
+        }
+    }
+    for _ in 0..3 {
+        policy_render(&ctx, &mut app, vec![]);
+    }
+    let dialogs = HeldDialogs::default();
+    app.set_dialogs(Box::new(dialogs.clone()));
+    policy_click(&ctx, &mut app, "열기");
+    assert_eq!(dialogs.0.borrow().len(), 1);
+    let shown = policy_render(&ctx, &mut app, vec![]);
+    assert!(
+        !shown
+            .iter()
+            .any(|(text, _)| text == "압축파일을 열지 못했습니다")
+    );
+    dialogs.0.borrow()[0].send(Ok(None)).unwrap();
+    for _ in 0..3 {
+        policy_render(&ctx, &mut app, vec![]);
+    }
+    let shown = policy_render(&ctx, &mut app, vec![]);
+    assert!(
+        shown
+            .iter()
+            .any(|(text, _)| text == "압축파일을 열지 못했습니다")
+    );
+}

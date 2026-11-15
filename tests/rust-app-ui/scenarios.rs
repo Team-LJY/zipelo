@@ -21,6 +21,8 @@ macro_rules! catalog {
 }
 
 catalog! {
+    "archive-loading" => "목록 로딩 중 최초 작업 창의 표시 순서",
+    "archive-loading-in-parent" => "Wayland의 부모 내부 목록 로딩 창",
     "recovery-progress" => "ZIP 복구 분석과 저장 확인 전 대기",
     "recovery-complete" => "전체 항목을 검증한 복구본 저장 완료",
     "recovery-partial" => "유실 항목이 있는 복구본과 경고",
@@ -275,6 +277,24 @@ impl Scenario {
             "tar-xz" => "여행 자료.TaR.Xz",
             _ => "여행 자료.zip",
         });
+        if matches!(self.name, "archive-loading" | "archive-loading-in-parent") {
+            app.set_work_window_in_parent(self.name == "archive-loading-in-parent");
+            app.open_path(archive);
+            {
+                let mut state = state.borrow_mut();
+                state.frame(Event::Accepted { encryption: false });
+                state.frame(Event::Progress {
+                    stage: Stage::Read,
+                    processed: 38 << 20,
+                    total: Some(61 << 20),
+                    completed_entries: 0,
+                });
+            }
+            for _ in 0..64 {
+                app.model.poll();
+            }
+            return app;
+        }
         app.model.archive = Some(archive.clone());
         app.model.entries = entries(self.name == "many-items");
         app.model.list_id = Some(ListId {

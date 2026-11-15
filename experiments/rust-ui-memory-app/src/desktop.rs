@@ -108,6 +108,7 @@ fn run() -> eframe::Result {
                 if let Some(scenario) = scenario {
                     let mut app = scenario.build();
                     app.set_custom_frame(custom_frame);
+                    app.set_work_window_in_parent(custom_frame);
                     return Ok(Box::new(
                         zipelo_ui_memory_app::archive_screen::scenarios::Preview::new(
                             app,
@@ -139,6 +140,7 @@ fn run() -> eframe::Result {
                     fixture,
                 );
                 app.set_custom_frame(custom_frame);
+                app.set_work_window_in_parent(custom_frame);
                 Ok(Box::new(app))
             })
         },
