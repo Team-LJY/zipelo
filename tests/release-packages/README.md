@@ -3,9 +3,11 @@
 저장소의 packaging/windows/rust/build.py와 packaging/ubuntu/rust/build.py로 두 플랫폼의 실제 앱과 작업자를 생성합니다. 기본 profile은 release이며 ui-fixture는 사용하지 않습니다.
 
 ```sh
-python3 tests/ci/run_rust.py local
-python3 -m unittest discover -s tests/release-packages -p "test_*.py"
-python3 tests/release-packages/ubuntu_smoke.py tests/work/v021-build-out/zipelo_0.2.1_amd64.deb --work-dir tests/work/ubuntu-package-smoke
+checkout="$(git rev-parse --show-toplevel)"
+work="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")/tests/work"
+python3 "$checkout/tests/ci/run_rust.py" local
+python3 -m unittest discover -s "$checkout/tests/release-packages" -p "test_*.py"
+python3 "$checkout/tests/release-packages/ubuntu_smoke.py" "$work/v021-build-out/zipelo_0.2.1_amd64.deb" --work-dir "$work/ubuntu-package-smoke"
 ```
 
 Ubuntu 실기 스모크는 이 패키지를 sudo로 설치하되, 패키지 설치 및 제거 시 실제 사용자의 기본 앱 설정 단계는 실행하지 않습니다. 대신 tests/work 안의 격리된 HOME에서 ZIP, 7z, TAR.GZ 기본 앱 적용과 제거를 검증합니다. 별도 Xvfb 화면에서 공백이 있는 경로의 합성 ZIP을 실제 앱으로 열어 소유 창을 캡처합니다. 실제 사용자 MIME 설정 파일은 시험 전후 바이트 단위로 비교하며 변경되면 실패를 보고하고 덮어쓰지 않습니다. 설치된 Zipelo나 같은 경로의 기존 파일이 있으면 중단합니다.

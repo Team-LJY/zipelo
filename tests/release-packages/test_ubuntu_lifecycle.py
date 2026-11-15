@@ -45,6 +45,33 @@ class LifecycleTests(unittest.TestCase):
                 test_work_root(), SMOKE.work_root() / "lifecycle-regression/tmp"
             )
 
+    def test_work_directory_rejects_nested_checkout_paths(self):
+        allowed = SMOKE.work_root().resolve()
+        self.assertEqual(SMOKE.selected_work_directory(None, allowed),
+                         allowed / "ubuntu-package-smoke")
+        self.assertEqual(SMOKE.selected_work_directory(allowed / "custom", allowed),
+                         allowed / "custom")
+        for requested in (allowed, allowed / "review/r/tests/work/nested",
+                          allowed / "review/r/tests/work", allowed.parent / "outside"):
+            with self.subTest(requested=requested), self.assertRaisesRegex(
+                ValueError, "바로 아래"
+            ):
+                SMOKE.selected_work_directory(requested, allowed)
+
+    def test_readme_commands_use_checkout_and_common_work_root(self):
+        readme = (ROOT / "tests/release-packages/README.md").read_text()
+        commands = readme.split("```sh\n", 1)[1].split("\n```", 1)[0]
+        result = subprocess.run(
+            ["bash", "-c", 'python3() { printf "<%s>\n" "$@"; }; ' + commands],
+            cwd=ROOT / "tests/release-packages", check=True, capture_output=True, text=True,
+        )
+        output = result.stdout
+        self.assertIn(str(ROOT / "tests/ci/run_rust.py"), output)
+        self.assertIn(str(ROOT / "tests/release-packages/ubuntu_smoke.py"), output)
+        self.assertIn(str(SMOKE.work_root() / "v021-build-out/zipelo_0.2.1_amd64.deb"),
+                      output)
+        self.assertIn(str(SMOKE.work_root() / "ubuntu-package-smoke"), output)
+
     def test_only_first_configuration_sets_defaults(self):
         commands = self.directory / "bin"
         commands.mkdir()

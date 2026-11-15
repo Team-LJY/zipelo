@@ -30,6 +30,13 @@ def work_root():
     return directory.parent / "tests/work"
 
 
+def selected_work_directory(requested, allowed_work_root):
+    runs = (requested or allowed_work_root / "ubuntu-package-smoke").resolve()
+    if runs.parent != allowed_work_root:
+        raise ValueError("작업 폴더는 프로젝트 tests/work 바로 아래에 있어야 함")
+    return runs
+
+
 def isolated_environment(home):
     home = home.resolve()
     for directory in (home / ".config", home / ".local/share", home / ".local/state", home / ".cache"):
@@ -97,9 +104,10 @@ def main():
     args = parser.parse_args()
     package = args.package.resolve(strict=True)
     allowed_work_root = work_root().resolve()
-    runs = (args.work_dir or allowed_work_root / "ubuntu-package-smoke").resolve()
-    if not runs.is_relative_to(allowed_work_root) or runs == allowed_work_root:
-        parser.error("작업 폴더는 프로젝트 tests/work 아래에 있어야 함")
+    try:
+        runs = selected_work_directory(args.work_dir, allowed_work_root)
+    except ValueError as error:
+        parser.error(str(error))
     runs.mkdir(parents=True, exist_ok=False)
     assert subprocess.run(["dpkg-query", "-W", "-f=${db:Status-Status}", "zipelo"],
                           capture_output=True).stdout != b"installed", "기존 설치를 보존해야 함"
