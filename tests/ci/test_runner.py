@@ -24,6 +24,28 @@ class RunnerTests(unittest.TestCase):
                 run_rust.work_directory(run_rust.ROOT, name)
         self.assertEqual(run_rust.work_directory(run_rust.ROOT, os.environ["ZIPELO_CI_JOB"]), TEST_WORK)
 
+    def test_output_paths_reject_symlinks_outside_job(self):
+        with tempfile.TemporaryDirectory(dir=TEST_WORK) as directory:
+            work = Path(directory)
+            outside = TEST_WORK / "outside"
+            for name in ("tmp", "target"):
+                with self.subTest(name=name):
+                    link = work / name
+                    link.symlink_to(outside, target_is_directory=True)
+                    with self.assertRaisesRegex(ValueError, "작업 폴더 밖"):
+                        run_rust.output_directory(work, name, create=True)
+                    self.assertFalse(outside.exists())
+                    link.unlink()
+
+    def test_output_paths_allow_symlinks_within_job(self):
+        with tempfile.TemporaryDirectory(dir=TEST_WORK) as directory:
+            work = Path(directory)
+            inner = work / "inner"
+            inner.mkdir()
+            link = work / "tmp"
+            link.symlink_to(inner, target_is_directory=True)
+            self.assertEqual(run_rust.output_directory(work, "tmp", create=True), link)
+
     def test_cargo_and_temp_paths_are_kept_in_job_directory(self):
         for key in ("CARGO_TARGET_DIR", "TMPDIR", "TMP", "TEMP", "ZIPELO_TEST_WORK_DIR"):
             with self.subTest(key=key):

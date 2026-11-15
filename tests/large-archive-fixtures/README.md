@@ -14,20 +14,20 @@ Python 표준 라이브러리로 실행할 때 합성 표본을 생성합니다.
 
 ## 실행
 
-저장소 루트에서 실행합니다. --large는 1 GiB 성공 2건과 16 GiB 초과 거부를 포함해 총 14건을 검사합니다. 생성을 포함한 기본 실행은 tests 안의 전용 임시 디렉터리를 쓰고 종료 시 정리합니다. 압축 표본, 입력 사본과 출력에 수 GiB의 임시 디스크 공간이 필요합니다.
+저장소 루트에서 실행합니다. --large는 1 GiB 성공 2건과 16 GiB 초과 거부를 포함해 총 14건을 검사합니다. 생성을 포함한 기본 실행은 tests/work/rust-local 안의 전용 임시 디렉터리를 쓰고 종료 시 정리합니다. 압축 표본, 입력 사본과 출력에 수 GiB의 임시 디스크 공간이 필요합니다.
 
 ```sh
 python3 tests/ci/run_rust.py local
 python3 tests/large-archive-fixtures/verify.py --large
 ```
 
-CARGO_TARGET_DIR을 지정했다면 검증기도 같은 환경 값을 사용합니다. --probe와 --worker로 바이너리 경로를 따로 지정할 수도 있습니다. --large를 생략하면 작은 경계 및 고압축 호환성 11건만 검사합니다. 기본 local 실행에는 작은 표본의 참조 무결성, 경계 독립성과 생성기 경로 및 버퍼 제약 검사가 포함됩니다.
+검증기는 기본적으로 tests/work/rust-local/target의 빌드를 사용합니다. CARGO_TARGET_DIR을 지정했다면 같은 환경 값을 사용합니다. --probe와 --worker로 바이너리 경로를 따로 지정할 수도 있습니다. --large를 생략하면 작은 경계 및 고압축 호환성 11건만 검사합니다. 기본 local 실행에는 작은 표본의 참조 무결성, 경계 독립성과 생성기 경로 및 버퍼 제약 검사가 포함됩니다.
 
-표본을 보존하려면 아래처럼 새 경로를 지정합니다. 기존 디렉터리는 생성기가 덮어쓰지 않으며, 검증기는 기존 expectations.json이 있으면 재사용합니다.
+표본을 보존하려면 아래처럼 작업 폴더 안의 새 상대 경로를 지정합니다. 기존 디렉터리는 생성기가 덮어쓰지 않으며, 검증기는 기존 expectations.json이 있으면 재사용합니다.
 
 ```sh
-python3 tests/large-archive-fixtures/generate.py --large --output tests/large-archive-fixtures/runs/full
-python3 tests/large-archive-fixtures/verify.py --large --directory tests/large-archive-fixtures/runs/full
+python3 tests/large-archive-fixtures/generate.py --large --output large-archive-fixtures/full
+python3 tests/large-archive-fixtures/verify.py --large --directory large-archive-fixtures/full
 ```
 
 검증기는 전체 표본을 참조 판독기로 읽어 합성 내용, CRC와 TAR 구조를 확인한 후 실제 작업자의 종료 코드, Terminal, 오류, 게시 상태, Output 개수와 정리를 확인합니다. 성공 파일은 길이와 모든 바이트를 검사하며 거부한 경우 출력 폴더가 비어 있어야 합니다. 입력의 전후 SHA-256도 확인합니다. 작업자 피크 RSS, 디스크 부족과 고아 작업자 정리는 tests/rust-archive-worker/hardening.rs에서 별도로 검사합니다. Windows 실기는 별도 검증이 필요합니다.

@@ -42,6 +42,15 @@ def work_directory(root, name):
     return path
 
 
+def output_directory(work, name, create=False):
+    path = work / name
+    if not path.resolve().is_relative_to(work) or (path.exists() and not path.is_dir()):
+        raise ValueError(f"작업 폴더 밖의 출력 경로는 허용하지 않음: {path}")
+    if create:
+        path.mkdir(mode=0o700, exist_ok=True)
+    return path
+
+
 def test_work_directory(root):
     return Path(os.environ.get("ZIPELO_TEST_WORK_DIR", root / "tests/work/rust-local"))
 
@@ -226,8 +235,8 @@ def main():
     if args.phase == "local" and sys.platform != "linux":
         parser.error("local 모드는 Linux에서 실행해야 함")
     work = work_directory(ROOT, args.job)
-    temporary = work / "tmp"
-    temporary.mkdir(mode=0o700, exist_ok=True)
+    temporary = output_directory(work, "tmp", create=True)
+    target = output_directory(work, "target")
     os.environ["ZIPELO_CI_JOB"] = args.job
     os.environ["ZIPELO_TEST_WORK_DIR"] = str(work)
     os.environ["TMPDIR"] = str(temporary)
@@ -235,7 +244,7 @@ def main():
     os.environ["TEMP"] = str(temporary)
     os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
     os.environ.setdefault("CARGO_BUILD_JOBS", "2")
-    os.environ["CARGO_TARGET_DIR"] = str(work / "target")
+    os.environ["CARGO_TARGET_DIR"] = str(target)
     prepare_tools(ROOT)
     phases = ["build", "test", "cross-build"] if args.phase == "local" else [args.phase]
     checks = subprocess.run(

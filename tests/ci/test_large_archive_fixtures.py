@@ -2,10 +2,13 @@ import gzip
 import importlib.util
 import io
 import os
+import subprocess
+import sys
 from pathlib import Path
 import tarfile
 import tempfile
 import unittest
+from unittest.mock import patch
 import zipfile
 
 
@@ -18,6 +21,32 @@ SPEC.loader.exec_module(GENERATOR)
 
 
 class LargeArchiveFixtureTests(unittest.TestCase):
+    def test_standalone_generator_uses_common_work_directory(self):
+        expected = Path(os.environ["ZIPELO_TEST_WORK_DIR"])
+        with tempfile.TemporaryDirectory(dir=expected) as scratch:
+            relative = Path(scratch).name + "/corpus"
+            environment = dict(os.environ, ZIPELO_CI_JOB=expected.name)
+            environment.pop("ZIPELO_TEST_WORK_DIR", None)
+            result = subprocess.run(
+                ["python3", str(ROOT / "tests/large-archive-fixtures/generate.py"),
+                 "--output", relative],
+                cwd=ROOT, env=environment, capture_output=True, text=True, check=True,
+            )
+            self.assertTrue((Path(scratch) / "corpus/expectations.json").is_file())
+            self.assertIn("11 cases", result.stdout)
+
+    def test_standalone_verifier_uses_work_target(self):
+        job = Path(os.environ["ZIPELO_TEST_WORK_DIR"]).name
+        with patch.dict(os.environ, {"ZIPELO_CI_JOB": job}), patch.dict(sys.modules, {"generate": GENERATOR}):
+            os.environ.pop("ZIPELO_TEST_WORK_DIR", None)
+            os.environ.pop("CARGO_TARGET_DIR", None)
+            spec = importlib.util.spec_from_file_location(
+                "large_fixture_verifier", ROOT / "tests/large-archive-fixtures/verify.py"
+            )
+            verifier = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(verifier)
+            self.assertEqual(verifier.default_target(), GENERATOR.work_root() / "target/debug")
+
     def test_boundary_archives_are_valid_and_expectations_straddle_limit(self):
         with tempfile.TemporaryDirectory(dir=os.environ["ZIPELO_TEST_WORK_DIR"]) as scratch:
             directory = Path(scratch) / "corpus"
