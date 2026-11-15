@@ -1,17 +1,34 @@
 from contextlib import redirect_stdout
 from io import StringIO
 import json
+import os
 from pathlib import Path, PurePosixPath, PureWindowsPath
 import tempfile
 import subprocess
 import sys
 import unittest
-from unittest.mock import patch
+from unittest.mock import ANY, patch
 
 import run_rust
 
 
+TEST_WORK = run_rust.work_directory(
+    run_rust.ROOT, os.environ.get("ZIPELO_CI_JOB", "rust-local")
+)
+
+
 class RunnerTests(unittest.TestCase):
+    def test_job_directory_is_restricted_to_one_work_child(self):
+        for name in ("../escape", "other/job", "", ".hidden", "bad name"):
+            with self.subTest(name=name), self.assertRaises(ValueError):
+                run_rust.work_directory(run_rust.ROOT, name)
+        self.assertEqual(run_rust.work_directory(run_rust.ROOT, os.environ["ZIPELO_CI_JOB"]), TEST_WORK)
+
+    def test_cargo_and_temp_paths_are_kept_in_job_directory(self):
+        for key in ("CARGO_TARGET_DIR", "TMPDIR", "TMP", "TEMP", "ZIPELO_TEST_WORK_DIR"):
+            with self.subTest(key=key):
+                self.assertTrue(Path(os.environ[key]).resolve().is_relative_to(TEST_WORK))
+
     def test_all_manifests_have_locks(self):
         paths = run_rust.manifests(run_rust.ROOT)
         expected = set(run_rust.ROOT.glob("experiments/*/Cargo.toml"))
@@ -84,13 +101,14 @@ class RunnerTests(unittest.TestCase):
     def test_self_check_failure_replaces_previous_success_report(self):
         for phase, platform in (("local", "linux"), ("test", "win32")):
             with self.subTest(phase=phase), tempfile.TemporaryDirectory(
-                dir=run_rust.ROOT / "tests/ci"
+                dir=TEST_WORK
             ) as directory:
                 root = Path(directory)
-                (root / "tests/ci").mkdir(parents=True)
-                report_path = root / f"tests/ci/{phase}-results.json"
+                (root / "work/tmp").mkdir(parents=True)
+                report_path = root / f"work/{phase}-results.json"
                 with (
                     patch.object(run_rust, "ROOT", root),
+                    patch.object(run_rust, "work_directory", return_value=root / "work"),
                     patch.object(run_rust, "prepare_tools"),
                     patch.object(run_rust, "prepare_local_tools"),
                     patch.object(run_rust.sys, "argv", ["run_rust.py", phase]),
@@ -125,7 +143,7 @@ class RunnerTests(unittest.TestCase):
 
     @unittest.skipUnless(sys.platform == "linux", "Linux MinGW 실행 파일 탐색 시험임")
     def test_linked_worktree_finds_setup_tools_without_path_export(self):
-        with tempfile.TemporaryDirectory(dir=run_rust.ROOT / "tests/ci") as directory:
+        with tempfile.TemporaryDirectory(dir=TEST_WORK) as directory:
             base = Path(directory)
             root = base / "linked"
             tools = base / "tests/ci/tools"
@@ -159,7 +177,7 @@ class RunnerTests(unittest.TestCase):
                 ):
                     run_rust.prepare_local_tools(root)
                 setup.assert_called_once_with(
-                    ["bash", str(root / "tests/ci/setup_windows.sh")], cwd=root, check=True,
+                    ["bash", str(root / "tests/ci/setup_windows.sh")], cwd=root, env=ANY, check=True,
                 )
                 reload.assert_called_once_with(root)
                 self.assertEqual(detect.call_count, 2)
@@ -184,10 +202,10 @@ class RunnerTests(unittest.TestCase):
 
     @unittest.skipUnless(sys.platform == "linux", "Linux 파일시스템과 소유권 검사 시험임")
     def test_filesystem_skip_is_limited_to_publication_test_crates(self):
-        with tempfile.TemporaryDirectory(dir=run_rust.ROOT / "tests/ci") as directory:
+        with tempfile.TemporaryDirectory(dir=TEST_WORK) as directory:
             root = Path(directory)
-            for name in run_rust.FILE_FIXTURES:
-                (root / "tests" / name).mkdir(parents=True)
+            work = root / "work"
+            work.mkdir()
             paths = [
                 root / "tests/rust-file-publication/Cargo.toml",
                 root / "tests/rust-gzip-file-job/Cargo.toml",
@@ -196,6 +214,7 @@ class RunnerTests(unittest.TestCase):
             ]
             with (
                 patch.object(run_rust, "manifests", return_value=paths),
+                patch.dict(run_rust.os.environ, {"ZIPELO_TEST_WORK_DIR": str(work)}),
                 patch.object(run_rust.subprocess, "check_output", return_value="1021994\n"),
                 patch.object(run_rust.subprocess, "run", return_value=subprocess.CompletedProcess([], 0)) as cargo,
             ):
@@ -212,18 +231,19 @@ class RunnerTests(unittest.TestCase):
 
     @unittest.skipUnless(sys.platform == "linux", "Linux 소켓 경로 회귀 시험임")
     def test_long_checkout_does_not_block_file_fixtures(self):
-        work = run_rust.ROOT / "tests/work"
-        work.mkdir(exist_ok=True)
-        with tempfile.TemporaryDirectory(dir=work) as directory:
+        with tempfile.TemporaryDirectory(dir=TEST_WORK) as directory:
             root = Path(directory) / ("long-checkout-" * 10)
-            for name in run_rust.FILE_FIXTURES:
-                (root / "tests" / name).mkdir(parents=True)
+            work = Path(directory) / "work"
             socket = root / "tests/rust-file-publication/runs/case-1-1/parent/output"
             self.assertGreaterEqual(len(run_rust.os.fsencode(socket)), 108)
-            with patch.object(run_rust.subprocess, "check_output", return_value="ef53\n"):
+            with (
+                patch.dict(run_rust.os.environ, {"ZIPELO_TEST_WORK_DIR": str(work)}),
+                patch.object(run_rust.subprocess, "check_output", return_value="ef53\n"),
+            ):
                 self.assertEqual(run_rust.prepare_fixtures(root), {})
             for name in run_rust.FILE_FIXTURES:
-                self.assertEqual(list((root / "tests" / name / "runs").iterdir()), [])
+                self.assertEqual(list((work / "fixtures" / name).iterdir()), [])
+                self.assertFalse((root / "tests" / name / "runs").exists())
 
     def test_unknown_filesystem_probe_error_is_failure(self):
         with (

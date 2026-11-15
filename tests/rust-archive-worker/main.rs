@@ -14,12 +14,8 @@ static NEXT: AtomicU64 = AtomicU64::new(0);
 struct Scratch(PathBuf);
 impl Scratch {
     fn new() -> Self {
-        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .unwrap()
-            .parent()
-            .unwrap()
-            .join("tests/rust-archive-worker/runs")
+        let path = PathBuf::from(std::env::var_os("ZIPELO_TEST_WORK_DIR").expect("runner 작업 경로 필요"))
+            .join("fixtures/rust-archive-worker")
             .join(format!(
                 "{}-{}",
                 std::process::id(),

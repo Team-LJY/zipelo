@@ -119,7 +119,7 @@
     },
     "fixture_provenance": {
         "inputs": "Only source-defined pattern(i)=(i*37+11)%251, fixed literals and bounded repeated bytes. No archive or user-file inputs.",
-        "paths": "Future approved runner exclusively creates mode-0700 tests/rust-file-publication/runs. Each case creates exclusive case-PID-counter and a mode-0700 parent. Tests may only publish/create/move/remove their own synthetic paths. No global cwd, environment, umask, permission or ownership changes.",
+        "paths": "Future approved runner exclusively creates mode-0700 tests/work/<작업명>/fixtures/rust-file-publication. Each case creates exclusive case-PID-counter and a mode-0700 parent. Tests may only publish/create/move/remove their own synthetic paths. No global cwd, environment, umask, permission or ownership changes.",
         "special_files": "Synthetic FIFO through existing libc::mkfifo, unconnected local Unix socket, symlinks and hard links. No device nodes, mounts or system special-file writes.",
         "filesystem": "Linux magic ef53 (ext family) or 58465342 (XFS), exclusively managed by effective UID. The current tests directory reports ef53 in read-only stat inspection; O_TMPFILE/linkat/fsync are unverified until execution. Unsupported environment must stop, not skip or silently fall back.",
         "boundaries": [

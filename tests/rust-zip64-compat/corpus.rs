@@ -58,7 +58,7 @@ fn directory(path: &Path) {
 #[test]
 fn zip64_tool_and_field_corpus_lists_and_extracts() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let runs = root.join("runs");
+    let runs = PathBuf::from(std::env::var_os("ZIPELO_TEST_WORK_DIR").expect("runner 작업 경로 필요")).join("fixtures/rust-zip64-compat");
     fs::create_dir_all(&runs).unwrap();
     let scratch = runs.join(format!(
         "{}-{}",

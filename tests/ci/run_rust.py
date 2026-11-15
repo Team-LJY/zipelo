@@ -1,6 +1,7 @@
 import argparse
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import stat
@@ -19,6 +20,32 @@ LINUX_ONLY = {
 }
 FILE_FIXTURES = LINUX_ONLY - {"rust-ui-system-font-regressions"}
 PUBLICATION_FIXTURES = {"rust-file-publication", "rust-gzip-file-job"}
+JOB_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}\Z")
+
+
+def work_directory(root, name):
+    if not JOB_NAME.fullmatch(name):
+        raise ValueError("작업명은 영숫자로 시작하는 영숫자, 밑줄, 하이픈만 허용함")
+    common = Path(subprocess.check_output(
+        ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
+        cwd=root, text=True,
+    ).strip()).resolve()
+    project = common.parent if common.name == ".git" else root.resolve()
+    base = project / "tests/work"
+    base.mkdir(parents=True, exist_ok=True)
+    path = base / name
+    if path.is_symlink() or (path.exists() and not path.is_dir()):
+        raise ValueError(f"안전한 작업 디렉터리가 필요함: {path}")
+    path.mkdir(mode=0o700, exist_ok=True)
+    if path.resolve() != path:
+        raise ValueError(f"안전한 작업 디렉터리가 필요함: {path}")
+    return path
+
+
+def test_work_directory(root):
+    return Path(os.environ.get("ZIPELO_TEST_WORK_DIR", root / "tests/work/rust-local"))
+
+
 
 
 def manifests(root):
@@ -53,9 +80,9 @@ def command(manifest, phase):
 def prepare_fixtures(root):
     skipped = {}
     for name in sorted(FILE_FIXTURES):
-        path = root / "tests" / name / "runs"
+        path = test_work_directory(root) / "fixtures" / name
         if not path.exists() and not path.is_symlink():
-            path.mkdir(mode=0o700)
+            path.mkdir(mode=0o700, parents=True)
         info = path.lstat()
         if (
             not stat.S_ISDIR(info.st_mode)
@@ -124,7 +151,7 @@ def prepare_tools(root):
     if configured:
         directories = [Path(configured).resolve()]
     else:
-        directories = [root / "tests/ci/tools"]
+        directories = [test_work_directory(root) / "tools"]
         common = Path(subprocess.check_output(
             ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
             cwd=root, text=True,
@@ -169,7 +196,10 @@ def prepare_local_tools(root):
         prepare_cross_build()
     except ValueError:
         print("Windows 교차 도구를 프로젝트 내부에 준비함: tests/ci/setup_windows.sh", flush=True)
-        subprocess.run(["bash", str(root / "tests/ci/setup_windows.sh")], cwd=root, check=True)
+        environment = dict(os.environ, ZIPELO_CI_TOOLS=str(test_work_directory(root) / "tools"))
+        subprocess.run(["bash", str(root / "tests/ci/setup_windows.sh")],
+                       cwd=root, env=environment, check=True)
+        os.environ["ZIPELO_CI_TOOLS"] = environment["ZIPELO_CI_TOOLS"]
         prepare_tools(root)
         prepare_cross_build()
 
@@ -191,12 +221,22 @@ def execute_phases(root, phases):
 def main():
     parser = argparse.ArgumentParser(description="로컬 Linux 시험과 Windows 교차 빌드")
     parser.add_argument("phase", choices=["local", "build", "test", "cross-build"])
+    parser.add_argument("--job", default=os.environ.get("ZIPELO_CI_JOB", "rust-local"))
     args = parser.parse_args()
     if args.phase == "local" and sys.platform != "linux":
         parser.error("local 모드는 Linux에서 실행해야 함")
-    prepare_tools(ROOT)
+    work = work_directory(ROOT, args.job)
+    temporary = work / "tmp"
+    temporary.mkdir(mode=0o700, exist_ok=True)
+    os.environ["ZIPELO_CI_JOB"] = args.job
+    os.environ["ZIPELO_TEST_WORK_DIR"] = str(work)
+    os.environ["TMPDIR"] = str(temporary)
+    os.environ["TMP"] = str(temporary)
+    os.environ["TEMP"] = str(temporary)
+    os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
     os.environ.setdefault("CARGO_BUILD_JOBS", "2")
-    os.environ.setdefault("CARGO_TARGET_DIR", str(ROOT / "tests/ci/target"))
+    os.environ["CARGO_TARGET_DIR"] = str(work / "target")
+    prepare_tools(ROOT)
     phases = ["build", "test", "cross-build"] if args.phase == "local" else [args.phase]
     checks = subprocess.run(
         [sys.executable, "-m", "unittest", "discover", "-s", "tests/ci", "-p", "test_*.py"],
@@ -227,7 +267,7 @@ def main():
         "windows_runtime_tested": checks.returncode == 0 and sys.platform == "win32" and "test" in phases,
         "results": results,
     }
-    (ROOT / f"tests/ci/{args.phase}-results.json").write_text(
+    (work / f"{args.phase}-results.json").write_text(
         json.dumps(report, ensure_ascii=False, indent=4) + "\n", encoding="utf-8"
     )
     lines = []

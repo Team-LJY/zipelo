@@ -13,7 +13,7 @@ HELPER = ROOT / "packaging/ubuntu/rust/default-apps"
 
 class DefaultAppsTests(unittest.TestCase):
     def setUp(self):
-        work = ROOT / "tests/work"
+        work = Path(os.environ["ZIPELO_TEST_WORK_DIR"])
         work.mkdir(exist_ok=True)
         self.temporary = tempfile.TemporaryDirectory(dir=work)
         self.addCleanup(self.temporary.cleanup)

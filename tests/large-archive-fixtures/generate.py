@@ -5,6 +5,7 @@ import gzip
 import hashlib
 import io
 import json
+import os
 from pathlib import Path
 import struct
 import tarfile
@@ -103,7 +104,7 @@ def violations(artifact, limits):
 
 def build(directory, large=False):
     directory = Path(directory).resolve()
-    directory.relative_to(ROOT / "tests")
+    directory.relative_to(Path(os.environ["ZIPELO_TEST_WORK_DIR"]).resolve())
     directory.mkdir(mode=0o700, parents=True, exist_ok=False)
     cases = []
     artifacts = {}

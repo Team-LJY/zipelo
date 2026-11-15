@@ -11,8 +11,8 @@ ROOT = Path(__file__).resolve().parents[2]
 class IconBuildTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        (ROOT / "tests/work").mkdir(parents=True, exist_ok=True)
-        cls.scratch = tempfile.TemporaryDirectory(dir=ROOT / "tests/work")
+        work = Path(os.environ["ZIPELO_TEST_WORK_DIR"])
+        cls.scratch = tempfile.TemporaryDirectory(dir=work)
         cls.addClassCleanup(cls.scratch.cleanup)
         cls.root = Path(cls.scratch.name)
         cls.builder = cls.root / "build.exe"

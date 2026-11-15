@@ -16,7 +16,7 @@ pub struct Sandbox {
 
 impl Sandbox {
     pub fn new() -> Self {
-        let parent = Path::new(env!("CARGO_MANIFEST_DIR")).join("runs");
+        let parent = PathBuf::from(std::env::var_os("ZIPELO_TEST_WORK_DIR").expect("runner 작업 경로 필요")).join("fixtures/rust-file-snapshot");
         let metadata = fs::symlink_metadata(&parent).expect("runner가 runs 디렉터리를 준비해야 함");
         assert!(metadata.is_dir() && !metadata.file_type().is_symlink());
         assert_eq!(metadata.mode() & 0o777, 0o700);

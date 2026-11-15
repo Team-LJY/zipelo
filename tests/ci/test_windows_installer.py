@@ -1,5 +1,6 @@
 import argparse
 import importlib.util
+import os
 from pathlib import Path
 import struct
 import re
@@ -18,7 +19,7 @@ SPEC.loader.exec_module(MODULE)
 
 class InstallerInputTests(unittest.TestCase):
     def setUp(self):
-        runs = ROOT / "tests/windows-installer/runs"
+        runs = Path(os.environ["ZIPELO_TEST_WORK_DIR"]) / "fixtures/windows-installer"
         runs.mkdir(parents=True, exist_ok=True)
         self.directory = tempfile.TemporaryDirectory(dir=runs)
         self.addCleanup(self.directory.cleanup)

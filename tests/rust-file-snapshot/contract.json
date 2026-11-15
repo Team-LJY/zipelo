@@ -210,7 +210,7 @@
             "<fixed-binary> --exact <contract-name> --test-threads=1 --nocapture"
         ],
         "toolchain": "Existing 1.99.1-x86_64-unknown-linux-gnu explicitly selected; default stable lacks rustfmt. No toolchain installation or shared override.",
-        "sandbox_precondition": "Approved runner creates tests/rust-file-snapshot/runs with mode 0700 before tests, verifies no symlink and expected owner, and refuses leftover case directories. No sandbox or synthetic input has been created at source-only stage."
+        "sandbox_precondition": "Approved runner creates tests/work/<작업명>/fixtures/rust-file-snapshot with mode 0700 before tests, verifies no symlink and expected owner, and refuses leftover case directories. No sandbox or synthetic input has been created at source-only stage."
     },
     "static_validation": {
         "allowed": [
