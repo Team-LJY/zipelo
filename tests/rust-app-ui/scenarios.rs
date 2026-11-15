@@ -91,6 +91,7 @@ catalog! {
     "folder-empty" => "항목이 없는 하위 폴더",
     "gzip-conflict" => "단일 GZ 파일 이름 충돌",
     "extract-disk-full" => "압축 해제 중 디스크 공간 또는 할당량 부족",
+    "extract-complete-cleanup-failed" => "압축 해제 완료와 출력 폴더의 임시 파일 정리 실패",
     "extract-cleanup-failed" => "압축 해제 실패와 출력 폴더의 임시 파일 정리 실패",
     "extract-partial" => "일부 파일만 풀린 결과",
     "extract-uncertain" => "저장 여부를 확인할 수 없는 결과",
@@ -904,7 +905,8 @@ impl Scenario {
                 "extract-complete"
                 | "create-complete"
                 | "create-sevenzip-complete"
-                | "extract-unsynced" => {
+                | "extract-unsynced"
+                | "extract-complete-cleanup-failed" => {
                     let names = app.targets.as_ref().unwrap();
                     for name in names {
                         state.frame(Event::Output {
@@ -924,7 +926,11 @@ impl Scenario {
                         } else {
                             Durability::Synced
                         },
-                        cleanup: Cleanup::Complete,
+                        cleanup: if self.name == "extract-complete-cleanup-failed" {
+                            Cleanup::Failed
+                        } else {
+                            Cleanup::Complete
+                        },
                     }));
                     state.queue.extend([
                         HostEvent::StdoutEof,

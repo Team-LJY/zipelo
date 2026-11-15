@@ -164,6 +164,7 @@ fn every_listed_scenario_draws_and_keeps_its_expected_screen() {
                 "tar-bz2" | "tar-xz" => "읽어주세요.txt",
                 "folder-empty" => "이 폴더는 비어 있습니다",
                 "dialog-error" => "파일 선택 창을 열 수 없습니다",
+                "extract-complete-cleanup-failed" => "압축을 풀었습니다",
                 "extract-disk-full" => "디스크 여유 공간이 부족합니다",
                 "extract-cleanup-failed" => "풀 위치 폴더에 남은 임시 파일이 있을 수 있습니다",
                 "extract-partial" => "일부 파일만 풀렸습니다",
@@ -192,6 +193,31 @@ fn every_listed_scenario_draws_and_keeps_its_expected_screen() {
                 _ => "읽어주세요.txt",
             };
             assert!(labels.contains(expected), "{}: {labels}", scenario.name);
+            if scenario.name == "extract-complete-cleanup-failed" {
+                use zipelo_ui_memory_app::archive_ui::{
+                    Cleanup, Disposition, Outcome, Publication,
+                };
+                let terminal = app.model.terminal.as_ref().unwrap();
+                assert!(app.model.confirmed);
+                assert_eq!(terminal.outcome, Outcome::Completed);
+                assert_eq!(terminal.error, None);
+                assert_eq!(terminal.publication, Publication::Complete);
+                assert_eq!(terminal.cleanup, Cleanup::Failed);
+                assert_eq!(terminal.created_count, app.model.outputs.len() as u64);
+                assert!(app
+                    .model
+                    .outputs
+                    .iter()
+                    .all(|(_, state)| *state == Disposition::Created));
+                assert!(labels.contains("폴더에 저장했습니다"), "{labels}");
+                assert!(labels.contains("임시 파일을 지우지 못했습니다"), "{labels}");
+                assert!(
+                    labels.contains("풀 위치 폴더에 남은 임시 파일이 있을 수 있습니다"),
+                    "{labels}"
+                );
+                assert!(!labels.contains("압축을 풀지 못했습니다"), "{labels}");
+                assert!(!labels.contains("아무 파일도 풀지 않았습니다"), "{labels}");
+            }
             if matches!(
                 scenario.name,
                 "extract-disk-full" | "extract-cleanup-failed"
