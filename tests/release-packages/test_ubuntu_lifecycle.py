@@ -98,6 +98,48 @@ with patch.object(module.subprocess, "run", return_value=subprocess.CompletedPro
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout.strip(), "blocked")
 
+    def test_window_guards_stay_active_with_python_optimization(self):
+        script = """import importlib.util
+import subprocess
+import sys
+from unittest.mock import Mock, patch
+
+spec = importlib.util.spec_from_file_location("ubuntu_smoke", sys.argv[1])
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+app = Mock(pid=123)
+app.poll.return_value = 1
+with patch.object(module.subprocess, "run") as search:
+    try:
+        module.wait_for_window(app, {}, timeout=0.5)
+    except RuntimeError as error:
+        if "조기에 종료" not in str(error):
+            raise
+    else:
+        raise SystemExit("종료된 앱을 통과시킴")
+    search.assert_not_called()
+app.poll.return_value = None
+with patch.object(module.subprocess, "run", return_value=subprocess.CompletedProcess([], 1)):
+    with patch.object(module.time, "monotonic", side_effect=[0, 1]):
+        with patch.object(module.time, "sleep") as sleep:
+            try:
+                module.wait_for_window(app, {}, timeout=0.5)
+            except RuntimeError as error:
+                if "시간 초과" not in str(error):
+                    raise
+            else:
+                raise SystemExit("창 탐색 제한 시간을 통과시킴")
+            sleep.assert_not_called()
+print("guards active")
+"""
+        result = subprocess.run(
+            [sys.executable, "-B", "-O", "-c", script, str(SMOKE.ROOT / "tests/release-packages/ubuntu_smoke.py")],
+            env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1"), cwd=ROOT,
+            capture_output=True, text=True, timeout=10,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), "guards active")
+
     def test_existing_installation_files_are_blocked(self):
         with (
             patch.object(SMOKE.subprocess, "run", return_value=subprocess.CompletedProcess([], 1, b"")),

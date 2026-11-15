@@ -10,8 +10,24 @@ if [[ ! "$job" =~ ^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$ ]]; then
     exit 2
 fi
 ci_tools="${ZIPELO_CI_TOOLS:-$project_root/tests/work/$job/tools}"
+ci_tools="$(python3 - "$project_root" "$job" "$ci_tools" <<'PYTHON'
+import os
+from pathlib import Path
+import sys
+
+project = Path(sys.argv[1]).resolve()
+allowed = project / "tests/work" / sys.argv[2]
+tools = Path(os.path.abspath(sys.argv[3]))
+for path in (project / "tests", project / "tests/work", allowed, tools,
+             tools / "downloads", tools / "mingw"):
+    if path.resolve() != path:
+        raise SystemExit(f"작업 폴더 밖의 경로는 허용하지 않음: {path}")
+if not tools.is_relative_to(allowed):
+    raise SystemExit(f"작업 폴더 밖의 경로는 허용하지 않음: {tools}")
+print(tools)
+PYTHON
+)"
 mkdir -p "$ci_tools/downloads" "$ci_tools/mingw"
-ci_tools="$(cd "$ci_tools" && pwd)"
 
 # 도구를 프로젝트 안에 풀며 시스템 패키지는 설치하지 않음.
 (
