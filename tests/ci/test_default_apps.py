@@ -7,13 +7,15 @@ import subprocess
 import tempfile
 import unittest
 
+import run_rust
+
 ROOT = Path(__file__).resolve().parents[2]
 HELPER = ROOT / "packaging/ubuntu/rust/default-apps"
 
 
 class DefaultAppsTests(unittest.TestCase):
     def setUp(self):
-        work = Path(os.environ["ZIPELO_TEST_WORK_DIR"])
+        work = run_rust.test_work_directory(ROOT)
         work.mkdir(exist_ok=True)
         self.temporary = tempfile.TemporaryDirectory(dir=work)
         self.addCleanup(self.temporary.cleanup)

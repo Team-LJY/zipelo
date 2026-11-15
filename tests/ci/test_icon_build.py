@@ -5,13 +5,15 @@ import subprocess
 import tempfile
 import unittest
 
+import run_rust
+
 ROOT = Path(__file__).resolve().parents[2]
 
 
 class IconBuildTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        work = Path(os.environ["ZIPELO_TEST_WORK_DIR"])
+        work = run_rust.test_work_directory(ROOT)
         cls.scratch = tempfile.TemporaryDirectory(dir=work)
         cls.addClassCleanup(cls.scratch.cleanup)
         cls.root = Path(cls.scratch.name)

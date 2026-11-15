@@ -11,6 +11,8 @@ import sys
 from unittest.mock import patch
 import unittest
 
+import run_rust
+
 ROOT = Path(__file__).resolve().parents[2]
 SPEC = importlib.util.spec_from_file_location("windows_installer", ROOT / "packaging/windows/rust/build.py")
 MODULE = importlib.util.module_from_spec(SPEC)
@@ -19,7 +21,7 @@ SPEC.loader.exec_module(MODULE)
 
 class InstallerInputTests(unittest.TestCase):
     def setUp(self):
-        runs = Path(os.environ["ZIPELO_TEST_WORK_DIR"]) / "fixtures/windows-installer"
+        runs = run_rust.test_work_directory(ROOT) / "fixtures/windows-installer"
         runs.mkdir(parents=True, exist_ok=True)
         self.directory = tempfile.TemporaryDirectory(dir=runs)
         self.addCleanup(self.directory.cleanup)

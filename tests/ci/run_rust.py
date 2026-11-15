@@ -59,7 +59,10 @@ def output_directory(work, name, create=False):
 
 
 def test_work_directory(root):
-    return Path(os.environ.get("ZIPELO_TEST_WORK_DIR", root / "tests/work/rust-local"))
+    configured = os.environ.get("ZIPELO_TEST_WORK_DIR")
+    if configured:
+        return Path(configured)
+    return work_directory(root, os.environ.get("ZIPELO_CI_JOB", "rust-local"))
 
 
 

@@ -22,7 +22,9 @@ class RunnerTests(unittest.TestCase):
         for name in ("../escape", "other/job", "", ".hidden", "bad name"):
             with self.subTest(name=name), self.assertRaises(ValueError):
                 run_rust.work_directory(run_rust.ROOT, name)
-        self.assertEqual(run_rust.work_directory(run_rust.ROOT, os.environ["ZIPELO_CI_JOB"]), TEST_WORK)
+        self.assertEqual(run_rust.work_directory(
+            run_rust.ROOT, os.environ.get("ZIPELO_CI_JOB", "rust-local")
+        ), TEST_WORK)
 
     def test_work_directory_rejects_symlinked_parents_before_creation(self):
         for link_name in ("tests", "tests/work"):
@@ -68,6 +70,8 @@ class RunnerTests(unittest.TestCase):
             self.assertEqual(run_rust.output_directory(work, "tmp", create=True), link)
 
     def test_cargo_and_temp_paths_are_kept_in_job_directory(self):
+        if "ZIPELO_TEST_WORK_DIR" not in os.environ:
+            self.skipTest("러너가 설정한 작업 경로에서 검사함")
         for key in ("CARGO_TARGET_DIR", "TMPDIR", "TMP", "TEMP", "ZIPELO_TEST_WORK_DIR"):
             with self.subTest(key=key):
                 self.assertTrue(Path(os.environ[key]).resolve().is_relative_to(TEST_WORK))
@@ -232,6 +236,15 @@ class RunnerTests(unittest.TestCase):
                 self.assertEqual(run_rust.shutil.which("x86_64-w64-mingw32-gcc-posix"),
                                  str(executable))
 
+    def test_unconfigured_work_directory_uses_common_project(self):
+        with patch.dict(os.environ), patch.object(
+            run_rust, "work_directory", return_value=TEST_WORK
+        ) as directory:
+            os.environ.pop("ZIPELO_TEST_WORK_DIR", None)
+            os.environ.pop("ZIPELO_CI_JOB", None)
+            self.assertEqual(run_rust.test_work_directory(run_rust.ROOT), TEST_WORK)
+            directory.assert_called_once_with(run_rust.ROOT, "rust-local")
+
     def test_local_bootstraps_missing_cross_tools_and_reloads_paths(self):
         for root in (Path("/repo"), PurePosixPath("/repo"), PureWindowsPath("C:/repo")):
             with self.subTest(root=root):
@@ -239,6 +252,7 @@ class RunnerTests(unittest.TestCase):
                     patch.object(run_rust, "prepare_cross_build", side_effect=[ValueError("missing"), None]) as detect,
                     patch.object(run_rust.subprocess, "run") as setup,
                     patch.object(run_rust, "prepare_tools") as reload,
+                    patch.object(run_rust, "test_work_directory", return_value=root / "tests/work/rust-local"),
                 ):
                     run_rust.prepare_local_tools(root)
                 setup.assert_called_once_with(
