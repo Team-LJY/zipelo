@@ -8,27 +8,107 @@ use std::{
 
 type Result<T> = std::result::Result<T, ErrorCode>;
 
+enum Placement {
+    Fixed(filesystem::Dir),
+    Fallback {
+        source_parent: std::path::PathBuf,
+        next: usize,
+        other_error: Option<ErrorCode>,
+    },
+}
+
 thread_local! {
-    // 작업 스레드가 지정한 임시 파일 위치. 없으면 시스템 임시 폴더를 사용함.
-    static LOCATION: std::cell::RefCell<Option<filesystem::Dir>> =
+    // 작업 스레드의 임시 파일 정책만 보관함.
+    static LOCATION: std::cell::RefCell<Option<Placement>> =
         const { std::cell::RefCell::new(None) };
     // 출력 폴더에 이름 있는 임시 파일을 만든 뒤 이름을 지우지 못했는지 기록함.
     static LEFTOVER: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 
-/// 해제 작업의 임시 파일을 출력 폴더에 두도록 지정함. 반환값이 사라지면 해제됨.
-/// 작업은 한 스레드에서 실행되므로 다른 작업이나 시험에 섞이지 않음.
-pub(crate) struct Location(());
+pub(crate) struct Location(Option<Placement>);
 impl Drop for Location {
     fn drop(&mut self) {
-        LOCATION.with(|location| *location.borrow_mut() = None);
+        LOCATION.with(|location| *location.borrow_mut() = self.0.take());
     }
 }
 pub(crate) fn place_in(dir: &filesystem::Dir) -> Result<Location> {
-    let dir = dir.duplicate()?;
-    LOCATION.with(|location| *location.borrow_mut() = Some(dir));
+    let placement = Placement::Fixed(dir.duplicate()?);
     LEFTOVER.with(|leftover| leftover.set(false));
-    Ok(Location(()))
+    Ok(LOCATION.with(|location| Location(location.replace(Some(placement)))))
+}
+pub(crate) fn fallback_for(path: &Path) -> Location {
+    LEFTOVER.with(|leftover| leftover.set(false));
+    let placement = Placement::Fallback {
+        source_parent: path.parent().unwrap_or(Path::new("")).to_path_buf(),
+        next: 0,
+        other_error: None,
+    };
+    LOCATION.with(|location| Location(location.replace(Some(placement))))
+}
+
+#[cfg(target_os = "linux")]
+fn private_directory(path: &Path) -> Result<filesystem::Dir> {
+    if !path.is_absolute() {
+        return Err(ErrorCode::Io);
+    }
+    match filesystem::Dir::root(path) {
+        Ok(dir) => Ok(dir),
+        Err(error) => {
+            if !matches!(std::fs::symlink_metadata(path), Err(ref e) if e.kind() == std::io::ErrorKind::NotFound)
+            {
+                return Err(error);
+            }
+            let parent = private_directory(path.parent().ok_or(ErrorCode::Io)?)?;
+            let name = path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .ok_or(ErrorCode::Io)?;
+            parent.child(name, true)?.ok_or(ErrorCode::Io)
+        }
+    }
+}
+fn cache_directory() -> Result<filesystem::Dir> {
+    #[cfg(target_os = "linux")]
+    {
+        let base = match std::env::var_os("XDG_CACHE_HOME").filter(|p| !p.is_empty()) {
+            Some(path) => std::path::PathBuf::from(path),
+            None => std::path::PathBuf::from(std::env::var_os("HOME").ok_or(ErrorCode::Io)?)
+                .join(".cache"),
+        };
+        private_directory(&base)?
+            .child("zipelo", true)?
+            .ok_or(ErrorCode::Io)
+    }
+    #[cfg(windows)]
+    {
+        let base = std::path::PathBuf::from(std::env::var_os("LOCALAPPDATA").ok_or(ErrorCode::Io)?);
+        if !base.is_absolute() {
+            return Err(ErrorCode::Io);
+        }
+        filesystem::Dir::root(&base)?
+            .child("Zipelo", true)?
+            .ok_or(ErrorCode::Io)?
+            .child("Temp", true)?
+            .ok_or(ErrorCode::Io)
+    }
+}
+fn next_after_full() -> Result<bool> {
+    LOCATION.with(|location| {
+        let mut location = location.borrow_mut();
+        match location.as_mut() {
+            Some(Placement::Fallback {
+                next, other_error, ..
+            }) => {
+                *next += 1;
+                if *next >= 3 {
+                    Err(other_error.unwrap_or(ErrorCode::DiskFull))
+                } else {
+                    Ok(true)
+                }
+            }
+            _ => Ok(false),
+        }
+    })
 }
 
 /// 출력 폴더에 지우지 못한 임시 파일이 남았음을 기록함. Windows 임시 파일은 닫으면 지워지므로
@@ -43,25 +123,64 @@ pub(crate) fn take_leftover() -> bool {
     LEFTOVER.with(|leftover| leftover.replace(false))
 }
 
+/// 실패한 단계의 임시 파일이 닫힌 뒤 다음 위치에서 다시 시도함.
+pub(crate) fn retry_full<T>(mut operation: impl FnMut() -> Result<T>) -> Result<T> {
+    loop {
+        match operation() {
+            Err(ErrorCode::DiskFull) if next_after_full()? => continue,
+            result => return result,
+        }
+    }
+}
+
 pub(crate) fn random_name() -> Result<String> {
     let mut random = [0; 16];
     crate::crypto::random(&mut random)?;
     Ok(random.iter().map(|b| format!("{b:02x}")).collect())
 }
 
-/// 이름 없는 임시 파일을 만듦. 해제 작업에서는 출력 폴더에, 그 외에는 시스템 임시 폴더에 둠.
-/// 출력 폴더에 두면 공간 판단이 실제 출력 디스크와 같아지고 /tmp 크기나 할당량에 묶이지 않음.
-/// 출력 폴더에 만들지 못하면(읽기 전용, 공간 부족 등) 이 작업의 남은 임시 파일은 모두
-/// 기존 시스템 임시 폴더에 둠. 그러면 동작과 오류 우선순위가 이전과 같아지며, 출력 폴더
-/// 문제는 원래의 출력 확인 지점에서 보고됨.
+/// 지정한 정책에 따라 이름 없는 임시 파일을 만듦.
 pub(crate) fn temporary() -> Result<File> {
-    let placed =
-        LOCATION.with(|location| location.borrow().as_ref().map(filesystem::Dir::temporary));
-    match placed {
-        Some(Ok(file)) => return Ok(file),
-        Some(Err(_)) => LOCATION.with(|location| *location.borrow_mut() = None),
-        None => {}
-    }
+    let placed = LOCATION.with(|location| {
+        let mut location = location.borrow_mut();
+        match location.as_mut() {
+            Some(Placement::Fixed(dir)) => match dir.temporary() {
+                Ok(file) => Some(Ok(file)),
+                Err(_) => {
+                    *location = None;
+                    None
+                }
+            },
+            Some(Placement::Fallback {
+                source_parent,
+                next,
+                other_error,
+            }) => {
+                while *next < 3 {
+                    let file = match *next {
+                        0 => cache_directory().and_then(|dir| dir.temporary()),
+                        1 => filesystem::Dir::root(source_parent).and_then(|dir| dir.temporary()),
+                        _ => system_temporary(),
+                    };
+                    match file {
+                        Ok(file) => return Some(Ok(file)),
+                        Err(error) => {
+                            if error != ErrorCode::DiskFull {
+                                *other_error = Some(ErrorCode::Io);
+                            }
+                            *next += 1;
+                        }
+                    }
+                }
+                Some(Err(other_error.unwrap_or(ErrorCode::DiskFull)))
+            }
+            None => None,
+        }
+    });
+    placed.unwrap_or_else(system_temporary)
+}
+
+fn system_temporary() -> Result<File> {
     #[cfg(target_os = "linux")]
     {
         use std::os::unix::fs::OpenOptionsExt;
@@ -190,6 +309,26 @@ impl Snapshot {
         })
     }
     pub(crate) fn capture_reporting(
+        source: &mut File,
+        limit: u64,
+        step: &mut impl FnMut(Step) -> Result<()>,
+    ) -> Result<Self> {
+        let original = source.metadata().map_err(|_| ErrorCode::Io)?;
+        loop {
+            step(Step::Check)?;
+            let current = source.metadata().map_err(|_| ErrorCode::Io)?;
+            if current.len() != original.len()
+                || current.modified().ok() != original.modified().ok()
+            {
+                return Err(ErrorCode::SourceChanged);
+            }
+            match Self::capture_once(source, limit, step) {
+                Err(ErrorCode::DiskFull) if next_after_full()? => continue,
+                result => return result,
+            }
+        }
+    }
+    fn capture_once(
         source: &mut File,
         limit: u64,
         step: &mut impl FnMut(Step) -> Result<()>,

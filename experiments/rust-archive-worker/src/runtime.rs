@@ -595,6 +595,9 @@ impl<W: Write> Job<W> {
                 .and_then(|path| Dir::root(&path).ok())
                 .map(|root| crate::spool::place_in(&root))
                 .transpose()?,
+            Action::List { archive } | Action::Preview { archive, .. } => {
+                Some(crate::spool::fallback_for(&archive.to_path()?))
+            }
             _ => None,
         };
         if let Some(budget) = &self.budget {

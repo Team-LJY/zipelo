@@ -75,6 +75,19 @@ impl Catalog {
         selected: Option<u32>,
         check: &mut impl crate::resources::Monitor,
     ) -> Result<Self> {
+        spool::retry_full(|| {
+            Self::open_selected_once(source, len, limits, decode, password, selected, check)
+        })
+    }
+    fn open_selected_once(
+        source: &mut File,
+        len: u64,
+        limits: Limits,
+        decode: bool,
+        password: Option<&[u8]>,
+        selected: Option<u32>,
+        check: &mut impl crate::resources::Monitor,
+    ) -> Result<Self> {
         let mut magic = [0; 6];
         let n = len.min(6) as usize;
         at(source, 0, &mut magic[..n])?;
