@@ -98,10 +98,13 @@ def command(manifest, phase):
 
 def prepare_fixtures(root):
     skipped = {}
+    work = test_work_directory(root)
+    if work.resolve() != work:
+        raise ValueError(f"안전한 작업 디렉터리가 필요함: {work}")
+    work.mkdir(mode=0o700, parents=True, exist_ok=True)
+    fixtures = output_directory(work, "fixtures", create=True)
     for name in sorted(FILE_FIXTURES):
-        path = test_work_directory(root) / "fixtures" / name
-        if not path.exists() and not path.is_symlink():
-            path.mkdir(mode=0o700, parents=True)
+        path = output_directory(fixtures, name, create=True)
         info = path.lstat()
         if (
             not stat.S_ISDIR(info.st_mode)

@@ -109,6 +109,26 @@ def installed_package(package, home):
         raise BaseExceptionGroup("패키지 시험 또는 정리 실패", failures)
 
 
+def ensure_app_running(app):
+    if app.poll() is not None:
+        raise RuntimeError("설치된 앱이 조기에 종료됨")
+
+
+def wait_for_window(app, env, timeout=30):
+    deadline = time.monotonic() + timeout
+    while True:
+        ensure_app_running(app)
+        window = subprocess.run(
+            ["xdotool", "search", "--all", "--pid", str(app.pid), "--name", "Zipelo"],
+            env=env, capture_output=True, text=True,
+        )
+        if window.returncode == 0:
+            return window
+        if time.monotonic() >= deadline:
+            raise RuntimeError("앱 창 표시 시간 초과")
+        time.sleep(0.2)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("package", type=Path)
@@ -147,17 +167,9 @@ def main():
                 env.pop("WAYLAND_DISPLAY", None)
                 with (runs / "app.stdout").open("wb") as stdout, (runs / "app.stderr").open("wb") as stderr:
                     app = subprocess.Popen(["/usr/bin/zipelo", str(archive)], env=env, stdout=stdout, stderr=stderr)
-                    deadline = time.monotonic() + 30
-                    while True:
-                        assert app.poll() is None, "설치된 앱이 조기에 종료됨"
-                        window = subprocess.run(["xdotool", "search", "--all", "--pid", str(app.pid), "--name", "Zipelo"],
-                                                env=env, capture_output=True, text=True)
-                        if window.returncode == 0:
-                            break
-                        assert time.monotonic() < deadline, "앱 창 표시 시간 초과"
-                        time.sleep(0.2)
+                    window = wait_for_window(app, env)
                     time.sleep(3)
-                    assert app.poll() is None
+                    ensure_app_running(app)
                     subprocess.run(["import", "-window", window.stdout.splitlines()[0],
                                     str(runs / "installed-window.png")], env=env, check=True)
                 print("PASS installed package, ZIP/7z/TAR.GZ defaults and native X11 window")

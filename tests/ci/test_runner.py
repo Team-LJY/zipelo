@@ -47,6 +47,100 @@ class RunnerTests(unittest.TestCase):
                 self.assertFalse((outside / "task").exists())
                 self.assertFalse((outside / "work").exists())
 
+    def test_fixture_parent_symlink_is_rejected_before_creating_children(self):
+        with tempfile.TemporaryDirectory(dir=TEST_WORK) as directory:
+            base = Path(directory)
+            work = base / "work"
+            work.mkdir()
+            outside = base / "outside"
+            outside.mkdir()
+            (work / "fixtures").symlink_to(outside, target_is_directory=True)
+            with (
+                patch.object(run_rust, "test_work_directory", return_value=work),
+                self.assertRaisesRegex(ValueError, "작업 폴더 밖"),
+            ):
+                run_rust.prepare_fixtures(run_rust.ROOT)
+            self.assertEqual(list(outside.iterdir()), [])
+
+    def test_windows_setup_rejects_symlinked_parent_before_creating_tools(self):
+        with tempfile.TemporaryDirectory(dir=TEST_WORK) as directory:
+            base = Path(directory)
+            project = base / "project"
+            ci = project / "tests/ci"
+            ci.mkdir(parents=True)
+            work = project / "tests/work/task"
+            work.mkdir(parents=True)
+            script = ci / "setup_windows.sh"
+            script.write_bytes((run_rust.ROOT / "tests/ci/setup_windows.sh").read_bytes())
+            commands = base / "bin"
+            commands.mkdir()
+            git = commands / "git"
+            git.write_text('#!/bin/sh\nprintf "%s\n" "$FAKE_GIT_COMMON"\n')
+            git.chmod(0o700)
+            outside = base / "outside"
+            outside.mkdir()
+            (work / "linked").symlink_to(outside, target_is_directory=True)
+            environment = {
+                **os.environ,
+                "PATH": str(commands) + os.pathsep + os.environ["PATH"],
+                "FAKE_GIT_COMMON": str(project / ".git"),
+                "ZIPELO_CI_JOB": "task",
+                "ZIPELO_CI_TOOLS": str(work / "linked/tools"),
+            }
+            result = subprocess.run(["bash", str(script)], env=environment,
+                                    capture_output=True, text=True)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("작업 폴더 밖", result.stderr)
+            self.assertEqual(list(outside.iterdir()), [])
+
+    def test_windows_setup_rejects_external_rustup_before_install(self):
+        with tempfile.TemporaryDirectory(dir=TEST_WORK) as directory:
+            base = Path(directory)
+            project = base / "project"
+            ci = project / "tests/ci"
+            ci.mkdir(parents=True)
+            work = project / "tests/work/task"
+            tools = work / "tools"
+            tools.mkdir(parents=True)
+            script = ci / "setup_windows.sh"
+            script.write_bytes((run_rust.ROOT / "tests/ci/setup_windows.sh").read_bytes())
+            commands = base / "bin"
+            commands.mkdir()
+            git = commands / "git"
+            git.write_text('#!/bin/sh\nprintf "%s\n" "$FAKE_GIT_COMMON"\n')
+            git.chmod(0o700)
+            for name in ("apt-get", "dpkg-deb"):
+                command = commands / name
+                command.write_text("#!/bin/sh\nexit 0\n")
+                command.chmod(0o700)
+            rustup = commands / "rustup"
+            rustup.write_text(
+                '#!/bin/sh\nmkdir -p "$RUSTUP_HOME"\nprintf marker > "$RUSTUP_HOME/marker"\n'
+            )
+            rustup.chmod(0o700)
+            outside = base / "outside"
+            outside.mkdir()
+            environment = {
+                **os.environ,
+                "PATH": str(commands) + os.pathsep + os.environ["PATH"],
+                "FAKE_GIT_COMMON": str(project / ".git"),
+                "ZIPELO_CI_JOB": "task",
+                "ZIPELO_CI_TOOLS": str(tools),
+            }
+            for name in ("rustup", "cargo", "downloads/nested"):
+                with self.subTest(name=name):
+                    link = tools / name
+                    link.parent.mkdir(parents=True, exist_ok=True)
+                    link.symlink_to(outside, target_is_directory=True)
+                    result = subprocess.run(
+                        ["bash", str(script)], env=environment,
+                        capture_output=True, text=True,
+                    )
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn("작업 폴더 밖", result.stderr)
+                    self.assertEqual(list(outside.iterdir()), [])
+                    link.unlink()
+
     def test_output_paths_reject_symlinks_outside_job(self):
         with tempfile.TemporaryDirectory(dir=TEST_WORK) as directory:
             work = Path(directory)
