@@ -5,6 +5,7 @@ import os
 import re
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -71,6 +72,39 @@ class LifecycleTests(unittest.TestCase):
         self.assertIn(str(SMOKE.work_root() / "v021-build-out/zipelo_0.2.1_amd64.deb"),
                       output)
         self.assertIn(str(SMOKE.work_root() / "ubuntu-package-smoke"), output)
+
+    def test_existing_installation_is_blocked_with_python_optimization(self):
+        script = """import importlib.util
+import subprocess
+import sys
+from unittest.mock import patch
+
+spec = importlib.util.spec_from_file_location("ubuntu_smoke", sys.argv[1])
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+with patch.object(module.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, b"installed")):
+    try:
+        module.ensure_no_existing_installation()
+    except RuntimeError:
+        print("blocked")
+    else:
+        raise SystemExit("기존 설치를 통과시킴")
+"""
+        environment = dict(os.environ, PYTHONDONTWRITEBYTECODE="1")
+        result = subprocess.run(
+            [sys.executable, "-O", "-c", script, str(SMOKE.ROOT / "tests/release-packages/ubuntu_smoke.py")],
+            env=environment, cwd=ROOT, capture_output=True, text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), "blocked")
+
+    def test_existing_installation_files_are_blocked(self):
+        with (
+            patch.object(SMOKE.subprocess, "run", return_value=subprocess.CompletedProcess([], 1, b"")),
+            patch.object(SMOKE.Path, "exists", return_value=True),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "기존 파일"):
+                SMOKE.ensure_no_existing_installation()
 
     def test_only_first_configuration_sets_defaults(self):
         commands = self.directory / "bin"

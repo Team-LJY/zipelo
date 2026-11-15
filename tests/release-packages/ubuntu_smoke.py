@@ -37,6 +37,18 @@ def selected_work_directory(requested, allowed_work_root):
     return runs
 
 
+def ensure_no_existing_installation():
+    status = subprocess.run(
+        ["dpkg-query", "-W", "-f=${db:Status-Status}", "zipelo"],
+        capture_output=True,
+    )
+    if status.stdout == b"installed":
+        raise RuntimeError("기존 설치를 보존해야 함")
+    for name in ("/usr/lib/zipelo", "/usr/bin/zipelo", "/usr/share/applications/zipelo.desktop"):
+        if Path(name).exists():
+            raise RuntimeError("기존 파일이 있어 설치를 중단함")
+
+
 def isolated_environment(home):
     home = home.resolve()
     for directory in (home / ".config", home / ".local/share", home / ".local/state", home / ".cache"):
@@ -109,10 +121,7 @@ def main():
     except ValueError as error:
         parser.error(str(error))
     runs.mkdir(parents=True, exist_ok=False)
-    assert subprocess.run(["dpkg-query", "-W", "-f=${db:Status-Status}", "zipelo"],
-                          capture_output=True).stdout != b"installed", "기존 설치를 보존해야 함"
-    for name in ("/usr/lib/zipelo", "/usr/bin/zipelo", "/usr/share/applications/zipelo.desktop"):
-        assert not Path(name).exists(), "기존 파일이 있어 설치를 중단함"
+    ensure_no_existing_installation()
     app = None
     display = None
     with tempfile.TemporaryDirectory(dir=runs) as temporary_home:
