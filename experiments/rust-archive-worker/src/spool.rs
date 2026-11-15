@@ -271,7 +271,146 @@ pub(crate) struct Snapshot {
     pub object: SourceObject,
     pub hash: [u8; 32],
 }
+pub(crate) struct DirectSource {
+    file: File,
+    path: std::path::PathBuf,
+    object: SourceObject,
+    len: u64,
+    modified: std::time::SystemTime,
+    changed: Option<(i64, i64)>,
+    hash: [u8; 32],
+}
+pub(crate) fn change_stamp(metadata: &std::fs::Metadata) -> Option<(i64, i64)> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        Some((metadata.ctime(), metadata.ctime_nsec()))
+    }
+    #[cfg(windows)]
+    {
+        let _ = metadata;
+        None
+    }
+}
+fn source_options() -> OpenOptions {
+    let mut options = OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(0x20000 | 0x800);
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        options.share_mode(1);
+    }
+    options
+}
+impl DirectSource {
+    fn unchanged(&self) -> Result<()> {
+        let before = self.file.metadata().map_err(|_| ErrorCode::SourceChanged)?;
+        let named = source_options()
+            .open(&self.path)
+            .map_err(|_| ErrorCode::SourceChanged)?;
+        let after = named.metadata().map_err(|_| ErrorCode::SourceChanged)?;
+        for (file, metadata) in [(&self.file, before), (&named, after)] {
+            if !metadata.is_file()
+                || filesystem::object(file)? != self.object
+                || metadata.len() != self.len
+                || metadata.modified().map_err(|_| ErrorCode::SourceChanged)? != self.modified
+                || change_stamp(&metadata) != self.changed
+            {
+                return Err(ErrorCode::SourceChanged);
+            }
+        }
+        Ok(())
+    }
+    pub(crate) fn verify(&mut self, step: &mut impl FnMut(Step) -> Result<()>) -> Result<()> {
+        self.unchanged()?;
+        let hash = hash_source(&mut self.file, self.len, step)?;
+        self.unchanged()?;
+        if hash != self.hash {
+            return Err(ErrorCode::SourceChanged);
+        }
+        Ok(())
+    }
+}
+fn hash_source(
+    file: &mut File,
+    length: u64,
+    step: &mut impl FnMut(Step) -> Result<()>,
+) -> Result<[u8; 32]> {
+    file.rewind().map_err(|_| ErrorCode::Io)?;
+    let mut hash = Sha256::new();
+    let mut bytes = 0u64;
+    let mut buffer = zeroize::Zeroizing::new([0; 65536]);
+    let mut reported = std::time::Instant::now();
+    loop {
+        step(Step::Check)?;
+        let count = completed(file.read(&mut buffer[..]).map_err(|_| ErrorCode::Io), step)?;
+        if count == 0 {
+            break;
+        }
+        bytes = bytes
+            .checked_add(count as u64)
+            .filter(|n| *n <= length)
+            .ok_or(ErrorCode::SourceChanged)?;
+        hash.update(&buffer[..count]);
+        if reported.elapsed() >= std::time::Duration::from_millis(200) {
+            step(Step::Read {
+                bytes,
+                total: length,
+            })?;
+            reported = std::time::Instant::now();
+        }
+    }
+    if bytes != length {
+        return Err(ErrorCode::SourceChanged);
+    }
+    step(Step::Read {
+        bytes,
+        total: length,
+    })?;
+    file.rewind().map_err(|_| ErrorCode::Io)?;
+    Ok(hash.finalize().into())
+}
 impl Snapshot {
+    /// 열린 원본을 직접 읽고 작업 종료까지 같은 객체의 핸들을 유지함.
+    pub(crate) fn open_direct(
+        path: &Path,
+        limit: u64,
+        step: &mut impl FnMut(Step) -> Result<()>,
+    ) -> Result<(Self, DirectSource)> {
+        let mut file = completed(source_options().open(path).map_err(|_| ErrorCode::Io), step)?;
+        let metadata = file.metadata().map_err(|_| ErrorCode::Io)?;
+        if !metadata.is_file() {
+            return Err(ErrorCode::InvalidRequest);
+        }
+        if metadata.len() > limit {
+            return Err(ErrorCode::Limit);
+        }
+        let mut guard = DirectSource {
+            file: file.try_clone().map_err(|_| ErrorCode::Io)?,
+            path: path.to_path_buf(),
+            object: filesystem::object(&file)?,
+            len: metadata.len(),
+            modified: metadata.modified().map_err(|_| ErrorCode::Io)?,
+            changed: change_stamp(&metadata),
+            hash: [0; 32],
+        };
+        guard.hash = hash_source(&mut file, guard.len, step)?;
+        guard.unchanged()?;
+        Ok((
+            Self {
+                file,
+                len: guard.len,
+                object: guard.object.clone(),
+                hash: guard.hash,
+            },
+            guard,
+        ))
+    }
     /// 원본을 임시 파일로 복사하는 동안 읽은 바이트와 전체 크기를 함께 알림.
     pub fn open_reporting(
         path: &Path,
@@ -400,3 +539,7 @@ impl Snapshot {
         })
     }
 }
+
+#[cfg(test)]
+#[path = "../../../tests/rust-archive-worker/direct_source.rs"]
+mod direct_source_tests;

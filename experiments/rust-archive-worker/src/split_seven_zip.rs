@@ -448,13 +448,13 @@ impl Group {
         Ok(())
     }
 }
-pub(crate) fn open(
+fn discover(
     path: &Path,
     expected: Option<&ListId>,
     limit: u64,
     metadata_limits: crate::archive::MetadataLimits,
     step: &mut impl FnMut(Step) -> std::result::Result<(), ErrorCode>,
-) -> Result<Option<Captured>> {
+) -> Result<Option<Group>> {
     if unsupported_split(path) {
         return Err(ErrorCode::UnsupportedFeature.into());
     }
@@ -539,6 +539,18 @@ pub(crate) fn open(
     if group.total > limit {
         return Err(ErrorCode::Limit.into());
     }
+    Ok(Some(group))
+}
+pub(crate) fn open(
+    path: &Path,
+    expected: Option<&ListId>,
+    limit: u64,
+    metadata_limits: crate::archive::MetadataLimits,
+    step: &mut impl FnMut(Step) -> std::result::Result<(), ErrorCode>,
+) -> Result<Option<Captured>> {
+    let Some(mut group) = discover(path, expected, limit, metadata_limits, step)? else {
+        return Ok(None);
+    };
     let (mut file, hash) = loop {
         match group.capture(step) {
             Err(failure)
@@ -589,6 +601,187 @@ pub(crate) fn open(
         },
         group,
     }))
+}
+
+pub(crate) struct Direct {
+    group: Group,
+    changes: Vec<Option<(i64, i64)>>,
+    position: u64,
+    pub hash: [u8; 32],
+}
+impl Direct {
+    pub fn len(&self) -> u64 {
+        self.group.total
+    }
+    pub fn object(&self) -> Result<SourceObject> {
+        Ok(SourceObject::SplitSevenZip {
+            manifest_sha256: self.group.manifest()?,
+        })
+    }
+    fn matches(&self, index: usize, input: &Input) -> Result<()> {
+        let part = &self.group.parts[index];
+        let data = input.file.metadata().map_err(crate::space::io_error)?;
+        if !data.is_file()
+            || filesystem::object(&input.file)? != part.object
+            || data.len() != part.length
+            || data.modified().map_err(crate::space::io_error)? != part.modified
+            || crate::spool::change_stamp(&data) != self.changes[index]
+        {
+            return Err(ErrorCode::SourceChanged.into());
+        }
+        Ok(())
+    }
+    fn open_checked(
+        &self,
+        index: usize,
+        step: &mut impl FnMut(Step) -> std::result::Result<(), ErrorCode>,
+    ) -> Result<Input> {
+        let input = self
+            .group
+            .open_part(&self.group.parts[index].name, step)
+            .map_err(|failure| {
+                if failure.error == ErrorCode::UnsafePath {
+                    ErrorCode::SourceChanged.into()
+                } else {
+                    failure
+                }
+            })?;
+        self.matches(index, &input)?;
+        Ok(input)
+    }
+    fn unchanged(
+        &self,
+        step: &mut impl FnMut(Step) -> std::result::Result<(), ErrorCode>,
+    ) -> Result<()> {
+        for index in 0..self.group.parts.len() {
+            step(Step::Check)?;
+            self.open_checked(index, step)?;
+        }
+        Ok(())
+    }
+    pub fn verify(
+        &self,
+        step: &mut impl FnMut(Step) -> std::result::Result<(), ErrorCode>,
+    ) -> Result<()> {
+        self.unchanged(step)?;
+        self.group.verify(step)?;
+        self.unchanged(step)
+    }
+}
+impl Read for Direct {
+    fn read(&mut self, output: &mut [u8]) -> std::io::Result<usize> {
+        let mut start = 0;
+        if output.is_empty() {
+            return Ok(0);
+        }
+        let source_error = |failure: Failure| {
+            std::io::Error::other(format!("분할 원본 읽기 실패: {:?}", failure.error))
+        };
+        for (index, part) in self.group.parts.iter().enumerate() {
+            let end = start + part.length;
+            if self.position < end {
+                let count = (end - self.position).min(output.len() as u64) as usize;
+                // 필요한 조각만 열어 핸들 사용량이 조각 수에 비례하지 않게 함.
+                let mut input = self
+                    .open_checked(index, &mut |_| Ok(()))
+                    .map_err(source_error)?;
+                input
+                    .file
+                    .seek(std::io::SeekFrom::Start(self.position - start))?;
+                let read = input.file.read(&mut output[..count]);
+                self.matches(index, &input).map_err(source_error)?;
+                let count = read?;
+                if count == 0 {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::UnexpectedEof,
+                        "분할 원본이 변경됨",
+                    ));
+                }
+                self.position += count as u64;
+                return Ok(count);
+            }
+            start = end;
+        }
+        Ok(0)
+    }
+}
+impl Seek for Direct {
+    fn seek(&mut self, position: std::io::SeekFrom) -> std::io::Result<u64> {
+        let next = match position {
+            std::io::SeekFrom::Start(n) => i128::from(n),
+            std::io::SeekFrom::Current(n) => i128::from(self.position) + i128::from(n),
+            std::io::SeekFrom::End(n) => i128::from(self.group.total) + i128::from(n),
+        };
+        self.position = u64::try_from(next).map_err(|_| {
+            std::io::Error::new(std::io::ErrorKind::InvalidInput, "잘못된 읽기 위치")
+        })?;
+        Ok(self.position)
+    }
+}
+pub(crate) fn open_direct(
+    path: &Path,
+    limit: u64,
+    metadata_limits: crate::archive::MetadataLimits,
+    step: &mut impl FnMut(Step) -> std::result::Result<(), ErrorCode>,
+) -> Result<Option<Direct>> {
+    let Some(mut group) = discover(path, None, limit, metadata_limits, step)? else {
+        return Ok(None);
+    };
+    let mut changes = Vec::new();
+    for part in &group.parts {
+        let input = group.open_part(&part.name, step)?;
+        group.matches(part, &input)?;
+        changes.push(crate::spool::change_stamp(&metadata(&input.file)?));
+    }
+    let mut whole = Sha256::new();
+    let mut processed = 0;
+    let mut reported = Instant::now();
+    for index in 0..group.parts.len() {
+        group.parts[index].hash = group.read_part(
+            &group.parts[index],
+            &mut None,
+            &mut whole,
+            &mut processed,
+            &mut reported,
+            step,
+        )?;
+    }
+    step(Step::Read {
+        bytes: processed,
+        total: group.total,
+    })?;
+    let mut direct = Direct {
+        group,
+        changes,
+        position: 0,
+        hash: whole.finalize().into(),
+    };
+    let mut header = [0; 32];
+    if direct.group.parts.iter().any(|part| part.length == 0) || direct.len() < 32 {
+        return Err(direct.group.name.incomplete());
+    }
+    let header_read = direct
+        .read_exact(&mut header)
+        .map_err(crate::space::io_error);
+    direct.verify(step)?;
+    header_read?;
+    if &header[..6] != b"7z\xbc\xaf\x27\x1c"
+        || zlib_rs::crc32::crc32(0, &header[12..])
+            != u32::from_le_bytes(header[8..12].try_into().unwrap())
+    {
+        return Err(direct.group.name.incomplete());
+    }
+    let offset = u64::from_le_bytes(header[12..20].try_into().unwrap());
+    let length = u64::from_le_bytes(header[20..28].try_into().unwrap());
+    if 32u64
+        .checked_add(offset)
+        .and_then(|n| n.checked_add(length))
+        != Some(direct.len())
+    {
+        return Err(direct.group.name.incomplete());
+    }
+    direct.rewind().map_err(crate::space::io_error)?;
+    Ok(Some(direct))
 }
 
 #[cfg(test)]
