@@ -469,17 +469,15 @@ fn central(
             return Err(ErrorCode::Integrity);
         }
         let local = bytes(source, offset, 30, cd)?;
-        declared(u32at(&local, 22), u32at(&local, 18))?;
         let ln = u16at(&local, 26) as usize;
         let le = u16at(&local, 28) as usize;
         charge(&mut metadata, ln, le, check)?;
+        // 로컬 extra 내용은 읽지 않고 중앙 목록 앞의 경계만 확인함.
         let start = add(offset, 30 + ln as u64 + le as u64)?;
         if start > cd {
             return Err(ErrorCode::Integrity);
         }
         let local_raw = bytes(source, offset + 30, ln, cd)?;
-        let local_extra = bytes(source, offset + 30 + ln as u64, le, cd)?;
-        extra(&local_extra)?;
         let mut stop = add(start, packed)?;
         if stop > cd {
             return Err(ErrorCode::Integrity);
