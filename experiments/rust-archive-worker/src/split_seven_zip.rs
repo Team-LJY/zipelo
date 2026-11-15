@@ -336,6 +336,34 @@ impl Group {
         self.matches(part, &named)?;
         Ok(hash.finalize().into())
     }
+    fn capture(
+        &mut self,
+        step: &mut impl FnMut(Step) -> std::result::Result<(), ErrorCode>,
+    ) -> Result<(File, [u8; 32])> {
+        step(Step::Check)?;
+        let mut file = crate::spool::temporary()?;
+        crate::space::ensure(&file, self.total)?;
+        let mut processed = 0;
+        let mut whole = Sha256::new();
+        let mut reported = Instant::now();
+        for index in 0..self.parts.len() {
+            let hash = self.read_part(
+                &self.parts[index],
+                &mut Some(&mut file),
+                &mut whole,
+                &mut processed,
+                &mut reported,
+                step,
+            )?;
+            self.parts[index].hash = hash;
+            step(Step::Activity)?;
+        }
+        step(Step::Read {
+            bytes: processed,
+            total: self.total,
+        })?;
+        Ok((file, whole.finalize().into()))
+    }
     fn manifest(&self) -> Result<[u8; 32]> {
         let mut hash = Sha256::new();
         hash.update(b"zipelo.split7z.v1\0");
@@ -511,28 +539,16 @@ pub(crate) fn open(
     if group.total > limit {
         return Err(ErrorCode::Limit.into());
     }
-    let mut file = crate::spool::temporary()?;
-    crate::space::ensure(&file, group.total)?;
-    let mut processed = 0;
-    let mut whole = Sha256::new();
-    let mut reported = Instant::now();
-    for index in 0..group.parts.len() {
-        let hash = group.read_part(
-            &group.parts[index],
-            &mut Some(&mut file),
-            &mut whole,
-            &mut processed,
-            &mut reported,
-            step,
-        )?;
-        group.parts[index].hash = hash;
-        step(Step::Activity)?;
-    }
-    step(Step::Read {
-        bytes: processed,
-        total: group.total,
-    })?;
-    let hash = whole.finalize().into();
+    let (mut file, hash) = loop {
+        match group.capture(step) {
+            Err(failure)
+                if failure.error == ErrorCode::DiskFull && crate::spool::next_after_full()? =>
+            {
+                continue;
+            }
+            result => break result?,
+        }
+    };
     let object = SourceObject::SplitSevenZip {
         manifest_sha256: group.manifest()?,
     };
