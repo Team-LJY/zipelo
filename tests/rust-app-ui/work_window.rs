@@ -823,3 +823,118 @@ fn hosted_work_window_stays_in_parent_and_hides_for_native_picker() {
             .any(|(text, _)| text == "압축파일을 열지 못했습니다")
     );
 }
+
+
+#[test]
+fn native_work_window_reopens_without_raising_over_another_app() {
+    let mut app = zipelo_ui_memory_app::archive_screen::scenarios::parse("extract-complete")
+        .unwrap()
+        .build();
+    let ctx = egui::Context::default();
+    ctx.set_embed_viewports(false);
+    install_work_child_renderer();
+    for _ in 0..3 {
+        policy_render(&ctx, &mut app, vec![]);
+    }
+    let dialogs = HeldDialogs::default();
+    app.set_dialogs(Box::new(dialogs.clone()));
+    policy_click(&ctx, &mut app, "열기");
+    assert_eq!(dialogs.0.borrow().len(), 1);
+    let rendered = WORK_CHILD.with(|child| child.borrow().rendered);
+    policy_render(&ctx, &mut app, vec![]);
+    assert_eq!(WORK_CHILD.with(|child| child.borrow().rendered), rendered);
+    dialogs.0.borrow()[0].send(Ok(None)).unwrap();
+    for focus in [Some(false), None] {
+        let mut raw = egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(
+                egui::Pos2::ZERO,
+                egui::vec2(1060.0, 720.0),
+            )),
+            ..Default::default()
+        };
+        for id in [
+            egui::ViewportId::ROOT,
+            egui::ViewportId::from_hash_of("archive-work"),
+        ] {
+            raw.viewports.insert(
+                id,
+                egui::ViewportInfo {
+                    focused: focus,
+                    ..Default::default()
+                },
+            );
+        }
+        let _ = ctx.run_ui(raw, |ui| app.show(ui));
+        WORK_CHILD.with(|child| {
+            let child = child.borrow();
+            assert!(child.rendered > rendered);
+            assert_eq!(
+                child.builders.last().unwrap().1.window_level,
+                Some(egui::WindowLevel::Normal)
+            );
+        });
+    }
+}
+
+#[test]
+fn initial_work_window_respects_explicitly_absent_focus() {
+    let mut app = ArchiveApp::new(
+        Box::new(FakeFactory::manual()),
+        Some("/sample.zip".into()),
+        false,
+    );
+    let ctx = egui::Context::default();
+    ctx.set_embed_viewports(false);
+    install_work_child_renderer();
+    let mut raw = egui::RawInput {
+        screen_rect: Some(egui::Rect::from_min_size(
+            egui::Pos2::ZERO,
+            egui::vec2(1060.0, 720.0),
+        )),
+        ..Default::default()
+    };
+    raw.viewports.insert(
+        egui::ViewportId::ROOT,
+        egui::ViewportInfo {
+            focused: Some(false),
+            ..Default::default()
+        },
+    );
+    let _ = ctx.run_ui(raw, |ui| app.show(ui));
+    WORK_CHILD.with(|child| {
+        assert_eq!(
+            child.borrow().builders.last().unwrap().1.window_level,
+            Some(egui::WindowLevel::Normal)
+        );
+    });
+}
+
+#[test]
+fn scenario_window_hosting_survives_platform_frame_configuration() {
+    for custom_frame in [false, true] {
+        for (name, hosted) in [
+            ("archive-loading", false),
+            ("archive-loading-in-parent", true),
+        ] {
+            let scenario = zipelo_ui_memory_app::archive_screen::scenarios::parse(name).unwrap();
+            let mut app = scenario.build_with_frame(custom_frame);
+            let ctx = egui::Context::default();
+            ctx.set_embed_viewports(false);
+            install_work_child_renderer();
+            let mut shown = Vec::new();
+            for _ in 0..3 {
+                shown = policy_render(&ctx, &mut app, vec![]);
+            }
+            assert_eq!(
+                WORK_CHILD.with(|child| child.borrow().builders.is_empty()),
+                hosted,
+                "{name}, custom_frame={custom_frame}"
+            );
+            assert_eq!(
+                shown.iter().any(|(text, _)| text == "압축파일을 읽는 중"),
+                hosted,
+                "{name}, custom_frame={custom_frame}"
+            );
+        }
+    }
+}

@@ -74,6 +74,7 @@ const WORK_RESULT_MAX_HEIGHT: f32 = 220.0;
 /// 부모 창 기준 상대 위치를 기억해 두고, 부모 창이 움직이면 같은 상대 위치로 따라감.
 struct WorkWindow {
     open: bool,
+    created: bool,
     initial: Option<egui::Pos2>,
     offset: Option<egui::Vec2>,
     parent: Option<egui::Pos2>,
@@ -86,6 +87,7 @@ impl Default for WorkWindow {
     fn default() -> Self {
         Self {
             open: false,
+            created: false,
             initial: None,
             offset: None,
             parent: None,
@@ -112,15 +114,18 @@ impl WorkWindow {
         let (parent, parent_focused, now) = ctx.input(|i| {
             (
                 i.viewport().outer_rect,
-                i.viewport().focused.unwrap_or(false),
+                i.viewport().focused,
                 i.time,
             )
         });
         let (child, child_focused) = ctx.input(|i| {
-            i.raw.viewports.get(&id).map_or((None, false), |v| {
-                (v.outer_rect, v.focused.unwrap_or(false))
+            i.raw.viewports.get(&id).map_or((None, None), |v| {
+                (v.outer_rect, v.focused)
             })
         });
+        let initial_focus_unknown =
+            !self.created && parent_focused.is_none() && child_focused.is_none();
+        self.created = true;
         let opening = !self.open;
         if opening {
             // 처음 열 때 부모 창 가운데에 둠. 닫혔다 다시 열 때는 기억한 위치에 둠.
@@ -166,7 +171,11 @@ impl WorkWindow {
             .with_maximize_button(false)
             .with_taskbar(false)
             .with_window_level(
-                if !native_dialog_open && (opening || parent_focused || child_focused) {
+                if !native_dialog_open
+                    && (initial_focus_unknown
+                        || parent_focused == Some(true)
+                        || child_focused == Some(true))
+                {
                     egui::WindowLevel::AlwaysOnTop
                 } else {
                     egui::WindowLevel::Normal

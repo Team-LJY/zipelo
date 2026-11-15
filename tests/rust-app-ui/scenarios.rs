@@ -258,6 +258,13 @@ impl Scenario {
         });
     }
 
+    /// 플랫폼 테두리만 적용하고 시나리오가 정한 작업 창 방식은 유지함.
+    pub fn build_with_frame(self, custom_frame: bool) -> ArchiveApp {
+        let mut app = self.build();
+        app.set_custom_frame(custom_frame);
+        app
+    }
+
     /// 실제 파일과 작업자를 사용하지 않고 기존 화면 상태를 준비함.
     pub fn build(self) -> ArchiveApp {
         let factory = FakeFactory::manual();

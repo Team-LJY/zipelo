@@ -106,9 +106,7 @@ fn run() -> eframe::Result {
                 zipelo_ui_memory_app::archive_theme::apply(&cc.egui_ctx);
                 #[cfg(all(feature = "ui-fixture", debug_assertions))]
                 if let Some(scenario) = scenario {
-                    let mut app = scenario.build();
-                    app.set_custom_frame(custom_frame);
-                    app.set_work_window_in_parent(custom_frame);
+                    let app = scenario.build_with_frame(custom_frame);
                     return Ok(Box::new(
                         zipelo_ui_memory_app::archive_screen::scenarios::Preview::new(
                             app,
