@@ -39,7 +39,7 @@ static int output_file(int fd) {
 
 int openat(int fd, const char *path, int flags, ...) {
     mode_t mode = 0;
-    if (flags & O_CREAT) {
+    if ((flags & O_CREAT) || ((flags & O_TMPFILE) == O_TMPFILE)) {
         va_list args;
         va_start(args, flags);
         mode = va_arg(args, unsigned int);
@@ -50,6 +50,19 @@ int openat(int fd, const char *path, int flags, ...) {
             && !strncmp(path, ".zipelo-", 8)) {
         errno = !strcmp(fault, "create-full") ? ENOSPC : EACCES;
         return -1;
+    }
+    /* 해제 작업의 원본 사본과 단계 임시 파일은 출력 폴더 핸들 기준 O_TMPFILE로 만듦. */
+    if ((flags & O_TMPFILE) == O_TMPFILE) {
+        if (fault && !strcmp(fault, "temp-full")) {
+            errno = ENOSPC;
+            return -1;
+        }
+        if (fault && !strcmp(fault, "fallback")) {
+            int marker = real_openat(AT_FDCWD, getenv("ZIPELO_TEST_MARKER"), O_CREAT | O_WRONLY, 0600);
+            if (marker >= 0) close(marker);
+            errno = EOPNOTSUPP;
+            return -1;
+        }
     }
     return real_openat(fd, path, flags, mode);
 }

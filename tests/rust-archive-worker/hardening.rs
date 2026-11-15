@@ -820,6 +820,8 @@ mod linux {
         assert_eq!(terminal(&events).outcome, Outcome::Completed, "{events:?}");
         assert!(s.0.join("paused").exists());
         assert_eq!(fs::read_dir(s.0.join("staging")).unwrap().count(), 0);
+        // 출력 폴더의 이름 있는 대체 임시 파일도 사용 전에 이름이 지워져야 함.
+        assert_eq!(fs::read_dir(s.0.join("output")).unwrap().count(), 1);
         assert_zero_file(&s.0.join("output/payload.bin"), 1024 * 1024);
     }
     struct Subreaper(i32);

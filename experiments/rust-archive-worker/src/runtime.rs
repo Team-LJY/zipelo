@@ -586,6 +586,17 @@ impl<W: Write> Job<W> {
                 return Err(ErrorCode::InvalidRequest);
             }
         }
+        // 해제의 원본 사본과 단계 임시 파일은 출력 폴더에 둠. 폴더를 열 수 없으면 기존 위치를
+        // 쓰고, 오류는 아래의 원래 출력 폴더 확인 지점에서 같은 순서로 보고함.
+        let _spool_location = match &start.action {
+            Action::Extract { destination, .. } => destination
+                .to_path()
+                .ok()
+                .and_then(|path| Dir::root(&path).ok())
+                .map(|root| crate::spool::place_in(&root))
+                .transpose()?,
+            _ => None,
+        };
         if let Some(budget) = &self.budget {
             let scope = ResourceScope {
                 output: budget.ceiling.output > budget.soft.output,

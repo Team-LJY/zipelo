@@ -319,6 +319,29 @@ mod platform {
         pub fn create(&self, n: &str) -> std::io::Result<File> {
             open(&self.file, std::ffi::OsStr::new(n), 1 | 0x40 | 0x80)
         }
+        /// 이 폴더 안에 이름 없는 읽기/쓰기 임시 파일을 만듦. 마지막 핸들을 닫으면 제거됨.
+        pub(crate) fn temporary(&self) -> Result<File> {
+            // O_TMPFILE | O_EXCL: 이름이 생기지 않고 나중에 링크할 수도 없음.
+            match open(&self.file, std::ffi::OsStr::new("."), 2 | 0x410000 | 0x80) {
+                Ok(file) => return Ok(file),
+                Err(e) => {
+                    if crate::space::io_error(e) == ErrorCode::DiskFull {
+                        return Err(ErrorCode::DiskFull);
+                    }
+                }
+            }
+            // O_TMPFILE을 지원하지 않는 파일 시스템은 숨김 이름으로 만든 즉시 이름을 지움.
+            let n = format!(".zipelo-{}.tmp", crate::spool::random_name()?);
+            let file = open(&self.file, std::ffi::OsStr::new(&n), 2 | 0x40 | 0x80)
+                .map_err(crate::space::io_error)?;
+            if !self.remove(&n) {
+                return Err(ErrorCode::Io);
+            }
+            if file.metadata().map_err(|_| ErrorCode::Io)?.nlink() != 0 {
+                return Err(ErrorCode::Io);
+            }
+            Ok(file)
+        }
         pub fn link(&self, from: &str, to: &str) -> std::io::Result<()> {
             let a = CString::new(from).unwrap();
             let b = CString::new(to).unwrap();
@@ -477,6 +500,10 @@ mod platform {
                 .share_mode(0)
                 .custom_flags(0x00200000)
                 .open(self.path.join(n))
+        }
+        /// 이 폴더 안에 닫으면 지워지는 숨김 임시 파일을 만듦.
+        pub(crate) fn temporary(&self) -> Result<File> {
+            crate::spool::windows_temporary(&self.path, ".zipelo-", true)
         }
         pub fn link(&self, a: &str, b: &str) -> std::io::Result<()> {
             std::fs::hard_link(self.path.join(a), self.path.join(b))
