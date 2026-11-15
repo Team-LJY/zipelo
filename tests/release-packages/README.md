@@ -5,12 +5,12 @@
 ```sh
 python3 tests/ci/run_rust.py local
 python3 -m unittest discover -s tests/release-packages -p "test_*.py"
-python3 tests/release-packages/ubuntu_smoke.py tests/release-packages/runs/ubuntu-release/zipelo_0.2.1_amd64.deb
+python3 tests/release-packages/ubuntu_smoke.py tests/work/v021-build-out/zipelo_0.2.1_amd64.deb --work-dir tests/work/ubuntu-package-smoke
 ```
 
-Ubuntu 실기 스모크는 이 패키지를 sudo로 설치하고 ZIP, 7z, TAR.GZ의 기본 앱을 확인합니다. 별도 Xvfb 화면에서 공백이 있는 경로의 합성 ZIP을 실제 앱으로 열어 소유 창을 캡처합니다. 종료 후 패키지를 제거하고 기존 MIME 설정을 복원합니다. 설치나 제거가 실패해도 MIME 설정 복원을 시도하고 원래 실패와 정리 실패를 함께 보고합니다. 설치된 Zipelo나 같은 경로의 기존 파일이 있으면 중단합니다. 시험 중 다른 MIME 설정 변경이 감지되면 해당 파일을 덮어쓰지 않고 나머지 파일은 복원합니다.
+Ubuntu 실기 스모크는 이 패키지를 sudo로 설치하되, 패키지 설치 및 제거 시 실제 사용자의 기본 앱 설정 단계는 실행하지 않습니다. 대신 tests/work 안의 격리된 HOME에서 ZIP, 7z, TAR.GZ 기본 앱 적용과 제거를 검증합니다. 별도 Xvfb 화면에서 공백이 있는 경로의 합성 ZIP을 실제 앱으로 열어 소유 창을 캡처합니다. 실제 사용자 MIME 설정 파일은 시험 전후 바이트 단위로 비교하며 변경되면 실패를 보고하고 덮어쓰지 않습니다. 설치된 Zipelo나 같은 경로의 기존 파일이 있으면 중단합니다.
 
-sudo 비대화형 권한, Xvfb, xdotool과 ImageMagick import가 필요합니다. 이 검사는 실제 시스템 패키지를 설치하고 사용자 기본 앱을 임시로 바꾸므로 실행 전에 해당 작업의 승인이 필요합니다. 출력은 runs/에 남고 Git에는 포함하지 않습니다.
+sudo 비대화형 권한, Xvfb, xdotool과 ImageMagick import가 필요합니다. 이 검사는 실제 시스템 패키지를 설치하고 제거하므로 해당 작업에 승인된 환경에서 실행합니다. 출력은 지정한 tests/work 폴더에 남고 Git에는 포함하지 않습니다.
 
 Windows 설치와 설정 화면, 제거의 실기 검증은 이 Linux 시험에 포함되지 않습니다. release 게시와 다운로드 버튼 갱신도 수행하지 않습니다.
 

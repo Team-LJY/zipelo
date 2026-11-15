@@ -16,8 +16,9 @@ SPEC.loader.exec_module(SMOKE)
 
 class LifecycleTests(unittest.TestCase):
     def setUp(self):
-        (ROOT / "tests/release-packages/runs").mkdir(parents=True, exist_ok=True)
-        temporary = tempfile.TemporaryDirectory(dir=ROOT / "tests/release-packages/runs")
+        work = Path(os.environ.get("TMPDIR", SMOKE.work_root() / "ubuntu-lifecycle"))
+        work.mkdir(parents=True, exist_ok=True)
+        temporary = tempfile.TemporaryDirectory(dir=work)
         self.addCleanup(temporary.cleanup)
         self.directory = Path(temporary.name)
         self.previous = self.directory / "mimeapps.list"
@@ -56,6 +57,11 @@ class LifecycleTests(unittest.TestCase):
                 subprocess.run(["sh", str(ROOT / "packaging/ubuntu/rust/postinst"), *arguments],
                                env=env, check=True)
                 self.assertEqual(len(log.read_text().splitlines()), count)
+        env["SUDO_USER"] = "root"
+        log.write_text("")
+        subprocess.run(["sh", str(ROOT / "packaging/ubuntu/rust/postinst"), "configure"],
+                       env=env, check=True)
+        self.assertEqual(log.read_text(), "")
 
     def test_prerm_restores_only_on_remove_for_known_user(self):
         commands = self.directory / "bin"
@@ -80,6 +86,11 @@ class LifecycleTests(unittest.TestCase):
                 if count:
                     self.assertIn("HOME=" + str(self.directory), calls[0])
                     self.assertTrue(calls[0].endswith("/usr/lib/zipelo/default-apps remove"))
+        env["SUDO_USER"] = "root"
+        log.write_text("")
+        subprocess.run(["sh", str(ROOT / "packaging/ubuntu/rust/prerm"), "remove"],
+                       env=env, check=True, capture_output=True)
+        self.assertEqual(log.read_text(), "")
         env.pop("SUDO_USER")
         log.write_text("")
         result = subprocess.run(["sh", str(ROOT / "packaging/ubuntu/rust/prerm"), "remove"],
@@ -87,62 +98,101 @@ class LifecycleTests(unittest.TestCase):
         self.assertEqual(log.read_text(), "")
         self.assertIn("사용자를 확인할 수 없어", result.stdout)
 
-    def check_smoke(self, install_fails=False, purge_fails=False, body_fails=False):
+    def check_smoke(self, install_fails=False, defaults_fail=False, purge_fails=False, body_fails=False):
+        calls = []
+        home = self.directory / "isolated-home"
+        home.mkdir()
+        isolated_config = home / ".config/mimeapps.list"
+        isolated_config.parent.mkdir()
+        isolated_config.write_bytes(b"previous-app.desktop\n")
+
+        def command(arguments, **options):
+            calls.append(arguments)
+            if arguments[0] == "sudo":
+                self.assertIn("SUDO_USER=root", arguments)
+                self.assertIn("HOME=" + str(home), arguments)
+                if "-i" in arguments and install_fails:
+                    raise subprocess.CalledProcessError(1, arguments)
+                if "-P" in arguments and purge_fails:
+                    raise subprocess.CalledProcessError(2, arguments)
+            else:
+                self.assertEqual(arguments[0], "/usr/lib/zipelo/default-apps")
+                self.assertEqual(options["env"]["HOME"], str(home))
+                self.assertEqual(options["env"]["XDG_CONFIG_HOME"], str(home / ".config"))
+                self.assertEqual(options["env"]["XDG_DATA_HOME"], str(home / ".local/share"))
+                self.assertEqual(options["env"]["XDG_STATE_HOME"], str(home / ".local/state"))
+                if arguments[1] == "install":
+                    isolated_config.write_bytes(b"zipelo.desktop\n")
+                    if defaults_fail:
+                        raise subprocess.CalledProcessError(3, arguments)
+                else:
+                    isolated_config.write_bytes(b"previous-app.desktop\n")
+            return subprocess.CompletedProcess(arguments, 0)
+
+        def exercise():
+            with patch.object(SMOKE.subprocess, "run", side_effect=command):
+                with SMOKE.installed_package(self.directory / "sample.deb", home) as isolated:
+                    self.assertEqual(isolated["HOME"], str(home))
+                    if body_fails:
+                        raise RuntimeError("창 실행 실패")
+
+        if install_fails or defaults_fail or purge_fails or body_fails:
+            with self.assertRaises(BaseExceptionGroup) as raised:
+                exercise()
+            self.assertEqual(len(raised.exception.exceptions),
+                             int(install_fails) + int(defaults_fail) + int(purge_fails) + int(body_fails))
+        else:
+            exercise()
+        self.assertEqual(SMOKE.configs(), self.original)
+        self.assertEqual(self.previous.read_bytes(), b"previous-app.desktop\n")
+        self.assertFalse(self.created.exists())
+        if install_fails:
+            self.assertEqual([arguments[-2:] for arguments in calls],
+                             [["-i", str(self.directory / "sample.deb")], ["-P", "zipelo"]])
+        else:
+            self.assertEqual([arguments[-2:] for arguments in calls if arguments[0] == "sudo"],
+                             [["-i", str(self.directory / "sample.deb")], ["-P", "zipelo"]])
+            self.assertEqual([arguments[-1] for arguments in calls if arguments[0] != "sudo"],
+                             ["install", "remove"])
+            self.assertEqual(isolated_config.read_bytes(), b"previous-app.desktop\n")
+
+    def test_success_keeps_real_user_settings_unchanged(self):
+        self.check_smoke()
+
+    def test_partial_install_failure_keeps_real_user_settings_unchanged(self):
+        self.check_smoke(install_fails=True)
+
+    def test_default_app_failure_still_cleans_isolated_settings(self):
+        self.check_smoke(defaults_fail=True)
+
+    def test_purge_failure_keeps_real_user_settings_unchanged(self):
+        self.check_smoke(purge_fails=True)
+
+    def test_install_and_purge_failures_are_reported(self):
+        self.check_smoke(install_fails=True, purge_fails=True)
+
+    def test_window_failure_keeps_real_user_settings_unchanged(self):
+        self.check_smoke(body_fails=True)
+
+    def test_host_change_is_detected_without_overwrite(self):
+        home = self.directory / "isolated-home"
+        home.mkdir()
         calls = []
 
         def command(arguments, **options):
             calls.append(arguments)
             if "-i" in arguments:
-                self.previous.write_bytes(b"zipelo.desktop\n")
-                self.created.write_bytes(b"zipelo.desktop\n")
-                if install_fails:
-                    raise subprocess.CalledProcessError(1, arguments)
-            elif purge_fails:
-                raise subprocess.CalledProcessError(2, arguments)
+                self.previous.write_bytes(b"external-choice.desktop\n")
             return subprocess.CompletedProcess(arguments, 0)
 
-        def exercise():
-            with patch.object(SMOKE.subprocess, "run", side_effect=command):
-                with SMOKE.installed_package(self.directory / "sample.deb"):
-                    self.assertFalse(install_fails)
-                    if body_fails:
-                        raise RuntimeError("창 실행 실패")
-
-        if install_fails or purge_fails or body_fails:
-            with self.assertRaises(ExceptionGroup) as raised:
-                exercise()
-            self.assertEqual(len(raised.exception.exceptions),
-                             int(install_fails) + int(purge_fails) + int(body_fails))
-        else:
-            exercise()
-        self.assertEqual(SMOKE.configs(), self.original)
+        with patch.object(SMOKE.subprocess, "run", side_effect=command):
+            with self.assertRaises(BaseExceptionGroup) as raised:
+                with SMOKE.installed_package(self.directory / "sample.deb", home):
+                    pass
+        self.assertTrue(any("실제 사용자 MIME 설정" in str(error)
+                            for error in raised.exception.exceptions))
+        self.assertEqual(self.previous.read_bytes(), b"external-choice.desktop\n")
         self.assertEqual(len(calls), 2)
-        self.assertIn("-P", calls[1])
-
-    def test_success_restores_settings(self):
-        self.check_smoke()
-
-    def test_partial_install_failure_restores_settings(self):
-        self.check_smoke(install_fails=True)
-
-    def test_purge_failure_still_restores_settings(self):
-        self.check_smoke(purge_fails=True)
-
-    def test_both_failures_are_reported(self):
-        self.check_smoke(install_fails=True, purge_fails=True)
-
-    def test_window_failure_restores_settings(self):
-        self.check_smoke(body_fails=True)
-
-    def test_external_change_does_not_skip_other_restores(self):
-        self.previous.write_bytes(b"zipelo.desktop\n")
-        self.created.write_bytes(b"zipelo.desktop\n")
-        after = SMOKE.configs()
-        self.created.write_bytes(b"external-choice.desktop\n")
-        with self.assertRaises(ExceptionGroup):
-            SMOKE.restore_configs(self.original, after)
-        self.assertEqual(self.previous.read_bytes(), self.original[self.previous])
-        self.assertEqual(self.created.read_bytes(), b"external-choice.desktop\n")
 
 
 if __name__ == "__main__":
