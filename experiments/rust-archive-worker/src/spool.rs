@@ -57,11 +57,22 @@ pub(crate) fn random_name() -> Result<String> {
 pub(crate) fn temporary() -> Result<File> {
     let placed =
         LOCATION.with(|location| location.borrow().as_ref().map(filesystem::Dir::temporary));
+    let destination_full = matches!(&placed, Some(Err(ErrorCode::DiskFull)));
     match placed {
         Some(Ok(file)) => return Ok(file),
         Some(Err(_)) => LOCATION.with(|location| *location.borrow_mut() = None),
         None => {}
     }
+    system_temporary().map_err(|error| {
+        if destination_full {
+            ErrorCode::DiskFull
+        } else {
+            error
+        }
+    })
+}
+
+fn system_temporary() -> Result<File> {
     #[cfg(target_os = "linux")]
     {
         use std::os::unix::fs::OpenOptionsExt;
