@@ -2,9 +2,10 @@ use crate::support::*;
 use publication::{Error, Limits, Publication, Request, Stop, Usage};
 use std::{
     ffi::{CString, OsStr, OsString},
-    fs,
+    fs::{self, File},
     os::unix::{
         ffi::{OsStrExt, OsStringExt},
+        io::AsRawFd,
         fs::{FileTypeExt, MetadataExt, symlink},
         net::UnixListener,
     },
@@ -172,10 +173,14 @@ enum Existing {
 }
 
 fn bind_socket(output: &Path) -> UnixListener {
-    // Cargo 시험의 현재 디렉터리 기준으로 소켓 주소만 짧게 지정함.
-    let current = std::env::current_dir().unwrap();
-    let relative = output.strip_prefix(&current).unwrap();
-    UnixListener::bind(relative).unwrap()
+    // 디렉터리 핸들로 긴 절대 경로를 소켓 주소에서 제외함.
+    let parent = File::open(output.parent().unwrap()).unwrap();
+    let address = format!(
+        "/proc/self/fd/{}/{}",
+        parent.as_raw_fd(),
+        output.file_name().unwrap().to_string_lossy()
+    );
+    UnixListener::bind(address).unwrap()
 }
 
 #[test]

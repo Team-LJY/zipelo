@@ -2,7 +2,14 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-ci_tools="${ZIPELO_CI_TOOLS:-$repo_root/tests/ci/tools}"
+common_dir="$(git -C "$repo_root" rev-parse --path-format=absolute --git-common-dir)"
+project_root="$(dirname "$common_dir")"
+job="${ZIPELO_CI_JOB:-rust-local}"
+if [[ ! "$job" =~ ^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$ ]]; then
+    echo "유효하지 않은 작업명: $job" >&2
+    exit 2
+fi
+ci_tools="${ZIPELO_CI_TOOLS:-$project_root/tests/work/$job/tools}"
 mkdir -p "$ci_tools/downloads" "$ci_tools/mingw"
 ci_tools="$(cd "$ci_tools" && pwd)"
 

@@ -23,7 +23,7 @@ python3 tests/ci/run_rust.py local
 단독 시험에서는 같은 target 디렉터리에 먼저 두 실행 파일을 빌드할 것.
 
 ```sh
-export CARGO_TARGET_DIR="$PWD/tests/ci/target"
+export CARGO_TARGET_DIR="$PWD/tests/work/rust-local/target"
 cargo +1.99.1 build --locked --manifest-path experiments/rust-archive-worker/Cargo.toml
 cargo +1.99.1 build --locked --manifest-path tests/rust-app-real-worker/Cargo.toml
 cargo +1.99.1 test --locked --all-features --manifest-path experiments/rust-ui-memory-app/Cargo.toml --test real_worker

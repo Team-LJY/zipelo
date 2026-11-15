@@ -22,7 +22,7 @@ pub struct Sandbox {
 
 impl Sandbox {
     pub fn new() -> Self {
-        let runs = Path::new(env!("CARGO_MANIFEST_DIR")).join("runs");
+        let runs = PathBuf::from(std::env::var_os("ZIPELO_TEST_WORK_DIR").expect("runner 작업 경로 필요")).join("fixtures/rust-gzip-file-job");
         let info = fs::symlink_metadata(&runs).expect("runner가 전용 runs를 준비해야 함");
         assert!(info.is_dir() && !info.file_type().is_symlink());
         assert_eq!(info.mode() & 0o777, 0o700);

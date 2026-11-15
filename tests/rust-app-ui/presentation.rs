@@ -341,7 +341,7 @@ static SCRATCH_ID: AtomicU64 = AtomicU64::new(0);
 pub(super) struct Folder(pub(super) PathBuf);
 impl Folder {
     pub(super) fn new() -> Self {
-        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/rust-app-ui/runs");
+        let root = PathBuf::from(std::env::var_os("ZIPELO_TEST_WORK_DIR").expect("runner 작업 경로 필요")).join("fixtures/rust-app-ui");
         fs::create_dir_all(&root).unwrap();
         let path = root.join(format!(
             "presentation-{}-{}",

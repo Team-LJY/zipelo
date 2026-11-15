@@ -1,4 +1,4 @@
-use std::{collections::BTreeSet, path::Path};
+use std::{collections::BTreeSet, path::{Path, PathBuf}};
 use zipelo_ui_memory_app::{
     archive_dialog::archive_filters,
     archive_present::{gzip_output_name, valid_output_leaf},
@@ -147,10 +147,8 @@ fn missing_portal_returns_errors_for_every_dialog() {
         }
         return;
     }
-    let endpoint = Path::new(env!("CARGO_MANIFEST_DIR")).join(format!(
-        "../../tests/rust-app-ui/runs/no-bus-{}",
-        std::process::id()
-    ));
+    let endpoint = PathBuf::from(std::env::var_os("ZIPELO_TEST_WORK_DIR").expect("runner 작업 경로 필요"))
+        .join(format!("fixtures/rust-app-ui/no-bus-{}", std::process::id()));
     assert!(!endpoint.exists());
     let mut child = Command::new(std::env::current_exe().unwrap())
         .args([

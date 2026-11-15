@@ -598,8 +598,8 @@ mod linux {
             measurements.join(", ")
         );
         fs::write(
-            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                .join("../../tests/ci/seven-zip-streaming-rss.log"),
+            PathBuf::from(std::env::var_os("ZIPELO_TEST_WORK_DIR").expect("runner 작업 경로 필요"))
+                .join("seven-zip-streaming-rss.log"),
             measurements.join("\n") + "\n",
         )
         .unwrap();
@@ -679,7 +679,8 @@ mod linux {
             measurements.join(", ")
         );
         fs::write(
-            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/ci/streaming-rss.log"),
+            PathBuf::from(std::env::var_os("ZIPELO_TEST_WORK_DIR").expect("runner 작업 경로 필요"))
+                .join("streaming-rss.log"),
             measurements.join("\n") + "\n",
         )
         .unwrap();

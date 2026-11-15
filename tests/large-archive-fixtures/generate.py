@@ -5,6 +5,9 @@ import gzip
 import hashlib
 import io
 import json
+import os
+import re
+import subprocess
 from pathlib import Path
 import struct
 import tarfile
@@ -18,6 +21,25 @@ CHUNK = 64 * 1024
 INPUT_LIMIT = 2 ** 64 - 1
 OUTPUT_LIMIT = 16 * GIB
 NAME = "payload.bin"
+JOB_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}\Z")
+
+
+def work_root():
+    job = os.environ.get("ZIPELO_CI_JOB", "rust-local")
+    if not JOB_NAME.fullmatch(job):
+        raise ValueError("안전한 작업명이 필요함")
+    common = Path(subprocess.check_output(
+        ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
+        cwd=ROOT, text=True,
+    ).strip()).resolve()
+    project = common.parent if common.name == ".git" else ROOT.resolve()
+    work = project / "tests/work" / job
+    configured = os.environ.get("ZIPELO_TEST_WORK_DIR")
+    if configured and Path(configured).resolve() != work:
+        raise ValueError("작업 폴더 밖의 표본 경로는 허용하지 않음")
+    if work.resolve() != work:
+        raise ValueError("안전한 작업 폴더가 필요함")
+    return work
 
 
 class ZeroStream(io.RawIOBase):
@@ -103,7 +125,7 @@ def violations(artifact, limits):
 
 def build(directory, large=False):
     directory = Path(directory).resolve()
-    directory.relative_to(ROOT / "tests")
+    directory.relative_to(work_root())
     directory.mkdir(mode=0o700, parents=True, exist_ok=False)
     cases = []
     artifacts = {}
@@ -196,8 +218,9 @@ def main():
     parser.add_argument("--output", required=True, type=Path, help="tests 아래의 새 디렉터리")
     parser.add_argument("--large", action="store_true", help="1 GiB 성공과 16 GiB 초과 표본도 생성함")
     args = parser.parse_args()
-    manifest = build(args.output, args.large)
-    print(f"{len(manifest['cases'])} cases: {args.output / 'expectations.json'}")
+    output = args.output if args.output.is_absolute() else work_root() / args.output
+    manifest = build(output, args.large)
+    print(f"{len(manifest['cases'])} cases: {output / 'expectations.json'}")
 
 
 if __name__ == "__main__":

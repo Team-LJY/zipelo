@@ -11,7 +11,7 @@ import tempfile
 import tarfile
 import zipfile
 
-from generate import CHUNK, NAME, ROOT, build, digest, violations
+from generate import CHUNK, NAME, ROOT, build, digest, violations, work_root
 
 
 def check_payload(source, size):
@@ -49,7 +49,7 @@ def check_reference(path, artifact):
 
 def verify(directory, probe, worker, large=False):
     directory = directory.resolve()
-    directory.relative_to(ROOT / "tests")
+    directory.relative_to(work_root())
     manifest = json.loads((directory / "expectations.json").read_text(encoding="utf-8"))
     assert not large or manifest["large"]
     for name, artifact in manifest["artifacts"].items():
@@ -108,22 +108,29 @@ def verify(directory, probe, worker, large=False):
     return results
 
 
+def default_target():
+    return Path(os.environ.get("CARGO_TARGET_DIR", work_root() / "target")) / "debug"
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--directory", type=Path, help="기존 표본 또는 새 표본 경로")
     parser.add_argument("--large", action="store_true", help="1 GiB 성공과 16 GiB 초과도 검사함")
-    target = Path(os.environ.get("CARGO_TARGET_DIR", ROOT / "tests/ci/target")) / "debug"
+    target = default_target()
     suffix = ".exe" if os.name == "nt" else ""
     parser.add_argument("--probe", type=Path, default=target / ("zipelo-large-archive-probe" + suffix))
     parser.add_argument("--worker", type=Path, default=target / ("zipelo-archive-worker" + suffix))
     args = parser.parse_args()
     assert args.probe.is_file() and args.worker.is_file(), "local 빌드를 먼저 실행해야 함"
     if args.directory:
-        if not args.directory.exists():
-            build(args.directory, args.large)
-        verify(args.directory, args.probe, args.worker, args.large)
+        directory = args.directory if args.directory.is_absolute() else work_root() / args.directory
+        if not directory.exists():
+            build(directory, args.large)
+        verify(directory, args.probe, args.worker, args.large)
     else:
-        with tempfile.TemporaryDirectory(prefix="fixture-", dir=ROOT / "tests/large-archive-fixtures") as scratch:
+        work = work_root()
+        work.mkdir(mode=0o700, parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix="fixture-", dir=work) as scratch:
             directory = Path(scratch) / "corpus"
             build(directory, args.large)
             verify(directory, args.probe, args.worker, args.large)

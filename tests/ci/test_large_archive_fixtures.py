@@ -1,12 +1,18 @@
 import gzip
 import importlib.util
 import io
+import os
+import subprocess
+import sys
 from pathlib import Path
 import tarfile
 import tempfile
 import unittest
+from unittest.mock import patch
 import zipfile
 
+
+import run_rust
 
 ROOT = Path(__file__).resolve().parents[2]
 SPEC = importlib.util.spec_from_file_location(
@@ -17,8 +23,34 @@ SPEC.loader.exec_module(GENERATOR)
 
 
 class LargeArchiveFixtureTests(unittest.TestCase):
+    def test_standalone_generator_uses_common_work_directory(self):
+        expected = run_rust.test_work_directory(ROOT)
+        with tempfile.TemporaryDirectory(dir=expected) as scratch:
+            relative = Path(scratch).name + "/corpus"
+            environment = dict(os.environ, ZIPELO_CI_JOB=expected.name)
+            environment.pop("ZIPELO_TEST_WORK_DIR", None)
+            result = subprocess.run(
+                ["python3", str(ROOT / "tests/large-archive-fixtures/generate.py"),
+                 "--output", relative],
+                cwd=ROOT, env=environment, capture_output=True, text=True, check=True,
+            )
+            self.assertTrue((Path(scratch) / "corpus/expectations.json").is_file())
+            self.assertIn("11 cases", result.stdout)
+
+    def test_standalone_verifier_uses_work_target(self):
+        job = run_rust.test_work_directory(ROOT).name
+        with patch.dict(os.environ, {"ZIPELO_CI_JOB": job}), patch.dict(sys.modules, {"generate": GENERATOR}):
+            os.environ.pop("ZIPELO_TEST_WORK_DIR", None)
+            os.environ.pop("CARGO_TARGET_DIR", None)
+            spec = importlib.util.spec_from_file_location(
+                "large_fixture_verifier", ROOT / "tests/large-archive-fixtures/verify.py"
+            )
+            verifier = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(verifier)
+            self.assertEqual(verifier.default_target(), GENERATOR.work_root() / "target/debug")
+
     def test_boundary_archives_are_valid_and_expectations_straddle_limit(self):
-        with tempfile.TemporaryDirectory(dir=ROOT / "tests/ci") as scratch:
+        with tempfile.TemporaryDirectory(dir=run_rust.test_work_directory(ROOT)) as scratch:
             directory = Path(scratch) / "corpus"
             manifest = GENERATOR.build(directory)
             self.assertEqual(len(manifest["cases"]), 11)
@@ -52,7 +84,7 @@ class LargeArchiveFixtureTests(unittest.TestCase):
                 self.assertEqual(case["expected"]["created_count"], 0 if failed else 1)
 
     def test_former_ratio_samples_all_expect_success(self):
-        with tempfile.TemporaryDirectory(dir=ROOT / "tests/ci") as scratch:
+        with tempfile.TemporaryDirectory(dir=run_rust.test_work_directory(ROOT)) as scratch:
             manifest = GENERATOR.build(Path(scratch) / "corpus")
             for suffix, delta in (("below", -1), ("equal", 0), ("above", 1)):
                 name = "ratio-" + suffix + ".gz"
@@ -66,7 +98,7 @@ class LargeArchiveFixtureTests(unittest.TestCase):
                 self.assertEqual(payload, bytes(artifact["payload_bytes"]))
 
     def test_generator_rejects_existing_destination_without_changes(self):
-        with tempfile.TemporaryDirectory(dir=ROOT / "tests/ci") as scratch:
+        with tempfile.TemporaryDirectory(dir=run_rust.test_work_directory(ROOT)) as scratch:
             directory = Path(scratch)
             marker = directory / "keep"
             marker.write_bytes(b"preserve")
@@ -77,7 +109,7 @@ class LargeArchiveFixtureTests(unittest.TestCase):
 
     def test_generator_requires_project_test_directory(self):
         with self.assertRaises(ValueError):
-            GENERATOR.build(ROOT / "outside-tests")
+            GENERATOR.build(run_rust.test_work_directory(ROOT).parent / "outside-tests")
 
     def test_payload_source_enforces_bounded_reads(self):
         source = GENERATOR.ZeroStream(GENERATOR.GIB)
