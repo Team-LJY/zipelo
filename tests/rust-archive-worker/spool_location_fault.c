@@ -7,6 +7,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/statvfs.h>
+#include <sys/stat.h>
+#include <sys/resource.h>
+#include <signal.h>
 #include <unistd.h>
 
 static int (*original_openat)(int, const char *, int, ...);
@@ -14,11 +17,19 @@ static int (*original_open64)(const char *, int, ...);
 static ssize_t (*original_write)(int, const void *, size_t);
 static int written[3];
 static int snapshot_fd = -1;
+static int source_changed;
+static unsigned long long source_read;
 
 __attribute__((constructor)) static void initialize(void) {
     original_openat = dlsym(RTLD_NEXT, "openat");
     original_open64 = dlsym(RTLD_NEXT, "open64");
     original_write = dlsym(RTLD_NEXT, "write");
+    const char *phase = getenv("ZIPELO_SPOOL_PHASE");
+    if (phase && !strcmp(phase, "quota")) {
+        struct rlimit limit = {65536, 65536};
+        signal(SIGXFSZ, SIG_IGN);
+        if (setrlimit(RLIMIT_FSIZE, &limit)) _exit(99);
+    }
 }
 static int location(const char *path) {
     if (strstr(path, "/cache/")) return 0;
@@ -109,13 +120,6 @@ ssize_t write(int fd, const void *bytes, size_t count) {
             || !strcmp(phase, "changed") || !strcmp(phase, "io"))) {
         if (!strcmp(phase, "io")) { errno = EIO; return -1; }
         if (!written[at]++) return original_write(fd, bytes, count < 7 ? count : 7);
-        if (!strcmp(phase, "changed")) {
-            int source = original_openat(AT_FDCWD, getenv("ZIPELO_SPOOL_SOURCE"), O_WRONLY | O_APPEND);
-            if (source >= 0) {
-                original_write(source, "x", 1);
-                close(source);
-            }
-        }
         errno = EDQUOT;
         return -1;
     }
@@ -132,5 +136,32 @@ int fstatvfs(int fd, struct statvfs *value) {
         value->f_frsize = 1;
         value->f_bavail = stage ? 0 : 1024;
     }
+    if (!result && affected(at) && phase && !strcmp(phase, "quota")) {
+        value->f_frsize = 1;
+        value->f_bavail = 65536;
+    }
     return result;
+}
+
+ssize_t read(int fd, void *bytes, size_t count) {
+    ssize_t (*original)(int, void *, size_t) = dlsym(RTLD_NEXT, "read");
+    ssize_t length = original(fd, bytes, count);
+    const char *phase = getenv("ZIPELO_SPOOL_PHASE");
+    const char *source = getenv("ZIPELO_SPOOL_SOURCE");
+    char path[4096];
+    descriptor(fd, path, sizeof(path));
+    struct stat data;
+    if (length > 0 && source && !strcmp(path, source)) source_read += length;
+    int late = phase && !strcmp(phase, "late-changed") && !fstat(fd, &data)
+        && source_read > (unsigned long long)data.st_size;
+    if (length > 0 && !source_changed && phase && (!strcmp(phase, "changed") || late)
+            && source && !strcmp(path, source)) {
+        source_changed = 1;
+        int output = original_openat(AT_FDCWD, source, O_WRONLY | O_APPEND);
+        if (output >= 0) {
+            original_write(output, "x", 1);
+            close(output);
+        }
+    }
+    return length;
 }

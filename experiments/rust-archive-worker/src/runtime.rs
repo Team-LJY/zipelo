@@ -40,6 +40,8 @@ struct Job<W> {
     watchdog: Watchdog,
     remaining_choice: Option<ConflictChoice>,
     source_group: Option<crate::split_seven_zip::Group>,
+    direct_source: Option<crate::spool::DirectSource>,
+    direct_split: Option<crate::split_seven_zip::Direct>,
     source_verified_for_publication: bool,
     creation_plan: Option<crate::create::Plan>,
     recovery: Option<crate::zip_recovery::Recovery>,
@@ -419,6 +421,87 @@ impl<W: Write> Job<W> {
         }
         Ok(())
     }
+    fn direct_snapshot(
+        &mut self,
+        path: &std::path::Path,
+        limit: u64,
+    ) -> Result<crate::spool::Snapshot> {
+        let (snapshot, guard) =
+            crate::spool::Snapshot::open_direct(path, limit, &mut |step| match step {
+                crate::spool::Step::Check => self.check(),
+                crate::spool::Step::Activity => completed(Ok(()), self),
+                crate::spool::Step::Read { bytes, total } => {
+                    self.progress(Stage::Read, bytes, Some(total), 0)
+                }
+            })?;
+        self.direct_source = Some(guard);
+        Ok(snapshot)
+    }
+    fn verify_direct(&mut self) -> Result<()> {
+        if let Some(mut source) = self.direct_source.take() {
+            let result = source.verify(&mut |step| match step {
+                crate::spool::Step::Check => self.check(),
+                crate::spool::Step::Activity => completed(Ok(()), self),
+                crate::spool::Step::Read { bytes, total } => {
+                    self.progress(Stage::Verify, bytes, Some(total), 0)
+                }
+            });
+            self.direct_source = Some(source);
+            result?;
+        }
+        if let Some(source) = self.direct_split.take() {
+            let result = source.verify(&mut |step| match step {
+                crate::spool::Step::Check => self.check(),
+                crate::spool::Step::Activity => completed(Ok(()), self),
+                crate::spool::Step::Read { bytes, total } => {
+                    self.progress(Stage::Verify, bytes, Some(total), 0)
+                }
+            });
+            self.direct_split = Some(source);
+            self.split_result(result)?;
+        }
+        Ok(())
+    }
+    fn list_direct_split(&mut self, path: &std::path::Path, limits: Limits) -> Result<()> {
+        let metadata_limits = self.metadata_limits();
+        let opened =
+            crate::split_seven_zip::open_direct(path, limits.input, metadata_limits, &mut |step| {
+                match step {
+                    crate::spool::Step::Check => self.check(),
+                    crate::spool::Step::Activity => completed(Ok(()), self),
+                    crate::spool::Step::Read { bytes, total } => {
+                        self.progress(Stage::Read, bytes, Some(total), 0)
+                    }
+                }
+            });
+        let mut source = self.split_result(opened)?.ok_or(ErrorCode::Internal)?;
+        let length = source.len();
+        let object = self.split_result(source.object())?;
+        let hash = source.hash;
+        let result = crate::spool::retry_full(|| {
+            crate::seven_zip::open(&mut source, length, limits, false, self)
+        });
+        self.direct_split = Some(source);
+        let catalog = result?;
+        for member in &catalog.members {
+            self.check()?;
+            completed(self.event(Message::Entry(member.entry.clone())), self)?;
+        }
+        self.verify_direct()?;
+        completed(
+            self.event(Message::ListEnd {
+                entry_count: catalog.members.len() as u32,
+                list_id: ListId {
+                    catalog_version: 2,
+                    format: Format::SevenZip,
+                    source_object: object,
+                    archive_bytes: length,
+                    archive_sha256: hash,
+                },
+            }),
+            self,
+        )
+    }
     fn preview(
         &mut self,
         archive: NativePath,
@@ -436,14 +519,7 @@ impl<W: Write> Job<W> {
             return Err(ErrorCode::UnsupportedFeature);
         }
         self.progress(Stage::Read, 0, None, 0)?;
-        let mut snapshot =
-            crate::spool::Snapshot::open_reporting(&path, limits.input, &mut |step| match step {
-                crate::spool::Step::Check => self.check(),
-                crate::spool::Step::Activity => completed(Ok(()), self),
-                crate::spool::Step::Read { bytes, total } => {
-                    self.progress(Stage::Read, bytes, Some(total), 0)
-                }
-            })?;
+        let mut snapshot = self.direct_snapshot(&path, limits.input)?;
         if expected.catalog_version != 1
             || expected.source_object != snapshot.object
             || expected.archive_bytes != snapshot.len
@@ -535,6 +611,7 @@ impl<W: Write> Job<W> {
         }
         let (info, bytes) = crate::preview::decode(kind, entry_id, bytes, self)?;
         self.check()?;
+        self.verify_direct()?;
         let hash: [u8; 32] = Sha256::digest(&bytes).into();
         completed(self.event(Message::PreviewBegin(info)), self)?;
         for (index, chunk) in bytes.chunks(MAX_PREVIEW_CHUNK_BYTES).enumerate() {
@@ -675,6 +752,9 @@ impl<W: Write> Job<W> {
                     Action::Extract { list_id, .. } => list_id.as_ref(),
                     _ => None,
                 };
+                if !extract && crate::split_seven_zip::is_split(&path) {
+                    return self.list_direct_split(&path, limits);
+                }
                 let metadata_limits = self.metadata_limits();
                 let captured = crate::split_seven_zip::open(
                     &path,
@@ -692,6 +772,8 @@ impl<W: Write> Job<W> {
                 let mut snapshot = if let Some(captured) = self.split_result(captured)? {
                     self.source_group = Some(captured.group);
                     captured.snapshot
+                } else if !extract {
+                    self.direct_snapshot(&path, limits.input)?
                 } else {
                     crate::spool::Snapshot::open_reporting(&path, limits.input, &mut |step| {
                         match step {
@@ -738,6 +820,7 @@ impl<W: Write> Job<W> {
                         completed(self.event(Message::Entry(member.entry.clone())), self)?;
                     }
                     self.verify_split()?;
+                    self.verify_direct()?;
                     completed(
                         self.event(Message::ListEnd {
                             entry_count: catalog.members.len() as u32,
@@ -1237,6 +1320,8 @@ pub fn serve<R: Read + Send + 'static, W: Write + Send + 'static>(
         watchdog: Watchdog::new(),
         remaining_choice: None,
         source_group: None,
+        direct_source: None,
+        direct_split: None,
         source_verified_for_publication: false,
         creation_plan: None,
         recovery: None,
@@ -1253,7 +1338,18 @@ pub fn serve<R: Read + Send + 'static, W: Write + Send + 'static>(
             detail: String::new(),
         },
     };
-    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| context.run(start)));
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let result = context.run(start);
+        if result.is_err()
+            && !matches!(
+                result,
+                Err(ErrorCode::None | ErrorCode::Limit | ErrorCode::Protocol | ErrorCode::Internal)
+            )
+        {
+            context.verify_direct()?;
+        }
+        result
+    }));
     let error = match result {
         Ok(r) => r.err(),
         Err(_) => {

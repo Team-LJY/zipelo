@@ -276,7 +276,7 @@ impl Streams {
     }
     fn ranges(
         &self,
-        input: &mut std::fs::File,
+        input: &mut (impl std::io::Read + std::io::Seek),
         data_end: u64,
         check: &mut impl crate::resources::Monitor,
     ) -> Result<Vec<(u64, u64)>> {
@@ -303,13 +303,13 @@ impl Streams {
     }
     fn decode_file(
         &self,
-        input: &mut std::fs::File,
+        input: &mut (impl std::io::Read + std::io::Seek),
         ranges: &[(u64, u64)],
         output: &mut std::fs::File,
         selected: Option<usize>,
         check: &mut impl crate::resources::Monitor,
     ) -> Result<()> {
-        use std::io::{Read, Seek, SeekFrom, Write};
+        use std::io::{Seek, SeekFrom, Write};
         let total = self
             .folders
             .iter()
@@ -407,12 +407,12 @@ impl Streams {
     }
 }
 fn digest(
-    file: &mut std::fs::File,
+    file: &mut (impl std::io::Read + std::io::Seek),
     start: u64,
     size: u64,
     check: &mut impl crate::resources::Monitor,
 ) -> Result<u32> {
-    use std::io::{Read, Seek, SeekFrom};
+    use std::io::SeekFrom;
     file.seek(SeekFrom::Start(start))
         .map_err(crate::space::io_error)?;
     let mut crc = 0;
@@ -589,7 +589,7 @@ fn files(
     Ok((members, stream_indices))
 }
 pub(crate) fn open(
-    input: &mut std::fs::File,
+    input: &mut (impl std::io::Read + std::io::Seek),
     length: u64,
     limits: Limits,
     decode: bool,
@@ -598,7 +598,7 @@ pub(crate) fn open(
     open_selected(input, length, limits, decode, None, check)
 }
 pub(crate) fn open_selected(
-    input: &mut std::fs::File,
+    input: &mut (impl std::io::Read + std::io::Seek),
     length: u64,
     limits: Limits,
     decode: bool,

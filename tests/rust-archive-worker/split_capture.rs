@@ -483,3 +483,102 @@ fn scratch_abrupt_exit_leaves_parts_only_under_tmpdir() {
     };
     assert!(!path.exists());
 }
+
+#[test]
+fn direct_reader_preserves_copy_hash_manifest_and_reads_across_volume_boundaries() {
+    use std::io::SeekFrom;
+    let s = Scratch::new();
+    let original = s.split(11);
+    let copied = s.capture();
+    let mut direct = open_direct(
+        &s.first(),
+        u64::MAX,
+        crate::archive::MetadataLimits::default(),
+        &mut |_| Ok(()),
+    )
+    .unwrap()
+    .unwrap();
+    assert_eq!(direct.hash, copied.snapshot.hash);
+    assert_eq!(direct.object().unwrap(), copied.snapshot.object);
+    assert_eq!(direct.len(), original.len() as u64);
+    for offset in [
+        0,
+        1,
+        original.len() / 11 - 1,
+        original.len() / 2,
+        original.len() - 1,
+    ] {
+        direct.seek(SeekFrom::Start(offset as u64)).unwrap();
+        let mut bytes = vec![0; (original.len() - offset).min(64)];
+        direct.read_exact(&mut bytes).unwrap();
+        assert_eq!(bytes, original[offset..offset + bytes.len()]);
+    }
+    direct.seek(SeekFrom::End(1)).unwrap();
+    assert_eq!(direct.read(&mut [0; 1]).unwrap(), 0);
+    assert!(direct.seek(SeekFrom::Start(0)).is_ok());
+    assert!(direct.seek(SeekFrom::Current(-1)).is_err());
+    direct.verify(&mut |_| Ok(())).unwrap();
+}
+
+#[cfg(unix)]
+#[test]
+fn direct_reader_detects_transient_middle_volume_changes() {
+    use std::io::{SeekFrom, Write};
+    let s = Scratch::new();
+    s.split(11);
+    let direct = open_direct(
+        &s.first(),
+        u64::MAX,
+        crate::archive::MetadataLimits::default(),
+        &mut |_| Ok(()),
+    )
+    .unwrap()
+    .unwrap();
+    let path = s.0.join("sample.7z.006");
+    let original = std::fs::read(&path).unwrap();
+    let modified = std::fs::metadata(&path).unwrap().modified().unwrap();
+    let mut file = std::fs::OpenOptions::new().write(true).open(path).unwrap();
+    file.write_all(&[original[0] ^ 1]).unwrap();
+    file.seek(SeekFrom::Start(0)).unwrap();
+    file.write_all(&original[..1]).unwrap();
+    file.set_times(std::fs::FileTimes::new().set_modified(modified))
+        .unwrap();
+    assert_eq!(
+        code(direct.verify(&mut |_| Ok(()))),
+        ErrorCode::SourceChanged
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn direct_reader_detects_transient_change_during_final_verification() {
+    use std::io::{SeekFrom, Write};
+    let s = Scratch::new();
+    s.split(11);
+    let direct = open_direct(
+        &s.first(),
+        u64::MAX,
+        crate::archive::MetadataLimits::default(),
+        &mut |_| Ok(()),
+    )
+    .unwrap()
+    .unwrap();
+    let path = s.first();
+    let original = std::fs::read(&path).unwrap();
+    let modified = std::fs::metadata(&path).unwrap().modified().unwrap();
+    let mut changed = false;
+    let result = direct.verify(&mut |step| {
+        if !changed && matches!(step, Step::Activity) {
+            let mut file = std::fs::OpenOptions::new().write(true).open(&path).unwrap();
+            file.write_all(&[original[0] ^ 1]).unwrap();
+            file.seek(SeekFrom::Start(0)).unwrap();
+            file.write_all(&original[..1]).unwrap();
+            file.set_times(std::fs::FileTimes::new().set_modified(modified))
+                .unwrap();
+            changed = true;
+        }
+        Ok(())
+    });
+    assert!(changed);
+    assert_eq!(code(result), ErrorCode::SourceChanged);
+}
