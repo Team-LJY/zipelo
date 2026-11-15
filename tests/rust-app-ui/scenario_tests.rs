@@ -164,6 +164,8 @@ fn every_listed_scenario_draws_and_keeps_its_expected_screen() {
                 "tar-bz2" | "tar-xz" => "읽어주세요.txt",
                 "folder-empty" => "이 폴더는 비어 있습니다",
                 "dialog-error" => "파일 선택 창을 열 수 없습니다",
+                "extract-disk-full" => "디스크 여유 공간이 부족합니다",
+                "extract-cleanup-failed" => "풀 위치 폴더에 남은 임시 파일이 있을 수 있습니다",
                 "extract-partial" => "일부 파일만 풀렸습니다",
                 "extract-uncertain" => "저장이 끝났는지 확인하지 못했습니다",
                 "extract-unsynced" => "파일을 디스크에 완전히 저장했는지 확인하지 못했습니다",
@@ -190,6 +192,50 @@ fn every_listed_scenario_draws_and_keeps_its_expected_screen() {
                 _ => "읽어주세요.txt",
             };
             assert!(labels.contains(expected), "{}: {labels}", scenario.name);
+            if matches!(
+                scenario.name,
+                "extract-disk-full" | "extract-cleanup-failed"
+            ) {
+                use zipelo_ui_memory_app::archive_ui::{Cleanup, ErrorCode, Outcome, Publication};
+                let cleanup_failed = scenario.name == "extract-cleanup-failed";
+                let terminal = app.model.terminal.as_ref().unwrap();
+                assert!(app.model.confirmed);
+                assert_eq!(terminal.outcome, Outcome::Failed);
+                assert_eq!(terminal.publication, Publication::None);
+                assert_eq!(terminal.created_count, 0);
+                assert_eq!(terminal.retained_partial_count, 0);
+                assert_eq!(
+                    terminal.error,
+                    Some(if cleanup_failed {
+                        ErrorCode::Io
+                    } else {
+                        ErrorCode::DiskFull
+                    })
+                );
+                assert_eq!(
+                    terminal.cleanup,
+                    if cleanup_failed {
+                        Cleanup::Failed
+                    } else {
+                        Cleanup::Complete
+                    }
+                );
+                assert!(labels.contains("압축을 풀지 못했습니다"), "{labels}");
+                assert!(!labels.contains("압축을 풀었습니다"), "{labels}");
+                assert_eq!(
+                    labels.contains("임시 파일을 지우지 못했습니다"),
+                    cleanup_failed
+                );
+                if cleanup_failed {
+                    assert!(!labels.contains("아무 파일도 풀지 않았습니다"), "{labels}");
+                } else {
+                    assert!(
+                        labels.contains("공간을 확보한 뒤 다시 시도하세요"),
+                        "{labels}"
+                    );
+                    assert!(labels.contains("아무 파일도 풀지 않았습니다"), "{labels}");
+                }
+            }
             if scenario.name == "extract-rename-failed" {
                 assert!(labels.contains("파일을 읽거나 쓰지 못했습니다"), "{labels}");
                 assert!(!labels.contains("이름 바꿔 저장:"), "{labels}");
