@@ -2,6 +2,7 @@
 
 import importlib.util
 import os
+import re
 from pathlib import Path
 import subprocess
 import tempfile
@@ -14,9 +15,16 @@ SMOKE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(SMOKE)
 
 
+def test_work_root():
+    job = os.environ.get("ZIPELO_CI_JOB", "rust-local")
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}", job):
+        raise ValueError("안전한 작업명이 필요함")
+    return SMOKE.work_root() / job / "tmp"
+
+
 class LifecycleTests(unittest.TestCase):
     def setUp(self):
-        work = Path(os.environ.get("TMPDIR", SMOKE.work_root() / "ubuntu-lifecycle"))
+        work = test_work_root()
         work.mkdir(parents=True, exist_ok=True)
         temporary = tempfile.TemporaryDirectory(dir=work)
         self.addCleanup(temporary.cleanup)
@@ -28,6 +36,14 @@ class LifecycleTests(unittest.TestCase):
         settings = patch.object(SMOKE, "CONFIGS", (self.directory,))
         settings.start()
         self.addCleanup(settings.stop)
+
+    def test_default_work_path_uses_common_job_directory(self):
+        with patch.dict(os.environ, {"ZIPELO_CI_JOB": "lifecycle-regression"}):
+            os.environ.pop("TMPDIR", None)
+            os.environ.pop("ZIPELO_TEST_WORK_DIR", None)
+            self.assertEqual(
+                test_work_root(), SMOKE.work_root() / "lifecycle-regression/tmp"
+            )
 
     def test_only_first_configuration_sets_defaults(self):
         commands = self.directory / "bin"
