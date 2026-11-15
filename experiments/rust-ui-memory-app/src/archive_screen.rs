@@ -2323,7 +2323,9 @@ impl ArchiveApp {
         let success = self.model.confirmed
             && self.model.error.is_none()
             && t.as_ref().is_some_and(|t| t.outcome == Outcome::Completed)
-            && warnings.is_empty();
+            && warnings
+                .iter()
+                .all(|warning| !creating && *warning == present::CLEANUP_WARNING);
         let durability_warning = t
             .as_ref()
             .filter(|_| self.model.confirmed && !listing)

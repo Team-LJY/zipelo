@@ -55,6 +55,15 @@ int openat(int fd, const char *path, int flags, ...) {
         va_end(args);
     }
     const char *fault = getenv("ZIPELO_TEST_FAULT");
+    if (fault && !strncmp(fault, "destination-", 12)
+            && (((flags & O_TMPFILE) == O_TMPFILE) || ((flags & O_CREAT) && spool_name(path)))) {
+        if (strstr(fault, "named") && (flags & O_TMPFILE) == O_TMPFILE) {
+            errno = EOPNOTSUPP;
+        } else {
+            errno = strstr(fault, "edquot") ? EDQUOT : strstr(fault, "denied") ? EACCES : ENOSPC;
+        }
+        return -1;
+    }
     if (fault && (!strcmp(fault, "create-full") || !strcmp(fault, "create-denied"))
             && !strncmp(path, ".zipelo-", 8)) {
         errno = !strcmp(fault, "create-full") ? ENOSPC : EACCES;

@@ -92,7 +92,7 @@ fn cache_directory() -> Result<filesystem::Dir> {
             .ok_or(ErrorCode::Io)
     }
 }
-fn next_after_full() -> Result<bool> {
+pub(crate) fn next_after_full() -> Result<bool> {
     LOCATION.with(|location| {
         let mut location = location.borrow_mut();
         match location.as_mut() {
@@ -146,9 +146,15 @@ pub(crate) fn temporary() -> Result<File> {
         match location.as_mut() {
             Some(Placement::Fixed(dir)) => match dir.temporary() {
                 Ok(file) => Some(Ok(file)),
-                Err(_) => {
+                Err(error) => {
                     *location = None;
-                    None
+                    Some(system_temporary().map_err(|fallback| {
+                        if error == ErrorCode::DiskFull {
+                            ErrorCode::DiskFull
+                        } else {
+                            fallback
+                        }
+                    }))
                 }
             },
             Some(Placement::Fallback {

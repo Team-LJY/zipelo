@@ -18,6 +18,7 @@ impl Drop for Running {
 const PAYLOAD: &[u8] = b"spool fallback preview\n";
 struct Case {
     scratch: Scratch,
+    archive_names: Vec<String>,
 }
 impl Case {
     fn new() -> Self {
@@ -40,7 +41,23 @@ impl Case {
                 .unwrap()
                 .success()
         );
-        Self { scratch }
+        Self {
+            scratch,
+            archive_names: vec!["input.7z".into(), "input.zip".into()],
+        }
+    }
+    fn split(&mut self) -> (NativePath, Vec<(PathBuf, Vec<u8>)>) {
+        let bytes = fs::read(self.archive("7z").to_path().unwrap()).unwrap();
+        let mut originals = Vec::new();
+        for (index, chunk) in bytes.chunks(bytes.len().div_ceil(9)).enumerate() {
+            let name = format!("split.7z.{:03}", index + 1);
+            let path = self.scratch.0.join("archive").join(&name);
+            fs::write(&path, chunk).unwrap();
+            originals.push((path, chunk.to_vec()));
+            self.archive_names.push(name);
+        }
+        self.archive_names.sort();
+        (self.scratch.path("archive/split.7z.001"), originals)
     }
     fn run(&self, action: Action, phase: &str, mask: u8, named: bool) -> Vec<Message> {
         let s = &self.scratch;
@@ -62,7 +79,12 @@ impl Case {
         if phase == "changed" {
             command.env(
                 "ZIPELO_SPOOL_SOURCE",
-                self.archive("zip").to_path().unwrap(),
+                match &action {
+                    Action::List { archive } | Action::Preview { archive, .. } => {
+                        archive.to_path().unwrap()
+                    }
+                    _ => panic!("source mutation requires an archive"),
+                },
             );
         }
         if phase != "real" {
@@ -186,7 +208,12 @@ impl Case {
                 assert_eq!(fs::read_dir(&path).unwrap().count(), 0, "{path:?}");
             }
         }
-        assert_eq!(fs::read_dir(root.join("archive")).unwrap().count(), 2);
+        let mut names: Vec<_> = fs::read_dir(root.join("archive"))
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name().into_string().unwrap())
+            .collect();
+        names.sort();
+        assert_eq!(names, self.archive_names);
     }
     fn preview(&self, format: &str, phase: &str, mask: u8, named: bool) -> Vec<Message> {
         let events = self.list(format, phase, mask, named);
@@ -271,6 +298,97 @@ fn cache_source_and_system_locations_retry_creation_space_and_partial_quota_writ
         }
     }
 }
+#[test]
+fn split_seven_zip_retries_all_locations_after_partial_quota_writes() {
+    use sha2::{Digest, Sha256};
+    for named in [false, true] {
+        for phase in ["write", "space", "create"] {
+            for mask in [1, 3, 7] {
+                let mut c = Case::new();
+                let (archive, originals) = c.split();
+                assert_eq!(originals.len(), 9);
+                let bytes = fs::read(c.archive("7z").to_path().unwrap()).unwrap();
+                let zip = fs::read(c.archive("zip").to_path().unwrap()).unwrap();
+                let events = c.run(Action::List { archive }, phase, mask, named);
+                if mask == 7 {
+                    assert_eq!(
+                        terminal(&events).outcome,
+                        Outcome::Failed,
+                        "{phase}/{named}: {events:?}"
+                    );
+                    assert_eq!(terminal(&events).error, ErrorCode::DiskFull, "{events:?}");
+                    assert!(!events.iter().any(|e| matches!(e, Message::ListEnd { .. })));
+                } else {
+                    assert_eq!(
+                        terminal(&events).outcome,
+                        Outcome::Completed,
+                        "{phase}/{mask}/{named}: {events:?}"
+                    );
+                    let id = events
+                        .iter()
+                        .find_map(|e| match e {
+                            Message::ListEnd { list_id, .. } => Some(list_id),
+                            _ => None,
+                        })
+                        .unwrap();
+                    assert_eq!(id.catalog_version, 2);
+                    assert_eq!(id.format, Format::SevenZip);
+                    assert_eq!(id.archive_bytes, bytes.len() as u64);
+                    assert_eq!(
+                        id.archive_sha256.as_slice(),
+                        Sha256::digest(&bytes).as_slice()
+                    );
+                    assert!(matches!(
+                        id.source_object,
+                        SourceObject::SplitSevenZip { .. }
+                    ));
+                    assert!(events.iter().any(
+                        |e| matches!(e, Message::Entry(entry) if entry.name == "preview.txt")
+                    ));
+                }
+                let trace = fs::read_to_string(c.scratch.0.join("trace")).unwrap();
+                for at in if mask == 1 {
+                    &['0', '1'][..]
+                } else {
+                    &['0', '1', '2'][..]
+                } {
+                    assert!(trace.contains(*at), "{phase}/{mask}/{named}: {trace}");
+                }
+                if mask == 1 {
+                    assert!(!trace.contains('2'), "{trace}");
+                }
+                for (path, original) in originals {
+                    assert_eq!(fs::read(path).unwrap(), original);
+                }
+                assert_eq!(fs::read(c.archive("7z").to_path().unwrap()).unwrap(), bytes);
+                assert_eq!(fs::read(c.archive("zip").to_path().unwrap()).unwrap(), zip);
+            }
+        }
+    }
+}
+
+#[test]
+fn split_source_change_during_failed_copy_prevents_retry_success() {
+    for named in [false, true] {
+        let mut c = Case::new();
+        let (archive, originals) = c.split();
+        let events = c.run(Action::List { archive }, "changed", 1, named);
+        assert_eq!(terminal(&events).outcome, Outcome::Failed, "{events:?}");
+        assert_eq!(
+            terminal(&events).error,
+            ErrorCode::SourceChanged,
+            "{events:?}"
+        );
+        assert!(!events.iter().any(|e| matches!(e, Message::ListEnd { .. })));
+        for (index, (path, mut bytes)) in originals.into_iter().enumerate() {
+            if index == 0 {
+                bytes.push(b'x');
+            }
+            assert_eq!(fs::read(path).unwrap(), bytes);
+        }
+    }
+}
+
 #[test]
 fn disk_full_requires_exhausting_all_three_locations_and_io_errors_stay_io() {
     for phase in ["create", "space", "write"] {

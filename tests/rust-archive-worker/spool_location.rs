@@ -3,11 +3,41 @@ use super::*;
 // 해제 작업의 원본 사본과 단계 임시 파일은 시스템 임시 폴더가 아니라 출력 폴더에 둠.
 // 시스템 임시 폴더를 쓸 수 없게 만들어도(/tmp 할당량 초과와 같은 상황) 해제가 성공해야 함.
 fn extract_without_system_temp(bytes: &[u8]) -> (Scratch, Vec<Message>) {
+    extract_unusable_system_temp(bytes, None, false)
+}
+fn extract_unusable_system_temp(
+    bytes: &[u8],
+    fault: Option<&str>,
+    file_at_temp_path: bool,
+) -> (Scratch, Vec<Message>) {
     let s = Scratch::new();
     let start = encrypted_start(&s, bytes);
-    let mut child = s
-        .worker()
-        .env("TMPDIR", s.0.join("missing-temp"))
+    let temp = s.0.join("missing-temp");
+    if file_at_temp_path {
+        fs::write(&temp, b"keep").unwrap();
+    }
+    let mut command = s.worker();
+    command.env("TMPDIR", &temp);
+    if let Some(fault) = fault {
+        let shim = s.0.join("io_fault.so");
+        assert!(
+            Command::new("cc")
+                .args(["-shared", "-fPIC", "-O2", "-Wall", "-Wextra", "-Werror"])
+                .arg(
+                    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                        .join("../../tests/rust-archive-worker/io_fault.c")
+                )
+                .args(["-ldl", "-o"])
+                .arg(&shim)
+                .status()
+                .unwrap()
+                .success()
+        );
+        command
+            .env("LD_PRELOAD", shim)
+            .env("ZIPELO_TEST_FAULT", fault);
+    }
+    let mut child = command
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -37,7 +67,11 @@ fn extract_without_system_temp(bytes: &[u8]) -> (Scratch, Vec<Message>) {
     let output = child.wait_with_output().unwrap();
     assert!(output.status.success(), "{:?}", output.stderr);
     assert!(output.stderr.is_empty());
-    assert!(!s.0.join("missing-temp").exists());
+    if file_at_temp_path {
+        assert_eq!(fs::read(&temp).unwrap(), b"keep");
+    } else {
+        assert!(!temp.exists());
+    }
     (s, events)
 }
 
@@ -100,4 +134,49 @@ fn corrupt_archive_error_wins_over_read_only_destination() {
     assert_eq!(terminal(&events).publication, Publication::None);
     assert_eq!(terminal(&events).cleanup, Cleanup::Complete);
     assert_eq!(fs::read_dir(&output).unwrap().count(), 0);
+}
+
+#[test]
+fn destination_space_or_quota_failure_survives_unusable_system_temp() {
+    let input = include_bytes!("fixtures/deflate.zip");
+    for fault in [
+        "destination-enospc",
+        "destination-edquot",
+        "destination-named-enospc",
+        "destination-named-edquot",
+    ] {
+        for file in [false, true] {
+            let (s, events) = extract_unusable_system_temp(input, Some(fault), file);
+            let terminal = terminal(&events);
+            assert_eq!(
+                terminal.outcome,
+                Outcome::Failed,
+                "{fault}/{file}: {events:?}"
+            );
+            assert_eq!(
+                terminal.error,
+                ErrorCode::DiskFull,
+                "{fault}/{file}: {events:?}"
+            );
+            assert_eq!(terminal.publication, Publication::None);
+            assert_eq!(terminal.cleanup, Cleanup::Complete);
+            assert_eq!(terminal.created_count, 0);
+            assert_only_outputs(&s, &[]);
+            assert_eq!(fs::read(s.0.join("input")).unwrap(), input);
+        }
+    }
+}
+
+#[test]
+fn destination_permission_failure_with_unusable_system_temp_stays_io() {
+    for file in [false, true] {
+        let (s, events) = extract_unusable_system_temp(
+            include_bytes!("fixtures/deflate.zip"),
+            Some("destination-denied"),
+            file,
+        );
+        assert_eq!(terminal(&events).error, ErrorCode::Io, "{events:?}");
+        assert_eq!(terminal(&events).outcome, Outcome::Failed);
+        assert_only_outputs(&s, &[]);
+    }
 }
