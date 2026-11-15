@@ -74,6 +74,7 @@ const WORK_RESULT_MAX_HEIGHT: f32 = 220.0;
 /// 부모 창 기준 상대 위치를 기억해 두고, 부모 창이 움직이면 같은 상대 위치로 따라감.
 struct WorkWindow {
     open: bool,
+    created: bool,
     initial: Option<egui::Pos2>,
     offset: Option<egui::Vec2>,
     parent: Option<egui::Pos2>,
@@ -86,6 +87,7 @@ impl Default for WorkWindow {
     fn default() -> Self {
         Self {
             open: false,
+            created: false,
             initial: None,
             offset: None,
             parent: None,
@@ -112,16 +114,20 @@ impl WorkWindow {
         let (parent, parent_focused, now) = ctx.input(|i| {
             (
                 i.viewport().outer_rect,
-                i.viewport().focused.unwrap_or(false),
+                i.viewport().focused,
                 i.time,
             )
         });
         let (child, child_focused) = ctx.input(|i| {
-            i.raw.viewports.get(&id).map_or((None, false), |v| {
-                (v.outer_rect, v.focused.unwrap_or(false))
+            i.raw.viewports.get(&id).map_or((None, None), |v| {
+                (v.outer_rect, v.focused)
             })
         });
-        if !self.open {
+        let initial_focus_unknown =
+            !self.created && parent_focused.is_none() && child_focused.is_none();
+        self.created = true;
+        let opening = !self.open;
+        if opening {
             // 처음 열 때 부모 창 가운데에 둠. 닫혔다 다시 열 때는 기억한 위치에 둠.
             self.open = true;
             self.initial = parent.map(|p| match self.offset {
@@ -165,7 +171,11 @@ impl WorkWindow {
             .with_maximize_button(false)
             .with_taskbar(false)
             .with_window_level(
-                if !native_dialog_open && (parent_focused || child_focused) {
+                if !native_dialog_open
+                    && (initial_focus_unknown
+                        || parent_focused == Some(true)
+                        || child_focused == Some(true))
+                {
                     egui::WindowLevel::AlwaysOnTop
                 } else {
                     egui::WindowLevel::Normal
@@ -218,6 +228,7 @@ pub struct ArchiveApp {
     preview_return_focus: Option<egui::Id>,
     preview_initial_focus: bool,
     work: WorkWindow,
+    work_in_parent: bool,
     create_win: WorkWindow,
     /// ZIP 만들기 창에서 보고 있는 폴더 (고른 폴더 기준 상대 경로, 비어 있으면 최상위).
     create_folder: String,
@@ -289,6 +300,7 @@ impl ArchiveApp {
             preview_return_focus: None,
             preview_initial_focus: false,
             work: WorkWindow::default(),
+            work_in_parent: false,
             create_win: WorkWindow::default(),
             create_folder: String::new(),
             create_listing: None,
@@ -330,6 +342,11 @@ impl ArchiveApp {
 
     pub fn set_dialogs(&mut self, dialogs: Box<dyn Dialogs>) {
         self.dialogs = dialogs;
+    }
+
+    /// 창 순서를 지정할 수 없는 환경에서는 부모 안에 작업 화면을 그림.
+    pub fn set_work_window_in_parent(&mut self, enabled: bool) {
+        self.work_in_parent = enabled;
     }
 
     /// 운영체제가 창 테두리를 그려 주지 않을 때(GNOME Wayland) 제목 표시줄을 직접 그림.
@@ -1085,7 +1102,11 @@ impl ArchiveApp {
                 );
                 theme::status_text(ui, rect, &format!("선택 {selected}개"), half, Align::Max);
             });
-        if ctx.embed_viewports() && self.work_visible() && !self.limit_result_visible() {
+        if ctx.embed_viewports()
+            && !self.work_in_parent
+            && self.work_visible()
+            && !self.limit_result_visible()
+        {
             // 별도 창을 만들 수 없을 때만 쓰는 대체 배치. 목록을 가리지 않도록 하단에 둠.
             egui::Panel::bottom("archive-work")
                 .frame(theme::panel(theme::PANEL).corner_radius(0))
@@ -1515,7 +1536,9 @@ impl ArchiveApp {
                         );
                     }
                 }
-                if rows.is_empty() {
+                if rows.is_empty()
+                    && !(self.model.busy() && matches!(self.last_request, Some(Start::List { .. })))
+                {
                     ui.scope_builder(egui::UiBuilder::new().max_rect(clip), |ui| {
                         ui.centered_and_justified(|ui| {
                             ui.label(if self.search.is_empty() {
@@ -1918,7 +1941,7 @@ impl ArchiveApp {
             self.work.open = false;
             return;
         }
-        if ctx.embed_viewports() {
+        if ctx.embed_viewports() && !self.work_in_parent {
             // 별도 창을 만들 수 없는 환경(시험 등)은 show()에서 하단에 그림.
             return;
         }
@@ -1941,6 +1964,43 @@ impl ArchiveApp {
         } else {
             "작업 결과".to_owned()
         };
+        if self.work_in_parent {
+            // Wayland는 창 올리기를 지원하지 않으므로 부모 안에서 같은 내용을 그림.
+            let mut open = true;
+            let mut window = egui::Window::new(RichText::new(title).size(theme::FONT_SMALL))
+                .id(egui::Id::new("archive-work-in-parent"))
+                .default_pos(
+                    ctx.content_rect().center() - egui::vec2(WORK_WIDTH, self.work.height) / 2.0,
+                )
+                .default_width(WORK_WIDTH)
+                .min_width(WORK_WIDTH)
+                .max_width(WORK_WIDTH)
+                .max_height(WORK_MAX_HEIGHT)
+                .collapsible(false)
+                .resizable(false)
+                .fade_in(false)
+                .fade_out(false)
+                .title_frame(
+                    theme::panel(theme::STRIPE)
+                        .inner_margin(egui::Margin::symmetric(16, 8))
+                        .corner_radius(0),
+                )
+                .frame(
+                    theme::panel(theme::PANEL)
+                        .stroke(egui::Stroke::new(1.0, theme::BORDER))
+                        .corner_radius(0),
+                );
+            if !self.model.busy() {
+                window = window.open(&mut open);
+            }
+            window.show(ctx, |ui| self.work_area(ui));
+            if !open {
+                self.dismissed = true;
+                self.ui_error = None;
+                self.model.input_error = None;
+            }
+            return;
+        }
         let window_title = format!("{title} — Zipelo");
         let custom_frame = self.custom_frame;
         let size = egui::vec2(WORK_WIDTH, self.work.height);

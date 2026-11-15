@@ -128,7 +128,15 @@ fn every_listed_scenario_draws_and_keeps_its_expected_screen() {
                 assert!(app.model.list_id.as_ref().unwrap().is_split());
                 assert!(!app.model.can_preview());
             }
+            if matches!(scenario.name, "archive-loading" | "archive-loading-in-parent") {
+                assert!(app.model.busy());
+                assert!(app.model.list_id.is_none());
+                assert!(app.model.entries.is_empty());
+                assert!(!labels.contains("이 폴더는 비어 있습니다"), "{labels}");
+            }
+
             let expected = match scenario.name {
+                "archive-loading" | "archive-loading-in-parent" => "압축파일을 읽는 중",
                 "split-archive" => "읽어주세요.txt",
                 "split-first-volume" => "첫 조각 여행.7z.001을 선택해 다시 여세요.",
                 "split-missing-volume" => "여행.7z.003 조각이 없습니다",
