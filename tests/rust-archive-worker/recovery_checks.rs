@@ -325,3 +325,88 @@ fn validation_only_decode_preserves_exact_stream_limits_and_cancellation() {
         assert_eq!(std::fs::read_dir(&s.0).unwrap().count(), 1);
     }
 }
+
+#[test]
+fn central_rejects_local_extra_past_directory_or_file_boundary() {
+    let original = include_bytes!("../zip-recovery-fixtures/control.zip");
+    let cd = u32at(original, original.len() - 6) as usize;
+    let name_length = u16at(original, 26) as usize;
+    for extra in [(cd - 30 - name_length + 1) as u16, u16::MAX] {
+        let mut damaged = original.to_vec();
+        damaged[28..30].copy_from_slice(&extra.to_le_bytes());
+        let s = Scratch::new(&damaged);
+        let mut source = File::open(s.path()).unwrap();
+        assert!(matches!(
+            central(
+                &mut source,
+                damaged.len() as u64,
+                Limits::default(),
+                &mut || Ok(())
+            ),
+            Err(ErrorCode::Integrity)
+        ));
+    }
+}
+
+#[test]
+fn central_rejects_overlapping_local_offsets() {
+    let mut damaged = include_bytes!("../zip-recovery-fixtures/control.zip").to_vec();
+    let cd = u32at(&damaged, damaged.len() - 6) as usize;
+    let second = cd
+        + 46
+        + u16at(&damaged, cd + 28) as usize
+        + u16at(&damaged, cd + 30) as usize
+        + u16at(&damaged, cd + 32) as usize;
+    damaged[second + 42..second + 46].copy_from_slice(&0u32.to_le_bytes());
+    let s = Scratch::new(&damaged);
+    let mut source = File::open(s.path()).unwrap();
+    assert!(matches!(
+        central(
+            &mut source,
+            damaged.len() as u64,
+            Limits::default(),
+            &mut || Ok(())
+        ),
+        Err(ErrorCode::Integrity)
+    ));
+}
+
+#[test]
+fn central_zip64_fields_and_extra_remain_unsupported() {
+    let original = include_bytes!("../zip-recovery-fixtures/control.zip");
+    let cd = u32at(original, original.len() - 6) as usize;
+    for field in [20, 24, 42] {
+        let mut damaged = original.to_vec();
+        damaged[cd + field..cd + field + 4].copy_from_slice(&u32::MAX.to_le_bytes());
+        let s = Scratch::new(&damaged);
+        let mut source = File::open(s.path()).unwrap();
+        assert!(matches!(
+            central(
+                &mut source,
+                damaged.len() as u64,
+                Limits::default(),
+                &mut || Ok(())
+            ),
+            Err(ErrorCode::UnsupportedFeature)
+        ));
+    }
+    let mut damaged = original.to_vec();
+    let extra = cd + 46 + u16at(original, cd + 28) as usize;
+    assert_eq!(u16at(original, cd + 30), 0);
+    damaged.splice(extra..extra, [1, 0, 0, 0]);
+    damaged[cd + 30..cd + 32].copy_from_slice(&4u16.to_le_bytes());
+    let end = damaged.len() - 22;
+    let size = u32at(original, original.len() - 10) + 4;
+    damaged[end + 12..end + 16].copy_from_slice(&size.to_le_bytes());
+    let s = Scratch::new(&damaged);
+    let mut source = File::open(s.path()).unwrap();
+    assert!(matches!(
+        central(
+            &mut source,
+            damaged.len() as u64,
+            Limits::default(),
+            &mut || Ok(())
+        ),
+        Err(ErrorCode::UnsupportedFeature)
+    ));
+}

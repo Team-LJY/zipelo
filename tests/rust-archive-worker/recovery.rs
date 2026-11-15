@@ -829,3 +829,62 @@ fn candidate_body_probes_do_not_bypass_recovery_quotas() {
         assert_eq!(fs::read(s.0.join("damaged.zip")).unwrap(), input);
     }
 }
+
+#[test]
+fn corrupt_local_zip64_directory_sizes_recover_list_and_extract() {
+    let s = Scratch::new();
+    let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../tests/rust-archive-worker/local_zip64_fixture.py");
+    let generated = Command::new("python3")
+        .arg("-B")
+        .arg(&fixture)
+        .arg(s.0.join("damaged.zip"))
+        .output()
+        .unwrap();
+    assert!(generated.status.success(), "{generated:?}");
+    let original = fs::read(s.0.join("damaged.zip")).unwrap();
+    let events = execute(start(&s));
+    assert_eq!(terminal(&events).outcome, Outcome::Completed, "{events:?}");
+    let end = recovery_end(&events);
+    assert_eq!(end.mode, RecoveryMode::CentralDirectory);
+    assert_eq!(end.known_entries, Some(2));
+    assert_eq!(end.verified_entries, 2);
+    assert!(!end.unknown_loss);
+    assert!(events.iter().any(|event| matches!(
+        event,
+        Message::RecoveryEntry(entry)
+            if entry.name.as_deref() == Some("folder")
+                && entry.reason == RecoveryReason::HeaderRebuilt
+                && entry.status == RecoveryStatus::Verified
+    )));
+    assert_eq!(fs::read(s.0.join("damaged.zip")).unwrap(), original);
+    let checked = Command::new("python3")
+        .arg("-B")
+        .arg(&fixture)
+        .arg("--verify")
+        .arg(s.0.join("recovered.zip"))
+        .output()
+        .unwrap();
+    assert!(checked.status.success(), "{checked:?}");
+    let recovered = fs::read(s.0.join("recovered.zip")).unwrap();
+    fs::write(s.0.join("input"), &recovered).unwrap();
+    let id = listing(&s);
+    let extracted = extract(
+        &s,
+        &recovered,
+        None,
+        Selection::All,
+        Some(id),
+        Limits::default(),
+    );
+    assert_eq!(
+        terminal(&extracted).outcome,
+        Outcome::Completed,
+        "{extracted:?}"
+    );
+    assert!(s.0.join("output/folder").is_dir());
+    assert_eq!(
+        fs::read(s.0.join("output/folder/hello.txt")).unwrap(),
+        b"Central directory recovery reference\n"
+    );
+}
