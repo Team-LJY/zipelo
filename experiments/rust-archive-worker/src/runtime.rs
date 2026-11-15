@@ -1259,6 +1259,10 @@ pub fn serve<R: Read + Send + 'static, W: Write + Send + 'static>(
             Some(ErrorCode::Internal)
         }
     };
+    // 출력 폴더의 임시 파일 이름을 지우지 못했으면 남은 파일이 있다고 알림.
+    if crate::spool::take_leftover() {
+        context.terminal.cleanup = Cleanup::Failed;
+    }
     let mut state = state
         .lock()
         .map_err(|_| std::io::Error::other("worker state poisoned"))?;

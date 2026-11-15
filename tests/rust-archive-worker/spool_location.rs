@@ -72,3 +72,32 @@ fn encrypted_extract_spools_in_destination_when_system_temp_is_unusable() {
     );
     assert_only_outputs(&s, &["payload.bin"]);
 }
+
+#[test]
+fn corrupt_archive_error_wins_over_read_only_destination() {
+    // 출력 폴더에 임시 파일을 만들 수 없으면 시스템 임시 폴더를 써서 기존 오류 우선순위를 유지함.
+    // 손상된 압축파일은 권한 문제가 아니라 손상으로 안내해야 함.
+    let bytes = seven_fixture("bad-trailing.7z");
+    let writable = Scratch::new();
+    let baseline = extract(
+        &writable,
+        &bytes,
+        None,
+        Selection::All,
+        None,
+        Limits::default(),
+    );
+    assert_eq!(terminal(&baseline).error, ErrorCode::Integrity);
+
+    use std::os::unix::fs::PermissionsExt;
+    let s = Scratch::new();
+    let output = s.0.join("output");
+    fs::create_dir(&output).unwrap();
+    fs::set_permissions(&output, fs::Permissions::from_mode(0o500)).unwrap();
+    let events = extract(&s, &bytes, None, Selection::All, None, Limits::default());
+    fs::set_permissions(&output, fs::Permissions::from_mode(0o700)).unwrap();
+    assert_eq!(terminal(&events).error, ErrorCode::Integrity, "{events:?}");
+    assert_eq!(terminal(&events).publication, Publication::None);
+    assert_eq!(terminal(&events).cleanup, Cleanup::Complete);
+    assert_eq!(fs::read_dir(&output).unwrap().count(), 0);
+}

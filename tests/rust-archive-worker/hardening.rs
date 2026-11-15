@@ -824,6 +824,28 @@ mod linux {
         assert_eq!(fs::read_dir(s.0.join("output")).unwrap().count(), 1);
         assert_zero_file(&s.0.join("output/payload.bin"), 1024 * 1024);
     }
+    #[test]
+    fn destination_fallback_unlink_failure_reports_cleanup_and_moves_to_system_temp() {
+        let s = Scratch::new();
+        generate(&s, "store", 1024 * 1024);
+        let request = start(&s, false, Limits::default().output);
+        let child = spawn(&s, request, Some("fallback-unlink-denied"));
+        assert_eq!(wait(child.id()).0, 0);
+        let events = events(&s);
+        let t = terminal(&events);
+        // 이름을 지우지 못한 대체 임시 파일은 정리 실패로 알리고, 남은 작업은 시스템 임시 폴더에서 계속함.
+        assert_eq!(t.outcome, Outcome::Completed, "{events:?}");
+        assert_eq!(t.cleanup, Cleanup::Failed, "{events:?}");
+        assert!(s.0.join("paused").exists());
+        let leftovers = fs::read_dir(s.0.join("output"))
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name().into_string().unwrap())
+            .filter(|name| name.starts_with(".zipelo-"))
+            .count();
+        assert_eq!(leftovers, 1, "첫 시도의 대체 임시 파일 하나만 남아야 함");
+        assert_eq!(fs::read_dir(s.0.join("staging")).unwrap().count(), 0);
+        assert_zero_file(&s.0.join("output/payload.bin"), 1024 * 1024);
+    }
     struct Subreaper(i32);
     impl Subreaper {
         fn new() -> Self {

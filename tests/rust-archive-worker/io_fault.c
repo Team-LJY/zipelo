@@ -26,6 +26,15 @@ __attribute__((constructor)) static void initialize(void) {
     real_fstatvfs = dlsym(RTLD_NEXT, "fstatvfs");
 }
 
+/* 출력 폴더 임시 파일의 대체 이름(.zipelo-<hex 32>.tmp). 게시 임시 이름(.zipelo-<pid>-<n>.tmp)은 제외함. */
+static int spool_name(const char *path) {
+    size_t length = strlen(path);
+    if (length != 44 || strncmp(path, ".zipelo-", 8) || strcmp(path + 40, ".tmp")) return 0;
+    for (size_t i = 8; i < 40; i++)
+        if (!strchr("0123456789abcdef", path[i])) return 0;
+    return 1;
+}
+
 static int output_file(int fd) {
     char link[64], path[4096];
     snprintf(link, sizeof(link), "/proc/self/fd/%d", fd);
@@ -57,7 +66,7 @@ int openat(int fd, const char *path, int flags, ...) {
             errno = ENOSPC;
             return -1;
         }
-        if (fault && !strcmp(fault, "fallback")) {
+        if (fault && (!strcmp(fault, "fallback") || !strcmp(fault, "fallback-unlink-denied"))) {
             int marker = real_openat(AT_FDCWD, getenv("ZIPELO_TEST_MARKER"), O_CREAT | O_WRONLY, 0600);
             if (marker >= 0) close(marker);
             errno = EOPNOTSUPP;
@@ -190,6 +199,10 @@ int fsync(int fd) {
 int unlinkat(int fd, const char *path, int flags) {
     const char *fault = getenv("ZIPELO_TEST_FAULT");
     if (fault && strstr(fault, "cleanup-fail") && !strncmp(path, ".zipelo-", 8)) {
+        errno = EACCES;
+        return -1;
+    }
+    if (fault && !strcmp(fault, "fallback-unlink-denied") && spool_name(path)) {
         errno = EACCES;
         return -1;
     }

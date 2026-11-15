@@ -12,6 +12,8 @@ thread_local! {
     // 작업 스레드가 지정한 임시 파일 위치. 없으면 시스템 임시 폴더를 사용함.
     static LOCATION: std::cell::RefCell<Option<filesystem::Dir>> =
         const { std::cell::RefCell::new(None) };
+    // 출력 폴더에 이름 있는 임시 파일을 만든 뒤 이름을 지우지 못했는지 기록함.
+    static LEFTOVER: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 
 /// 해제 작업의 임시 파일을 출력 폴더에 두도록 지정함. 반환값이 사라지면 해제됨.
@@ -25,7 +27,20 @@ impl Drop for Location {
 pub(crate) fn place_in(dir: &filesystem::Dir) -> Result<Location> {
     let dir = dir.duplicate()?;
     LOCATION.with(|location| *location.borrow_mut() = Some(dir));
+    LEFTOVER.with(|leftover| leftover.set(false));
     Ok(Location(()))
+}
+
+/// 출력 폴더에 지우지 못한 임시 파일이 남았음을 기록함. Windows 임시 파일은 닫으면 지워지므로
+/// Linux 대체 이름 경로에서만 사용함.
+#[cfg(target_os = "linux")]
+pub(crate) fn note_leftover() {
+    LEFTOVER.with(|leftover| leftover.set(true));
+}
+
+/// 작업 중 출력 폴더에 임시 파일이 남았는지 확인하고 기록을 비움.
+pub(crate) fn take_leftover() -> bool {
+    LEFTOVER.with(|leftover| leftover.replace(false))
 }
 
 pub(crate) fn random_name() -> Result<String> {
@@ -36,11 +51,16 @@ pub(crate) fn random_name() -> Result<String> {
 
 /// 이름 없는 임시 파일을 만듦. 해제 작업에서는 출력 폴더에, 그 외에는 시스템 임시 폴더에 둠.
 /// 출력 폴더에 두면 공간 판단이 실제 출력 디스크와 같아지고 /tmp 크기나 할당량에 묶이지 않음.
+/// 출력 폴더에 만들지 못하면(읽기 전용, 공간 부족 등) 이 작업의 남은 임시 파일은 모두
+/// 기존 시스템 임시 폴더에 둠. 그러면 동작과 오류 우선순위가 이전과 같아지며, 출력 폴더
+/// 문제는 원래의 출력 확인 지점에서 보고됨.
 pub(crate) fn temporary() -> Result<File> {
-    if let Some(file) =
-        LOCATION.with(|location| location.borrow().as_ref().map(filesystem::Dir::temporary))
-    {
-        return file;
+    let placed =
+        LOCATION.with(|location| location.borrow().as_ref().map(filesystem::Dir::temporary));
+    match placed {
+        Some(Ok(file)) => return Ok(file),
+        Some(Err(_)) => LOCATION.with(|location| *location.borrow_mut() = None),
+        None => {}
     }
     #[cfg(target_os = "linux")]
     {

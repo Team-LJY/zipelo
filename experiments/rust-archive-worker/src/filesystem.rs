@@ -335,6 +335,11 @@ mod platform {
             let file = open(&self.file, std::ffi::OsStr::new(&n), 2 | 0x40 | 0x80)
                 .map_err(crate::space::io_error)?;
             if !self.remove(&n) {
+                // 핸들을 닫고 한 번 더 지움. 그래도 남으면 정리 실패로 기록해 결과에 알림.
+                drop(file);
+                if !self.remove(&n) && !self.absent(&n).unwrap_or(false) {
+                    crate::spool::note_leftover();
+                }
                 return Err(ErrorCode::Io);
             }
             if file.metadata().map_err(|_| ErrorCode::Io)?.nlink() != 0 {
