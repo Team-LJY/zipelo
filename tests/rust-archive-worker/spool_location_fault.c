@@ -61,31 +61,64 @@ static void trace(int at) {
         close(fd);
     }
 }
+struct usage {
+    struct stat seen[256];
+    size_t count;
+    unsigned long long bytes;
+};
+static void count_file(struct usage *usage, const struct stat *value) {
+    if (!S_ISREG(value->st_mode)) return;
+    for (size_t i = 0; i < usage->count; i++) {
+        if (usage->seen[i].st_dev == value->st_dev
+                && usage->seen[i].st_ino == value->st_ino) return;
+    }
+    if (usage->count == 256) _exit(97);
+    usage->seen[usage->count++] = *value;
+    usage->bytes += value->st_size;
+}
+static void count_directory(DIR *directory, struct usage *usage, unsigned depth) {
+    if (depth > 64) _exit(97);
+    struct dirent *entry;
+    while ((entry = readdir(directory))) {
+        if (!strcmp(entry->d_name, ".") || !strcmp(entry->d_name, "..")) continue;
+        struct stat value;
+        if (fstatat(dirfd(directory), entry->d_name, &value, AT_SYMLINK_NOFOLLOW)) _exit(98);
+        count_file(usage, &value);
+        if (S_ISDIR(value.st_mode)) {
+            int fd = original_openat(dirfd(directory), entry->d_name,
+                O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+            if (fd < 0) _exit(98);
+            DIR *child = fdopendir(fd);
+            if (!child) _exit(98);
+            count_directory(child, usage, depth + 1);
+            closedir(child);
+        }
+    }
+}
 static unsigned long long temporary_usage(void) {
-    DIR *directory = opendir("/proc/self/fd");
+    struct usage usage = {0};
+    const char *root = getenv("TMPDIR");
+    if (!root) _exit(98);
+    DIR *directory = opendir(root);
+    if (!directory) _exit(98);
+    // 닫혀도 이름이 남은 파일은 계속 용량을 사용함.
+    count_directory(directory, &usage, 0);
+    closedir(directory);
+    directory = opendir("/proc/self/fd");
     if (!directory) _exit(98);
     struct dirent *entry;
-    struct stat seen[256];
-    size_t count = 0;
-    unsigned long long used = 0;
+    // 이름이 지워진 열린 파일도 마지막 핸들을 닫기 전까지 집계함.
     while ((entry = readdir(directory))) {
         if (entry->d_name[0] == '.') continue;
         int fd = atoi(entry->d_name);
         char path[4096];
         struct stat value;
-        if (descriptor(fd, path, sizeof(path)) != 2 || fstat(fd, &value)
-                || !S_ISREG(value.st_mode)) continue;
-        size_t i;
-        for (i = 0; i < count; i++) {
-            if (seen[i].st_dev == value.st_dev && seen[i].st_ino == value.st_ino) break;
+        if (descriptor(fd, path, sizeof(path)) == 2 && !fstat(fd, &value)) {
+            count_file(&usage, &value);
         }
-        if (i < count) continue;
-        if (count == 256) _exit(97);
-        seen[count++] = value;
-        used += value.st_size;
     }
     closedir(directory);
-    return used;
+    return usage.bytes;
 }
 static void exhausted(void) {
     const char *path = getenv("ZIPELO_SPOOL_TRACE");
