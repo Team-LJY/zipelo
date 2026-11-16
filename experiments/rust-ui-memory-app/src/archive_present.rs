@@ -503,11 +503,72 @@ fn private_dir(path: &Path) -> io::Result<()> {
     builder.create(path)
 }
 
+pub struct OpenRoot {
+    path: PathBuf,
+    handle: fs::File,
+    identity: worker_protocol::protocol::SourceObject,
+}
+
+impl OpenRoot {
+    fn capture(path: PathBuf) -> io::Result<Self> {
+        let handle = open_root_handle(&path)?;
+        let identity = worker_protocol::filesystem::object(&handle)
+            .map_err(|_| io::Error::other("임시 폴더 식별 실패"))?;
+        Ok(Self {
+            path,
+            handle,
+            identity,
+        })
+    }
+
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
+    pub fn is_current(&self) -> bool {
+        // 원본 핸들을 유지해 삭제된 inode가 재사용되어도 같다고 판정하지 않음.
+        self.handle.metadata().is_ok()
+            && open_root_handle(&self.path)
+                .ok()
+                .and_then(|file| worker_protocol::filesystem::object(&file).ok())
+                .is_some_and(|identity| identity == self.identity)
+    }
+}
+
+fn open_root_handle(path: &Path) -> io::Result<fs::File> {
+    let mut options = fs::OpenOptions::new();
+    options.read(true);
+    #[cfg(target_os = "linux")]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(0x20000); // 심볼릭 링크를 따라가지 않음.
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        // 폴더 자체를 열며 재분석 지점을 따라가지 않음.
+        options.custom_flags(0x02000000 | 0x00200000);
+    }
+    let file = options.open(path)?;
+    let metadata = file.metadata()?;
+    if !metadata.is_dir() || fs::symlink_metadata(path)?.file_type().is_symlink() {
+        return Err(io::Error::other("임시 폴더가 아님"));
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        if metadata.file_attributes() & 0x400 != 0 {
+            return Err(io::Error::other("재분석 지점은 임시 폴더로 쓰지 않음"));
+        }
+    }
+    Ok(file)
+}
+
 /// 압축파일 안 파일을 기본 프로그램으로 열 때 쓸 임시 폴더를 만듦.
 /// 압축파일과 같은 폴더에 만들고, 그곳에 만들 수 없으면 시스템 임시 폴더를 씀.
 /// 숨김 폴더로 만들지 않음. snap으로 설치한 Firefox 등은 홈 바로 아래 숨김 폴더와
 /// 시스템 임시 폴더의 파일을 읽지 못해 열기 요청을 조용히 무시함.
-pub fn create_open_root(archive: &Path) -> io::Result<PathBuf> {
+pub fn create_open_root(archive: &Path) -> io::Result<OpenRoot> {
     let name = archive.file_name().unwrap_or_default().to_string_lossy();
     let mut error = None;
     if let Some(parent) = archive.parent().filter(|p| !p.as_os_str().is_empty()) {
@@ -515,7 +576,7 @@ pub fn create_open_root(archive: &Path) -> io::Result<PathBuf> {
         for _ in 0..8 {
             let path = unique_folder(&base);
             match private_dir(&path) {
-                Ok(()) => return Ok(path),
+                Ok(()) => return OpenRoot::capture(path),
                 Err(e) if e.kind() == io::ErrorKind::AlreadyExists => continue,
                 Err(e) => {
                     error = Some(e);
@@ -527,7 +588,7 @@ pub fn create_open_root(archive: &Path) -> io::Result<PathBuf> {
     let base = std::env::temp_dir().join(format!("zipelo-{}-{name}", std::process::id()));
     let path = unique_folder(&base);
     private_dir(&path).map_err(|e| error.unwrap_or(e))?;
-    Ok(path)
+    OpenRoot::capture(path)
 }
 
 /// 열기용 임시 폴더 이름. 예: `자료.zip (Zipelo 임시)`.
@@ -536,8 +597,10 @@ pub fn open_root_name(archive_name: &str) -> String {
 }
 
 /// 이 앱이 만든 열기용 폴더를 지움. 다른 프로그램이 파일을 쓰고 있으면 남을 수 있음.
-pub fn remove_open_root(path: &Path) {
-    let _ = fs::remove_dir_all(path);
+pub fn remove_open_root(root: &OpenRoot) {
+    if root.is_current() {
+        let _ = fs::remove_dir_all(root.path());
+    }
 }
 
 /// 기본 프로그램으로 열면 실행될 수 있는 파일은 바로 열지 않음.
