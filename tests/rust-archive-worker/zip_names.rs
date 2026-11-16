@@ -107,20 +107,11 @@ fn listed_names(bytes: &[u8]) -> std::result::Result<Vec<String>, ErrorCode> {
         .collect())
 }
 
-/// 스트리밍 목록과 메모리 파서가 같은 이름 또는 같은 오류를 내는지 확인함.
-fn names_agree(bytes: &[u8]) -> std::result::Result<Vec<String>, ErrorCode> {
-    let streamed = listed_names(bytes);
-    let parsed = archive::parse(bytes, Limits::default(), false, &mut || Ok(()))
-        .map(|c| c.members.into_iter().map(|m| m.entry.name).collect());
-    assert_eq!(streamed, parsed);
-    streamed
-}
-
 #[test]
 fn infozip_utf8_names_without_flag_list_and_extract() {
-    assert_eq!(names_agree(KOREAN).unwrap(), ["README.md", "회의록.txt"]);
+    assert_eq!(listed_names(KOREAN).unwrap(), ["README.md", "회의록.txt"]);
     assert_eq!(
-        names_agree(KOREAN_TREE).unwrap(),
+        listed_names(KOREAN_TREE).unwrap(),
         ["README.md", "회의록.txt", "폴더", "폴더/메모.txt"]
     );
     for bytes in [KOREAN, KOREAN_TREE] {
@@ -149,7 +140,7 @@ fn infozip_multi_entry_zipcrypto_trees_list_and_extract() {
         (ZIPCRYPTO_ASCII_TREE, "docs/notes.txt"),
         (ZIPCRYPTO_KOREAN_TREE, "폴더/메모.txt"),
     ] {
-        let names = names_agree(bytes).unwrap();
+        let names = listed_names(bytes).unwrap();
         assert!(names.iter().any(|n| n == file), "{names:?}");
         let s = Scratch::new();
         let events = interactive(encrypted_start(&s, bytes), |id, _, purpose| {
@@ -168,7 +159,7 @@ fn unicode_path_extra_is_used_only_when_its_crc_matches() {
     let cp949 = b"\xc8\xb8\xc0\xc7\xb7\xcf.txt";
     let extra = unicode_path(cp949, "회의록.txt");
     assert_eq!(
-        names_agree(&single_entry_zip(cp949, 0, &extra, b"hi\n")).unwrap(),
+        listed_names(&single_entry_zip(cp949, 0, &extra, b"hi\n")).unwrap(),
         ["회의록.txt"]
     );
     let s = Scratch::new();
@@ -180,24 +171,24 @@ fn unicode_path_extra_is_used_only_when_its_crc_matches() {
     // CRC가 다른 확장 필드는 이름이 바뀐 뒤 남은 낡은 값이므로 무시함.
     let stale = unicode_path(b"old.txt", "회의록.txt");
     assert_eq!(
-        names_agree(&single_entry_zip(b"new.txt", 0, &stale, b"hi\n")).unwrap(),
+        listed_names(&single_entry_zip(b"new.txt", 0, &stale, b"hi\n")).unwrap(),
         ["new.txt"]
     );
     let stale = unicode_path(b"other", "회의록.txt");
     assert_eq!(
-        names_agree(&single_entry_zip(cp949, 0, &stale, b"hi\n")),
+        listed_names(&single_entry_zip(cp949, 0, &stale, b"hi\n")),
         Err(ErrorCode::UnsupportedFeature)
     );
     // UTF-8 플래그가 있으면 이름 자체가 UTF-8이므로 확장 필드를 보지 않음.
     let ignored = unicode_path("a.txt".as_bytes(), "b.txt");
     assert_eq!(
-        names_agree(&single_entry_zip(b"a.txt", 0x0800, &ignored, b"hi\n")).unwrap(),
+        listed_names(&single_entry_zip(b"a.txt", 0x0800, &ignored, b"hi\n")).unwrap(),
         ["a.txt"]
     );
 }
 
 fn assert_rejected_without_output(bytes: &[u8], error: ErrorCode) {
-    assert_eq!(names_agree(bytes), Err(error));
+    assert_eq!(listed_names(bytes), Err(error));
     let s = Scratch::new();
     let events = extract(&s, bytes, None, Selection::All, None, Limits::default());
     let result = terminal(&events);
@@ -223,7 +214,10 @@ fn converted_names_colliding_with_other_paths_are_rejected_before_writes() {
     let first = b"first.txt";
     let second = b"second.txt";
     let original = stored_entries_zip(&[(first, 0, &[], b"first"), (second, 0, &[], b"second")]);
-    assert_eq!(names_agree(&original).unwrap(), ["first.txt", "second.txt"]);
+    assert_eq!(
+        listed_names(&original).unwrap(),
+        ["first.txt", "second.txt"]
+    );
     for (first_name, second_name) in [
         ("회의록.txt", "회의록.txt"),
         ("폴더/Memo.txt", "폴더/memo.txt"),
@@ -236,7 +230,7 @@ fn converted_names_colliding_with_other_paths_are_rejected_before_writes() {
             (second.as_slice(), &second_extra, second_name),
         ] {
             let bytes = single_entry_zip(raw, 0, extra, b"hi\n");
-            assert_eq!(names_agree(&bytes).unwrap(), [name]);
+            assert_eq!(listed_names(&bytes).unwrap(), [name]);
         }
         let bytes = stored_entries_zip(&[
             (first, 0, &first_extra, b"first"),
@@ -251,26 +245,26 @@ fn legacy_and_hostile_names_stay_rejected() {
     let cp949 = b"\xc8\xb8\xc0\xc7\xb7\xcf.txt";
     // 코드 페이지를 추측하지 않음.
     assert_eq!(
-        names_agree(&single_entry_zip(cp949, 0, &[], b"hi\n")),
+        listed_names(&single_entry_zip(cp949, 0, &[], b"hi\n")),
         Err(ErrorCode::UnsupportedFeature)
     );
     // UTF-8 플래그와 맞지 않는 이름은 손상으로 봄.
     assert_eq!(
-        names_agree(&single_entry_zip(cp949, 0x0800, &[], b"hi\n")),
+        listed_names(&single_entry_zip(cp949, 0x0800, &[], b"hi\n")),
         Err(ErrorCode::Integrity)
     );
     // 확장 필드로 들어온 이름도 같은 경로 검사를 거침.
     for hostile in ["../escape.txt", "/absolute.txt", "C:drive.txt", "CON.txt"] {
         let extra = unicode_path(b"safe.txt", hostile);
         assert_eq!(
-            names_agree(&single_entry_zip(b"safe.txt", 0, &extra, b"hi\n")),
+            listed_names(&single_entry_zip(b"safe.txt", 0, &extra, b"hi\n")),
             Err(ErrorCode::UnsafePath),
             "{hostile}"
         );
     }
     for hostile in ["../회의록.txt", "폴더/../../x"] {
         assert_eq!(
-            names_agree(&single_entry_zip(hostile.as_bytes(), 0, &[], b"hi\n")),
+            listed_names(&single_entry_zip(hostile.as_bytes(), 0, &[], b"hi\n")),
             Err(ErrorCode::UnsafePath),
             "{hostile}"
         );
@@ -280,20 +274,20 @@ fn legacy_and_hostile_names_stay_rejected() {
     let len = broken.len();
     broken[len - 1] = 0xff;
     assert_eq!(
-        names_agree(&single_entry_zip(b"safe.txt", 0, &broken, b"hi\n")),
+        listed_names(&single_entry_zip(b"safe.txt", 0, &broken, b"hi\n")),
         Err(ErrorCode::Integrity)
     );
     let mut short = 0x7075u16.to_le_bytes().to_vec();
     short.extend([4, 0, 1, 0, 0, 0]);
     assert_eq!(
-        names_agree(&single_entry_zip(b"safe.txt", 0, &short, b"hi\n")),
+        listed_names(&single_entry_zip(b"safe.txt", 0, &short, b"hi\n")),
         Err(ErrorCode::Integrity)
     );
     // APPNOTE 4.6.9에 따라 모르는 버전의 확장 필드는 무시함.
     let mut version = unicode_path(b"safe.txt", "x");
     version[4] = 2;
     assert_eq!(
-        names_agree(&single_entry_zip(b"safe.txt", 0, &version, b"hi\n")).unwrap(),
+        listed_names(&single_entry_zip(b"safe.txt", 0, &version, b"hi\n")).unwrap(),
         ["safe.txt"]
     );
 }

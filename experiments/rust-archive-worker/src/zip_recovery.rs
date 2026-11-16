@@ -38,24 +38,6 @@ fn bytes(source: &mut File, offset: u64, size: usize, end: u64) -> Result<Vec<u8
     io(source.read_exact(&mut data))?;
     Ok(data)
 }
-fn extra(data: &[u8]) -> Result<()> {
-    let mut at = 0;
-    while at < data.len() {
-        if data.len() - at < 4 {
-            return Err(ErrorCode::Integrity);
-        }
-        let tag = u16at(data, at);
-        let size = u16at(data, at + 2) as usize;
-        if matches!(tag, 1 | 0x0017 | 0x0018) {
-            return Err(ErrorCode::UnsupportedFeature);
-        }
-        at = at
-            .checked_add(4 + size)
-            .filter(|n| *n <= data.len())
-            .ok_or(ErrorCode::Integrity)?;
-    }
-    Ok(())
-}
 struct Candidate {
     finding: RecoveryEntry,
     start: u64,
@@ -438,7 +420,7 @@ fn central(
         charge(&mut metadata, nn, ne, check)?;
         let raw = bytes(source, at + 46, nn, cd_end)?;
         let ext = bytes(source, at + 46 + nn as u64, ne, cd_end)?;
-        extra(&ext)?;
+        crate::zip_extra::parse(&ext, crate::zip_extra::Policy::Recovery)?;
         let (size, packed) = declared(u32at(&h, 24), u32at(&h, 20))?;
         let unix_kind = (u32at(&h, 38) >> 16) & 0xf000;
         let kind = match unix_kind {
@@ -579,7 +561,7 @@ fn local(
         }
         let raw = bytes(source, at + 30, nn, len)?;
         let ext = bytes(source, at + 30 + nn as u64, ne, len)?;
-        extra(&ext)?;
+        crate::zip_extra::parse(&ext, crate::zip_extra::Policy::Recovery)?;
         let kind = if raw.ends_with(b"/") {
             EntryKind::Directory
         } else {

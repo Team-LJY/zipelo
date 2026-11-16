@@ -141,7 +141,7 @@ fn six_damaged_corpora_preserve_source_and_independent_expected_hashes() {
         assert_eq!(t.created_count, 1);
         assert_eq!(t.publication, Publication::Complete);
         let bytes = fs::read(s.0.join("recovered.zip")).unwrap();
-        let catalog = archive::parse(&bytes, Limits::default(), true, &mut || Ok(())).unwrap();
+        let catalog = worker_catalog(&bytes, Limits::default(), true, None).unwrap();
         assert_eq!(catalog.members.len(), count);
         for member in &catalog.members {
             let (_, sha) = expected

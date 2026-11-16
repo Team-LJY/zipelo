@@ -17,6 +17,7 @@ python3 tests/ci/run_rust.py local --job rust-local
 - 추적된 fixture를 Git blob과 대조합니다. Windows checkout 시 core.autocrlf=false를 사용해야 하며 기대값의 바이트를 바꾸지 않습니다.
 - 개별 단계는 `build`, `test`, `cross-build`로 실행할 수 있습니다. 한 crate가 실패해도 다른 crate 결과를 수집합니다.
 - GUI 앱은 컴파일하며 실제 화면 시나리오는 실행하지 않습니다. C# 시험과 역사적 hash 검사는 포함하지 않습니다.
+- Linux 작업자의 작은 임시 공간 시험은 기본 실행에 포함합니다. 자식 프로세스에만 적용한 LD_PRELOAD 보조 코드로 2MiB 공유 용량, 부분 쓰기와 ENOSPC 및 핸들 종료 후 공간 반환을 재현합니다. 커널 tmpfs를 직접 마운트한 실기 검증은 아닙니다.
 
 ## 출시 전 Windows 실기 확인
 

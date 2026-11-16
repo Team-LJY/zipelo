@@ -1,5 +1,6 @@
 #define _GNU_SOURCE
 #include <dlfcn.h>
+#include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <stdarg.h>
@@ -60,10 +61,50 @@ static void trace(int at) {
         close(fd);
     }
 }
+static unsigned long long temporary_usage(void) {
+    DIR *directory = opendir("/proc/self/fd");
+    if (!directory) _exit(98);
+    struct dirent *entry;
+    struct stat seen[256];
+    size_t count = 0;
+    unsigned long long used = 0;
+    while ((entry = readdir(directory))) {
+        if (entry->d_name[0] == '.') continue;
+        int fd = atoi(entry->d_name);
+        char path[4096];
+        struct stat value;
+        if (descriptor(fd, path, sizeof(path)) != 2 || fstat(fd, &value)
+                || !S_ISREG(value.st_mode)) continue;
+        size_t i;
+        for (i = 0; i < count; i++) {
+            if (seen[i].st_dev == value.st_dev && seen[i].st_ino == value.st_ino) break;
+        }
+        if (i < count) continue;
+        if (count == 256) _exit(97);
+        seen[count++] = value;
+        used += value.st_size;
+    }
+    closedir(directory);
+    return used;
+}
+static void exhausted(void) {
+    const char *path = getenv("ZIPELO_SPOOL_TRACE");
+    if (!path) return;
+    int fd = original_openat(AT_FDCWD, path, O_CREAT | O_WRONLY | O_APPEND, 0600);
+    if (fd >= 0) {
+        original_write(fd, "F", 1);
+        close(fd);
+    }
+}
+#define TEMPORARY_CAPACITY (2ULL * 1024 * 1024)
 static int reject(int at, int flags) {
     if ((flags & O_TMPFILE) != O_TMPFILE && !(flags & O_CREAT)) return 0;
     trace(at);
     const char *phase = getenv("ZIPELO_SPOOL_PHASE");
+    if (affected(at) && at < 2 && phase && !strcmp(phase, "tiny-tmpfs")) {
+        errno = EDQUOT;
+        return 1;
+    }
     if (affected(at) && phase && (!strcmp(phase, "create") || !strcmp(phase, "denied"))) {
         errno = !strcmp(phase, "denied") ? EACCES : EDQUOT;
         return 1;
@@ -115,6 +156,20 @@ ssize_t write(int fd, const void *bytes, size_t count) {
     char path[4096];
     int at = descriptor(fd, path, sizeof(path));
     const char *phase = getenv("ZIPELO_SPOOL_PHASE");
+    if (phase && !strcmp(phase, "tiny-tmpfs") && at == 2) {
+        struct stat value;
+        off_t position = lseek(fd, 0, SEEK_CUR);
+        if (position < 0 || fstat(fd, &value)) _exit(96);
+        unsigned long long used = temporary_usage();
+        unsigned long long room = used < TEMPORARY_CAPACITY ? TEMPORARY_CAPACITY - used : 0;
+        unsigned long long end = (unsigned long long)value.st_size + room;
+        if ((unsigned long long)position >= end) {
+            exhausted();
+            errno = ENOSPC;
+            return -1;
+        }
+        if (count > end - position) count = end - position;
+    }
     int stage = phase && !strcmp(phase, "stage-write") && fd != snapshot_fd;
     if (affected(at) && phase && (stage || !strcmp(phase, "write")
             || !strcmp(phase, "changed") || !strcmp(phase, "io"))) {
@@ -139,6 +194,12 @@ int fstatvfs(int fd, struct statvfs *value) {
     if (!result && affected(at) && phase && !strcmp(phase, "quota")) {
         value->f_frsize = 1;
         value->f_bavail = 65536;
+    }
+    if (!result && at == 2 && phase && !strcmp(phase, "tiny-tmpfs")) {
+        unsigned long long used = temporary_usage();
+        value->f_frsize = 1;
+        value->f_blocks = TEMPORARY_CAPACITY;
+        value->f_bavail = value->f_bfree = used < TEMPORARY_CAPACITY ? TEMPORARY_CAPACITY - used : 0;
     }
     return result;
 }

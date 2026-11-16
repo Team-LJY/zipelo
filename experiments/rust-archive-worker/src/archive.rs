@@ -382,39 +382,9 @@ fn tar(
     validate_members(&members)?;
     Ok(members)
 }
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub(crate) struct AesExtra {
-    pub version: u16,
-    pub method: u16,
-}
+pub(crate) use crate::zip_extra::AesExtra;
 pub(crate) fn aes_extra(extra: &[u8]) -> Result<Option<AesExtra>> {
-    let mut at = 0;
-    let mut found = None;
-    while at < extra.len() {
-        let tag = u16at(extra, at)?;
-        let len = u16at(extra, at + 2)? as usize;
-        let value = part(extra, at + 4, len)?;
-        if tag == 1 {
-            return Err(ErrorCode::UnsupportedFeature);
-        }
-        if tag == 0x9901 {
-            if found.is_some() || len < 7 {
-                return Err(ErrorCode::Integrity);
-            }
-            let version = u16at(value, 0)?;
-            let method = u16at(value, 5)?;
-            if !matches!(version, 1 | 2)
-                || &value[2..4] != b"AE"
-                || value[4] != 3
-                || !matches!(method, 0 | 8)
-            {
-                return Err(ErrorCode::UnsupportedFeature);
-            }
-            found = Some(AesExtra { version, method });
-        }
-        at += 4 + len;
-    }
-    Ok(found)
+    crate::zip_extra::parse(extra, crate::zip_extra::Policy::Classic).map(|extra| extra.aes)
 }
 /// ZIP 항목 이름을 해석함.
 ///
@@ -431,20 +401,7 @@ pub(crate) fn zip_name(raw: &[u8], flags: u16, extra: &[u8]) -> Result<String> {
             .map(str::to_owned)
             .map_err(|_| ErrorCode::Integrity);
     }
-    let mut at = 0;
-    let mut unicode = None;
-    while at < extra.len() {
-        let tag = u16at(extra, at)?;
-        let len = u16at(extra, at + 2)? as usize;
-        let value = part(extra, at + 4, len)?;
-        if tag == 0x7075 {
-            if unicode.is_some() || len < 5 {
-                return Err(ErrorCode::Integrity);
-            }
-            unicode = Some(value);
-        }
-        at += 4 + len;
-    }
+    let unicode = crate::zip_extra::parse(extra, crate::zip_extra::Policy::Names)?.unicode;
     if let Some(value) = unicode
         && value[0] == 1
         && u32::from_le_bytes(value[1..5].try_into().unwrap()) == crc32(0, raw)

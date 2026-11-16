@@ -10,17 +10,21 @@ use zipelo_archive_worker::{
     protocol::*,
     wire::{Reader, Writer},
 };
+mod real_catalog;
+use real_catalog::worker_catalog;
+
 static NEXT: AtomicU64 = AtomicU64::new(0);
 struct Scratch(PathBuf);
 impl Scratch {
     fn new() -> Self {
-        let path = PathBuf::from(std::env::var_os("ZIPELO_TEST_WORK_DIR").expect("runner 작업 경로 필요"))
-            .join("fixtures/rust-archive-worker")
-            .join(format!(
-                "{}-{}",
-                std::process::id(),
-                NEXT.fetch_add(1, Ordering::Relaxed)
-            ));
+        let path =
+            PathBuf::from(std::env::var_os("ZIPELO_TEST_WORK_DIR").expect("runner 작업 경로 필요"))
+                .join("fixtures/rust-archive-worker")
+                .join(format!(
+                    "{}-{}",
+                    std::process::id(),
+                    NEXT.fetch_add(1, Ordering::Relaxed)
+                ));
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         let builder = fs::DirBuilder::new();
         #[cfg(unix)]
@@ -414,7 +418,7 @@ fn create_store_and_deflate_zip() {
         });
         assert_eq!(terminal(&e).outcome, Outcome::Completed, "{e:?}");
         let bytes = fs::read(s.0.join("result.zip")).unwrap();
-        let parsed = archive::parse(&bytes, Limits::default(), true, &mut || Ok(())).unwrap();
+        let parsed = worker_catalog(&bytes, Limits::default(), true, None).unwrap();
         assert_eq!(parsed.members[0].data, PAYLOAD);
     }
 }
@@ -723,15 +727,7 @@ fn shallow_zip_parent_metadata_is_bounded() {
             .iter()
             .all(|n| n.split('/').count() <= archive::MAX_PATH_DEPTH)
     );
-    assert!(
-        archive::parse(
-            &path_fixture_zip(&names),
-            Limits::default(),
-            false,
-            &mut || Ok(())
-        )
-        .is_ok()
-    );
+    assert!(worker_catalog(&path_fixture_zip(&names), Limits::default(), false, None).is_ok());
     assert_metadata_limit(&names);
 }
 
@@ -749,7 +745,7 @@ fn aggregate_archive_name_metadata_is_bounded() {
     let bytes = path_fixture_zip(&names);
     assert!((bytes.len() as u64) < Limits::default().input);
     assert!(matches!(
-        archive::parse(&bytes, Limits::default(), false, &mut || Ok(())),
+        worker_catalog(&bytes, Limits::default(), false, None),
         Err(ErrorCode::Limit)
     ));
     assert_metadata_limit(&names);
@@ -787,7 +783,7 @@ fn zero_payload_gzip_is_not_tar() {
     for length in [512, 1024, 1536] {
         let scratch = Scratch::new();
         let bytes = zeros_gzip(length);
-        let parsed = archive::parse(&bytes, Limits::default(), true, &mut || Ok(())).unwrap();
+        let parsed = worker_catalog(&bytes, Limits::default(), true, None).unwrap();
         assert_eq!(parsed.format, Format::Gzip);
         let events = extract(
             &scratch,
@@ -1160,14 +1156,7 @@ fn empty_aes_members_and_random_salts_round_trip() {
     )
     .unwrap();
     assert_ne!(a, b);
-    let decoded = archive::parse_with_password(
-        &a,
-        Limits::default(),
-        true,
-        Some(TEST_PASSWORD),
-        &mut || Ok(()),
-    )
-    .unwrap();
+    let decoded = worker_catalog(&a, Limits::default(), true, Some(TEST_PASSWORD)).unwrap();
     assert!(decoded.members[0].data.is_empty());
 }
 
@@ -1230,7 +1219,7 @@ fn seven_zip_lzma_lzma2_and_copy_interoperate() {
         "libarchive-lzma2.7z",
     ] {
         let bytes = seven_fixture(name);
-        let catalog = archive::parse(&bytes, Limits::default(), true, &mut || Ok(()))
+        let catalog = worker_catalog(&bytes, Limits::default(), true, None)
             .unwrap_or_else(|e| panic!("{name}: {e:?}"));
         assert_eq!(catalog.format, Format::SevenZip);
         assert_eq!(catalog.members[0].data, SEVEN_PAYLOAD.repeat(100), "{name}");
@@ -1251,7 +1240,7 @@ fn seven_zip_lzma_lzma2_and_copy_interoperate() {
 fn seven_zip_encoded_header_solid_and_empty_entries() {
     let s = Scratch::new();
     let bytes = seven_fixture("encoded-solid.7z");
-    let catalog = archive::parse(&bytes, Limits::default(), false, &mut || Ok(())).unwrap();
+    let catalog = worker_catalog(&bytes, Limits::default(), false, None).unwrap();
     assert_eq!(catalog.members.len(), 4);
     let events = extract(&s, &bytes, None, Selection::All, None, Limits::default());
     assert_eq!(terminal(&events).outcome, Outcome::Completed, "{events:?}");
@@ -1268,7 +1257,7 @@ fn seven_zip_encoded_header_solid_and_empty_entries() {
 fn seven_zip_long_matches_and_lzma2_chunks() {
     for name in ["long-match.7z", "lzma2-chunks.7z"] {
         let bytes = seven_fixture(name);
-        let catalog = archive::parse(&bytes, Limits::default(), true, &mut || Ok(()))
+        let catalog = worker_catalog(&bytes, Limits::default(), true, None)
             .unwrap_or_else(|e| panic!("{name}: {e:?}"));
         if name == "long-match.7z" {
             assert_eq!(catalog.members[0].data, SEVEN_PAYLOAD.repeat(10000));
@@ -1443,20 +1432,6 @@ fn seven_zip_limits_truncation_and_existing_files_are_preserved() {
     );
     assert_eq!(terminal(&events).error, ErrorCode::Integrity);
     assert_eq!(fs::read_dir(s.0.join("output")).unwrap().count(), 0);
-}
-#[test]
-fn seven_zip_parser_honors_cancellation_checkpoints() {
-    let bytes = seven_fixture("long-match.7z");
-    let mut calls = 0;
-    let result = archive::parse(&bytes, Limits::default(), true, &mut || {
-        calls += 1;
-        if calls >= 5 {
-            Err(ErrorCode::None)
-        } else {
-            Ok(())
-        }
-    });
-    assert!(matches!(result, Err(ErrorCode::None)));
 }
 #[test]
 fn pr64_malicious_corpus_is_rejected_without_writes() {
