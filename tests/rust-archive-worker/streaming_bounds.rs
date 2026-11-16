@@ -122,3 +122,27 @@ fn descriptor_width_uses_sizes_and_crc() {
         );
     }
 }
+
+#[test]
+fn seven_zip_parser_honors_cancellation_checkpoints() {
+    let bytes = include_bytes!("fixtures/7z/long-match.7z");
+    let mut source = spool::temporary().unwrap();
+    source.write_all(bytes).unwrap();
+    let mut calls = 0;
+    let result = Catalog::open(
+        &mut source,
+        bytes.len() as u64,
+        Limits::default(),
+        true,
+        None,
+        &mut || {
+            calls += 1;
+            if calls >= 5 {
+                Err(ErrorCode::None)
+            } else {
+                Ok(())
+            }
+        },
+    );
+    assert!(matches!(result, Err(ErrorCode::None)));
+}

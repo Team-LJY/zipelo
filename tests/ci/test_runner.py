@@ -187,7 +187,7 @@ class RunnerTests(unittest.TestCase):
         by_name = {path.parent.name: path for path in paths}
         self.assertEqual(
             run_rust.select_manifests(
-                run_rust.ROOT, paths, {"README.md", "docs/ui-scenario-guide.md"}
+                run_rust.ROOT, paths, {"README.md", "docs/PLANS.md"}
             ),
             [],
         )
@@ -198,11 +198,29 @@ class RunnerTests(unittest.TestCase):
                      "rust-app-real-worker", "rust-large-archive-fixtures",
                      "rust-zip64-compat"):
             self.assertIn(by_name[name], selected)
-        self.assertNotIn(by_name["rust-memory-gzip-reader"], selected)
+        self.assertNotIn(by_name["rust-ui-system-font-regressions"], selected)
         self.assertEqual(
             run_rust.select_manifests(run_rust.ROOT, paths, {"tests/ci/run_rust.py"}),
             paths,
         )
+
+    def test_included_ui_source_selects_font_regression_crate(self):
+        paths = run_rust.manifests(run_rust.ROOT)
+        by_name = {path.parent.name: path for path in paths}
+        selected = set(run_rust.select_manifests(
+            run_rust.ROOT, paths,
+            {"experiments/rust-ui-memory-app/src/system_font.rs"},
+        ))
+        self.assertIn(by_name["rust-ui-memory-app"], selected)
+        self.assertIn(by_name["rust-ui-system-font-regressions"], selected)
+
+    def test_included_ui_guide_selects_app_tests(self):
+        paths = run_rust.manifests(run_rust.ROOT)
+        by_name = {path.parent.name: path for path in paths}
+        selected = set(run_rust.select_manifests(
+            run_rust.ROOT, paths, {"docs/ui-scenario-guide.md"}
+        ))
+        self.assertEqual(selected, {by_name["rust-ui-memory-app"]})
 
     def test_changed_file_list_includes_worktree_and_untracked_files(self):
         with patch.object(run_rust.subprocess, "check_output", side_effect=[
@@ -283,8 +301,8 @@ class RunnerTests(unittest.TestCase):
 
     def test_windows_exclusion_is_explicit_and_only_for_linux_tests(self):
         paths = [
-            Path("/repo/tests/rust-file-publication/Cargo.toml"),
-            Path("/repo/experiments/rust-file-publication/Cargo.toml"),
+            Path("/repo/tests/rust-ui-system-font-regressions/Cargo.toml"),
+            Path("/repo/experiments/rust-archive-worker/Cargo.toml"),
         ]
         with (
             patch.object(run_rust, "manifests", return_value=paths),
@@ -462,54 +480,18 @@ class RunnerTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "setup_windows.sh"):
                 run_rust.prepare_cross_build()
 
-    @unittest.skipUnless(sys.platform == "linux", "Linux 파일시스템과 소유권 검사 시험임")
-    def test_filesystem_skip_is_limited_to_publication_test_crates(self):
-        with tempfile.TemporaryDirectory(dir=TEST_WORK) as directory:
-            root = Path(directory)
-            work = root / "work"
-            work.mkdir()
-            paths = [
-                root / "tests/rust-file-publication/Cargo.toml",
-                root / "tests/rust-gzip-file-job/Cargo.toml",
-                root / "tests/rust-file-snapshot/Cargo.toml",
-                root / "experiments/rust-file-publication/Cargo.toml",
-            ]
-            with (
-                patch.object(run_rust, "manifests", return_value=paths),
-                patch.dict(run_rust.os.environ, {"ZIPELO_TEST_WORK_DIR": str(work)}),
-                patch.object(run_rust.subprocess, "check_output", return_value="1021994\n"),
-                patch.object(run_rust.subprocess, "run", return_value=subprocess.CompletedProcess([], 0)) as cargo,
-            ):
-                results = run_rust.run(root, "test")
-                self.assertEqual([row["status"] for row in results], [
-                    "not-applicable", "not-applicable", "passed", "passed",
-                ])
-                self.assertIn("0x1021994", results[0]["reason"])
-                self.assertEqual(cargo.call_count, 2)
-                cargo.reset_mock()
-                results = run_rust.run(root, "cross-build")
-                self.assertTrue(all(row["status"] == "passed" for row in results))
-                self.assertEqual(cargo.call_count, 4)
-
-    @unittest.skipUnless(sys.platform == "linux", "Linux 소켓 경로 회귀 시험임")
-    def test_long_checkout_does_not_block_file_fixtures(self):
+    def test_long_checkout_keeps_fixture_directory_in_work(self):
         with tempfile.TemporaryDirectory(dir=TEST_WORK) as directory:
             root = Path(directory) / ("long-checkout-" * 10)
             work = Path(directory) / "work"
-            socket = root / "tests/rust-file-publication/runs/case-1-1/parent/output"
-            self.assertGreaterEqual(len(run_rust.os.fsencode(socket)), 108)
-            with (
-                patch.dict(run_rust.os.environ, {"ZIPELO_TEST_WORK_DIR": str(work)}),
-                patch.object(run_rust.subprocess, "check_output", return_value="ef53\n"),
-            ):
+            with patch.dict(run_rust.os.environ, {"ZIPELO_TEST_WORK_DIR": str(work)}):
                 self.assertEqual(run_rust.prepare_fixtures(root), {})
-            for name in run_rust.FILE_FIXTURES:
-                self.assertEqual(list((work / "fixtures" / name).iterdir()), [])
-                self.assertFalse((root / "tests" / name / "runs").exists())
+            self.assertTrue((work / "fixtures").is_dir())
+            self.assertFalse((root / "tests").exists())
 
-    def test_unknown_filesystem_probe_error_is_failure(self):
+    def test_fixture_preflight_error_is_failure(self):
         with (
-            patch.object(run_rust, "prepare_fixtures", side_effect=subprocess.CalledProcessError(1, "stat")),
+            patch.object(run_rust, "prepare_fixtures", side_effect=ValueError("bad fixture path")),
             patch.object(run_rust.sys, "platform", "linux"),
         ):
             results = run_rust.execute_phases(run_rust.ROOT, ["test"])
