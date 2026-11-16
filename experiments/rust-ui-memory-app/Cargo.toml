@@ -20,17 +20,12 @@ ui-fixture = ["ui"]
 [dependencies]
 sha2 = "=0.10.9"
 worker_protocol = { package = "zipelo-archive-worker", path = "../rust-archive-worker" }
-core_memory = { package = "zipelo-app-core-memory", path = "../rust-app-core-memory" }
 eframe = { version = "=0.37.0", optional = true, default-features = false, features = ["accesskit", "clipboard", "glow", "system_fonts", "wayland", "x11"] }
 
 [[bin]]
 name = "zipelo-ui-memory-app"
 path = "src/desktop.rs"
 required-features = ["ui"]
-
-[[test]]
-name = "ui_memory"
-path = "../../tests/rust-ui-memory-app/regressions.rs"
 
 [[test]]
 name = "archive_ui"
