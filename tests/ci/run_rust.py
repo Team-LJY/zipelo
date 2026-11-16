@@ -4,7 +4,6 @@ import os
 import re
 from pathlib import Path
 import shutil
-import stat
 import subprocess
 import sys
 
@@ -12,14 +11,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[2]
 TOOLCHAIN = "+1.99.1"
 WINDOWS_TARGET = "x86_64-pc-windows-gnu"
-LINUX_ONLY = {
-    "rust-file-publication",
-    "rust-file-snapshot",
-    "rust-gzip-file-job",
-    "rust-ui-system-font-regressions",
-}
-FILE_FIXTURES = LINUX_ONLY - {"rust-ui-system-font-regressions"}
-PUBLICATION_FIXTURES = {"rust-file-publication", "rust-gzip-file-job"}
+LINUX_ONLY = {"rust-ui-system-font-regressions"}
 JOB_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}\Z")
 
 
@@ -102,28 +94,7 @@ def prepare_fixtures(root):
     if work.resolve() != work:
         raise ValueError(f"안전한 작업 디렉터리가 필요함: {work}")
     work.mkdir(mode=0o700, parents=True, exist_ok=True)
-    fixtures = output_directory(work, "fixtures", create=True)
-    for name in sorted(FILE_FIXTURES):
-        path = output_directory(fixtures, name, create=True)
-        info = path.lstat()
-        if (
-            not stat.S_ISDIR(info.st_mode)
-            or stat.S_IMODE(info.st_mode) != 0o700
-            or info.st_uid != os.geteuid()
-            or path.resolve() != path
-            or any(path.iterdir())
-        ):
-            raise ValueError(f"비어 있는 소유 시험 디렉터리가 필요함: {path}")
-        if name in PUBLICATION_FIXTURES:
-            filesystem = subprocess.check_output(
-                ["stat", "-f", "-c", "%t", "--", str(path)], text=True
-            ).strip().lower()
-            if filesystem not in {"ef53", "58465342"}:
-                skipped[name] = (
-                    f"파일 게시 시험은 ext4/XFS가 필요함: filesystem=0x{filesystem}"
-                    " (tmpfs 포함 다른 파일시스템은 제품 코드에서 지원하지 않음)"
-                )
-                continue
+    output_directory(work, "fixtures", create=True)
     return skipped
 
 
