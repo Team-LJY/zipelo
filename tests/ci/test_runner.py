@@ -166,9 +166,98 @@ class RunnerTests(unittest.TestCase):
     def test_cargo_and_temp_paths_are_kept_in_job_directory(self):
         if "ZIPELO_TEST_WORK_DIR" not in os.environ:
             self.skipTest("러너가 설정한 작업 경로에서 검사함")
-        for key in ("CARGO_TARGET_DIR", "TMPDIR", "TMP", "TEMP", "ZIPELO_TEST_WORK_DIR"):
+        for key in ("CARGO_TARGET_DIR", "CARGO_HOME", "TMPDIR", "TMP", "TEMP",
+                    "ZIPELO_TEST_WORK_DIR"):
             with self.subTest(key=key):
                 self.assertTrue(Path(os.environ[key]).resolve().is_relative_to(TEST_WORK))
+
+    def test_cargo_home_rejects_external_symlink(self):
+        with tempfile.TemporaryDirectory(dir=TEST_WORK) as directory:
+            work = Path(directory)
+            tools = work / "tools"
+            tools.mkdir()
+            outside = TEST_WORK / "outside"
+            (tools / "cargo").symlink_to(outside, target_is_directory=True)
+            with self.assertRaisesRegex(ValueError, "작업 폴더 밖"):
+                run_rust.output_directory(tools, "cargo", create=True)
+            self.assertFalse(outside.exists())
+
+    def test_changed_crates_include_reverse_dependencies(self):
+        paths = run_rust.manifests(run_rust.ROOT)
+        by_name = {path.parent.name: path for path in paths}
+        self.assertEqual(
+            run_rust.select_manifests(
+                run_rust.ROOT, paths, {"README.md", "docs/ui-scenario-guide.md"}
+            ),
+            [],
+        )
+        selected = set(run_rust.select_manifests(
+            run_rust.ROOT, paths, {"experiments/rust-archive-worker/src/zip_recovery.rs"}
+        ))
+        for name in ("rust-archive-worker", "rust-ui-memory-app",
+                     "rust-app-real-worker", "rust-large-archive-fixtures",
+                     "rust-zip64-compat"):
+            self.assertIn(by_name[name], selected)
+        self.assertNotIn(by_name["rust-memory-gzip-reader"], selected)
+        self.assertEqual(
+            run_rust.select_manifests(run_rust.ROOT, paths, {"tests/ci/run_rust.py"}),
+            paths,
+        )
+
+    def test_changed_file_list_includes_worktree_and_untracked_files(self):
+        with patch.object(run_rust.subprocess, "check_output", side_effect=[
+            "base\n",
+            b"experiments/rust-archive-worker/src/lib.rs\0",
+            b"tests/rust-app-ui/new_case.rs\0",
+        ]) as git:
+            changes = run_rust.changed_files(run_rust.ROOT)
+        self.assertEqual(changes, {
+            "experiments/rust-archive-worker/src/lib.rs",
+            "tests/rust-app-ui/new_case.rs",
+        })
+        self.assertEqual(git.call_count, 3)
+
+    def test_changed_file_list_ignores_runner_outputs_in_job_worktree(self):
+        with (
+            patch.dict(run_rust.os.environ, {"ZIPELO_TEST_WORK_DIR": str(run_rust.ROOT)}),
+            patch.object(run_rust.subprocess, "check_output", side_effect=[
+                "base\n",
+                b"README.md\0",
+                b"target/debug/app\0tools/cargo/config.toml\0"
+                b"tmp/result\0fixtures/data\0local-results.json\0",
+            ]),
+        ):
+            self.assertEqual(run_rust.changed_files(run_rust.ROOT), {"README.md"})
+
+    def test_empty_selection_does_not_require_cross_tools(self):
+        with patch.object(run_rust, "prepare_cross_build",
+                          side_effect=AssertionError("도구를 준비하면 안 됨")):
+            self.assertEqual(
+                run_rust.execute_phases(run_rust.ROOT, ["build", "test", "cross-build"], []),
+                [],
+            )
+
+    def test_runner_sets_cargo_home_in_job_before_execution(self):
+        with tempfile.TemporaryDirectory(dir=TEST_WORK) as directory:
+            work = Path(directory)
+            with (
+                patch.object(run_rust, "work_directory", return_value=work),
+                patch.object(run_rust, "prepare_tools"),
+                patch.object(run_rust.sys, "argv", ["run_rust.py", "build"]),
+                patch.object(run_rust.subprocess, "run",
+                             return_value=subprocess.CompletedProcess([], 0)),
+                patch.object(run_rust.subprocess, "check_output",
+                             return_value="tested-head\n"),
+                patch.object(run_rust, "execute_phases", return_value=[]) as execute,
+                patch.dict(run_rust.os.environ, {"GITHUB_STEP_SUMMARY": ""}),
+                redirect_stdout(StringIO()),
+            ):
+                self.assertEqual(run_rust.main(), 0)
+                self.assertEqual(
+                    run_rust.os.environ["CARGO_HOME"], str(work / "tools/cargo")
+                )
+                self.assertTrue((work / "tools/cargo").is_dir())
+                execute.assert_called_once()
 
     def test_all_manifests_have_locks(self):
         paths = run_rust.manifests(run_rust.ROOT)

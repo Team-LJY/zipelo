@@ -12,12 +12,14 @@ python3 tests/ci/run_rust.py local --job rust-local
 - Rust 1.99.1, 기존 Cargo.lock, `--locked --all-targets --all-features`를 사용합니다. `experiments/*/Cargo.toml`과 `tests/*/Cargo.toml`을 자동 발견합니다.
 - Windows는 `x86_64-pc-windows-gnu` 대상의 링크까지 확인합니다. 시험 바이너리도 컴파일하지만 실행하지 않습니다. Windows MSVC 빌드 및 실제 실행 검증을 대신하지 않습니다.
 - 빌드 기본 병렬 수는 2이며 `CARGO_BUILD_JOBS`로 조절합니다. 시험 스레드는 1개입니다. Cargo target과 임시 파일은 `tests/work/<작업명>/target`, `tmp`에 둡니다. `--job` 대신 `ZIPELO_CI_JOB`을 설정할 수 있습니다.
+- Cargo 레지스트리와 Git 캐시는 같은 작업 폴더의 `tools/cargo`에 둡니다. 최초 교차 도구 설치 후에도 `CARGO_HOME`을 같은 경로로 유지합니다.
 - `setup_windows.sh`는 관리자 권한 없이 도구를 `tests/work/<작업명>/tools`에 풉니다. apt-get, dpkg-deb, rustup 및 GCC 호스트 실행 라이브러리가 필요합니다. 기존 도구 경로를 읽기 전용으로 재사용할 때는 `ZIPELO_CI_TOOLS`를 지정합니다. 설치가 필요하면 작업 폴더 안의 `tools`에 준비합니다. 과거 `tests/ci/tools`에 준비한 도구도 읽기 전용으로 재사용합니다. 기존 Rust target과 MinGW가 있으면 준비 스크립트 없이 PATH와 관련 Cargo/CC/CXX 환경 설정을 사용할 수 있습니다.
 - Linux GUI 빌드에는 pkg-config, libxkbcommon-dev, libwayland-dev, libgl1-mesa-dev가 필요하며 글꼴 시험에는 fonts-noto-cjk가 필요합니다.
 - 추적된 fixture를 Git blob과 대조합니다. Windows checkout 시 core.autocrlf=false를 사용해야 하며 기대값의 바이트를 바꾸지 않습니다.
 - Unix 소켓 시험은 Cargo가 설정한 시험 crate의 현재 디렉터리에서 짧은 상대 경로로 소켓을 생성합니다. 시험 파일은 `tests/work/<작업명>/fixtures` 안에 생성합니다. 파일 게시 시험은 소켓 주소에 디렉터리 핸들을 사용해 긴 checkout 절대 경로에서도 실행됩니다. fixture 디렉터리는 소유권, 0700, 빈 상태를 확인합니다. 실패한 fixture는 삭제하거나 권한을 바꾸지 않습니다.
 - 파일 게시 계층은 ext4/XFS만 지원합니다. tmpfs 등 다른 파일시스템에서는 `rust-file-publication`과 `rust-gzip-file-job`의 Rust 실행 시험만 `not-applicable`로 기록하고 파일시스템 식별값과 사유를 출력합니다. 해당 crate의 Linux 및 Windows 빌드와 snapshot 등 나머지 시험은 계속합니다. 전체 시험 통과가 필요한 검증은 ext4/XFS checkout에서 수행합니다. 파일시스템 탐색 오류나 기존 시험 디렉터리의 소유권 문제는 실패로 남깁니다.
 - 개별 단계는 `build`, `test`, `cross-build`로 실행할 수 있습니다. 한 crate가 실패해도 다른 crate 결과를 수집합니다.
+- 작업 중 빠른 확인에는 `python3 tests/ci/run_rust.py local --changed --job <작업명>`을 사용할 수 있습니다. `origin/main`과 현재 HEAD의 공통 조상부터 작업 트리까지 비교하며 미추적 파일도 포함합니다. 바뀐 crate와 그 역의존 crate를 실행하고, 문서만 바뀌면 Rust 실행을 건너뜁니다. 소유 crate를 알 수 없는 공통 파일이 바뀌면 전체를 실행합니다. 실행기 자체 시험은 항상 실행하며 선택 결과는 JSON의 `selected_manifests`에 남깁니다. PR 본문에는 이 빠른 확인 대신 기본 `local` 전체 결과를 기록합니다.
 - GUI 앱과 GUI race harness는 컴파일하며 실제 화면 시나리오는 실행하지 않습니다. C# 시험과 역사적 hash 검사는 포함하지 않습니다.
 
 ## 출시 전 Windows 실기 확인
