@@ -1156,3 +1156,42 @@ fn client_protocol_errors_hide_internal_terms_but_preserve_exit_uncertainty() {
         UNCONFIRMED_FINISH
     );
 }
+
+#[cfg(feature = "ui")]
+#[test]
+fn app_exit_preserves_replaced_open_root() {
+    use zipelo_ui_memory_app::archive_screen::ArchiveApp;
+    let scratch = Folder::new();
+    let mut app = ArchiveApp::new(
+        Box::new(FakeFactory::default()),
+        Some(scratch.0.join("sample.zip")),
+        false,
+    );
+    pump(&mut app.model);
+    assert!(app.open_entry(0));
+    let root = scratch.0.join(open_root_name("sample.zip"));
+    fs::rename(&root, scratch.0.join("original")).unwrap();
+    fs::create_dir(&root).unwrap();
+    let retained = root.join("keep.txt");
+    fs::write(&retained, b"user data").unwrap();
+    drop(app);
+    assert_eq!(fs::read(retained).unwrap(), b"user data");
+}
+
+#[cfg(feature = "ui")]
+#[test]
+fn app_exit_removes_original_open_root() {
+    use zipelo_ui_memory_app::archive_screen::ArchiveApp;
+    let scratch = Folder::new();
+    let mut app = ArchiveApp::new(
+        Box::new(FakeFactory::default()),
+        Some(scratch.0.join("sample.zip")),
+        false,
+    );
+    pump(&mut app.model);
+    assert!(app.open_entry(0));
+    let root = scratch.0.join(open_root_name("sample.zip"));
+    fs::write(root.join("opened.txt"), b"temporary").unwrap();
+    drop(app);
+    assert!(!root.exists());
+}
