@@ -287,3 +287,56 @@ fn explorer_folder_click_and_escape_control_actual_extraction_scope() {
     ));
     assert_reaped(&observed);
 }
+
+// 작업자는 새로 만든 상위 폴더도 출력으로 알림. 하위 폴더 안 파일도 그 파일 자체를 열어야 함.
+#[test]
+fn double_click_open_extracts_nested_file_and_opens_that_file() {
+    let scratch = Scratch::new();
+    let folder = make_directory(&scratch.path("site"));
+    fs::write(folder.join("index.html"), b"<p>zipelo</p>").unwrap();
+    fs::write(folder.join("style.css"), b"p{}").unwrap();
+    let archive = scratch.path("site.zip");
+    let (factory, observed) = observed_factory();
+    let mut screen = Screen::new(factory);
+    let opened = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
+    let record = opened.clone();
+    screen.app.set_opener(Box::new(move |path| {
+        record.borrow_mut().push(path.to_path_buf());
+        Ok(())
+    }));
+    screen.app.add_sources(vec![folder]);
+    screen.render(vec![]);
+    screen.set_text("zip-name", "site.zip");
+    screen.click("압축하기");
+    screen.settle();
+    screen.open(&archive);
+    for name in ["site/index.html", "site/style.css"] {
+        let id = screen
+            .app
+            .model
+            .entries
+            .iter()
+            .find(|entry| entry.name == name)
+            .unwrap()
+            .id;
+        assert!(screen.app.open_entry(id));
+        screen.settle();
+        screen.render(vec![]);
+    }
+    let root = scratch.path("site.zip (Zipelo 임시)");
+    assert_eq!(
+        *opened.borrow(),
+        vec![
+            root.join("1/site/index.html"),
+            root.join("2/site/style.css")
+        ]
+    );
+    assert_eq!(
+        fs::read(root.join("1/site/index.html")).unwrap(),
+        b"<p>zipelo</p>"
+    );
+    assert!(!root.join("1/site/style.css").exists());
+    assert_reaped(&observed);
+    drop(screen);
+    assert!(!root.exists());
+}

@@ -333,6 +333,19 @@ fn default_names_and_middle_truncation_preserve_unicode() {
         assert_eq!(default_destination(&path(name)), path("압축 해제"));
     }
     assert_eq!(default_destination(&path("자료.zip")), path("자료"));
+    assert!(blocked_open("폴더/setup.EXE"));
+    assert!(blocked_open("run.desktop"));
+    assert!(!blocked_open("사진.jpg"));
+    assert!(!blocked_open("exe"));
+    // Linux는 스크립트를 편집기로 열므로 막지 않음.
+    #[cfg(not(windows))]
+    assert!(!blocked_open("app.js"));
+    #[cfg(windows)]
+    assert!(blocked_open("app.js"));
+    assert_eq!(
+        open_blocked_text("폴더/setup.EXE"),
+        "실행 파일(.EXE)은 안전을 위해 바로 열 수 없습니다"
+    );
     assert_eq!(middle_text("가나다라마바사아자차", 7), "가나다…아자차");
     assert_eq!(bytes_text(21), "21 B");
 }
@@ -356,6 +369,17 @@ impl Drop for Folder {
     fn drop(&mut self) {
         fs::remove_dir_all(&self.0).unwrap();
     }
+}
+
+#[test]
+fn unique_folder_numbers_existing_names() {
+    let scratch = Folder::new();
+    let base = scratch.0.join("자료");
+    assert_eq!(unique_folder(&base), base);
+    fs::create_dir(&base).unwrap();
+    assert_eq!(unique_folder(&base), scratch.0.join("자료 (1)"));
+    fs::write(scratch.0.join("자료 (1)"), b"").unwrap();
+    assert_eq!(unique_folder(&base), scratch.0.join("자료 (2)"));
 }
 
 #[test]

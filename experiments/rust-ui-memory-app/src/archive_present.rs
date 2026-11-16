@@ -479,3 +479,125 @@ pub fn excluded_split(path: &Path) -> bool {
         .to_ascii_lowercase();
     name.ends_with(".zip.001") || name.ends_with(".z01") || name.ends_with(".rar")
 }
+
+/// 같은 이름이 이미 있으면 `이름 (1)`, `이름 (2)`처럼 비어 있는 이름을 찾음.
+pub fn unique_folder(base: &Path) -> PathBuf {
+    let taken = |path: &Path| fs::symlink_metadata(path).is_ok();
+    if !taken(base) {
+        return base.to_path_buf();
+    }
+    let name = base.file_name().unwrap_or_default().to_string_lossy();
+    (1..)
+        .map(|n| base.with_file_name(format!("{name} ({n})")))
+        .find(|path| !taken(path))
+        .unwrap()
+}
+
+fn private_dir(path: &Path) -> io::Result<()> {
+    let mut builder = fs::DirBuilder::new();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::DirBuilderExt;
+        builder.mode(0o700);
+    }
+    builder.create(path)
+}
+
+/// 압축파일 안 파일을 기본 프로그램으로 열 때 쓸 임시 폴더를 만듦.
+/// 압축파일과 같은 폴더에 만들고, 그곳에 만들 수 없으면 시스템 임시 폴더를 씀.
+/// 숨김 폴더로 만들지 않음. snap으로 설치한 Firefox 등은 홈 바로 아래 숨김 폴더와
+/// 시스템 임시 폴더의 파일을 읽지 못해 열기 요청을 조용히 무시함.
+pub fn create_open_root(archive: &Path) -> io::Result<PathBuf> {
+    let name = archive.file_name().unwrap_or_default().to_string_lossy();
+    let mut error = None;
+    if let Some(parent) = archive.parent().filter(|p| !p.as_os_str().is_empty()) {
+        let base = parent.join(open_root_name(&name));
+        for _ in 0..8 {
+            let path = unique_folder(&base);
+            match private_dir(&path) {
+                Ok(()) => return Ok(path),
+                Err(e) if e.kind() == io::ErrorKind::AlreadyExists => continue,
+                Err(e) => {
+                    error = Some(e);
+                    break;
+                }
+            }
+        }
+    }
+    let base = std::env::temp_dir().join(format!("zipelo-{}-{name}", std::process::id()));
+    let path = unique_folder(&base);
+    private_dir(&path).map_err(|e| error.unwrap_or(e))?;
+    Ok(path)
+}
+
+/// 열기용 임시 폴더 이름. 예: `자료.zip (Zipelo 임시)`.
+pub fn open_root_name(archive_name: &str) -> String {
+    format!("{archive_name} (Zipelo 임시)")
+}
+
+/// 이 앱이 만든 열기용 폴더를 지움. 다른 프로그램이 파일을 쓰고 있으면 남을 수 있음.
+pub fn remove_open_root(path: &Path) {
+    let _ = fs::remove_dir_all(path);
+}
+
+/// 기본 프로그램으로 열면 실행될 수 있는 파일은 바로 열지 않음.
+/// Windows는 스크립트도 연결 프로그램이 바로 실행하므로 범위가 넓고,
+/// Linux는 스크립트를 편집기로 열므로 실행·설치 파일만 막음.
+pub fn blocked_open(name: &str) -> bool {
+    #[cfg(windows)]
+    const EXECUTABLE: &[&str] = &[
+        "exe", "com", "bat", "cmd", "scr", "pif", "msi", "msp", "msc", "ps1", "psm1", "vbs",
+        "vbe", "js", "jse", "wsf", "wsh", "hta", "cpl", "lnk", "url", "reg", "jar", "inf", "scf",
+        "chm", "dll", "sys", "appref-ms", "application", "gadget", "settingcontent-ms",
+    ];
+    #[cfg(not(windows))]
+    const EXECUTABLE: &[&str] = &[
+        "desktop", "appimage", "run", "bin", "jar", "deb", "rpm", "snap", "flatpakref",
+        "flatpak", "exe", "msi",
+    ];
+    open_extension(name).is_some_and(|ext| EXECUTABLE.contains(&ext.to_ascii_lowercase().as_str()))
+}
+
+fn open_extension(name: &str) -> Option<&str> {
+    let leaf = name.rsplit(['/', '\\']).next().unwrap_or(name);
+    leaf.rsplit_once('.')
+        .map(|(_, ext)| ext)
+        .filter(|ext| !ext.is_empty())
+}
+
+/// 실행 파일이라 열지 않았다는 짧은 안내. 압축은 풀지 않음.
+pub fn open_blocked_text(name: &str) -> String {
+    match open_extension(name) {
+        Some(ext) => format!("실행 파일(.{ext})은 안전을 위해 바로 열 수 없습니다"),
+        None => "실행 파일은 안전을 위해 바로 열 수 없습니다".into(),
+    }
+}
+
+pub const OPEN_FAILED: &str = "파일을 열 프로그램을 실행하지 못했습니다";
+pub const OPEN_MISSING: &str = "풀린 파일을 찾지 못해 열지 못했습니다";
+
+/// 운영체제에 설정된 기본 프로그램으로 파일을 엶.
+pub fn open_with_default(path: &Path) -> Result<(), String> {
+    #[cfg(windows)]
+    let mut command = {
+        let mut command = std::process::Command::new("explorer.exe");
+        command.arg(path);
+        command
+    };
+    #[cfg(not(windows))]
+    let mut command = {
+        let mut command = std::process::Command::new("xdg-open");
+        command.arg(path);
+        command
+    };
+    command
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null());
+    let mut child = command.spawn().map_err(|_| OPEN_FAILED.to_owned())?;
+    // 끝난 자식 프로세스를 거둬 좀비로 남지 않게 함.
+    std::thread::spawn(move || {
+        let _ = child.wait();
+    });
+    Ok(())
+}

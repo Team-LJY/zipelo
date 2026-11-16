@@ -194,6 +194,50 @@ mod platform {
         fn renameat(fd: i32, path: *const i8, newfd: i32, newpath: *const i8) -> i32;
         fn unlinkat(fd: i32, path: *const i8, flags: i32) -> i32;
         fn geteuid() -> u32;
+        fn getegid() -> u32;
+        fn getgrgid_r(
+            gid: u32,
+            group: *mut Group,
+            buffer: *mut i8,
+            length: usize,
+            result: *mut *mut Group,
+        ) -> i32;
+    }
+    #[repr(C)]
+    struct Group {
+        name: *mut i8,
+        password: *mut i8,
+        gid: u32,
+        members: *mut *mut i8,
+    }
+    /// 현재 계정의 기본 그룹이 따로 등록된 구성원이 없는 개인 그룹인지 확인함.
+    /// Ubuntu는 계정마다 같은 이름의 개인 그룹을 만들고 umask 002를 써서,
+    /// 파일 관리자나 폴더 선택 창에서 새로 만든 폴더가 그룹 쓰기 권한(775)을 가짐.
+    fn private_group(gid: u32) -> bool {
+        if gid != unsafe { getegid() } {
+            return false;
+        }
+        let mut group = Group {
+            name: std::ptr::null_mut(),
+            password: std::ptr::null_mut(),
+            gid: 0,
+            members: std::ptr::null_mut(),
+        };
+        let mut result = std::ptr::null_mut();
+        let mut buffer = vec![0i8; 16 * 1024];
+        let status = unsafe {
+            getgrgid_r(
+                gid,
+                &mut group,
+                buffer.as_mut_ptr(),
+                buffer.len(),
+                &mut result,
+            )
+        };
+        // 그룹 정보를 읽지 못하면 안전하다고 볼 근거가 없으므로 거부함.
+        status == 0
+            && !result.is_null()
+            && (group.members.is_null() || unsafe { *group.members }.is_null())
     }
     pub struct Dir {
         file: File,
@@ -242,7 +286,13 @@ mod platform {
         fn trusted(&self) -> Result<()> {
             let m = self.file.metadata().map_err(|_| ErrorCode::Io)?;
             // 다른 계정이 바꿀 수 있는 출력 폴더를 거부함.
-            if !m.is_dir() || m.uid() != unsafe { geteuid() } || m.mode() & 0o022 != 0 {
+            // 그룹 쓰기는 그 그룹이 현재 계정만의 개인 그룹일 때만 허용함.
+            let group_writable = m.mode() & 0o020 != 0;
+            if !m.is_dir()
+                || m.uid() != unsafe { geteuid() }
+                || m.mode() & 0o002 != 0
+                || (group_writable && !private_group(m.gid()))
+            {
                 return Err(ErrorCode::UnsafePath);
             }
             Ok(())
