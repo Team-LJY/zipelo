@@ -519,44 +519,13 @@ fn symlink_parent_escape_is_rejected() {
     assert_eq!(fs::read_dir(s.0.join("outside")).unwrap().count(), 0);
 }
 
-// umask 002에서 폴더 선택 창으로 새로 만든 폴더(775)에도 풀 수 있어야 함.
-// 다른 계정이 쓸 수 있는 폴더(777)는 계속 거부함.
+// 개인 그룹의 압축 해제만 허용하고 공유 쓰기는 거부함.
 #[cfg(target_os = "linux")]
 #[test]
 fn private_group_writable_output_is_accepted() {
-    use std::os::unix::fs::{MetadataExt, PermissionsExt};
-    for (mode, other) in [(0o775, false), (0o777, true)] {
-        let s = Scratch::new();
-        fs::create_dir(s.0.join("output")).unwrap();
-        fs::set_permissions(s.0.join("output"), fs::Permissions::from_mode(mode)).unwrap();
-        let gid = fs::metadata(s.0.join("output")).unwrap().gid();
-        let entry = Command::new("getent")
-            .args(["group", &gid.to_string()])
-            .output()
-            .unwrap();
-        let entry = String::from_utf8_lossy(&entry.stdout);
-        let egid = Command::new("id").arg("-g").output().unwrap();
-        let private = String::from_utf8_lossy(&egid.stdout).trim() == gid.to_string()
-            && entry.trim_end().ends_with(':');
-        let e = extract(
-            &s,
-            include_bytes!("fixtures/store.zip"),
-            None,
-            Selection::All,
-            None,
-            Limits::default(),
-        );
-        if other || !private {
-            assert_eq!(terminal(&e).error, ErrorCode::UnsafePath, "{mode:o}");
-            assert!(!s.0.join("output/folder").exists());
-        } else {
-            assert_eq!(terminal(&e).outcome, Outcome::Completed, "{e:?}");
-            assert_eq!(
-                fs::read(s.0.join("output/folder/hello.txt")).unwrap(),
-                PAYLOAD
-            );
-        }
-    }
+    private_group::check_extraction("personal", true);
+    private_group::check_extraction("shared-primary", false);
+    private_group::check_extraction("world-writable", false);
 }
 
 #[test]
@@ -1676,3 +1645,6 @@ mod spool_location;
 
 #[cfg(target_os = "linux")]
 mod spool_fallback;
+
+#[cfg(target_os = "linux")]
+mod private_group;

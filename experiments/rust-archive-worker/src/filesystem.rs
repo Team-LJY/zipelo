@@ -210,11 +210,52 @@ mod platform {
         gid: u32,
         members: *mut *mut i8,
     }
-    /// 현재 계정의 기본 그룹이 따로 등록된 구성원이 없는 개인 그룹인지 확인함.
-    /// Ubuntu는 계정마다 같은 이름의 개인 그룹을 만들고 umask 002를 써서,
-    /// 파일 관리자나 폴더 선택 창에서 새로 만든 폴더가 그룹 쓰기 권한(775)을 가짐.
+    // 원격 계정 열거는 불완전할 수 있으므로 로컬 계정만 확인 가능한 경우에 허용함.
+    fn primary_group_is_private(gid: u32) -> bool {
+        let Ok(policy) = std::fs::read_to_string("/etc/nsswitch.conf") else {
+            return false;
+        };
+        let mut sources = policy.lines().filter_map(|line| {
+            let line = line.split('#').next().unwrap_or_default();
+            let (database, sources) = line.split_once(':')?;
+            (database.trim() == "passwd").then_some(sources)
+        });
+        let Some(source) = sources.next() else {
+            return false;
+        };
+        if sources.next().is_some() || !source.split_whitespace().eq(["files"]) {
+            return false;
+        }
+        let Ok(accounts) = std::fs::read_to_string("/etc/passwd") else {
+            return false;
+        };
+        let current_uid = unsafe { geteuid() };
+        let mut found_current = false;
+        for account in accounts.lines() {
+            if account.trim().is_empty() || account.starts_with('#') {
+                continue;
+            }
+            let fields: Vec<_> = account.split(':').collect();
+            if fields.len() != 7 || fields[0].is_empty() {
+                return false;
+            }
+            let (Ok(uid), Ok(primary_gid)) = (fields[2].parse::<u32>(), fields[3].parse::<u32>())
+            else {
+                return false;
+            };
+            if primary_gid == gid {
+                if uid != current_uid {
+                    return false;
+                }
+                found_current = true;
+            }
+        }
+        found_current
+    }
+
+    // 기본 구성원과 보조 구성원을 모두 확인함.
     fn private_group(gid: u32) -> bool {
-        if gid != unsafe { getegid() } {
+        if gid != unsafe { getegid() } || !primary_group_is_private(gid) {
             return false;
         }
         let mut group = Group {
@@ -237,7 +278,9 @@ mod platform {
         // 그룹 정보를 읽지 못하면 안전하다고 볼 근거가 없으므로 거부함.
         status == 0
             && !result.is_null()
-            && (group.members.is_null() || unsafe { *group.members }.is_null())
+            && group.gid == gid
+            && !group.members.is_null()
+            && unsafe { *group.members }.is_null()
     }
     pub struct Dir {
         file: File,
