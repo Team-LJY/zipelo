@@ -410,3 +410,33 @@ fn central_zip64_fields_and_extra_remain_unsupported() {
         Err(ErrorCode::UnsupportedFeature)
     ));
 }
+
+#[test]
+fn central_rejects_extra_crossing_only_the_next_local_file() {
+    let mut damaged = include_bytes!("../zip-recovery-fixtures/control.zip").to_vec();
+    let cd = u32at(&damaged, damaged.len() - 6) as usize;
+    let second = cd
+        + 46
+        + u16at(&damaged, cd + 28) as usize
+        + u16at(&damaged, cd + 30) as usize
+        + u16at(&damaged, cd + 32) as usize;
+    let next_local = u32at(&damaged, second + 42) as usize;
+    let names_end = 30 + u16at(&damaged, 26) as usize;
+    let extra = next_local - names_end + 1;
+    let data_start = names_end + extra;
+    assert!(data_start > next_local);
+    assert!(data_start + u32at(&damaged, cd + 20) as usize <= cd);
+    damaged[28..30].copy_from_slice(&(extra as u16).to_le_bytes());
+    let scratch = Scratch::new(&damaged);
+    let mut source = File::open(scratch.path()).unwrap();
+    assert!(matches!(
+        central(
+            &mut source,
+            damaged.len() as u64,
+            Limits::default(),
+            &mut || Ok(())
+        ),
+        Err(ErrorCode::Integrity)
+    ));
+    assert_eq!(std::fs::read(scratch.path()).unwrap(), damaged);
+}

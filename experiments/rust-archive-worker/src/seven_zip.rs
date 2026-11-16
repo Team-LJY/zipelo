@@ -773,33 +773,3 @@ pub(crate) fn open_selected(
         data,
     })
 }
-pub(crate) fn parse(
-    input: &[u8],
-    limits: Limits,
-    decode: bool,
-    check: &mut impl crate::resources::Monitor,
-) -> Result<Vec<Member>> {
-    use std::io::{Read, Seek, SeekFrom, Write};
-    let mut source = crate::spool::temporary()?;
-    crate::space::ensure(&source, input.len() as u64)?;
-    source.write_all(input).map_err(crate::space::io_error)?;
-    let mut catalog = open(&mut source, input.len() as u64, limits, decode, check)?;
-    if decode {
-        for (member, offset) in catalog.members.iter_mut().zip(catalog.offsets) {
-            catalog
-                .data
-                .seek(SeekFrom::Start(offset))
-                .map_err(crate::space::io_error)?;
-            member
-                .data
-                .try_reserve_exact(member.entry.size as usize)
-                .map_err(|_| ErrorCode::Limit)?;
-            (&mut catalog.data)
-                .take(member.entry.size)
-                .read_to_end(&mut member.data)
-                .map_err(crate::space::io_error)?;
-            crate::resources::completed(Ok(()), check)?;
-        }
-    }
-    Ok(catalog.members)
-}

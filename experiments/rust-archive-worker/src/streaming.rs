@@ -3,6 +3,7 @@ use crate::{
     crypto,
     protocol::*,
     spool,
+    zip_extra::{self, Policy, disk_start, expanded, large_value, local_sizes},
 };
 use std::{
     fs::File,
@@ -357,77 +358,6 @@ struct Packed {
     aes: bool,
 }
 
-fn extra(bytes: &[u8]) -> Result<(Option<archive::AesExtra>, Option<Vec<u8>>)> {
-    let mut at = 0;
-    let mut aes = Vec::new();
-    let mut large = None;
-    while at < bytes.len() {
-        if bytes.len() - at < 4 {
-            return Err(ErrorCode::Integrity);
-        }
-        let tag = u16at(bytes, at);
-        let len = u16at(bytes, at + 2) as usize;
-        let end = at + 4 + len;
-        if end > bytes.len() {
-            return Err(ErrorCode::Integrity);
-        }
-        if tag == 1 {
-            if large.is_some() {
-                return Err(ErrorCode::Integrity);
-            }
-            large = Some(bytes[at + 4..end].to_vec());
-        } else {
-            aes.extend_from_slice(&bytes[at..end]);
-        }
-        at = end;
-    }
-    Ok((archive::aes_extra(&aes)?, large))
-}
-fn large_value(value: u32, extra: &mut &[u8]) -> Result<u64> {
-    if value != u32::MAX {
-        return Ok(value as u64);
-    }
-    if extra.len() < 8 {
-        return Err(ErrorCode::Integrity);
-    }
-    let result = u64at(extra, 0);
-    *extra = &extra[8..];
-    Ok(result)
-}
-fn expanded(value: u64, maximum: u64, large: u64) -> Result<u64> {
-    if value == maximum || value == large {
-        Ok(large)
-    } else {
-        Err(ErrorCode::Integrity)
-    }
-}
-fn disk_start(value: u16, extra: &mut &[u8]) -> Result<u32> {
-    if value != u16::MAX {
-        return Ok(value as u32);
-    }
-    if extra.len() < 4 {
-        return Err(ErrorCode::Integrity);
-    }
-    let result = u32at(extra, 0);
-    *extra = &extra[4..];
-    Ok(result)
-}
-fn local_sizes(size: u32, compressed: u32, extra: Option<&[u8]>) -> Result<(u64, u64)> {
-    if let Some(extra) = extra {
-        // 로컬 ZIP64 추가 필드에는 두 크기가 함께 들어감.
-        if extra.len() < 16 {
-            return Err(ErrorCode::Integrity);
-        }
-        Ok((
-            expanded(size as u64, u32::MAX as u64, u64at(extra, 0))?,
-            expanded(compressed as u64, u32::MAX as u64, u64at(extra, 8))?,
-        ))
-    } else if size == u32::MAX || compressed == u32::MAX {
-        Err(ErrorCode::Integrity)
-    } else {
-        Ok((size as u64, compressed as u64))
-    }
-}
 fn descriptor_size(
     bytes: &[u8],
     crc: u32,
@@ -572,10 +502,12 @@ fn zip(
         }
         let raw = bytes(source, cursor + 46, nn as usize)?;
         let central_extra = bytes(source, cursor + 46 + nn, ne as usize)?;
-        let (aes, large) = extra(&central_extra)?;
+        let parsed_extra = zip_extra::parse(&central_extra, Policy::Streaming)?;
+        let aes = parsed_extra.aes;
+        let large = parsed_extra.zip64;
         let name = archive::zip_name(&raw, flags, &central_extra)?;
         let name = name.as_str();
-        let mut large = large.as_deref().unwrap_or(&[]);
+        let mut large = large.unwrap_or(&[]);
         let size = large_value(u32at(&h, 24), &mut large)?;
         let compressed = large_value(u32at(&h, 20), &mut large)?;
         let local = large_value(u32at(&h, 42), &mut large)?;
@@ -653,7 +585,9 @@ fn zip(
         if bytes(source, local + 30, ln as usize)? != raw {
             return Err(ErrorCode::Integrity);
         }
-        let (local_aes, local_large) = extra(&bytes(source, local + 30 + ln, le as usize)?)?;
+        let local_extra = bytes(source, local + 30 + ln, le as usize)?;
+        let parsed_local = zip_extra::parse(&local_extra, Policy::Streaming)?;
+        let (local_aes, local_large) = (parsed_local.aes, parsed_local.zip64);
         if local_aes != aes || local_large.as_ref().is_some_and(|values| values.len() < 16) {
             return Err(ErrorCode::Integrity);
         }
@@ -664,7 +598,7 @@ fn zip(
             || local_large.is_some();
         if flags & 8 == 0 {
             let (local_size, local_compressed) =
-                local_sizes(u32at(&lh, 22), u32at(&lh, 18), local_large.as_deref())?;
+                local_sizes(u32at(&lh, 22), u32at(&lh, 18), local_large)?;
             if u32at(&lh, 14) != crc || local_size != size || local_compressed != compressed {
                 return Err(ErrorCode::Integrity);
             }

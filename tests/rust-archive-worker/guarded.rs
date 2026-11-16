@@ -828,7 +828,7 @@ fn created_empty_files_and_directories_refresh_idle_deadline() {
             assert_eq!(terminal(&events).publication, Publication::Complete);
             assert_eq!(terminal(&events).created_count, 1);
             let bytes = fs::read(s.0.join("new.zip")).unwrap();
-            let parsed = archive::parse(&bytes, Limits::default(), true, &mut || Ok(())).unwrap();
+            let parsed = worker_catalog(&bytes, Limits::default(), true, None).unwrap();
             assert_eq!(parsed.members.len(), 37);
             assert!(parsed.members.iter().any(|member| {
                 member.entry.name == "source" && member.entry.kind == EntryKind::Directory

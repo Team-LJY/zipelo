@@ -1,5 +1,6 @@
 #define _GNU_SOURCE
 #include <dlfcn.h>
+#include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <stdarg.h>
@@ -60,10 +61,83 @@ static void trace(int at) {
         close(fd);
     }
 }
+struct usage {
+    struct stat seen[256];
+    size_t count;
+    unsigned long long bytes;
+};
+static void count_file(struct usage *usage, const struct stat *value) {
+    if (!S_ISREG(value->st_mode)) return;
+    for (size_t i = 0; i < usage->count; i++) {
+        if (usage->seen[i].st_dev == value->st_dev
+                && usage->seen[i].st_ino == value->st_ino) return;
+    }
+    if (usage->count == 256) _exit(97);
+    usage->seen[usage->count++] = *value;
+    usage->bytes += value->st_size;
+}
+static void count_directory(DIR *directory, struct usage *usage, unsigned depth) {
+    if (depth > 64) _exit(97);
+    struct dirent *entry;
+    while ((entry = readdir(directory))) {
+        if (!strcmp(entry->d_name, ".") || !strcmp(entry->d_name, "..")) continue;
+        struct stat value;
+        if (fstatat(dirfd(directory), entry->d_name, &value, AT_SYMLINK_NOFOLLOW)) _exit(98);
+        count_file(usage, &value);
+        if (S_ISDIR(value.st_mode)) {
+            int fd = original_openat(dirfd(directory), entry->d_name,
+                O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+            if (fd < 0) _exit(98);
+            DIR *child = fdopendir(fd);
+            if (!child) _exit(98);
+            count_directory(child, usage, depth + 1);
+            closedir(child);
+        }
+    }
+}
+static unsigned long long temporary_usage(void) {
+    struct usage usage = {0};
+    const char *root = getenv("TMPDIR");
+    if (!root) _exit(98);
+    DIR *directory = opendir(root);
+    if (!directory) _exit(98);
+    // 닫혀도 이름이 남은 파일은 계속 용량을 사용함.
+    count_directory(directory, &usage, 0);
+    closedir(directory);
+    directory = opendir("/proc/self/fd");
+    if (!directory) _exit(98);
+    struct dirent *entry;
+    // 이름이 지워진 열린 파일도 마지막 핸들을 닫기 전까지 집계함.
+    while ((entry = readdir(directory))) {
+        if (entry->d_name[0] == '.') continue;
+        int fd = atoi(entry->d_name);
+        char path[4096];
+        struct stat value;
+        if (descriptor(fd, path, sizeof(path)) == 2 && !fstat(fd, &value)) {
+            count_file(&usage, &value);
+        }
+    }
+    closedir(directory);
+    return usage.bytes;
+}
+static void exhausted(void) {
+    const char *path = getenv("ZIPELO_SPOOL_TRACE");
+    if (!path) return;
+    int fd = original_openat(AT_FDCWD, path, O_CREAT | O_WRONLY | O_APPEND, 0600);
+    if (fd >= 0) {
+        original_write(fd, "F", 1);
+        close(fd);
+    }
+}
+#define TEMPORARY_CAPACITY (2ULL * 1024 * 1024)
 static int reject(int at, int flags) {
     if ((flags & O_TMPFILE) != O_TMPFILE && !(flags & O_CREAT)) return 0;
     trace(at);
     const char *phase = getenv("ZIPELO_SPOOL_PHASE");
+    if (affected(at) && at < 2 && phase && !strcmp(phase, "tiny-tmpfs")) {
+        errno = EDQUOT;
+        return 1;
+    }
     if (affected(at) && phase && (!strcmp(phase, "create") || !strcmp(phase, "denied"))) {
         errno = !strcmp(phase, "denied") ? EACCES : EDQUOT;
         return 1;
@@ -115,6 +189,20 @@ ssize_t write(int fd, const void *bytes, size_t count) {
     char path[4096];
     int at = descriptor(fd, path, sizeof(path));
     const char *phase = getenv("ZIPELO_SPOOL_PHASE");
+    if (phase && !strcmp(phase, "tiny-tmpfs") && at == 2) {
+        struct stat value;
+        off_t position = lseek(fd, 0, SEEK_CUR);
+        if (position < 0 || fstat(fd, &value)) _exit(96);
+        unsigned long long used = temporary_usage();
+        unsigned long long room = used < TEMPORARY_CAPACITY ? TEMPORARY_CAPACITY - used : 0;
+        unsigned long long end = (unsigned long long)value.st_size + room;
+        if ((unsigned long long)position >= end) {
+            exhausted();
+            errno = ENOSPC;
+            return -1;
+        }
+        if (count > end - position) count = end - position;
+    }
     int stage = phase && !strcmp(phase, "stage-write") && fd != snapshot_fd;
     if (affected(at) && phase && (stage || !strcmp(phase, "write")
             || !strcmp(phase, "changed") || !strcmp(phase, "io"))) {
@@ -139,6 +227,12 @@ int fstatvfs(int fd, struct statvfs *value) {
     if (!result && affected(at) && phase && !strcmp(phase, "quota")) {
         value->f_frsize = 1;
         value->f_bavail = 65536;
+    }
+    if (!result && at == 2 && phase && !strcmp(phase, "tiny-tmpfs")) {
+        unsigned long long used = temporary_usage();
+        value->f_frsize = 1;
+        value->f_blocks = TEMPORARY_CAPACITY;
+        value->f_bavail = value->f_bfree = used < TEMPORARY_CAPACITY ? TEMPORARY_CAPACITY - used : 0;
     }
     return result;
 }

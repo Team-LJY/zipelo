@@ -174,9 +174,14 @@ fn granted_entry_policy_keeps_independent_metadata_budget() {
     );
     let mut metadata = crate::archive::MetadataBudget::default();
     for _ in 0..32768 {
-        metadata.charge("").unwrap();
+        metadata
+            .charge_with("", crate::archive::MetadataLimits::default())
+            .unwrap();
     }
-    assert_eq!(metadata.charge(""), Err(ErrorCode::Limit));
+    assert_eq!(
+        metadata.charge_with("", crate::archive::MetadataLimits::default()),
+        Err(ErrorCode::Limit)
+    );
 }
 
 #[test]

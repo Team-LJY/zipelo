@@ -17,4 +17,5 @@ mod split_seven_zip;
 mod spool;
 mod streaming;
 pub mod wire;
+mod zip_extra;
 mod zip_recovery;

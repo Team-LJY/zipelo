@@ -149,7 +149,7 @@ fn empty_root_folder_is_preserved() {
     let events = execute(start);
     assert_eq!(terminal(&events).outcome, Outcome::Completed, "{events:?}");
     let bytes = fs::read(s.0.join("created.zip")).unwrap();
-    let catalog = archive::parse(&bytes, Limits::default(), true, &mut || Ok(())).unwrap();
+    let catalog = worker_catalog(&bytes, Limits::default(), true, None).unwrap();
     assert_eq!(catalog.members.len(), 1);
     assert_eq!(catalog.members[0].entry.kind, EntryKind::Directory);
     assert_eq!(catalog.members[0].entry.name, "documents");

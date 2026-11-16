@@ -59,19 +59,31 @@ impl Case {
         self.archive_names.sort();
         (self.scratch.path("archive/split.7z.001"), originals)
     }
+    fn library(&self) -> PathBuf {
+        let library = self.scratch.0.join("location.so");
+        if !library.exists() {
+            assert!(
+                Command::new("cc")
+                    .args(["-shared", "-fPIC", "-O2", "-Wall", "-Wextra", "-Werror"])
+                    .arg(
+                        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                            .join("../../tests/rust-archive-worker/spool_location_fault.c")
+                    )
+                    .args(["-ldl", "-o"])
+                    .arg(&library)
+                    .status()
+                    .unwrap()
+                    .success()
+            );
+        }
+        library
+    }
     fn run(&self, action: Action, phase: &str, mask: u8, named: bool) -> Vec<Message> {
         let s = &self.scratch;
         let mut command = s.worker();
         command
             .env("XDG_CACHE_HOME", s.0.join("cache"))
-            .env(
-                "TMPDIR",
-                if phase == "real" {
-                    PathBuf::from(std::env::var_os("ZIPELO_SPOOL_REAL_TMP").unwrap())
-                } else {
-                    s.0.join("system")
-                },
-            )
+            .env("TMPDIR", s.0.join("system"))
             .env("HOME", &s.0);
         if phase == "home" {
             command.env_remove("XDG_CACHE_HOME");
@@ -87,31 +99,14 @@ impl Case {
                 },
             );
         }
-        if phase != "real" {
-            let library = s.0.join("location.so");
-            if !library.exists() {
-                assert!(
-                    Command::new("cc")
-                        .args(["-shared", "-fPIC", "-O2", "-Wall", "-Wextra", "-Werror"])
-                        .arg(
-                            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                                .join("../../tests/rust-archive-worker/spool_location_fault.c")
-                        )
-                        .args(["-ldl", "-o"])
-                        .arg(&library)
-                        .status()
-                        .unwrap()
-                        .success()
-                );
-            }
-            command
-                .env("LD_PRELOAD", library)
-                .env("ZIPELO_SPOOL_PHASE", phase)
-                .env("ZIPELO_SPOOL_MASK", mask.to_string())
-                .env("ZIPELO_SPOOL_TRACE", s.0.join("trace"));
-            if named {
-                command.env("ZIPELO_SPOOL_NAMED", "1");
-            }
+        let library = self.library();
+        command
+            .env("LD_PRELOAD", library)
+            .env("ZIPELO_SPOOL_PHASE", phase)
+            .env("ZIPELO_SPOOL_MASK", mask.to_string())
+            .env("ZIPELO_SPOOL_TRACE", s.0.join("trace"));
+        if named {
+            command.env("ZIPELO_SPOOL_NAMED", "1");
         }
         let mut child = Running(
             command
@@ -689,45 +684,117 @@ fn source_change_during_direct_read_prevents_success() {
 }
 
 #[test]
-#[ignore = "별도 VM의 작은 tmpfs 경로를 ZIPELO_SPOOL_REAL_TMP로 지정해야 함"]
-fn actual_tmpfs_quota_lists_and_previews_large_zip_and_seven_zip() {
-    let path = PathBuf::from(std::env::var_os("ZIPELO_SPOOL_REAL_TMP").unwrap());
-    let filesystem = Command::new("stat")
-        .args(["-f", "-c", "%T"])
-        .arg(&path)
+fn small_temporary_quota_counts_closed_files_until_unlinked() {
+    let scratch = Scratch::new();
+    fs::create_dir(scratch.0.join("system")).unwrap();
+    let c = Case {
+        scratch,
+        archive_names: Vec::new(),
+    };
+    let library = c.library();
+    let probe = Command::new("python3")
+        .arg("-B")
+        .arg("-c")
+        .arg(
+            r#"
+import errno, os, sys
+from pathlib import Path
+root = Path(sys.argv[1])
+def assert_full(fd):
+    try:
+        os.write(fd, b"x")
+    except OSError as error:
+        assert error.errno == errno.ENOSPC
+    else:
+        raise AssertionError("임시 용량이 너무 일찍 반환됨")
+a = os.open(root / "quota-a", os.O_CREAT | os.O_RDWR, 0o600)
+b = os.open(root / "quota-b", os.O_CREAT | os.O_RDWR, 0o600)
+duplicate = os.dup(a)
+try:
+    assert os.write(a, bytes(1024 * 1024)) == 1024 * 1024
+    os.close(duplicate)
+    duplicate = -1
+    os.close(a)
+    a = -1
+    assert os.write(b, bytes(2 * 1024 * 1024)) == 1024 * 1024
+    try:
+        os.write(b, b"x")
+    except OSError as error:
+        assert error.errno == errno.ENOSPC
+    else:
+        raise AssertionError("닫힌 파일의 용량이 반환됨")
+    assert (root / "quota-a").stat().st_size == 1024 * 1024
+    os.link(root / "quota-a", root / "quota-alias")
+    (root / "quota-a").unlink()
+    assert_full(b)
+    (root / "quota-alias").unlink()
+    assert os.write(b, bytes(1024 * 1024)) == 1024 * 1024
+    duplicate = os.dup(b)
+    (root / "quota-b").unlink()
+    assert_full(b)
+    os.close(b)
+    b = -1
+    assert_full(duplicate)
+    os.close(duplicate)
+    duplicate = -1
+    b = os.open(root / "quota-b", os.O_CREAT | os.O_RDWR, 0o600)
+    assert os.write(b, bytes(2 * 1024 * 1024)) == 2 * 1024 * 1024
+finally:
+    if duplicate >= 0:
+        os.close(duplicate)
+    if a >= 0:
+        os.close(a)
+    if b >= 0:
+        os.close(b)
+    for name in ["quota-a", "quota-b", "quota-alias"]:
+        (root / name).unlink(missing_ok=True)
+"#,
+        )
+        .arg(c.scratch.0.join("system"))
+        .env("TMPDIR", c.scratch.0.join("system"))
+        .env("LD_PRELOAD", library)
+        .env("ZIPELO_SPOOL_PHASE", "tiny-tmpfs")
+        .env("ZIPELO_SPOOL_TRACE", c.scratch.0.join("trace"))
         .output()
         .unwrap();
-    assert_eq!(
-        String::from_utf8(filesystem.stdout).unwrap().trim(),
-        "tmpfs"
+    assert!(
+        probe.status.success(),
+        "{}",
+        String::from_utf8_lossy(&probe.stderr)
     );
-    let capacity = Command::new("stat")
-        .args(["-f", "-c", "%S %b"])
-        .arg(&path)
-        .output()
-        .unwrap();
-    let fields: Vec<u64> = String::from_utf8(capacity.stdout)
-        .unwrap()
-        .split_whitespace()
-        .map(|value| value.parse().unwrap())
-        .collect();
-    let bytes = fields[0] * fields[1];
-    assert!(bytes > 0 && bytes < 16 * 1024 * 1024, "{bytes}");
-    let probe = path.join("capacity-probe");
-    let error = fs::write(&probe, vec![0; bytes as usize + 4096]).unwrap_err();
-    assert_eq!(error.kind(), std::io::ErrorKind::StorageFull);
-    fs::remove_file(probe).unwrap();
-    let c = Case::new();
-    for format in ["zip", "7z"] {
-        c.assert_preview(format, "real", 0, false);
-    }
-    assert_eq!(fs::read_dir(path).unwrap().count(), 0);
-    assert_eq!(
-        fs::metadata(c.scratch.0.join("cache/zipelo"))
+    assert!(
+        fs::read_to_string(c.scratch.0.join("trace"))
             .unwrap()
-            .permissions()
-            .mode()
-            & 0o777,
-        0o700
+            .contains('F')
     );
+}
+
+#[test]
+fn small_temporary_quota_lists_and_previews_large_zip_and_seven_zip() {
+    for named in [false, true] {
+        let c = Case::new();
+        for format in ["zip", "7z"] {
+            c.assert_preview(format, "tiny-tmpfs", 0, named);
+        }
+        assert!(
+            Command::new("python3")
+                .arg("-B")
+                .arg(
+                    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                        .join("../../tests/rust-archive-worker/spool_fallback_cases.py")
+                )
+                .arg(&c.scratch.0)
+                .arg("non-solid")
+                .status()
+                .unwrap()
+                .success()
+        );
+        for format in ["zip", "7z"] {
+            c.assert_preview(format, "tiny-tmpfs", 3, named);
+        }
+        let trace = fs::read_to_string(c.scratch.0.join("trace")).unwrap();
+        assert!(trace.contains('2'), "{trace}");
+        assert_eq!(fs::read_dir(c.scratch.0.join("system")).unwrap().count(), 0);
+        c.clean();
+    }
 }
