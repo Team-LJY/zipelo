@@ -695,15 +695,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "be95d4a884358a21a199689323c29e9256b4a1b315e22f183d155422041d3a9a"
 
 [[package]]
-name = "constant_time_eq"
-version = "0.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9eb6feb175df65d0a3ccd3e73484e940d0ac664e8034f0519fd49a93db3071d9"
-dependencies = [
- "rustversion",
-]
-
-[[package]]
 name = "core-foundation"
 version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1381,10 +1372,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "300e883d756b2e4ec94e02791f39b04b522276138852cfc41d9fb7e904106099"
 dependencies = [
  "cfg-if",
- "js-sys",
  "libc",
  "r-efi 6.0.0",
- "wasm-bindgen",
 ]
 
 [[package]]
@@ -2054,18 +2043,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ee6cda3051665f1fb8d9e08fc35c96d5a244fb1be711a03b71118828afc9a873"
 dependencies = [
  "jni-sys 0.3.1",
-]
-
-[[package]]
-name = "nix"
-version = "0.31.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cf20d2fde8ff38632c426f1165ed7436270b44f199fc55284c38276f9db47c3d"
-dependencies = [
- "bitflags 2.13.2",
- "cfg-if",
- "cfg_aliases",
- "libc",
 ]
 
 [[package]]
@@ -3445,12 +3422,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "typed-path"
-version = "0.13.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9ce898823d8cd0f028662d2f349694b1af0a5cc9be83f1d213a00d3147445e1e"
-
-[[package]]
 name = "typenum"
 version = "1.20.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4571,20 +4542,6 @@ name = "zeroize"
 version = "1.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e13084392c5e4bc371903e2935a5eaeed24905a7511356b883835e18a78f6879"
-dependencies = [
- "zeroize_derive",
-]
-
-[[package]]
-name = "zeroize_derive"
-version = "1.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3c50655cbb0fe3fc43170059e702f1ce5e19b84cec58dc87b037a09935c2f328"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.119",
-]
 
 [[package]]
 name = "zerotrie"
@@ -4620,34 +4577,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "zip"
-version = "9.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0700e6c427aff64acdbf02e85fbfd946c2ee12319d1af013092f3a2178914ff8"
-dependencies = [
- "constant_time_eq",
- "crc32fast",
- "flate2",
- "getrandom 0.4.3",
- "indexmap",
- "libc",
- "memchr",
- "nix",
- "typed-path",
- "windows-sys 0.61.2",
- "zeroize",
-]
-
-[[package]]
-name = "zipelo-app-core-memory"
-version = "0.1.0"
-dependencies = [
- "zipelo-memory-gzip-reader",
- "zipelo-memory-ustar-reader",
- "zipelo-rust-memory-zip-create",
-]
-
-[[package]]
 name = "zipelo-archive-worker"
 version = "0.1.0"
 dependencies = [
@@ -4674,28 +4603,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "zipelo-memory-gzip-reader"
-version = "0.1.0"
-dependencies = [
- "zlib-rs",
-]
-
-[[package]]
-name = "zipelo-memory-ustar-reader"
-version = "0.1.0"
-dependencies = [
- "sha2 0.10.9",
- "subtle",
-]
-
-[[package]]
-name = "zipelo-rust-memory-zip-create"
-version = "0.1.0"
-dependencies = [
- "zip",
-]
-
-[[package]]
 name = "zipelo-ui-memory-app"
 version = "0.1.0"
 dependencies = [
@@ -4705,7 +4612,6 @@ dependencies = [
  "rfd",
  "sha2 0.10.9",
  "wgpu",
- "zipelo-app-core-memory",
  "zipelo-archive-worker",
 ]
 

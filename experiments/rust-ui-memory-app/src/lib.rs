@@ -3,11 +3,6 @@
 #[cfg(all(feature = "ui-fixture", debug_assertions))]
 extern crate self as zipelo_ui_memory_app;
 
-pub use core_memory as core;
-pub mod controller;
-pub mod runtime;
-pub mod transport;
-
 pub mod archive_ui;
 
 #[cfg(feature = "ui")]

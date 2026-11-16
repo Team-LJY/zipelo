@@ -15,13 +15,11 @@ python3 tests/ci/run_rust.py local --job rust-local
 - `setup_windows.sh`는 관리자 권한 없이 도구를 `tests/work/<작업명>/tools`에 풉니다. apt-get, dpkg-deb, rustup 및 GCC 호스트 실행 라이브러리가 필요합니다. 기존 도구 경로를 읽기 전용으로 재사용할 때는 `ZIPELO_CI_TOOLS`를 지정합니다. 설치가 필요하면 작업 폴더 안의 `tools`에 준비합니다. 과거 `tests/ci/tools`에 준비한 도구도 읽기 전용으로 재사용합니다. 기존 Rust target과 MinGW가 있으면 준비 스크립트 없이 PATH와 관련 Cargo/CC/CXX 환경 설정을 사용할 수 있습니다.
 - Linux GUI 빌드에는 pkg-config, libxkbcommon-dev, libwayland-dev, libgl1-mesa-dev가 필요하며 글꼴 시험에는 fonts-noto-cjk가 필요합니다.
 - 추적된 fixture를 Git blob과 대조합니다. Windows checkout 시 core.autocrlf=false를 사용해야 하며 기대값의 바이트를 바꾸지 않습니다.
-- Unix 소켓 시험은 Cargo가 설정한 시험 crate의 현재 디렉터리에서 짧은 상대 경로로 소켓을 생성합니다. 시험 파일은 `tests/work/<작업명>/fixtures` 안에 생성합니다. 파일 게시 시험은 소켓 주소에 디렉터리 핸들을 사용해 긴 checkout 절대 경로에서도 실행됩니다. fixture 디렉터리는 소유권, 0700, 빈 상태를 확인합니다. 실패한 fixture는 삭제하거나 권한을 바꾸지 않습니다.
-- 파일 게시 계층은 ext4/XFS만 지원합니다. tmpfs 등 다른 파일시스템에서는 `rust-file-publication`과 `rust-gzip-file-job`의 Rust 실행 시험만 `not-applicable`로 기록하고 파일시스템 식별값과 사유를 출력합니다. 해당 crate의 Linux 및 Windows 빌드와 snapshot 등 나머지 시험은 계속합니다. 전체 시험 통과가 필요한 검증은 ext4/XFS checkout에서 수행합니다. 파일시스템 탐색 오류나 기존 시험 디렉터리의 소유권 문제는 실패로 남깁니다.
 - 개별 단계는 `build`, `test`, `cross-build`로 실행할 수 있습니다. 한 crate가 실패해도 다른 crate 결과를 수집합니다.
-- GUI 앱과 GUI race harness는 컴파일하며 실제 화면 시나리오는 실행하지 않습니다. C# 시험과 역사적 hash 검사는 포함하지 않습니다.
+- GUI 앱은 컴파일하며 실제 화면 시나리오는 실행하지 않습니다. C# 시험과 역사적 hash 검사는 포함하지 않습니다.
 
 ## 출시 전 Windows 실기 확인
 
 `.github/workflows/rust.yml`에는 `workflow_dispatch`만 있습니다. push/PR 자동 실행과 Linux GitHub job은 없습니다. 수동 Windows 실행은 출시 전에 별도로 배정하며, 이 작업에서는 다시 실행하지 않습니다. workflow가 기본 브랜치에 반영된 후 Actions에서 해당 브랜치를 골라 실행할 수 있습니다.
 
-수동 실행은 Windows에서 전체 빌드와 Rust 시험을 수행하고 Linux 전용 publication, snapshot, file-job, system-font 시험은 `not-applicable`로 표시합니다. 기존 GUI 화면 시나리오는 별도 확인해야 합니다.
+수동 실행은 Windows에서 전체 빌드와 Rust 시험을 수행하고 Linux 전용 system-font 시험은 `not-applicable`로 표시합니다. 기존 GUI 화면 시나리오는 별도 확인해야 합니다.

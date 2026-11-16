@@ -1,6 +1,6 @@
 # Zipelo 화면 회귀 확인
 
-툴바는 열기, 압축하기와 압축해제 세 버튼으로 구성하며 ZIP 암호는 ZIP 만들기 창에서 설정함. 현재 화면은 툴바, 현재 폴더 경로와 검색, 폴더 탐색, 상태 줄과 ZIP 만들기 모달을 사용함. 파일과 폴더 선택 및 저장은 rfd의 운영체제 기본 창을 사용함. 설계 문서는 docs/ui-design-v0.1.md이며 실행 근거는 validation.json에 기록함.
+툴바는 열기, 압축하기와 압축해제 세 버튼으로 구성하며 ZIP 암호는 ZIP 만들기 창에서 설정함. 현재 화면은 툴바, 현재 폴더 경로와 검색, 폴더 탐색, 상태 줄과 ZIP 만들기 모달을 사용함. 파일과 폴더 선택 및 저장은 rfd의 운영체제 기본 창을 사용함. 설계 문서는 docs/ui-design-v0.1.md임. 과거 화면 검증 JSON 두 개는 삭제된 초기 crate의 결과를 포함해 PR143에서 제거함. 현재 실행 대상과 통과 여부는 로컬 실행기의 새 결과로 확인함.
 
 ## 기능 검증
 
@@ -41,4 +41,4 @@ CARGO_TARGET_DIR을 지정한 경우 --binary 경로도 해당 경로에 맞춤.
 python3 packaging/licenses.py --manifest experiments/rust-ui-memory-app/Cargo.toml --manifest experiments/rust-archive-worker/Cargo.toml --output tests/ui-redesign/runs/THIRD-PARTY-LICENSES.txt --audit tests/ui-redesign/runs/toolbar-license-audit.json
 ```
 
-rfd 0.16.0과 ashpd 0.11.1은 MIT이며 최종 고지는 패키지 빌드 시 잠금 파일에서 다시 생성함. 생성 결과와 해시는 validation.json에 기록함. 대용량 작업자 시험에는 임시 파일과 빌드 캐시를 위한 여유 공간이 필요함.
+rfd 0.16.0과 ashpd 0.11.1은 MIT이며 최종 고지는 패키지 빌드 시 잠금 파일에서 다시 생성함. 생성한 라이선스 고지와 --audit으로 지정한 JSON에서 원문과 해시를 확인함. 대용량 작업자 시험에는 임시 파일과 빌드 캐시를 위한 여유 공간이 필요함.
