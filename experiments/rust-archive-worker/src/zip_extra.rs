@@ -5,7 +5,6 @@ type Result<T> = std::result::Result<T, ErrorCode>;
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Policy {
     Streaming,
-    Classic,
     Recovery,
     Names,
 }
@@ -67,17 +66,10 @@ pub(crate) fn parse(bytes: &[u8], policy: Policy) -> Result<Extra<'_>> {
         let end = at.checked_add(4 + length).ok_or(ErrorCode::Integrity)?;
         let value = bytes.get(at + 4..end).ok_or(ErrorCode::Integrity)?;
         match (policy, tag) {
-            (Policy::Classic, 1) => return Err(ErrorCode::UnsupportedFeature),
             (Policy::Streaming, 1) => {
                 if found.zip64.replace(value).is_some() {
                     return Err(ErrorCode::Integrity);
                 }
-            }
-            (Policy::Classic, 0x9901) => {
-                if found.aes.is_some() {
-                    return Err(ErrorCode::Integrity);
-                }
-                found.aes = Some(aes(value)?);
             }
             (Policy::Streaming, 0x9901) => {
                 if deferred_aes.is_some() {

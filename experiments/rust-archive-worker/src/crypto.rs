@@ -44,28 +44,6 @@ fn authenticate(
     }
     Ok(mac)
 }
-pub(crate) fn aes_decrypt(
-    packed: &[u8],
-    password: &[u8],
-    check: &mut impl crate::resources::Monitor,
-) -> Result<Zeroizing<Vec<u8>>> {
-    if packed.len() < 28 {
-        return Err(ErrorCode::Integrity);
-    }
-    check.check()?;
-    let key = keys(password, &packed[..16]);
-    if !bool::from(key[64..].ct_eq(&packed[16..18])) {
-        return Err(ErrorCode::WrongPassword);
-    }
-    let end = packed.len() - 10;
-    // 인증이 성공하기 전에는 복호화나 압축 해제를 시작하지 않음.
-    authenticate(&key[32..64], &packed[18..end], check)?
-        .verify_truncated_left(&packed[end..])
-        .map_err(|_| ErrorCode::Integrity)?;
-    let mut bytes = Zeroizing::new(packed[18..end].to_vec());
-    ctr(&mut bytes, &key[..32], check)?;
-    Ok(bytes)
-}
 pub(crate) fn aes_encrypt(
     packed: &[u8],
     password: &[u8],
@@ -134,37 +112,6 @@ const CRC_TABLE: [u32; 256] = {
     }
     table
 };
-pub(crate) fn zipcrypto_decrypt(
-    packed: &[u8],
-    password: &[u8],
-    verifier: u8,
-    check: &mut impl crate::resources::Monitor,
-) -> Result<Zeroizing<Vec<u8>>> {
-    if packed.len() < 12 {
-        return Err(ErrorCode::Integrity);
-    }
-    let mut key = Zeroizing::new([0x12345678u32, 0x23456789, 0x34567890]);
-    for &byte in password {
-        zip_update(&mut key, byte);
-    }
-    let mut out = Zeroizing::new(Vec::with_capacity(packed.len() - 12));
-    for (index, &byte) in packed.iter().enumerate() {
-        if index % 65536 == 0 {
-            check.check()?;
-        }
-        let temp = key[2] | 2;
-        let plain = byte ^ ((temp.wrapping_mul(temp ^ 1) >> 8) as u8);
-        zip_update(&mut key, plain);
-        if index == 11 && plain != verifier {
-            return Err(ErrorCode::WrongPassword);
-        }
-        if index >= 12 {
-            out.push(plain);
-        }
-    }
-    Ok(out)
-}
-
 pub(crate) enum Decryptor {
     Plain,
     Zip(Zeroizing<[u32; 3]>),

@@ -11,12 +11,7 @@ fn field(tag: u16, value: &[u8]) -> Vec<u8> {
 
 #[test]
 fn truncated_headers_and_values_are_rejected_by_every_policy() {
-    for policy in [
-        Policy::Streaming,
-        Policy::Classic,
-        Policy::Recovery,
-        Policy::Names,
-    ] {
+    for policy in [Policy::Streaming, Policy::Recovery, Policy::Names] {
         for bytes in [vec![0], vec![0, 0], vec![0, 0, 0], vec![2, 0, 1, 0]] {
             assert!(matches!(parse(&bytes, policy), Err(ErrorCode::Integrity)));
         }
@@ -31,12 +26,10 @@ fn zip64_is_borrowed_only_for_normal_streaming() {
         parse(&bytes, Policy::Streaming).unwrap().zip64,
         Some(&bytes[4..])
     );
-    for policy in [Policy::Classic, Policy::Recovery] {
-        assert!(matches!(
-            parse(&bytes, policy),
-            Err(ErrorCode::UnsupportedFeature)
-        ));
-    }
+    assert!(matches!(
+        parse(&bytes, Policy::Recovery),
+        Err(ErrorCode::UnsupportedFeature)
+    ));
     assert!(matches!(
         parse(
             &[bytes.as_slice(), bytes.as_slice()].concat(),
@@ -56,29 +49,28 @@ fn zip64_is_borrowed_only_for_normal_streaming() {
 fn aes_policy_keeps_support_and_duplicate_checks() {
     let value = [2, 0, b'A', b'E', 3, 8, 0];
     let bytes = field(0x9901, &value);
-    for policy in [Policy::Streaming, Policy::Classic] {
-        assert_eq!(
-            parse(&bytes, policy).unwrap().aes,
-            Some(AesExtra {
-                version: 2,
-                method: 8
-            })
-        );
-        assert!(matches!(
-            parse(&[bytes.as_slice(), bytes.as_slice()].concat(), policy),
-            Err(ErrorCode::Integrity)
-        ));
-        assert!(matches!(
-            parse(&field(0x9901, &value[..6]), policy),
-            Err(ErrorCode::Integrity)
-        ));
-        let mut unsupported = value;
-        unsupported[4] = 2;
-        assert!(matches!(
-            parse(&field(0x9901, &unsupported), policy),
-            Err(ErrorCode::UnsupportedFeature)
-        ));
-    }
+    let policy = Policy::Streaming;
+    assert_eq!(
+        parse(&bytes, policy).unwrap().aes,
+        Some(AesExtra {
+            version: 2,
+            method: 8
+        })
+    );
+    assert!(matches!(
+        parse(&[bytes.as_slice(), bytes.as_slice()].concat(), policy),
+        Err(ErrorCode::Integrity)
+    ));
+    assert!(matches!(
+        parse(&field(0x9901, &value[..6]), policy),
+        Err(ErrorCode::Integrity)
+    ));
+    let mut unsupported = value;
+    unsupported[4] = 2;
+    assert!(matches!(
+        parse(&field(0x9901, &unsupported), policy),
+        Err(ErrorCode::UnsupportedFeature)
+    ));
     assert!(parse(&bytes, Policy::Recovery).unwrap().aes.is_none());
 }
 
@@ -109,18 +101,10 @@ fn mixed_invalid_fields_keep_error_precedence() {
         parse(&extra, Policy::Streaming),
         Err(ErrorCode::Integrity)
     ));
-    assert!(matches!(
-        parse(&extra, Policy::Classic),
-        Err(ErrorCode::UnsupportedFeature)
-    ));
     let truncated = [unsupported_aes.as_slice(), &[2, 0, 1, 0]].concat();
     assert!(matches!(
         parse(&truncated, Policy::Streaming),
         Err(ErrorCode::Integrity)
-    ));
-    assert!(matches!(
-        parse(&truncated, Policy::Classic),
-        Err(ErrorCode::UnsupportedFeature)
     ));
     assert!(matches!(
         parse(&[1, 0, 8, 0], Policy::Recovery),
