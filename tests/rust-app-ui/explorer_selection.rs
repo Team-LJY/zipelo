@@ -444,6 +444,58 @@ fn explorer_open_restores_destination_when_expanded_retry_fails_again() {
 }
 
 #[test]
+fn explorer_open_pending_after_limit_is_dropped_when_zip_creation_starts() {
+    let scratch = Folder::new();
+    let mut s = Explorer::new(&scratch);
+    let root = scratch.0.join("sample.zip (Zipelo 임시)");
+    let _limit_ctx = double_click_open_hits_limit(&mut s);
+    // 한도 초과 결과를 닫지 않고 폴더를 끌어 놓아 ZIP 만들기를 시작함.
+    let folder = scratch.0.join("photos");
+    std::fs::create_dir_all(&folder).unwrap();
+    std::fs::write(folder.join("a.txt"), b"abc").unwrap();
+    s.app.add_sources(vec![folder]);
+    let ctx = egui::Context::default();
+    policy_click(&ctx, &mut s.app, "압축하기");
+    assert!(s.app.model.busy());
+    assert!(matches!(
+        s.factory.state.borrow().starts.last(),
+        Some(Start::CreateZip { .. })
+    ));
+    {
+        let mut worker = s.factory.state.borrow_mut();
+        worker.frame(Event::Accepted { encryption: false });
+        worker.frame(Event::Output {
+            entry_id: None,
+            relative_name: "photos.zip".into(),
+            disposition: Disposition::Created,
+        });
+        worker.finish(Outcome::Completed, Publication::Complete);
+    }
+    for _ in 0..30 {
+        s.frame(egui::Modifiers::NONE, vec![]);
+    }
+    // 만들기가 끝나도 이전 열기가 적용되지 않아 오류가 뜨지 않음.
+    for _ in 0..3 {
+        policy_render(&ctx, &mut s.app, vec![]);
+    }
+    let shown = policy_render(&ctx, &mut s.app, vec![]);
+    assert!(
+        !shown.iter().any(|(text, _)| text.contains("열지 못했습니다")),
+        "{shown:?}"
+    );
+    assert!(s.opened.borrow().is_empty());
+    // 풀 위치도 원래대로 돌아옴.
+    s.factory.state.borrow_mut().manual = false;
+    assert!(s.app.begin_extract());
+    let state = s.factory.state.borrow();
+    let Some(Start::Extract { destination, .. }) = state.starts.last() else {
+        panic!("{:?}", state.starts.last());
+    };
+    assert_eq!(destination, &scratch.0.join("sample"));
+    assert!(!destination.starts_with(&root));
+}
+
+#[test]
 fn explorer_double_click_does_not_open_executables() {
     let scratch = Folder::new();
     let mut s = Explorer::new(&scratch);

@@ -848,6 +848,8 @@ impl ArchiveApp {
                 aes256: self.aes256,
             }
         };
+        // 한도 초과 뒤 보류된 열기는 만들기와 무관하므로 시작 전에 접음.
+        self.release_open();
         if self.start(request) {
             self.create = false;
             self.create_win = WorkWindow::default();
