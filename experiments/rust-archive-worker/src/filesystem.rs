@@ -237,25 +237,49 @@ mod platform {
         let Ok(policy) = std::fs::read_to_string("/etc/nsswitch.conf") else {
             return false;
         };
-        let mut sources = policy.lines().filter_map(|line| {
+        let mut databases = [None, None, None];
+        for line in policy.lines() {
             let line = line.split('#').next().unwrap_or_default();
-            let (database, sources) = line.split_once(':')?;
-            (database.trim() == "passwd").then_some(sources)
-        });
-        let Some(source) = sources.next() else {
+            let Some((database, sources)) = line.split_once(':') else {
+                continue;
+            };
+            let index = match database.trim() {
+                "passwd" => 0,
+                "group" => 1,
+                "initgroups" => 2,
+                _ => continue,
+            };
+            if databases[index]
+                .replace(sources.split_whitespace().collect::<Vec<_>>())
+                .is_some()
+            {
+                return false;
+            }
+        }
+        let [Some(passwd), Some(group), initgroups] = databases else {
             return false;
         };
-        let source: Vec<_> = source.split_whitespace().collect();
-        if sources.next().is_some()
-            || !matches!(
+        let mut has_systemd = false;
+        let mut has_sss = false;
+        // initgroups가 생략되어도 기본값인 group 소스를 검사함.
+        for source in [Some(passwd), Some(group), initgroups]
+            .into_iter()
+            .flatten()
+        {
+            if !matches!(
                 source.as_slice(),
                 ["files"] | ["files", "systemd"] | ["files", "sss"] | ["files", "systemd", "sss"]
+            ) {
+                return false;
+            }
+            has_systemd |= source.contains(&"systemd");
+            has_sss |= source.contains(&"sss");
+        }
+        if has_sss
+            && !sss_is_unused(
+                Path::new("/var/lib/sss/pipes/nss"),
+                Path::new("/var/lib/sss/mc"),
             )
-            || (source.contains(&"sss")
-                && !sss_is_unused(
-                    Path::new("/var/lib/sss/pipes/nss"),
-                    Path::new("/var/lib/sss/mc"),
-                ))
         {
             return false;
         }
@@ -288,7 +312,7 @@ mod platform {
         let Some(current_name) = current_name else {
             return false;
         };
-        !source.contains(&"systemd")
+        !has_systemd
             || crate::systemd_userdb::group_is_private(
                 gid,
                 current_uid,

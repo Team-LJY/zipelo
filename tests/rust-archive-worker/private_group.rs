@@ -10,6 +10,10 @@ pub(super) fn check_extraction(case: &str, safe: bool) {
 }
 
 fn run_case(case: &str, safe: bool, extraction: bool) {
+    run_case_with_policy(case, safe, extraction, None);
+}
+
+fn run_case_with_policy(case: &str, safe: bool, extraction: bool, policy: Option<&str>) {
     let scratch = Scratch::new();
     let output = scratch.0.join("output");
     fs::create_dir(&output).unwrap();
@@ -64,8 +68,13 @@ fn run_case(case: &str, safe: bool, extraction: bool) {
         }
         _ => "# fixture\npasswd: files # local accounts\n",
     };
+    let nss = if case == "missing-policy" {
+        nss.to_owned()
+    } else {
+        format!("{nss}group: files\n")
+    };
     let nss_path = scratch.0.join("nsswitch.conf");
-    fs::write(&nss_path, nss).unwrap();
+    fs::write(&nss_path, policy.unwrap_or(&nss)).unwrap();
     if case == "nss-unavailable" {
         fs::remove_file(&nss_path).unwrap();
     }
@@ -125,7 +134,7 @@ fn run_case(case: &str, safe: bool, extraction: bool) {
         .unwrap();
     assert!(
         result.status.success(),
-        "{case}: {} {}",
+        "{case} policy={policy:?}: {} {}",
         String::from_utf8_lossy(&result.stdout),
         String::from_utf8_lossy(&result.stderr)
     );
@@ -253,6 +262,82 @@ fn private_group_checks_varlink_records_and_completion() {
     ] {
         check_extraction(case, false);
     }
+}
+
+#[test]
+fn private_group_checks_systemd_in_group_and_initgroups_policies() {
+    for policy in [
+        "passwd: files\ngroup: files systemd\n",
+        "passwd: files\ngroup: files systemd\ninitgroups: files\n",
+        "passwd: files\ngroup: files\ninitgroups: files systemd\n",
+    ] {
+        for case in ["systemd-personal", "systemd-unrelated"] {
+            run_case_with_policy(case, true, true, Some(policy));
+        }
+        for case in [
+            "systemd-dynamic-shared",
+            "systemd-group-member",
+            "systemd-membership-member",
+            "systemd-user-member",
+            "systemd-partial-error",
+            "userdb-d0",
+        ] {
+            run_case_with_policy(case, false, true, Some(policy));
+        }
+    }
+}
+
+#[test]
+fn private_group_checks_sss_in_group_and_initgroups_policies() {
+    for policy in [
+        "passwd: files\ngroup: files sss\n",
+        "passwd: files\ngroup: files sss\ninitgroups: files\n",
+        "passwd: files\ngroup: files\ninitgroups: files sss\n",
+    ] {
+        run_case_with_policy("sss-empty", true, true, Some(policy));
+        for case in [
+            "sss-socket",
+            "sss-passwd-cache",
+            "sss-group-cache",
+            "sss-initgr-cache",
+            "sss-probe-error",
+        ] {
+            run_case_with_policy(case, false, true, Some(policy));
+        }
+    }
+}
+
+#[test]
+fn private_group_rejects_incomplete_group_and_initgroups_policies() {
+    for policy in [
+        "passwd: files\n",
+        "passwd: files\ngroup: files\ngroup: files\n",
+        "passwd: files\ngroup: files\ninitgroups: files\ninitgroups: files\n",
+    ] {
+        run_case_with_policy("personal", false, true, Some(policy));
+    }
+    for source in [
+        "",
+        "files ldap",
+        "files winbind",
+        "files unknown",
+        "files [SUCCESS=return] systemd",
+        "files systemd [UNAVAIL=continue]",
+        "files files",
+    ] {
+        for policy in [
+            format!("passwd: files\ngroup: {source}\n"),
+            format!("passwd: files\ngroup: files\ninitgroups: {source}\n"),
+        ] {
+            run_case_with_policy("personal", false, true, Some(&policy));
+        }
+    }
+    run_case_with_policy(
+        "personal",
+        true,
+        true,
+        Some("passwd: files\ngroup: files\ninitgroups: files # local groups\n"),
+    );
 }
 
 #[test]
