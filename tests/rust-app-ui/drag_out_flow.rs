@@ -408,8 +408,21 @@ fn blocking_drag_does_not_wait_for_a_password_prompt() {
         log.borrow().pumped,
         vec![zipelo_ui_memory_app::drag_out::PumpState::Failed]
     );
+    // Windows처럼 끌기가 취소로 끝났다고 알려도 암호 요청은 취소하지 않음.
+    log.borrow_mut()
+        .events
+        .push_back(zipelo_ui_memory_app::drag_out::DragEvent::Cancelled);
+    let mut labels = Vec::new();
+    for _ in 0..5 {
+        labels = layout_text(&s.frame(egui::Modifiers::NONE, vec![]));
+    }
     assert!(s.app.model.busy());
+    assert!(!s.app.model.cancellation_requested());
     assert!(s.app.model.challenge.is_some());
+    assert!(
+        labels.iter().any(|(text, _, _)| text == "암호가 필요합니다"),
+        "{labels:?}"
+    );
 }
 
 #[test]

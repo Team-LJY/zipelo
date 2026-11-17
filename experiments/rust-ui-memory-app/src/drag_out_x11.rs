@@ -28,6 +28,30 @@ use x11rb::{
 use zipelo_ui_memory_app::drag_out::{DragEvent, DragOut, uri_list};
 
 const XDND_VERSION: u32 = 5;
+/// 파일이 준비되거나 실패한 뒤에도 받는 쪽이 늦게 요청할 수 있도록 끌기 창을 남겨 두는 시간.
+const READY_GRACE: Duration = Duration::from_secs(60);
+
+/// 끌기 스레드를 끝내도 되는지.
+///
+/// - 끌고 있는 동안에는 끝내지 않음.
+/// - 놓지 않고 끝났으면(취소, 받는 쪽 없음) 바로 끝냄.
+/// - 놓은 뒤에는 파일 준비가 아무리 오래 걸려도 기다림. 준비되거나 실패한 뒤에는 기다리는
+///   요청이 없고 `READY_GRACE`가 지났을 때 끝냄. 놓은 뒤 일정 시간으로 끝내면 큰 파일의
+///   준비가 끝나기 전에 XdndSelection 소유자가 사라져 전달에 실패함.
+fn session_over(
+    grabbing: bool,
+    dropped: bool,
+    ready_for: Option<Duration>,
+    waiting_requests: bool,
+) -> bool {
+    if grabbing {
+        return false;
+    }
+    if !dropped {
+        return true;
+    }
+    ready_for.is_some_and(|elapsed| !waiting_requests && elapsed >= READY_GRACE)
+}
 
 enum Ready {
     Paths(Vec<PathBuf>),
@@ -119,11 +143,7 @@ impl Atoms {
 }
 
 impl DragOut for X11Drag {
-    fn start(
-        &mut self,
-        _: &[PathBuf],
-        _: &mut zipelo_ui_memory_app::drag_out::Pump<'_>,
-    ) -> bool {
+    fn start(&mut self, _: &[PathBuf], _: &mut zipelo_ui_memory_app::drag_out::Pump<'_>) -> bool {
         match self.begin() {
             Ok(()) => true,
             Err(error) => {
@@ -285,7 +305,8 @@ struct Session {
 
 impl Session {
     fn run(mut self) {
-        let mut dropped_at: Option<Instant> = None;
+        let mut dropped = false;
+        let mut ready_at: Option<Instant> = None;
         let mut grabbing = true;
         loop {
             self.answer_waiting();
@@ -298,9 +319,15 @@ impl Session {
                 }
             };
             let Some(event) = event else {
-                if dropped_at.is_some_and(|at| at.elapsed() > Duration::from_secs(60))
-                    || (!grabbing && dropped_at.is_none())
-                {
+                if ready_at.is_none() && self.shared.lock().unwrap().ready.is_some() {
+                    ready_at = Some(Instant::now());
+                }
+                if session_over(
+                    grabbing,
+                    dropped,
+                    ready_at.map(|at| at.elapsed()),
+                    !self.requests.is_empty(),
+                ) {
                     break;
                 }
                 std::thread::sleep(Duration::from_millis(5));
@@ -320,7 +347,7 @@ impl Session {
                         Some(target) if self.accepted => {
                             self.message(target, self.atoms.drop, [0, time, 0]);
                             self.push(DragEvent::Dropped);
-                            dropped_at = Some(Instant::now());
+                            dropped = true;
                         }
                         Some(target) => {
                             self.message(target, self.atoms.leave, [0, 0, 0]);
@@ -546,3 +573,7 @@ fn property_of(request: &SelectionRequestEvent) -> u32 {
         request.property
     }
 }
+
+#[cfg(test)]
+#[path = "../../../tests/rust-app-ui/drag_out_x11_lifetime.rs"]
+mod tests;

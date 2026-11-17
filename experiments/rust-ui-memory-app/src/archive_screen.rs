@@ -689,11 +689,22 @@ impl ArchiveApp {
         while let Some(event) = self.drag_out.as_mut().and_then(|drag| drag.poll()) {
             crate::log_debug!("끌어 놓기 사건: {event:?}");
             let dragging = self.opening.as_ref().is_some_and(|r| r.drag.is_some());
-            if event == crate::drag_out::DragEvent::Cancelled && dragging && self.model.busy() {
+            let waiting_for_user = self.model.challenge.is_some()
+                || self.model.resource.is_some()
+                || self.model.conflict.is_some();
+            if event == crate::drag_out::DragEvent::Cancelled
+                && dragging
+                && self.model.busy()
+                && !waiting_for_user
+            {
                 // 받을 곳이 없으므로 풀던 작업을 취소하고 결과 창은 띄우지 않음.
                 self.drag_cancelled = true;
                 self.clear_password();
                 self.model.cancel();
+            } else if event == crate::drag_out::DragEvent::Cancelled && waiting_for_user {
+                // 암호 등 사용자 응답이 필요해 끌기를 끝낸 경우 작업은 그대로 두고 그 창을
+                // 보여 줌. 다 풀린 뒤 같은 항목을 다시 끌면 풀어 둔 파일로 바로 끎.
+                crate::log_debug!("끌기를 끝내고 사용자 응답을 기다림");
             }
         }
     }
