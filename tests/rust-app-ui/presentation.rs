@@ -334,6 +334,8 @@ fn default_names_and_middle_truncation_preserve_unicode() {
     }
     assert_eq!(default_destination(&path("자료.zip")), path("자료"));
     assert!(blocked_open("폴더/setup.EXE"));
+    // desktop 항목은 Linux 차단 목록에만 있음.
+    #[cfg(not(windows))]
     assert!(blocked_open("run.desktop"));
     assert!(!blocked_open("사진.jpg"));
     assert!(!blocked_open("exe"));
