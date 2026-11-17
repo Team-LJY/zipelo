@@ -18,3 +18,6 @@ mod spool;
 mod streaming;
 pub mod wire;
 mod zip_recovery;
+
+#[cfg(target_os = "linux")]
+mod systemd_userdb;

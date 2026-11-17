@@ -210,11 +210,127 @@ mod platform {
         gid: u32,
         members: *mut *mut i8,
     }
-    /// 현재 계정의 기본 그룹이 따로 등록된 구성원이 없는 개인 그룹인지 확인함.
-    /// Ubuntu는 계정마다 같은 이름의 개인 그룹을 만들고 umask 002를 써서,
-    /// 파일 관리자나 폴더 선택 창에서 새로 만든 폴더가 그룹 쓰기 권한(775)을 가짐.
+    // 없는 경로만 허용하며 중간 심볼릭 링크와 확인 오류는 거부함.
+    fn path_is_absent(path: &Path) -> bool {
+        let mut prefix = std::path::PathBuf::new();
+        for component in path.components() {
+            prefix.push(component.as_os_str());
+            match std::fs::symlink_metadata(&prefix) {
+                Ok(metadata) if metadata.is_dir() => {}
+                Ok(_) => return false,
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => return true,
+                Err(_) => return false,
+            }
+        }
+        false
+    }
+
+    fn sss_is_unused(socket: &Path, cache: &Path) -> bool {
+        path_is_absent(socket)
+            && ["passwd", "group", "initgr"]
+                .iter()
+                .all(|name| path_is_absent(&cache.join(name)))
+    }
+
+    // sss는 소켓과 캐시가 모두 없을 때만 빈 소스로 취급함.
+    fn primary_group_is_private(gid: u32) -> bool {
+        let Ok(policy) = std::fs::read_to_string("/etc/nsswitch.conf") else {
+            return false;
+        };
+        let mut databases = [None, None, None];
+        for line in policy.lines() {
+            let line = line.split('#').next().unwrap_or_default();
+            let Some((database, sources)) = line.split_once(':') else {
+                continue;
+            };
+            let index = match database.trim() {
+                "passwd" => 0,
+                "group" => 1,
+                "initgroups" => 2,
+                _ => continue,
+            };
+            if databases[index]
+                .replace(sources.split_whitespace().collect::<Vec<_>>())
+                .is_some()
+            {
+                return false;
+            }
+        }
+        let [Some(passwd), Some(group), initgroups] = databases else {
+            return false;
+        };
+        let mut has_systemd = false;
+        let mut has_sss = false;
+        // initgroups가 생략되어도 기본값인 group 소스를 검사함.
+        for source in [Some(passwd), Some(group), initgroups]
+            .into_iter()
+            .flatten()
+        {
+            if !matches!(
+                source.as_slice(),
+                ["files"] | ["files", "systemd"] | ["files", "sss"] | ["files", "systemd", "sss"]
+            ) {
+                return false;
+            }
+            has_systemd |= source.contains(&"systemd");
+            has_sss |= source.contains(&"sss");
+        }
+        if has_sss
+            && !sss_is_unused(
+                Path::new("/var/lib/sss/pipes/nss"),
+                Path::new("/var/lib/sss/mc"),
+            )
+        {
+            return false;
+        }
+        let Ok(accounts) = std::fs::read_to_string("/etc/passwd") else {
+            return false;
+        };
+        let current_uid = unsafe { geteuid() };
+        let mut current_name = None;
+        for account in accounts.lines() {
+            if account.trim().is_empty() || account.starts_with('#') {
+                continue;
+            }
+            let fields: Vec<_> = account.split(':').collect();
+            if fields.len() != 7 || fields[0].is_empty() {
+                return false;
+            }
+            let (Ok(uid), Ok(primary_gid)) = (fields[2].parse::<u32>(), fields[3].parse::<u32>())
+            else {
+                return false;
+            };
+            if primary_gid == gid {
+                if uid != current_uid {
+                    return false;
+                }
+                if current_name.replace(fields[0]).is_some() {
+                    return false;
+                }
+            }
+        }
+        let Some(current_name) = current_name else {
+            return false;
+        };
+        !has_systemd
+            || crate::systemd_userdb::group_is_private(
+                gid,
+                current_uid,
+                current_name,
+                Path::new("/run/systemd/userdb/"),
+                &[
+                    Path::new("/etc/userdb"),
+                    Path::new("/run/userdb"),
+                    Path::new("/run/host/userdb"),
+                    Path::new("/usr/local/lib/userdb"),
+                    Path::new("/usr/lib/userdb"),
+                ],
+            )
+    }
+
+    // 기본 구성원과 보조 구성원을 모두 확인함.
     fn private_group(gid: u32) -> bool {
-        if gid != unsafe { getegid() } {
+        if gid != unsafe { getegid() } || !primary_group_is_private(gid) {
             return false;
         }
         let mut group = Group {
@@ -237,7 +353,9 @@ mod platform {
         // 그룹 정보를 읽지 못하면 안전하다고 볼 근거가 없으므로 거부함.
         status == 0
             && !result.is_null()
-            && (group.members.is_null() || unsafe { *group.members }.is_null())
+            && group.gid == gid
+            && !group.members.is_null()
+            && unsafe { *group.members }.is_null()
     }
     pub struct Dir {
         file: File,
