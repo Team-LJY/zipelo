@@ -1284,3 +1284,62 @@ fn removal_of_original_folder_clears_nested_contents() {
     remove_open_root(root);
     assert!(!path.exists());
 }
+
+#[cfg(unix)]
+#[test]
+fn creation_does_not_adopt_folder_replaced_before_handle_is_taken() {
+    let scratch = Folder::new();
+    let archive = scratch.0.join("sample.zip");
+    let swapped = scratch.0.join(open_root_name("sample.zip"));
+    let original = scratch.0.join("original");
+    let mut swaps = 0;
+    let root = create_open_root_with(&archive, |path| {
+        swaps += 1;
+        if swaps == 1 {
+            fs::rename(path, &original).unwrap();
+            fs::create_dir(path).unwrap();
+            fs::write(path.join("keep.txt"), b"user data").unwrap();
+        }
+    })
+    .unwrap();
+    // 바뀐 폴더는 원본으로 기록하지 않고 다른 이름의 새 폴더를 씀.
+    assert_ne!(root.path(), swapped);
+    assert!(root.is_current());
+    remove_open_root(root);
+    assert_eq!(fs::read(swapped.join("keep.txt")).unwrap(), b"user data");
+}
+
+#[cfg(unix)]
+#[test]
+fn creation_does_not_adopt_link_replaced_before_handle_is_taken() {
+    let scratch = Folder::new();
+    let archive = scratch.0.join("sample.zip");
+    let link = scratch.0.join(open_root_name("sample.zip"));
+    let victim = scratch.0.join("victim");
+    fs::create_dir(&victim).unwrap();
+    fs::write(victim.join("keep.txt"), b"user data").unwrap();
+    let mut swaps = 0;
+    let root = create_open_root_with(&archive, |path| {
+        swaps += 1;
+        if swaps == 1 {
+            fs::remove_dir(path).unwrap();
+            std::os::unix::fs::symlink(&victim, path).unwrap();
+        }
+    })
+    .unwrap();
+    assert_ne!(root.path(), link);
+    remove_open_root(root);
+    assert_eq!(fs::read(victim.join("keep.txt")).unwrap(), b"user data");
+    assert!(fs::symlink_metadata(&link).unwrap().file_type().is_symlink());
+}
+
+#[test]
+fn creation_of_unchanged_folder_is_empty_and_current() {
+    let scratch = Folder::new();
+    let root = create_open_root(&scratch.0.join("sample.zip")).unwrap();
+    let path = root.path().to_path_buf();
+    assert!(root.is_current());
+    assert_eq!(fs::read_dir(&path).unwrap().count(), 0);
+    remove_open_root(root);
+    assert!(!path.exists());
+}

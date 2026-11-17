@@ -512,6 +512,11 @@ pub struct OpenRoot {
 impl OpenRoot {
     fn capture(path: PathBuf) -> io::Result<Self> {
         let handle = open_root_handle(&path)?;
+        // 만든 직후에는 비어 있어야 함. 만든 뒤 핸들을 잡기 전에 다른 폴더로 바뀌었다면
+        // 사용자 데이터가 들어 있을 수 있으므로 원본으로 기록하지 않음.
+        if !worker_protocol::tree_remove::is_empty(&handle, &path)? {
+            return Err(io::Error::other("만든 임시 폴더가 아님"));
+        }
         let identity = worker_protocol::filesystem::object(&handle)
             .map_err(|_| io::Error::other("임시 폴더 식별 실패"))?;
         Ok(Self {
@@ -570,6 +575,17 @@ fn open_root_handle(path: &Path) -> io::Result<fs::File> {
 /// 숨김 폴더로 만들지 않음. snap으로 설치한 Firefox 등은 홈 바로 아래 숨김 폴더와
 /// 시스템 임시 폴더의 파일을 읽지 못해 열기 요청을 조용히 무시함.
 pub fn create_open_root(archive: &Path) -> io::Result<OpenRoot> {
+    create_open_root_with(archive, |_| {})
+}
+
+/// `create_open_root`와 같고, 폴더를 만든 직후 핸들을 잡기 전에 `after_create`를 실행함.
+/// 만든 뒤 경로가 바뀌는 경우를 시험하려고 둠.
+/// 폴더를 만든 뒤 핸들을 잡기까지의 틈에 경로가 바뀌어도, 핸들로 확인한 폴더가 비어 있지
+/// 않으면 원본으로 쓰지 않고 다른 이름으로 다시 만듦. 바뀐 폴더는 건드리지 않음.
+pub fn create_open_root_with(
+    archive: &Path,
+    mut after_create: impl FnMut(&Path),
+) -> io::Result<OpenRoot> {
     let name = archive.file_name().unwrap_or_default().to_string_lossy();
     let mut error = None;
     if let Some(parent) = archive.parent().filter(|p| !p.as_os_str().is_empty()) {
@@ -577,7 +593,18 @@ pub fn create_open_root(archive: &Path) -> io::Result<OpenRoot> {
         for _ in 0..8 {
             let path = unique_folder(&base);
             match private_dir(&path) {
-                Ok(()) => return OpenRoot::capture(path),
+                Ok(()) => {
+                    after_create(&path);
+                    match OpenRoot::capture(path.clone()) {
+                        Ok(root) => return Ok(root),
+                        Err(e) => {
+                            // 비어 있는 폴더만 지워지므로 바뀐 폴더의 내용은 남음.
+                            let _ = fs::remove_dir(&path);
+                            error = Some(e);
+                            continue;
+                        }
+                    }
+                }
                 Err(e) if e.kind() == io::ErrorKind::AlreadyExists => continue,
                 Err(e) => {
                     error = Some(e);
@@ -589,7 +616,10 @@ pub fn create_open_root(archive: &Path) -> io::Result<OpenRoot> {
     let base = std::env::temp_dir().join(format!("zipelo-{}-{name}", std::process::id()));
     let path = unique_folder(&base);
     private_dir(&path).map_err(|e| error.unwrap_or(e))?;
-    OpenRoot::capture(path)
+    after_create(&path);
+    OpenRoot::capture(path.clone()).inspect_err(|_| {
+        let _ = fs::remove_dir(&path);
+    })
 }
 
 /// 열기용 임시 폴더 이름. 예: `자료.zip (Zipelo 임시)`.

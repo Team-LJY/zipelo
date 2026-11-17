@@ -13,6 +13,11 @@ pub fn remove_contents(dir: &File, path: &Path) -> io::Result<()> {
     platform::remove_contents(dir, path)
 }
 
+/// `dir` 핸들이 가리키는 폴더가 비어 있는지 확인함. 새로 만든 폴더를 핸들로 잡은 직후 쓰임.
+pub fn is_empty(dir: &File, path: &Path) -> io::Result<bool> {
+    platform::is_empty(dir, path)
+}
+
 #[cfg(target_os = "linux")]
 mod platform {
     use std::ffi::{CStr, CString};
@@ -57,6 +62,10 @@ mod platform {
     pub fn remove_contents(dir: &File, _path: &Path) -> io::Result<()> {
         let device = dir.metadata()?.dev();
         remove_children(dir, device, 0)
+    }
+
+    pub fn is_empty(dir: &File, _path: &Path) -> io::Result<bool> {
+        Ok(names(dir)?.is_empty())
     }
 
     fn names(dir: &File) -> io::Result<Vec<CString>> {
@@ -154,6 +163,11 @@ mod platform {
     use std::fs::{self, File};
     use std::io;
     use std::path::Path;
+
+    pub fn is_empty(_dir: &File, path: &Path) -> io::Result<bool> {
+        // 호출한 쪽의 핸들이 이름 변경을 막고 있으므로 경로가 같은 폴더를 가리킴.
+        Ok(fs::read_dir(path)?.next().is_none())
+    }
 
     pub fn remove_contents(_dir: &File, path: &Path) -> io::Result<()> {
         let mut failure = None;
