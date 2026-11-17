@@ -607,8 +607,13 @@ impl Model {
         expanded: bool,
     ) -> bool {
         if self.busy() || self.close != Close::Open {
+            crate::log_debug!("작업을 시작하지 않음: 다른 작업 중이거나 닫는 중");
             return false;
         }
+        crate::log_debug!(
+            "작업 시작 요청 (확대 한도: {expanded}): {}",
+            crate::applog::brief(&start, 600)
+        );
         let selectable: BTreeSet<_> = self
             .entries
             .iter()
@@ -800,6 +805,7 @@ impl Model {
                 return false;
             }
         };
+        crate::log_debug!("암호 전달 (요청 {challenge_id}, 내용은 기록하지 않음)");
         if self
             .send(Command::Password {
                 challenge_id,
@@ -844,6 +850,32 @@ impl Model {
             return None;
         }
         let seq = run.outgoing;
+        if crate::applog::enabled(crate::applog::Level::Trace) {
+            // 암호는 내용 없이 요청 번호만 남김.
+            let text = match &command {
+                Command::Start(start) => format!("Start {}", crate::applog::brief(start, 400)),
+                Command::StartExpanded(start) => {
+                    format!("StartExpanded {}", crate::applog::brief(start, 400))
+                }
+                Command::ResourceReply {
+                    challenge_id,
+                    allow,
+                    ..
+                } => format!("ResourceReply challenge={challenge_id} allow={allow}"),
+                Command::Password { challenge_id, .. } => {
+                    format!("Password challenge={challenge_id}")
+                }
+                Command::ConflictReply {
+                    challenge_id,
+                    choice,
+                    apply_to_remaining,
+                } => format!(
+                    "ConflictReply challenge={challenge_id} choice={choice:?} apply={apply_to_remaining}"
+                ),
+                Command::Cancel => "Cancel".into(),
+            };
+            crate::log_trace!("작업 {} #{seq} 송신: {text}", run.id);
+        }
         let Some(next) = seq.checked_add(1) else {
             self.error = Some("요청 순서 한도 초과".into());
             return None;
@@ -864,6 +896,7 @@ impl Model {
         }
     }
     pub fn cancel(&mut self) {
+        crate::log_debug!("작업 취소 요청");
         self.preview = None;
         if let Some(run) = self.running.as_mut()
             && matches!(run.start, Start::Preview { .. })
@@ -944,6 +977,20 @@ impl Model {
             let mut run = self.running.take().unwrap();
             self.confirmed =
                 self.terminal.is_some() && run.exit == Some(true) && self.error.is_none();
+            match (&self.terminal, &self.error) {
+                (_, Some(error)) => crate::log_error!("작업 {} 실패: {error}", run.id),
+                (Some(terminal), None) if terminal.error.is_some() => crate::log_warn!(
+                    "작업 {} 끝남: {}",
+                    run.id,
+                    crate::applog::brief(terminal, 400)
+                ),
+                (Some(terminal), None) => crate::log_info!(
+                    "작업 {} 끝남: {}",
+                    run.id,
+                    crate::applog::brief(terminal, 400)
+                ),
+                (None, None) => crate::log_warn!("작업 {} 종료 결과 없음", run.id),
+            }
             if !self.confirmed {
                 self.error.get_or_insert(
                     "작업자 종료 결과를 확인할 수 없습니다. 출력 상태를 확인하세요".into(),
@@ -1030,16 +1077,47 @@ impl Model {
     fn receive(&mut self, host: HostEvent) {
         let run = self.running.as_mut().unwrap();
         match host {
-            HostEvent::Fault(message) => self.error = Some(message),
-            HostEvent::CleanupComplete => run.transport_closed = true,
-            HostEvent::StdoutEof => run.stdout_eof = true,
-            HostEvent::StderrEof => run.stderr_eof = true,
-            HostEvent::Exited { success } => run.exit = Some(success),
+            HostEvent::Fault(message) => {
+                crate::log_error!("작업자 통신 오류: {message}");
+                self.error = Some(message)
+            }
+            HostEvent::CleanupComplete => {
+                crate::log_trace!("작업 {} 통신 정리 완료", run.id);
+                run.transport_closed = true
+            }
+            HostEvent::StdoutEof => {
+                crate::log_trace!("작업 {} 표준 출력 끝", run.id);
+                run.stdout_eof = true
+            }
+            HostEvent::StderrEof => {
+                crate::log_trace!("작업 {} 표준 오류 끝", run.id);
+                run.stderr_eof = true
+            }
+            HostEvent::Exited { success } => {
+                if success {
+                    crate::log_debug!("작업 {} 작업자 종료 (성공)", run.id);
+                } else {
+                    crate::log_warn!("작업 {} 작업자 종료 (실패)", run.id);
+                }
+                run.exit = Some(success)
+            }
             HostEvent::Frame {
                 job_id,
                 sequence,
                 event,
             } => {
+                if crate::applog::enabled(crate::applog::Level::Trace) {
+                    match &event {
+                        Event::PreviewChunk { offset, data, .. } => crate::log_trace!(
+                            "작업 {job_id} #{sequence} 미리보기 조각 offset={offset} len={}",
+                            data.len()
+                        ),
+                        event => crate::log_trace!(
+                            "작업 {job_id} #{sequence} 수신: {}",
+                            crate::applog::brief(event, 400)
+                        ),
+                    }
+                }
                 if job_id != run.id
                     || sequence != run.incoming
                     || self.terminal.is_some()

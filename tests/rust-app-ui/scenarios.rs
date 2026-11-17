@@ -76,6 +76,12 @@ catalog! {
     "selection" => "여러 파일과 폴더 선택",
     "marquee" => "반투명 사각형으로 끌어서 선택 중",
     "search-empty" => "검색 결과 없음",
+    "find-folder" => "Ctrl+F로 연 폴더 아래 이름 찾기 창",
+    "find-all" => "Ctrl+Shift+F로 연 전체 경로 찾기 창",
+    "find-empty" => "찾기 창의 결과 없음 안내",
+    "open-blocked" => "실행 파일을 바로 열지 않는다는 안내",
+    "open-failed" => "기본 프로그램 실행 실패 안내",
+    "open-missing" => "풀린 파일을 찾지 못해 열지 못한 안내",
     "password" => "압축 해제 암호 입력",
     "password-retry" => "암호가 틀린 뒤 다시 입력",
     "extract-progress" => "압축 해제 진행률 62%",
@@ -544,6 +550,24 @@ impl Scenario {
             }
             "search-empty" => {
                 app.search = "없는 파일".into();
+                return app;
+            }
+            "find-folder" | "find-all" | "find-empty" => {
+                app.open_find(self.name == "find-all");
+                app.set_find_query(match self.name {
+                    "find-folder" => "jpg",
+                    "find-all" => "사진",
+                    _ => "없는 이름",
+                });
+                return app;
+            }
+            "open-blocked" | "open-failed" | "open-missing" => {
+                app.dismissed = false;
+                app.ui_error = Some(match self.name {
+                    "open-blocked" => present::open_blocked_text("설치 프로그램.exe"),
+                    "open-failed" => "파일을 열 프로그램을 실행하지 못했습니다".into(),
+                    _ => present::OPEN_MISSING.into(),
+                });
                 return app;
             }
             "selection" | "marquee" => {

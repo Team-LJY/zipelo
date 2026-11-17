@@ -1050,6 +1050,7 @@ mod widgets {
     include!("toolbar.rs");
     include!("long_layout.rs");
     include!("explorer_selection.rs");
+    include!("find_escape.rs");
     include!("window_frame.rs");
     include!("work_window.rs");
     include!("create_window.rs");

@@ -15,7 +15,16 @@ mod renderer;
 mod system_font;
 use eframe::egui;
 fn main() -> eframe::Result {
+    zipelo_ui_memory_app::log_info!(
+        "Zipelo {} 시작 (로그 단계 {:?}, ZIPELO_LOG로 변경 가능)",
+        env!("CARGO_PKG_VERSION"),
+        zipelo_ui_memory_app::applog::level()
+    );
     let result = run();
+    match &result {
+        Ok(()) => zipelo_ui_memory_app::log_info!("Zipelo 정상 종료"),
+        Err(error) => zipelo_ui_memory_app::log_error!("Zipelo 시작 또는 실행 실패: {error}"),
+    }
     #[cfg(all(
         target_os = "windows",
         not(all(feature = "ui-fixture", debug_assertions))
@@ -84,6 +93,10 @@ fn run() -> eframe::Result {
     )
     .map_err(|e| eframe::Error::AppCreation(Box::new(std::io::Error::other(e))))?;
     let custom_frame = zipelo_ui_memory_app::window_frame::custom_frame_needed();
+    zipelo_ui_memory_app::log_debug!(
+        "실행 인자 해석: 시험 모드={fixture}, 시작 파일={:?}, 직접 그린 창 테두리={custom_frame}",
+        startup
+    );
     // 운영체제 한글 글꼴은 Pretendard에 없는 글자를 위한 대체 글꼴로만 씀.
     let fallback = system_font::load()
         .ok()

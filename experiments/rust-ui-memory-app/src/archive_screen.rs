@@ -111,17 +111,13 @@ impl WorkWindow {
         decorations: bool,
         native_dialog_open: bool,
     ) -> egui::ViewportBuilder {
-        let (parent, parent_focused, now) = ctx.input(|i| {
-            (
-                i.viewport().outer_rect,
-                i.viewport().focused,
-                i.time,
-            )
-        });
+        let (parent, parent_focused, now) =
+            ctx.input(|i| (i.viewport().outer_rect, i.viewport().focused, i.time));
         let (child, child_focused) = ctx.input(|i| {
-            i.raw.viewports.get(&id).map_or((None, None), |v| {
-                (v.outer_rect, v.focused)
-            })
+            i.raw
+                .viewports
+                .get(&id)
+                .map_or((None, None), |v| (v.outer_rect, v.focused))
         });
         let initial_focus_unknown =
             !self.created && parent_focused.is_none() && child_focused.is_none();
@@ -208,6 +204,34 @@ struct OpenRequest {
     automatic: bool,
 }
 
+/// 찾기 창(Ctrl+F, Ctrl+Shift+F) 크기. 검색어 입력란 아래로 결과 목록이 길게 이어지는
+/// 작은 세로 창임.
+const FIND_WIDTH: f32 = 360.0;
+const FIND_HEIGHT: f32 = 560.0;
+/// 찾기 결과 한 줄(이름과 상위 경로 두 줄)의 높이.
+const FIND_ROW: f32 = 48.0;
+
+/// 찾기 창 상태.
+#[derive(Default)]
+struct FindState {
+    open: bool,
+    /// true면 압축파일 전체의 전체 경로에서 찾음(Ctrl+Shift+F).
+    /// false면 연 폴더 아래의 하위 폴더를 따라 이름에서 찾음(Ctrl+F).
+    whole_path: bool,
+    /// Ctrl+F를 누른 때 보고 있던 폴더.
+    base: String,
+    query: String,
+    results: Vec<browser::Found>,
+    truncated: bool,
+    /// 결과를 마지막으로 계산한 조건. 바뀐 경우에만 다시 찾음.
+    key: Option<(String, bool, String, usize)>,
+    cursor: Option<usize>,
+    focus_query: bool,
+    scroll_to_cursor: bool,
+    offset: f32,
+    win: WorkWindow,
+}
+
 /// 파일 목록의 오른쪽 클릭 메뉴에서 고른 동작.
 enum MenuAction {
     NewFolder,
@@ -287,6 +311,14 @@ pub struct ArchiveApp {
     open_roots: Vec<(PathBuf, present::OpenRoot)>,
     open_count: u64,
     opener: Opener,
+    find: FindState,
+    /// 이번 화면에서 목록 선택 해제 등 다른 곳이 Esc를 이미 처리했는지.
+    escape_handled: bool,
+    /// 찾기 결과로 이동한 뒤 다음 화면에서 목록에 키보드 초점을 줌.
+    focus_list: bool,
+    /// 지난 화면 끝에 입력란(전체, 목록 위 검색란)에 초점이 있었는지.
+    /// egui는 Esc를 누른 화면이 시작될 때 초점을 먼저 해제하므로 지난 값을 씀.
+    text_focus_before: (bool, bool),
     #[cfg(all(feature = "ui-fixture", debug_assertions))]
     scenario_marquee: Option<egui::Rect>,
     #[cfg(all(feature = "ui-fixture", debug_assertions))]
@@ -359,6 +391,10 @@ impl ArchiveApp {
             open_roots: Vec::new(),
             open_count: 0,
             opener: Box::new(present::open_with_default),
+            find: FindState::default(),
+            escape_handled: false,
+            focus_list: false,
+            text_focus_before: (false, false),
             #[cfg(all(feature = "ui-fixture", debug_assertions))]
             scenario_marquee: None,
             #[cfg(all(feature = "ui-fixture", debug_assertions))]
@@ -511,8 +547,123 @@ impl ArchiveApp {
 
     pub fn browse_folder(&mut self, folder: &str) {
         self.folder = folder.trim_matches('/').to_owned();
+        crate::log_trace!("폴더 이동: /{}", self.folder);
         self.search.clear();
         self.clear_list_selection();
+    }
+
+    /// 찾기 창이 열려 있는지.
+    pub fn find_open(&self) -> bool {
+        self.find.open
+    }
+
+    /// 찾기 창의 검색어. 시험과 UI 상황 미리보기에서 씀.
+    pub fn set_find_query(&mut self, query: &str) {
+        self.find.query = query.to_owned();
+    }
+
+    /// 찾기 창의 현재 결과.
+    pub fn find_results(&mut self) -> &[browser::Found] {
+        self.refresh_find();
+        &self.find.results
+    }
+
+    /// 찾기 창을 엶. `whole_path`가 false면(Ctrl+F) 지금 보고 있는 폴더 아래에서
+    /// 이름으로 찾고, true면(Ctrl+Shift+F) 압축파일 전체 경로에서 찾음.
+    /// 이미 열려 있으면 찾는 범위만 바꾸고 검색어는 유지함.
+    pub fn open_find(&mut self, whole_path: bool) -> bool {
+        if self.model.archive.is_none() || self.model.list_id.is_none() || self.model.busy() {
+            return false;
+        }
+        if !self.find.open {
+            self.find.win = WorkWindow::default();
+        }
+        self.find.open = true;
+        self.find.whole_path = whole_path;
+        self.find.base = if whole_path {
+            String::new()
+        } else {
+            self.folder.clone()
+        };
+        self.find.key = None;
+        self.find.cursor = None;
+        self.find.focus_query = true;
+        crate::log_debug!(
+            "찾기 창 열기: {}",
+            if whole_path {
+                "전체 경로".to_owned()
+            } else {
+                format!("/{} 아래", self.find.base)
+            }
+        );
+        true
+    }
+
+    pub fn close_find(&mut self) {
+        if self.find.open {
+            crate::log_debug!("찾기 창 닫기");
+        }
+        self.find.open = false;
+        self.find.win = WorkWindow::default();
+        self.find.results.clear();
+        self.find.key = None;
+        self.find.cursor = None;
+    }
+
+    fn refresh_find(&mut self) {
+        let key = (
+            self.find.query.clone(),
+            self.find.whole_path,
+            self.find.base.clone(),
+            self.model.entries.len(),
+        );
+        if self.find.key.as_ref() == Some(&key) {
+            return;
+        }
+        let (results, truncated) = browser::find(
+            &self.model.entries,
+            &self.find.base,
+            &self.find.query,
+            self.find.whole_path,
+            browser::FIND_LIMIT,
+        );
+        crate::log_trace!(
+            "찾기 '{}': {}개{}",
+            self.find.query,
+            results.len(),
+            if truncated { " (일부만 표시)" } else { "" }
+        );
+        self.find.results = results;
+        self.find.truncated = truncated;
+        self.find.cursor = self
+            .find
+            .cursor
+            .filter(|index| *index < self.find.results.len());
+        self.find.key = Some(key);
+    }
+
+    /// 찾기 결과로 이동함. 찾기 창을 닫고, 폴더면 그 폴더를 열고
+    /// 파일이면 들어 있는 폴더를 연 뒤 그 파일을 선택함.
+    pub fn go_to_found(&mut self, found: &browser::Found) {
+        crate::log_debug!("찾기 결과로 이동: /{}", found.path);
+        self.close_find();
+        if found.directory {
+            self.browse_folder(&found.path);
+        } else {
+            let parent = found
+                .path
+                .rsplit_once('/')
+                .map_or("", |(parent, _)| parent)
+                .to_owned();
+            self.browse_folder(&parent);
+            let rows = browser::rows(&self.model.entries, &self.folder, "");
+            if let Some(index) = rows.iter().position(|row| row.name == found.name) {
+                self.select_row(&rows, index, false, false);
+                // 선택한 행이 목록 위쪽에 보이도록 스크롤함.
+                self.list_offset = (index as f32 * LIST_ROW - 2.0 * LIST_ROW).max(0.0);
+            }
+        }
+        self.focus_list = true;
     }
 
     pub fn show_create(&mut self, encrypted: bool) {
@@ -640,8 +791,10 @@ impl ArchiveApp {
         self.folder.clear();
         self.search.clear();
         self.clear_list_selection();
+        self.close_find();
         self.targets = None;
         self.directories.clear();
+        crate::log_debug!("압축파일 열기: {}", archive.display());
         self.start(Start::List { archive });
     }
 
@@ -1145,6 +1298,27 @@ impl ArchiveApp {
             self.clear_password();
         }
         self.password_challenge = challenge;
+        // Esc 처리에 쓰려고 그리기 전에 입력란 초점과 열린 자식 창을 기억함.
+        self.escape_handled = false;
+        let (text_focused, main_search_focused) = self.text_focus_before;
+        let child_open = self.child_window_open();
+        if self.model.archive.is_some()
+            && !self.main_modal_open()
+            && !self.preview_open
+            && self.model.close == Close::Open
+        {
+            // 더 구체적인 Ctrl+Shift+F를 먼저 확인함.
+            if ctx.input_mut(|i| {
+                i.consume_key(
+                    egui::Modifiers::COMMAND | egui::Modifiers::SHIFT,
+                    egui::Key::F,
+                )
+            }) {
+                self.open_find(true);
+            } else if ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::F)) {
+                self.open_find(false);
+            }
+        }
         let dropped = ctx.input(|i| {
             i.raw
                 .dropped_files
@@ -1319,6 +1493,7 @@ impl ArchiveApp {
         self.work_window(&ctx);
         self.limit_result_dialog(&ctx);
         self.create_window(&ctx);
+        self.find_window(&ctx);
         if self.model.challenge.is_some() {
             self.password_dialog(&ctx, new_challenge);
         }
@@ -1328,6 +1503,11 @@ impl ArchiveApp {
         }
         self.close_dialog(&ctx);
         self.picker_notice(&ctx);
+        self.handle_escape(&ctx, text_focused, main_search_focused, child_open);
+        self.text_focus_before = (
+            ctx.text_edit_focused(),
+            ctx.memory(|m| m.has_focus(egui::Id::unique("archive-search"))),
+        );
         if !preview_was_open
             && !self.preview_open
             && !self.model.busy()
@@ -1341,6 +1521,386 @@ impl ArchiveApp {
         if self.model.busy() {
             ctx.request_repaint_after(std::time::Duration::from_millis(30));
         }
+    }
+
+    /// 메인 창 위에 자식 창(모달, 작업 창, 만들기 창, 찾기 창 등)이 떠 있는지.
+    fn child_window_open(&self) -> bool {
+        self.find.open
+            || self.preview_open
+            || self.create
+            || self.picker.is_some()
+            || self.model.challenge.is_some()
+            || self.model.resource.is_some()
+            || self.model.conflict.is_some()
+            || self.model.close != Close::Open
+            || self.work_visible()
+    }
+
+    /// 다른 곳에서 처리하지 않은 Esc를 처리함. 자식 창이 떠 있으면 그 창을 닫고,
+    /// 아무 창도 없으면 프로그램을 종료함(작업 중이면 기존 종료 확인을 거침).
+    /// 암호 입력, 미리보기 등 모달은 Esc를 직접 받아 닫으므로 여기까지 오지 않음.
+    fn handle_escape(
+        &mut self,
+        ctx: &egui::Context,
+        text_focused: bool,
+        main_search_focused: bool,
+        child_open: bool,
+    ) {
+        if self.escape_handled
+            || self.picker.is_some()
+            || !ctx.input(|i| i.key_pressed(egui::Key::Escape))
+        {
+            return;
+        }
+        let consume = |ctx: &egui::Context| {
+            ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape))
+        };
+        if child_open {
+            if self.find.open && !main_search_focused {
+                consume(ctx);
+                crate::log_debug!("Esc: 찾기 창 닫기");
+                self.close_find();
+            } else if matches!(self.model.close, Close::Confirm | Close::Waiting) {
+                consume(ctx);
+                crate::log_debug!("Esc: 종료 확인 취소");
+                self.model.keep_open();
+            } else if self.create && !self.model.busy() {
+                consume(ctx);
+                crate::log_debug!("Esc: 만들기 창 닫기");
+                self.close_create();
+            } else if !self.model.busy() && self.work_visible() {
+                consume(ctx);
+                crate::log_debug!("Esc: 작업 결과 창 닫기");
+                self.dismissed = true;
+                self.ui_error = None;
+                self.model.input_error = None;
+            }
+            // 진행 중인 작업 창은 Esc로 닫지 않음. 취소는 [취소] 버튼으로 함.
+            return;
+        }
+        if text_focused {
+            // 입력란에서 누른 Esc는 입력란 초점만 해제함.
+            return;
+        }
+        consume(ctx);
+        crate::log_info!("Esc: 프로그램 종료 요청");
+        ctx.send_viewport_cmd_to(egui::ViewportId::ROOT, egui::ViewportCommand::Close);
+    }
+
+    /// 찾기 창. 진행·결과 창처럼 부모 창을 따라가는 별도 창으로 띄우고,
+    /// 별도 창을 만들 수 없는 환경(시험 등)에서는 메인 창 안의 창으로 띄움.
+    fn find_window(&mut self, ctx: &egui::Context) {
+        if !self.find.open {
+            return;
+        }
+        if self.model.archive.is_none() || self.model.list_id.is_none() {
+            self.close_find();
+            return;
+        }
+        if self.main_modal_open() || self.preview_open {
+            // 암호 입력 등 모달을 가리지 않게 잠시 숨김.
+            self.find.win.open = false;
+            return;
+        }
+        let title = if self.find.whole_path {
+            "전체 경로에서 찾기"
+        } else {
+            "찾기"
+        };
+        let mut chosen = None;
+        let mut close = false;
+        if ctx.embed_viewports() || self.work_in_parent {
+            egui::Window::new(title)
+                .id(egui::Id::unique("archive-find-in-parent"))
+                .title_bar(false)
+                .default_pos(ctx.content_rect().right_top() + egui::vec2(-FIND_WIDTH - 24.0, 24.0))
+                .default_width(FIND_WIDTH)
+                .min_width(FIND_WIDTH)
+                .max_width(FIND_WIDTH)
+                .collapsible(false)
+                .resizable(false)
+                .fade_in(false)
+                .fade_out(false)
+                .frame(
+                    egui::Frame::new()
+                        .fill(theme::PANEL)
+                        .stroke(egui::Stroke::new(1.0, theme::BORDER))
+                        .inner_margin(egui::Margin::ZERO)
+                        .corner_radius(0),
+                )
+                .show(ctx, |ui| {
+                    let spacing = ui.spacing().item_spacing.y;
+                    ui.spacing_mut().item_spacing.y = 0.0;
+                    close = window_frame::in_parent_title(ui, "find-in-parent", title, true);
+                    egui::Frame::new()
+                        .inner_margin(egui::Margin::same(theme::PAD))
+                        .show(ui, |ui| {
+                            ui.spacing_mut().item_spacing.y = spacing;
+                            ui.set_width(FIND_WIDTH - 2.0 * theme::PAD as f32);
+                            let list_height = (ctx.content_rect().height() - 260.0)
+                                .clamp(120.0, FIND_HEIGHT - 200.0);
+                            chosen = self.find_contents(ui, list_height, false);
+                        });
+                });
+        } else {
+            let id = egui::ViewportId::from_hash_of("archive-find");
+            let window_title = format!("{title} — Zipelo");
+            let custom_frame = self.custom_frame;
+            let builder = self.find.win.builder(
+                ctx,
+                id,
+                egui::vec2(FIND_WIDTH, FIND_HEIGHT),
+                &window_title,
+                !custom_frame,
+                self.picker.is_some(),
+            );
+            ctx.show_viewport_immediate(id, builder, |ui, class| {
+                if ui.ctx().input(|i| i.viewport().close_requested()) {
+                    close = true;
+                }
+                if ui
+                    .ctx()
+                    .input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape))
+                {
+                    crate::log_debug!("Esc: 찾기 창 닫기");
+                    close = true;
+                }
+                // 찾기 창 안에서도 단축키로 찾는 범위를 바꿀 수 있음.
+                if ui.ctx().input_mut(|i| {
+                    i.consume_key(
+                        egui::Modifiers::COMMAND | egui::Modifiers::SHIFT,
+                        egui::Key::F,
+                    )
+                }) {
+                    self.find.whole_path = true;
+                    self.find.base.clear();
+                    self.find.focus_query = true;
+                } else if ui
+                    .ctx()
+                    .input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::F))
+                {
+                    self.find.whole_path = false;
+                    self.find.base = self.folder.clone();
+                    self.find.focus_query = true;
+                }
+                if class == egui::ViewportClass::EmbeddedWindow {
+                    ui.set_width(FIND_WIDTH);
+                    chosen = self.find_contents(ui, FIND_HEIGHT - 200.0, false);
+                    return;
+                }
+                if custom_frame {
+                    window_frame::title_bar(
+                        ui,
+                        "find",
+                        &window_title,
+                        window_frame::Buttons {
+                            minimize: false,
+                            maximize: false,
+                        },
+                    );
+                    window_frame::edges(ui.ctx(), false);
+                }
+                egui::CentralPanel::default()
+                    .frame(
+                        theme::panel(theme::PANEL)
+                            .corner_radius(0)
+                            .inner_margin(egui::Margin::same(theme::PAD)),
+                    )
+                    .show(ui, |ui| {
+                        chosen = self.find_contents(ui, 0.0, true);
+                    });
+            });
+        }
+        if let Some(found) = chosen {
+            self.go_to_found(&found);
+        } else if close {
+            self.close_find();
+        }
+    }
+
+    /// 찾기 창 내용: 위쪽 검색어 입력란과 그 아래 세로로 긴 결과 목록.
+    /// `list_height`가 0이면 남은 높이를 모두 목록에 씀. `own_keyboard`가 true면
+    /// 창 전체가 찾기 창이므로 입력란에 초점이 없어도 화살표와 Enter를 받음.
+    /// 결과를 골랐으면(더블클릭 또는 Enter) 그 결과를 돌려줌.
+    fn find_contents(
+        &mut self,
+        ui: &mut egui::Ui,
+        list_height: f32,
+        own_keyboard: bool,
+    ) -> Option<browser::Found> {
+        self.refresh_find();
+        let scope = if self.find.whole_path {
+            "압축파일 전체 경로에서 찾습니다".to_owned()
+        } else {
+            format!("/{} 아래 모든 폴더에서 이름으로 찾습니다", self.find.base)
+        };
+        let width = ui.available_width();
+        ui.add(egui::Label::new(RichText::new(&scope).color(theme::MUTED)).truncate())
+            .on_hover_text(&scope);
+        ui.add_space(theme::SPACE / 2.0);
+        let query_id = egui::Id::unique("archive-find-query");
+        let edit = ui.add(
+            egui::TextEdit::singleline(&mut self.find.query)
+                .id(query_id)
+                .char_limit(512)
+                .desired_width(width)
+                .hint_text(if self.find.whole_path {
+                    "찾을 경로 입력"
+                } else {
+                    "찾을 이름 입력"
+                }),
+        );
+        theme::focus(&edit);
+        if std::mem::take(&mut self.find.focus_query) {
+            edit.request_focus();
+        }
+        if edit.changed() {
+            self.refresh_find();
+            self.find.cursor = (!self.find.results.is_empty()).then_some(0);
+            self.find.offset = 0.0;
+            self.find.scroll_to_cursor = true;
+        }
+        let keyboard = own_keyboard || edit.has_focus() || edit.lost_focus();
+        let count = self.find.results.len();
+        let mut chosen = None;
+        if keyboard && count > 0 {
+            let (down, up, enter) = ui.input(|i| {
+                (
+                    i.key_pressed(egui::Key::ArrowDown),
+                    i.key_pressed(egui::Key::ArrowUp),
+                    i.key_pressed(egui::Key::Enter),
+                )
+            });
+            if down || up {
+                let index = match self.find.cursor {
+                    None => 0,
+                    Some(index) if down => (index + 1).min(count - 1),
+                    Some(index) => index.saturating_sub(1),
+                };
+                self.find.cursor = Some(index);
+                self.find.scroll_to_cursor = true;
+            }
+            if enter {
+                chosen = Some(self.find.cursor.unwrap_or(0));
+            }
+        }
+        ui.add_space(theme::SPACE / 2.0);
+        let status = if self.find.query.trim().is_empty() {
+            "검색어를 입력하세요".to_owned()
+        } else if count == 0 {
+            "찾은 항목이 없습니다".to_owned()
+        } else if self.find.truncated {
+            format!("처음 {count}개만 표시합니다. 검색어를 더 구체적으로 입력하세요")
+        } else {
+            format!("{count}개 찾음 · 두 번 누르거나 Enter로 이동")
+        };
+        ui.add(
+            egui::Label::new(
+                RichText::new(status)
+                    .size(theme::FONT_SMALL)
+                    .color(theme::MUTED),
+            )
+            .truncate(),
+        );
+        ui.add_space(theme::SPACE / 2.0);
+        let height = if list_height > 0.0 {
+            list_height
+        } else {
+            ui.available_height().max(FIND_ROW)
+        };
+        let (frame_rect, _) =
+            ui.allocate_exact_size(egui::vec2(width, height), egui::Sense::hover());
+        theme::boxed_field(ui, frame_rect);
+        let mut list_ui = ui.new_child(
+            egui::UiBuilder::new()
+                .max_rect(frame_rect.shrink(1.0))
+                .layout(Layout::top_down(Align::Min)),
+        );
+        let viewport_height = frame_rect.height() - 2.0;
+        if self.find.scroll_to_cursor
+            && let Some(index) = self.find.cursor
+        {
+            let top = index as f32 * FIND_ROW;
+            if top < self.find.offset {
+                self.find.offset = top;
+            } else if top + FIND_ROW > self.find.offset + viewport_height {
+                self.find.offset = top + FIND_ROW - viewport_height;
+            }
+        }
+        let mut area = egui::ScrollArea::vertical()
+            .id_salt("archive-find-results")
+            .auto_shrink([false, false]);
+        if std::mem::take(&mut self.find.scroll_to_cursor) {
+            area = area.vertical_scroll_offset(self.find.offset);
+        }
+        let output = area.show_rows(&mut list_ui, FIND_ROW, count, |ui, range| {
+            ui.spacing_mut().item_spacing.y = 0.0;
+            let row_width = ui.available_width();
+            for index in range {
+                let found = &self.find.results[index];
+                let (rect, response) =
+                    ui.allocate_exact_size(egui::vec2(row_width, FIND_ROW), egui::Sense::click());
+                theme::pointer(&response);
+                let parent = format!(
+                    "/{}",
+                    found.path.rsplit_once('/').map_or("", |(parent, _)| parent)
+                );
+                response.widget_info(|| {
+                    egui::WidgetInfo::selected(
+                        egui::Role::ListBoxOption,
+                        true,
+                        self.find.cursor == Some(index),
+                        &found.path,
+                    )
+                });
+                theme::row_background(
+                    ui,
+                    rect,
+                    self.find.cursor == Some(index),
+                    response.hovered(),
+                );
+                ui.scope_builder(
+                    egui::UiBuilder::new()
+                        .max_rect(rect.shrink2(egui::vec2(10.0, 4.0)))
+                        .layout(Layout::left_to_right(Align::Center)),
+                    |ui| {
+                        ui.style_mut().interaction.selectable_labels = false;
+                        theme::icon(
+                            ui,
+                            if found.directory {
+                                Icon::Folder
+                            } else {
+                                Icon::File
+                            },
+                            20.0,
+                        );
+                        ui.add_space(6.0);
+                        let text_width = ui.available_width();
+                        ui.vertical(|ui| {
+                            ui.spacing_mut().item_spacing.y = 0.0;
+                            theme::bounded_text_hover(ui, &found.name, &found.path, text_width);
+                            ui.add_sized(
+                                egui::vec2(text_width, 18.0),
+                                egui::Label::new(
+                                    RichText::new(&parent)
+                                        .size(theme::FONT_SMALL)
+                                        .color(theme::MUTED),
+                                )
+                                .truncate(),
+                            );
+                        });
+                    },
+                );
+                if response.clicked() {
+                    self.find.cursor = Some(index);
+                }
+                if response.double_clicked() {
+                    chosen = Some(index);
+                }
+            }
+        });
+        self.find.offset = output.state.offset().y;
+        chosen.and_then(|index| self.find.results.get(index).cloned())
     }
 
     // 선택 창이 열려 있는 동안 다른 조작을 막고, 응답을 받도록 화면을 계속 갱신함.
@@ -1537,6 +2097,9 @@ impl ArchiveApp {
         );
         background
             .widget_info(|| egui::WidgetInfo::labeled(egui::Role::ListBox, active, "파일 목록"));
+        if active && std::mem::take(&mut self.focus_list) {
+            background.request_focus();
+        }
         if background.has_focus() {
             ui.ctx().memory_mut(|memory| {
                 memory.set_focus_lock_filter(
@@ -1705,7 +2268,10 @@ impl ArchiveApp {
                     }
                     if active {
                         response.context_menu(|ui| {
-                            if ui.button("압축 파일명으로 새 폴더를 만들어 압축 풀기").clicked() {
+                            if ui
+                                .button("압축 파일명으로 새 폴더를 만들어 압축 풀기")
+                                .clicked()
+                            {
                                 menu_action = Some(MenuAction::NewFolder);
                             }
                             if ui.button("특정 폴더에 압축 풀기").clicked() {
@@ -1725,13 +2291,9 @@ impl ArchiveApp {
                         row.directory,
                         &name,
                         &row.name,
-                        if row.directory {
-                            "0 B".into()
-                        } else {
-                            row.bytes
-                                .map(present::bytes_text)
-                                .unwrap_or_else(|| "—".into())
-                        },
+                        row.bytes
+                            .map(present::bytes_text)
+                            .unwrap_or_else(|| "—".into()),
                         name_width,
                     );
                     if active
@@ -1802,10 +2364,14 @@ impl ArchiveApp {
             }
             let modifiers = ui.input(|i| i.modifiers);
             let ctrl = modifiers.ctrl || modifiers.command;
-            if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+            // 선택이 있으면 Esc는 선택만 해제함. 선택이 없으면 창 닫기로 넘김.
+            if (!self.model.selected.is_empty() || self.marquee.is_some())
+                && ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape))
+            {
                 self.model.selected.clear();
                 self.marquee = None;
                 background.request_focus();
+                self.escape_handled = true;
             }
             if ctrl && ui.input(|i| i.key_pressed(egui::Key::A)) {
                 self.model.selected = rows
@@ -2262,6 +2828,17 @@ impl ArchiveApp {
             self.picker.is_some(),
         );
         let height = ctx.show_viewport_immediate(id, builder, |ui, class| {
+            // 끝난 작업의 결과 창은 Esc로 닫음. 진행 중에는 [취소] 버튼을 씀.
+            if !self.model.busy()
+                && ui
+                    .ctx()
+                    .input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape))
+            {
+                crate::log_debug!("Esc: 작업 결과 창 닫기");
+                self.dismissed = true;
+                self.ui_error = None;
+                self.model.input_error = None;
+            }
             if ui.ctx().input(|i| i.viewport().close_requested()) {
                 if self.model.busy() {
                     ui.ctx()
@@ -3039,8 +3616,17 @@ impl ArchiveApp {
             self.create_win
                 .builder(ctx, id, size, title, !custom_frame, self.picker.is_some());
         let mut close = false;
+        let picker_open = self.picker.is_some();
         let height = ctx.show_viewport_immediate(id, builder, |ui, class| {
             if ui.ctx().input(|i| i.viewport().close_requested()) {
+                close = true;
+            }
+            if !picker_open
+                && ui
+                    .ctx()
+                    .input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape))
+            {
+                crate::log_debug!("Esc: 만들기 창 닫기");
                 close = true;
             }
             if class == egui::ViewportClass::EmbeddedWindow {

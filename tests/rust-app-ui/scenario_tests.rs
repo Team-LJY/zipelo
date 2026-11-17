@@ -190,6 +190,12 @@ fn every_listed_scenario_draws_and_keeps_its_expected_screen() {
                 "password-create" => "암호 확인",
                 "folder" => "바다.jpg",
                 "search-empty" => "일치하는 항목이 없습니다",
+                "find-folder" => "풍경.jpg",
+                "find-all" => "압축파일 전체 경로에서 찾습니다",
+                "find-empty" => "찾은 항목이 없습니다",
+                "open-blocked" => "안전을 위해 바로 열 수 없습니다",
+                "open-failed" => "파일을 열 프로그램을 실행하지 못했습니다",
+                "open-missing" => "풀린 파일을 찾지 못해 열지 못했습니다",
                 "password" | "password-retry" => "암호",
                 "extract-complete" => "압축을 풀었습니다",
                 "extract-cancelled" => "작업을 취소했습니다",
@@ -201,6 +207,25 @@ fn every_listed_scenario_draws_and_keeps_its_expected_screen() {
                 _ => "읽어주세요.txt",
             };
             assert!(labels.contains(expected), "{}: {labels}", scenario.name);
+            if scenario.name == "archive" {
+                // 폴더 크기는 안에 든 파일 크기의 합(1,287,952 B × 2)으로 표시함.
+                assert!(labels.contains("2.5 MB"), "{labels}");
+                assert!(!labels.contains("0 B"), "{labels}");
+            }
+            if scenario.name.starts_with("find-") {
+                assert!(app.find_open(), "{}", scenario.name);
+                let paths: Vec<_> = app
+                    .find_results()
+                    .iter()
+                    .map(|found| found.path.clone())
+                    .collect();
+                let expected: &[&str] = match scenario.name {
+                    "find-folder" => &["사진/바다.jpg", "사진/풍경.jpg"],
+                    "find-all" => &["사진", "사진/바다.jpg", "사진/풍경.jpg"],
+                    _ => &[],
+                };
+                assert_eq!(paths, expected, "{}", scenario.name);
+            }
             if scenario.name == "extract-complete-cleanup-failed" {
                 use zipelo_ui_memory_app::archive_ui::{
                     Cleanup, Disposition, Outcome, Publication,
