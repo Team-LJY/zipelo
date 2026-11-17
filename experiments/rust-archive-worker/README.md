@@ -2,7 +2,7 @@
 
 별도 프로세스의 stdin/stdout으로 revision 3 요청을 처리합니다. 제품 앱이 공유 codec으로 연결하며 프로세스 분리는 OS sandbox를 뜻하지 않습니다. 기존 작업의 암호 기능은 capability=true이며 ZipCrypto 해제, WinZip AES-256 AE-1/AE-2 해제와 AE-2 생성을 지원합니다.
 
-- ZIP32/ZIP64 Store/Deflate 목록과 해제, ZIP32/ZIP64 생성, 기본 TAR/USTAR, GZ, TAR.GZ, TAR.BZ2, TAR.XZ, 비암호화 7z 해제를 지원합니다. GZ 연결 멤버는 하나의 논리 스트림으로 합칩니다. 다중 볼륨, UTF-8로 해석할 수 없는 ZIP 이름, PAX/GNU 확장과 특수 항목 해제는 미지원입니다.
+- ZIP32/ZIP64 Store/Deflate 목록과 해제, ZIP32/ZIP64 생성, 기본 TAR/USTAR, GZ, TAR.GZ, TAR.BZ2, TAR.XZ, 7z(7zAES 암호 포함) 해제를 지원합니다. GZ 연결 멤버는 하나의 논리 스트림으로 합칩니다. 다중 볼륨, UTF-8로 해석할 수 없는 ZIP 이름, PAX/GNU 확장과 특수 항목 해제는 미지원입니다.
 - ZIP 이름: UTF-8 플래그(비트 11)가 있으면 이름이 UTF-8이어야 하며 아니면 Integrity입니다. 플래그가 없으면 CRC가 원래 이름과 맞는 Info-ZIP Unicode Path 확장 필드(0x7075, 버전 1)를 우선 쓰고, 다음으로 UTF-8로 유효한 이름 바이트를 그대로 씁니다(Linux/macOS 도구의 기본 동작). CRC가 다르거나 버전이 다른 확장 필드는 무시합니다. 그 밖의 CP437/CP949 등 레거시 이름은 코드 페이지를 추측하지 않고 UnsupportedFeature로 거부합니다. 어느 경로로 얻은 이름이든 같은 경로 안전성 검사와 충돌 검사를 거칩니다.
 - ZIP/TAR/GZ/TAR.GZ/7z 목록과 해제는 입력 기본 한도 u64::MAX, 해제 총량 16 GiB, 항목 10,000개입니다. 기존 Start와 StartInteractive의 limits는 이 값을 낮출 수 있습니다. 별도 StartGuarded의 승인 흐름은 아래 절을 따릅니다. 64 KiB 버퍼와 임시 파일로 입력과 검증 완료 payload를 처리해 모든 출력의 CRC, 크기와 경로를 게시 전에 검사합니다. checkpoint마다 취소, 부모 프로세스 생존과 300초 한도를 확인합니다. ZIP 생성은 원본을 하나씩 스냅샷으로 읽어 스트리밍으로 압축하며 원본 크기 합계에 16 GiB 한도를 적용합니다. ZIP64 크기와 오프셋은 필요한 항목에만 기록합니다. slice 기반 archive parser는 입력 64 MiB/출력 128 MiB, slice ZIP builder는 원본 및 결과 128 MiB 한도를 유지합니다.
 - 경로 깊이는 64개 구성 요소이며 승인 전 이름/출력 계획 메타데이터 예산은 8 MiB, 출력 계획 노드는 32,768개로 제한합니다. 유효한 StartGuarded 자원 승인 후에만 각각 64 MiB와 262,144개로 확대합니다. 이름 복제와 인덱스 비용을 보수적으로 계산해 할당 전에 Limit으로 거부합니다.
@@ -27,12 +27,14 @@ revision 2의 기존 필드와 오류 tag 0~12 및 입력/출력 기본 한도�
 
 ## 7z 해제
 
-비암호화 7z의 단일 입력/출력 coder인 Copy, LZMA와 LZMA2를 Rust 코드로 해독합니다. solid substream, 빈 파일/디렉터리, UTF-16LE 이름과 한 단계 압축 헤더를 처리합니다. 추가 라이브러리나 제품 외부 명령을 사용하지 않습니다. 형식 근거는 [7z 명세](https://www.7-zip.org/7z.html)와 [LZMA SDK 명세 안내](https://www.7-zip.org/sdk.html)입니다.
+7z의 단일 입력/출력 coder인 Copy, LZMA와 LZMA2를 Rust 코드로 해독합니다. `7z a -p`가 만드는 7zAES와 Copy/LZMA/LZMA2의 두 coder 폴더와 7zAES 단일 coder 폴더도 지원합니다. solid substream, 빈 파일/디렉터리, UTF-16LE 이름과 한 단계 압축 헤더를 처리합니다. 추가 라이브러리나 제품 외부 명령을 사용하지 않습니다. 형식 근거는 [7z 명세](https://www.7-zip.org/7z.html)와 [LZMA SDK 명세 안내](https://www.7-zip.org/sdk.html)입니다.
 
 - 시작 헤더/다음 헤더 CRC, packed/folder/substream CRC가 있을 때 해당 CRC와 크기, 스트림의 끝을 검증합니다. 경로, 충돌과 모든 선택 내용 검증이 끝난 뒤 기존 안전 게시 경로로 넘깁니다. 목록은 데이터 CRC 검증 성공을 뜻하지 않습니다.
 - 기본 입력 한도 u64::MAX, 해제 총량 16 GiB와 기존 항목/이름 한도를 적용합니다. 압축 해제된 헤더는 승인 전 최대 8 MiB, 승인 후 최대 64 MiB이고 헤더 중첩은 한 단계입니다. 사전은 최대 64 MiB, LZMA의 lc+lp는 최대 4입니다. 최근 8 MiB 사전만 메모리에 두고 더 먼 참조는 임시 파일에서 읽습니다. 먼 거리 참조가 많은 파일은 추가 디스크 I/O가 발생합니다. 해독 중 checkpoint에서 취소와 시간 한도를 확인합니다.
-- 암호화 7z, 다중 coder 필터 체인(BCJ/BCJ2/Delta 등), PPMd/BZip2, 분할/SFX, external metadata, additional streams와 anti 항목은 미지원입니다. 링크, reparse point와 특수 Unix 항목은 거부합니다. 지원하지 않는 구조를 성공으로 처리하지 않습니다.
+- 7zAES는 SHA-256을 2^NumCyclesPower회 반복한 키(솔트, UTF-16LE 암호, 8바이트 카운터)와 AES-256-CBC로 풀며 반복 지수는 24까지만 받습니다. 키 유도와 복호화 중에도 취소와 시간 한도를 확인합니다. 암호는 기존 PasswordRequired(Decrypt)로 받고 세 번까지 다시 묻습니다. 헤더가 암호화되어 있으면(`-mhe=on`) 목록 작업에서 암호를 묻고, 같은 작업의 해제나 미리보기에서는 받은 암호를 먼저 씁니다. 복호화 뒤의 해독 실패와 CRC 불일치는 WrongPassword이고, 암호문의 packed CRC 불일치는 Integrity입니다. 틀린 암호를 가려낼 CRC가 없는 암호 폴더는 미지원입니다.
+- 다중 coder 필터 체인(BCJ/BCJ2/Delta 등), PPMd/BZip2, 분할/SFX, external metadata, additional streams와 anti 항목은 미지원입니다. 링크, reparse point와 특수 Unix 항목은 거부합니다. 지원하지 않는 구조를 성공으로 처리하지 않습니다.
 - solid 그룹의 압축 크기는 첫 substream에만 기록하고 나머지는 0으로 표시합니다. 각 파일의 정확한 비압축 크기는 유지합니다.
+- 암호 합성 표본(`fixtures/7z/aes-*.7z`)은 `tests/rust-archive-worker/seven_zip_aes_fixtures.py`가 Python 표준 라이브러리와 openssl 명령으로 만듭니다. 공개 시험 암호는 `zipelo-암호`입니다. 생성기는 먼저 7-Zip 26.00 분할 표본의 암호화 헤더를 같은 키 유도로 풀어 CRC를 대조합니다.
 - 합성 표본은 Python 표준 lzma로 생성합니다. 별도로 시스템 libarchive가 만든 LZMA1/LZMA2 표본을 해제하고, 합성 표본도 libarchive 읽기 API로 검사합니다. libarchive는 Linux 시험의 독립 참조 도구이며 제품 의존성이 아닙니다. 시험 도구와 표본은 tests/rust-archive-worker 아래에 있습니다.
 - 형식 확장은 히나타 님과 합의한 Format::SevenZip=4입니다. 기존 값 0~3과 필드, 메시지 tag, 프레임 version은 유지합니다. 구버전 앱은 값 4를 거부하므로 앱 Format과 양방향 변환도 갱신해야 합니다. 이 백엔드 변경은 frontend 코드를 수정하지 않습니다.
 
@@ -244,4 +246,4 @@ Python 표준 bz2, lzma와 tarfile로 독립 생성 및 해제한 결과의 SHA2
 
 - `tests/rust-archive-worker/fixtures/split7z/`는 Ubuntu `7zip 26.00+dfsg-1`의 7-Zip 26.00이 `-v64b`로 직접 만든 조각이다. 일반 solid LZMA2, 헤더 암호화와 본문 암호화 묶음을 포함한다. 테스트에만 쓰는 독립 실행 도구이며 제품 의존성이나 배포 파일에 추가하지 않는다.
 - 생성기 `tests/rust-archive-worker/split_fixtures.py`가 독립 도구로 다시 풀어 원본 바이트와 비교하고 `manifest.json`에 도구 버전, 옵션, 각 조각과 논리 입력 및 해제 결과의 SHA256을 기록한다. 암호 표본의 공개 시험 암호는 `zipelo-split-test`다. 새 표본을 만들 때 `--tool`에 7-Zip 실행 파일을, `--work`와 `--output`에는 `tests/work/split7z` 아래의 비어 있는 별도 하위 폴더를 지정한다.
-- 작업자 회귀 시험은 추적된 일반 표본의 두 파일을 풀어 기준 바이트와 해시를 대조한다. 암호화 표본은 기존 7z 정책대로 UnsupportedFeature이며 새 암호 지원이나 암호 질문을 추가하지 않는다. 목록 성공은 패킹 데이터 전체의 무결성 검증을 뜻하지 않는다.
+- 작업자 회귀 시험은 추적된 일반 표본의 두 파일을 풀어 기준 바이트와 해시를 대조한다. 암호화 표본은 공개 시험 암호로 목록과 해제를 확인하며, 헤더 암호화 표본만 목록에서 암호를 묻는다. 조각을 이어 붙인 단일 7z도 같은 시험에 쓴다. 목록 성공은 패킹 데이터 전체의 무결성 검증을 뜻하지 않는다.

@@ -1610,6 +1610,8 @@ mod seven_zip_create;
 
 mod seven_zip_create_runtime;
 
+mod seven_zip_aes;
+
 mod recovery;
 
 #[cfg(target_os = "linux")]

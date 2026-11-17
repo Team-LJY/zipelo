@@ -114,6 +114,24 @@ impl<W: Write> Job<W> {
                 .0;
         }
     }
+    /// 7z 헤더가 암호화되어 목록을 읽을 수 없으면 ZIP 해제처럼 세 번까지 암호를 물어 다시 엶.
+    /// 받은 암호는 `secret`에 남겨 같은 작업의 해제나 미리보기에서 다시 묻지 않고 씀.
+    fn open_listing<T>(
+        &mut self,
+        secret: &mut Option<Secret>,
+        mut open: impl FnMut(&mut Self, Option<&[u8]>) -> Result<T>,
+    ) -> Result<T> {
+        let mut attempt = 0;
+        loop {
+            match open(self, secret.as_ref().map(|s| s.0.as_slice())) {
+                Err(ErrorCode::WrongPassword) if attempt < 3 => {
+                    attempt += 1;
+                    *secret = Some(self.password(PasswordPurpose::Decrypt, attempt)?);
+                }
+                result => return result,
+            }
+        }
+    }
     fn password(&mut self, purpose: PasswordPurpose, attempt: u32) -> Result<Secret> {
         self.check()?;
         self.next_challenge = self.next_challenge.checked_add(1).ok_or(ErrorCode::Limit)?;
@@ -478,8 +496,10 @@ impl<W: Write> Job<W> {
         let length = source.len();
         let object = self.split_result(source.object())?;
         let hash = source.hash;
-        let result = crate::spool::retry_full(|| {
-            crate::seven_zip::open(&mut source, length, limits, false, self)
+        let result = self.open_listing(&mut None, |this, password| {
+            crate::spool::retry_full(|| {
+                crate::seven_zip::open_with_password(&mut source, length, limits, password, this)
+            })
         });
         self.direct_split = Some(source);
         let catalog = result?;
@@ -527,14 +547,17 @@ impl<W: Write> Job<W> {
         {
             return Err(ErrorCode::SourceChanged);
         }
-        let mut catalog = crate::streaming::Catalog::open(
-            &mut snapshot.file,
-            snapshot.len,
-            limits,
-            false,
-            None,
-            self,
-        )?;
+        let mut known = None;
+        let mut catalog = self.open_listing(&mut known, |this, password| {
+            crate::streaming::Catalog::open(
+                &mut snapshot.file,
+                snapshot.len,
+                limits,
+                false,
+                password,
+                this,
+            )
+        })?;
         if expected.format != catalog.format {
             return Err(ErrorCode::SourceChanged);
         }
@@ -566,16 +589,15 @@ impl<W: Write> Job<W> {
         self.progress(Stage::Decode, 0, Some(entry.size), 0)?;
         if matches!(catalog.format, Format::Zip | Format::SevenZip) {
             for attempt in 1..=3 {
-                let secret = if entry.encrypted {
-                    Some(self.password(PasswordPurpose::Decrypt, attempt)?)
-                } else {
-                    None
-                };
+                // 헤더를 열 때 받은 암호가 있으면 먼저 그 암호로 시도함.
+                if entry.encrypted && (attempt > 1 || known.is_none()) {
+                    known = Some(self.password(PasswordPurpose::Decrypt, attempt)?);
+                }
                 match crate::streaming::Catalog::preview(
                     &mut snapshot.file,
                     snapshot.len,
                     limits,
-                    secret.as_ref().map(|s| s.0.as_slice()),
+                    known.as_ref().map(|s| s.0.as_slice()),
                     entry_id,
                     self,
                 ) {
@@ -799,14 +821,17 @@ impl<W: Write> Job<W> {
                     }
                 }
                 self.progress(Stage::Decode, snapshot.len, Some(snapshot.len), 0)?;
-                let mut catalog = crate::streaming::Catalog::open(
-                    &mut snapshot.file,
-                    snapshot.len,
-                    limits,
-                    false,
-                    None,
-                    self,
-                )?;
+                let mut known = None;
+                let mut catalog = self.open_listing(&mut known, |this, password| {
+                    crate::streaming::Catalog::open(
+                        &mut snapshot.file,
+                        snapshot.len,
+                        limits,
+                        false,
+                        password,
+                        this,
+                    )
+                })?;
                 let list_id = ListId {
                     catalog_version: if self.source_group.is_some() { 2 } else { 1 },
                     format: catalog.format,
@@ -904,24 +929,25 @@ impl<W: Write> Job<W> {
                     filesystem::preflight_space_with(&root, initial_outputs, staged, self)?;
                     if matches!(catalog.format, Format::Zip | Format::SevenZip) {
                         for attempt in 1..=3 {
-                            let secret = if encrypted {
-                                Some(self.password(PasswordPurpose::Decrypt, attempt)?)
-                            } else {
-                                None
-                            };
+                            // 암호화된 7z 헤더를 열 때 받은 암호가 있으면 다시 묻지 않고 먼저 씀.
+                            if encrypted && (attempt > 1 || known.is_none()) {
+                                known = Some(self.password(PasswordPurpose::Decrypt, attempt)?);
+                            }
                             match crate::streaming::Catalog::open(
                                 &mut snapshot.file,
                                 snapshot.len,
                                 limits,
                                 true,
-                                secret.as_ref().map(|s| s.0.as_slice()),
+                                known.as_ref().map(|s| s.0.as_slice()),
                                 self,
                             ) {
                                 Ok(decoded) => {
                                     catalog = decoded;
                                     break;
                                 }
-                                Err(ErrorCode::WrongPassword) if attempt < 3 => continue,
+                                Err(ErrorCode::WrongPassword) if encrypted && attempt < 3 => {
+                                    continue;
+                                }
                                 Err(error) => return Err(error),
                             }
                         }

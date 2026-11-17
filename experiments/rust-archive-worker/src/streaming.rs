@@ -93,7 +93,9 @@ impl Catalog {
         let n = len.min(6) as usize;
         at(source, 0, &mut magic[..n])?;
         if magic.starts_with(b"7z\xbc\xaf\x27\x1c") {
-            return crate::seven_zip::open_selected(source, len, limits, decode, selected, check);
+            return crate::seven_zip::open_selected(
+                source, len, limits, decode, password, selected, check,
+            );
         }
         if magic.starts_with(b"PK\x03\x04")
             || magic.starts_with(b"PK\x05\x06")
