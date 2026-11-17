@@ -52,6 +52,36 @@ pub trait DragOut {
     fn fail(&mut self);
 }
 
+/// 끌던 버튼을 놓았을 때 끌기를 어떻게 끝낼지.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ReleaseAction {
+    /// 다 풀렸으므로 놓기를 받아들임.
+    Drop,
+    /// 끌기와 풀기를 함께 취소함.
+    Cancel,
+    /// 아직 푸는 중이므로 다 풀릴 때까지 기다린 뒤 놓음.
+    Wait,
+}
+
+/// 창 위에서 버튼을 놓았을 때의 처리를 정함. `ready`는 풀기 결과(풀리는 중이면 None, 다
+/// 풀렸으면 Some(true), 실패했으면 Some(false)). Zipelo 창 위에 놓으면 받을 곳이 없으므로
+/// 풀린 정도와 관계없이 기다리지 않고 바로 취소함(X11과 같음).
+pub fn release_action(ready: Option<bool>, over_own_window: bool) -> ReleaseAction {
+    if over_own_window {
+        return ReleaseAction::Cancel;
+    }
+    match ready {
+        Some(true) => ReleaseAction::Drop,
+        Some(false) => ReleaseAction::Cancel,
+        None => ReleaseAction::Wait,
+    }
+}
+
+/// 커서 아래 최상위 창의 소유 프로세스가 이 프로그램인지. 창이 없으면(None) 아님.
+pub fn is_own_window(owner_process: Option<u32>, own_process: u32) -> bool {
+    owner_process == Some(own_process)
+}
+
 /// RFC 2483 text/uri-list 본문을 만듦. 경로의 각 바이트를 file URI 규칙으로 바꿈.
 pub fn uri_list(paths: &[PathBuf]) -> String {
     let mut text = String::new();
@@ -88,3 +118,7 @@ pub fn file_uri(path: &Path) -> String {
 #[cfg(test)]
 #[path = "../../../tests/rust-app-ui/drag_out_uri.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "../../../tests/rust-app-ui/drag_out_release.rs"]
+mod release_tests;
