@@ -284,7 +284,7 @@ pub struct ArchiveApp {
     /// 마지막 풀기가 기본 프로그램으로 열기였으면 그 항목. 다시 시도할 때 다시 엶.
     last_open: Option<u32>,
     /// 압축파일별 열기용 임시 폴더. 앱을 닫을 때 지움.
-    open_roots: Vec<(PathBuf, PathBuf)>,
+    open_roots: Vec<(PathBuf, present::OpenRoot)>,
     open_count: u64,
     opener: Opener,
     #[cfg(all(feature = "ui-fixture", debug_assertions))]
@@ -410,12 +410,13 @@ impl ArchiveApp {
             return false;
         };
         let root = match self.open_roots.iter().find(|(a, _)| *a == archive) {
-            Some((_, root)) if root.is_dir() => root.clone(),
+            Some((_, root)) if root.is_current() => root.path().to_path_buf(),
             _ => match present::create_open_root(&archive) {
                 Ok(root) => {
                     self.open_roots.retain(|(a, _)| *a != archive);
-                    self.open_roots.push((archive, root.clone()));
-                    root
+                    let path = root.path().to_path_buf();
+                    self.open_roots.push((archive, root));
+                    path
                 }
                 Err(_) => {
                     self.dismissed = false;
@@ -3658,7 +3659,7 @@ impl Drop for ArchiveApp {
     fn drop(&mut self) {
         self.clear_password();
         for (_, root) in self.open_roots.drain(..) {
-            present::remove_open_root(&root);
+            present::remove_open_root(root);
         }
     }
 }

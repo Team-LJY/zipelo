@@ -1156,3 +1156,190 @@ fn client_protocol_errors_hide_internal_terms_but_preserve_exit_uncertainty() {
         UNCONFIRMED_FINISH
     );
 }
+
+#[cfg(feature = "ui")]
+#[cfg(unix)]
+#[test]
+fn app_exit_preserves_replaced_open_root() {
+    use zipelo_ui_memory_app::archive_screen::ArchiveApp;
+    let scratch = Folder::new();
+    let mut app = ArchiveApp::new(
+        Box::new(FakeFactory::default()),
+        Some(scratch.0.join("sample.zip")),
+        false,
+    );
+    pump(&mut app.model);
+    assert!(app.open_entry(0));
+    let root = scratch.0.join(open_root_name("sample.zip"));
+    fs::rename(&root, scratch.0.join("original")).unwrap();
+    fs::create_dir(&root).unwrap();
+    let retained = root.join("keep.txt");
+    fs::write(&retained, b"user data").unwrap();
+    drop(app);
+    assert_eq!(fs::read(retained).unwrap(), b"user data");
+}
+
+#[cfg(feature = "ui")]
+#[test]
+fn app_exit_removes_original_open_root() {
+    use zipelo_ui_memory_app::archive_screen::ArchiveApp;
+    let scratch = Folder::new();
+    let mut app = ArchiveApp::new(
+        Box::new(FakeFactory::default()),
+        Some(scratch.0.join("sample.zip")),
+        false,
+    );
+    pump(&mut app.model);
+    assert!(app.open_entry(0));
+    let root = scratch.0.join(open_root_name("sample.zip"));
+    fs::write(root.join("opened.txt"), b"temporary").unwrap();
+    drop(app);
+    assert!(!root.exists());
+}
+
+#[cfg(feature = "ui")]
+#[cfg(windows)]
+#[test]
+fn open_root_cannot_be_renamed_while_app_holds_it() {
+    use zipelo_ui_memory_app::archive_screen::ArchiveApp;
+    let scratch = Folder::new();
+    let mut app = ArchiveApp::new(
+        Box::new(FakeFactory::default()),
+        Some(scratch.0.join("sample.zip")),
+        false,
+    );
+    pump(&mut app.model);
+    assert!(app.open_entry(0));
+    let root = scratch.0.join(open_root_name("sample.zip"));
+    // 열어 둔 핸들이 이름 변경을 막아 경로가 다른 폴더로 바뀌지 않음.
+    assert!(fs::rename(&root, scratch.0.join("original")).is_err());
+    drop(app);
+    assert!(!root.exists());
+}
+
+#[cfg(unix)]
+fn open_root_with_contents(scratch: &Folder) -> (OpenRoot, PathBuf) {
+    let root = create_open_root(&scratch.0.join("sample.zip")).unwrap();
+    let path = root.path().to_path_buf();
+    fs::create_dir_all(path.join("a/b")).unwrap();
+    fs::write(path.join("a/b/deep.txt"), b"temporary").unwrap();
+    fs::write(path.join("top.txt"), b"temporary").unwrap();
+    (root, path)
+}
+
+#[cfg(unix)]
+#[test]
+fn removal_is_bound_to_checked_folder_when_replaced_after_check() {
+    let scratch = Folder::new();
+    let (root, path) = open_root_with_contents(&scratch);
+    let original = scratch.0.join("original");
+    remove_open_root_with(root, || {
+        fs::rename(&path, &original).unwrap();
+        fs::create_dir(&path).unwrap();
+        fs::write(path.join("keep.txt"), b"user data").unwrap();
+    });
+    assert_eq!(fs::read(path.join("keep.txt")).unwrap(), b"user data");
+    // 확인한 폴더의 내용만 지움.
+    assert_eq!(fs::read_dir(&original).unwrap().count(), 0);
+}
+
+#[cfg(unix)]
+#[test]
+fn removal_does_not_follow_link_swapped_in_after_check() {
+    let scratch = Folder::new();
+    let (root, path) = open_root_with_contents(&scratch);
+    let victim = scratch.0.join("victim");
+    fs::create_dir(&victim).unwrap();
+    fs::write(victim.join("keep.txt"), b"user data").unwrap();
+    let original = scratch.0.join("original");
+    remove_open_root_with(root, || {
+        fs::rename(&path, &original).unwrap();
+        std::os::unix::fs::symlink(&victim, &path).unwrap();
+    });
+    assert_eq!(fs::read(victim.join("keep.txt")).unwrap(), b"user data");
+    assert!(fs::symlink_metadata(&path).unwrap().file_type().is_symlink());
+    assert_eq!(fs::read_dir(&original).unwrap().count(), 0);
+}
+
+#[cfg(unix)]
+#[test]
+fn removal_does_not_follow_links_inside_folder() {
+    let scratch = Folder::new();
+    let (root, path) = open_root_with_contents(&scratch);
+    let victim = scratch.0.join("victim");
+    fs::create_dir(&victim).unwrap();
+    fs::write(victim.join("keep.txt"), b"user data").unwrap();
+    std::os::unix::fs::symlink(&victim, path.join("a/link")).unwrap();
+    std::os::unix::fs::symlink(victim.join("keep.txt"), path.join("file-link")).unwrap();
+    remove_open_root(root);
+    assert!(!path.exists());
+    assert_eq!(fs::read(victim.join("keep.txt")).unwrap(), b"user data");
+}
+
+#[cfg(unix)]
+#[test]
+fn removal_of_original_folder_clears_nested_contents() {
+    let scratch = Folder::new();
+    let (root, path) = open_root_with_contents(&scratch);
+    remove_open_root(root);
+    assert!(!path.exists());
+}
+
+#[cfg(unix)]
+#[test]
+fn creation_does_not_adopt_folder_replaced_before_handle_is_taken() {
+    let scratch = Folder::new();
+    let archive = scratch.0.join("sample.zip");
+    let swapped = scratch.0.join(open_root_name("sample.zip"));
+    let original = scratch.0.join("original");
+    let mut swaps = 0;
+    let root = create_open_root_with(&archive, |path| {
+        swaps += 1;
+        if swaps == 1 {
+            fs::rename(path, &original).unwrap();
+            fs::create_dir(path).unwrap();
+            fs::write(path.join("keep.txt"), b"user data").unwrap();
+        }
+    })
+    .unwrap();
+    // 바뀐 폴더는 원본으로 기록하지 않고 다른 이름의 새 폴더를 씀.
+    assert_ne!(root.path(), swapped);
+    assert!(root.is_current());
+    remove_open_root(root);
+    assert_eq!(fs::read(swapped.join("keep.txt")).unwrap(), b"user data");
+}
+
+#[cfg(unix)]
+#[test]
+fn creation_does_not_adopt_link_replaced_before_handle_is_taken() {
+    let scratch = Folder::new();
+    let archive = scratch.0.join("sample.zip");
+    let link = scratch.0.join(open_root_name("sample.zip"));
+    let victim = scratch.0.join("victim");
+    fs::create_dir(&victim).unwrap();
+    fs::write(victim.join("keep.txt"), b"user data").unwrap();
+    let mut swaps = 0;
+    let root = create_open_root_with(&archive, |path| {
+        swaps += 1;
+        if swaps == 1 {
+            fs::remove_dir(path).unwrap();
+            std::os::unix::fs::symlink(&victim, path).unwrap();
+        }
+    })
+    .unwrap();
+    assert_ne!(root.path(), link);
+    remove_open_root(root);
+    assert_eq!(fs::read(victim.join("keep.txt")).unwrap(), b"user data");
+    assert!(fs::symlink_metadata(&link).unwrap().file_type().is_symlink());
+}
+
+#[test]
+fn creation_of_unchanged_folder_is_empty_and_current() {
+    let scratch = Folder::new();
+    let root = create_open_root(&scratch.0.join("sample.zip")).unwrap();
+    let path = root.path().to_path_buf();
+    assert!(root.is_current());
+    assert_eq!(fs::read_dir(&path).unwrap().count(), 0);
+    remove_open_root(root);
+    assert!(!path.exists());
+}
