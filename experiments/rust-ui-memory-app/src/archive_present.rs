@@ -547,7 +547,8 @@ fn open_root_handle(path: &Path) -> io::Result<fs::File> {
     {
         use std::os::windows::fs::OpenOptionsExt;
         // 폴더 자체를 열며 재분석 지점을 따라가지 않음.
-        options.custom_flags(0x02000000 | 0x00200000);
+        // 삭제 공유를 허용하지 않아 열어 둔 동안 폴더 이름을 바꾸거나 지울 수 없게 함.
+        options.share_mode(1 | 2).custom_flags(0x02000000 | 0x00200000);
     }
     let file = options.open(path)?;
     let metadata = file.metadata()?;
@@ -597,10 +598,24 @@ pub fn open_root_name(archive_name: &str) -> String {
 }
 
 /// 이 앱이 만든 열기용 폴더를 지움. 다른 프로그램이 파일을 쓰고 있으면 남을 수 있음.
-pub fn remove_open_root(root: &OpenRoot) {
-    if root.is_current() {
-        let _ = fs::remove_dir_all(root.path());
+pub fn remove_open_root(root: OpenRoot) {
+    remove_open_root_with(root, || {});
+}
+
+/// `remove_open_root`와 같고, 정체를 확인한 직후 삭제 전에 `after_check`를 실행함.
+/// 확인과 삭제 사이에 경로가 바뀌는 경우를 시험하려고 둠.
+/// 내용은 만들 때 열어 둔 폴더 핸들에 묶어 지우므로 경로가 바뀌어도 다른 폴더는 건드리지 않음.
+pub fn remove_open_root_with(root: OpenRoot, after_check: impl FnOnce()) {
+    if !root.is_current() {
+        return;
     }
+    after_check();
+    let OpenRoot { path, handle, .. } = root;
+    let _ = worker_protocol::tree_remove::remove_contents(&handle, &path);
+    // Windows는 핸들을 닫아야 폴더를 지울 수 있음.
+    drop(handle);
+    // 비어 있지 않거나 링크로 바뀐 경로는 지워지지 않으므로 다른 내용이 사라지지 않음.
+    let _ = fs::remove_dir(&path);
 }
 
 /// 기본 프로그램으로 열면 실행될 수 있는 파일은 바로 열지 않음.

@@ -3659,7 +3659,7 @@ impl Drop for ArchiveApp {
     fn drop(&mut self) {
         self.clear_password();
         for (_, root) in self.open_roots.drain(..) {
-            present::remove_open_root(&root);
+            present::remove_open_root(root);
         }
     }
 }
