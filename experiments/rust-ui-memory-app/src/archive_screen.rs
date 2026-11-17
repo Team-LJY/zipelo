@@ -381,6 +381,7 @@ impl ArchiveApp {
 
     /// 압축파일 안 파일 하나를 임시 폴더에 풀고 기본 프로그램으로 엶.
     pub fn open_entry(&mut self, entry_id: u32) -> bool {
+        self.release_open();
         if !self.model.can_extract() || self.opening.is_some() {
             return false;
         }
@@ -444,6 +445,18 @@ impl ArchiveApp {
         }
     }
 
+    /// 한도를 늘려 다시 시도할 수 있는 결과가 화면에 남아 있는 동안은 열기 상태를 유지함.
+    fn open_retry_pending(&self) -> bool {
+        self.opening.is_some() && !self.dismissed && self.model.can_retry_expanded()
+    }
+
+    /// 다시 시도를 기다리던 열기를 접고 원래 풀 위치로 되돌림. 다른 작업을 시작하기 전에 씀.
+    fn release_open(&mut self) {
+        if self.opening.is_some() && !self.model.busy() {
+            self.finish_open(false);
+        }
+    }
+
     /// 열기용 풀기가 끝나면 원래 풀 위치를 되돌리고, 성공했으면 기본 프로그램을 실행함.
     fn finish_open(&mut self, completed: bool) {
         let Some(request) = self.opening.take() else {
@@ -477,6 +490,7 @@ impl ArchiveApp {
 
     /// 압축파일 이름으로 새 폴더를 만들고(같은 이름이 있으면 번호를 붙임) 선택 항목을 풂.
     fn extract_to_new_folder(&mut self) -> bool {
+        self.release_open();
         let Some(archive) = self.model.archive.clone() else {
             return false;
         };
@@ -610,6 +624,7 @@ impl ArchiveApp {
         if self.model.busy() {
             return;
         }
+        self.release_open();
         if self
             .recovery_warning
             .as_ref()
@@ -711,6 +726,7 @@ impl ArchiveApp {
     }
 
     pub fn begin_extract(&mut self) -> bool {
+        self.release_open();
         self.selected_only = !self.model.selected.is_empty();
         let selection = if self.selected_only {
             Selection::EntryIds(
@@ -832,6 +848,8 @@ impl ArchiveApp {
                 aes256: self.aes256,
             }
         };
+        // 한도 초과 뒤 보류된 열기는 만들기와 무관하므로 시작 전에 접음.
+        self.release_open();
         if self.start(request) {
             self.create = false;
             self.create_win = WorkWindow::default();
@@ -951,6 +969,7 @@ impl ArchiveApp {
                     }
                     Purpose::Destination | Purpose::Retry => {
                         // 다른 폴더를 골랐으면 기본 프로그램 열기가 아닌 일반 풀기로 다시 함.
+                        self.release_open();
                         self.last_open = None;
                         self.choose_destination(path);
                         self.selected_only = !self.model.selected.is_empty();
@@ -1076,7 +1095,10 @@ impl ArchiveApp {
             if self.opening.is_some() {
                 // 열기용 폴더는 앱을 닫을 때 지우므로 풀 위치 소유 기록만 정리함.
                 self.owned_destination = None;
-                self.finish_open(completed);
+                // 한도 실패는 늘려서 다시 시도할 수 있으므로 열기 상태를 남김.
+                if completed || !self.open_retry_pending() {
+                    self.finish_open(completed);
+                }
             }
             if let Some(path) = self.owned_destination.take() {
                 if !self.model.confirmed
@@ -1089,6 +1111,10 @@ impl ArchiveApp {
                     present::remove_owned_empty(&path);
                 }
             }
+        }
+        if self.opening.is_some() && !self.model.busy() && !self.open_retry_pending() {
+            // 결과를 닫았거나 다시 시도할 수 없게 되었으면 원래 풀 위치로 되돌림.
+            self.finish_open(false);
         }
     }
 
