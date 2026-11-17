@@ -195,6 +195,9 @@ mod platform {
         fn unlinkat(fd: i32, path: *const i8, flags: i32) -> i32;
         fn geteuid() -> u32;
         fn getegid() -> u32;
+        fn dlopen(name: *const i8, flags: i32) -> *mut std::ffi::c_void;
+        fn dlsym(library: *mut std::ffi::c_void, name: *const i8) -> *mut std::ffi::c_void;
+        fn dlclose(library: *mut std::ffi::c_void) -> i32;
         fn getgrgid_r(
             gid: u32,
             group: *mut Group,
@@ -210,7 +213,94 @@ mod platform {
         gid: u32,
         members: *mut *mut i8,
     }
-    // 원격 계정 열거는 불완전할 수 있으므로 로컬 계정만 확인 가능한 경우에 허용함.
+    #[repr(C)]
+    struct Passwd {
+        name: *mut i8,
+        password: *mut i8,
+        uid: u32,
+        gid: u32,
+        gecos: *mut i8,
+        directory: *mut i8,
+        shell: *mut i8,
+    }
+
+    // glibc는 NSS 서비스 실패도 열거 종료로 바꾸므로 모듈의 상태를 직접 확인함.
+    fn systemd_primary_group_is_private(gid: u32, uid: u32) -> bool {
+        type Set = unsafe extern "C" fn(i32) -> i32;
+        type End = unsafe extern "C" fn() -> i32;
+        type Next = unsafe extern "C" fn(*mut Passwd, *mut i8, usize, *mut i32) -> i32;
+        struct Library(*mut std::ffi::c_void);
+        impl Drop for Library {
+            fn drop(&mut self) {
+                unsafe { dlclose(self.0) };
+            }
+        }
+        struct Enumeration(End);
+        impl Drop for Enumeration {
+            fn drop(&mut self) {
+                unsafe { (self.0)() };
+            }
+        }
+        static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+        let Ok(_lock) = LOCK.lock() else {
+            return false;
+        };
+        // RTLD_NOW로 모든 심볼을 확인하고 모듈이 없거나 열리지 않으면 거부함.
+        let handle = unsafe { dlopen(c"libnss_systemd.so.2".as_ptr(), 2) };
+        if handle.is_null() {
+            return false;
+        }
+        let library = Library(handle);
+        let set = unsafe { dlsym(library.0, c"_nss_systemd_setpwent".as_ptr()) };
+        let end = unsafe { dlsym(library.0, c"_nss_systemd_endpwent".as_ptr()) };
+        let next = unsafe { dlsym(library.0, c"_nss_systemd_getpwent_r".as_ptr()) };
+        if set.is_null() || end.is_null() || next.is_null() {
+            return false;
+        }
+        // NSS 모듈의 공개 C ABI와 일치하는 함수 포인터만 사용함.
+        let (set, end, next) = unsafe {
+            (
+                std::mem::transmute::<*mut std::ffi::c_void, Set>(set),
+                std::mem::transmute::<*mut std::ffi::c_void, End>(end),
+                std::mem::transmute::<*mut std::ffi::c_void, Next>(next),
+            )
+        };
+        let _enumeration = Enumeration(end);
+        if unsafe { set(0) } != 1 {
+            return false;
+        }
+        let mut buffer = vec![0i8; 16 * 1024];
+        loop {
+            let mut account = Passwd {
+                name: std::ptr::null_mut(),
+                password: std::ptr::null_mut(),
+                uid: 0,
+                gid: 0,
+                gecos: std::ptr::null_mut(),
+                directory: std::ptr::null_mut(),
+                shell: std::ptr::null_mut(),
+            };
+            let mut error = 0;
+            let status =
+                unsafe { next(&mut account, buffer.as_mut_ptr(), buffer.len(), &mut error) };
+            if status == -2 && error == 34 && buffer.len() < 1024 * 1024 {
+                buffer.resize(buffer.len() * 2, 0);
+                continue;
+            }
+            // NSS_STATUS_NOTFOUND만 정상 종료이며 UNAVAIL과 TRYAGAIN은 거부함.
+            if status == 0 {
+                return true;
+            }
+            if status != 1 || account.name.is_null() || unsafe { *account.name } == 0 {
+                return false;
+            }
+            if account.gid == gid && account.uid != uid {
+                return false;
+            }
+        }
+    }
+
+    // files와 systemd만 열거하며 원격 계정 소스와 임의의 NSS 제어 규칙은 거부함.
     fn primary_group_is_private(gid: u32) -> bool {
         let Ok(policy) = std::fs::read_to_string("/etc/nsswitch.conf") else {
             return false;
@@ -223,7 +313,10 @@ mod platform {
         let Some(source) = sources.next() else {
             return false;
         };
-        if sources.next().is_some() || !source.split_whitespace().eq(["files"]) {
+        if sources.next().is_some()
+            || !(source.split_whitespace().eq(["files"])
+                || source.split_whitespace().eq(["files", "systemd"]))
+        {
             return false;
         }
         let Ok(accounts) = std::fs::read_to_string("/etc/passwd") else {
@@ -251,6 +344,8 @@ mod platform {
             }
         }
         found_current
+            && (!source.split_whitespace().any(|source| source == "systemd")
+                || systemd_primary_group_is_private(gid, current_uid))
     }
 
     // 기본 구성원과 보조 구성원을 모두 확인함.

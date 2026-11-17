@@ -52,7 +52,22 @@ fn run_case(case: &str, safe: bool, extraction: bool) {
     }
     let nss = match case {
         "remote-accounts" => "passwd: files sss\n",
-        "unknown-accounts" => "passwd: files systemd\n",
+        "systemd-personal"
+        | "systemd-dynamic-shared"
+        | "systemd-homed-shared"
+        | "systemd-unrelated"
+        | "systemd-large-record"
+        | "systemd-buffer-limit"
+        | "systemd-enumeration-error"
+        | "systemd-set-error"
+        | "systemd-load-error"
+        | "systemd-symbol-error"
+        | "systemd-partial-error" => "passwd: files systemd\n",
+        "ldap-accounts" => "passwd: files ldap\n",
+        "winbind-accounts" => "passwd: files winbind\n",
+        "systemd-remote" => "passwd: files systemd sss\n",
+        "unknown-accounts" => "passwd: files unknown\n",
+        "short-circuit-policy" => "passwd: files [SUCCESS=return] systemd\n",
         "duplicate-policy" => "passwd: files\npasswd: files\n",
         "missing-policy" => "group: files\n",
         _ => "# fixture\npasswd: files # local accounts\n",
@@ -159,6 +174,10 @@ fn private_group_rejects_incomplete_account_information() {
         "nss-unavailable",
         "remote-accounts",
         "unknown-accounts",
+        "ldap-accounts",
+        "winbind-accounts",
+        "systemd-remote",
+        "short-circuit-policy",
         "duplicate-policy",
         "missing-policy",
         "group-error",
@@ -169,4 +188,29 @@ fn private_group_rejects_incomplete_account_information() {
     ] {
         check_case(case, false);
     }
+}
+
+#[test]
+fn private_group_checks_systemd_enumerated_accounts() {
+    for case in [
+        "systemd-personal",
+        "systemd-unrelated",
+        "systemd-large-record",
+    ] {
+        check_extraction(case, true);
+    }
+    for case in [
+        "systemd-dynamic-shared",
+        "systemd-homed-shared",
+        "systemd-buffer-limit",
+        "systemd-enumeration-error",
+        "systemd-set-error",
+        "systemd-load-error",
+        "systemd-symbol-error",
+        "systemd-partial-error",
+    ] {
+        check_extraction(case, false);
+    }
+    check_extraction("remote-accounts", false);
+    check_extraction("systemd-remote", false);
 }
