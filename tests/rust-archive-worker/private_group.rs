@@ -23,6 +23,16 @@ fn run_case_with_policy(case: &str, safe: bool, extraction: bool, policy: Option
         0o775
     };
     fs::set_permissions(&output, fs::Permissions::from_mode(mode)).unwrap();
+    if matches!(
+        case,
+        "acl-user-writer"
+            | "acl-current-user"
+            | "acl-readonly-user"
+            | "acl-group-writer"
+            | "acl-mask-only"
+    ) {
+        set_access_acl(&output, case);
+    }
     if extraction {
         fs::write(
             scratch.0.join("input"),
@@ -181,6 +191,96 @@ fn probe_child() {
 fn private_group_accepts_only_current_primary_member() {
     for case in ["personal", "unrelated-primary"] {
         check_case(case, true);
+    }
+}
+
+fn set_access_acl(path: &std::path::Path, case: &str) {
+    use std::os::fd::AsRawFd;
+    unsafe extern "C" {
+        fn fsetxattr(
+            fd: i32,
+            name: *const std::ffi::c_char,
+            value: *const std::ffi::c_void,
+            size: usize,
+            flags: i32,
+        ) -> i32;
+    }
+    let file = fs::File::open(path).unwrap();
+    let metadata = file.metadata().unwrap();
+    let mut entries = vec![(1u16, 7u16, u32::MAX)];
+    if matches!(
+        case,
+        "acl-user-writer" | "acl-current-user" | "acl-readonly-user"
+    ) {
+        let uid = if case == "acl-current-user" {
+            metadata.uid()
+        } else {
+            metadata.uid().wrapping_add(1)
+        };
+        let permissions = if case == "acl-readonly-user" { 5 } else { 7 };
+        entries.push((2, permissions, uid));
+    }
+    entries.push((4, 7, u32::MAX));
+    if case == "acl-group-writer" {
+        entries.push((8, 7, metadata.gid().wrapping_add(1)));
+    }
+    entries.extend([(16, 7, u32::MAX), (32, 5, u32::MAX)]);
+    let mut bytes = 2u32.to_le_bytes().to_vec();
+    for (tag, permissions, id) in entries {
+        bytes.extend(tag.to_le_bytes());
+        bytes.extend(permissions.to_le_bytes());
+        bytes.extend(id.to_le_bytes());
+    }
+    // 실제 접근 ACL을 열린 디스크립터에 설정함.
+    assert_eq!(
+        unsafe {
+            fsetxattr(
+                file.as_raw_fd(),
+                c"system.posix_acl_access".as_ptr(),
+                bytes.as_ptr().cast(),
+                bytes.len(),
+                0,
+            )
+        },
+        0,
+        "{}",
+        std::io::Error::last_os_error()
+    );
+    assert_eq!(file.metadata().unwrap().mode() & 0o777, 0o775);
+}
+
+#[test]
+fn private_group_rejects_named_access_acl_entries() {
+    for case in [
+        "acl-user-writer",
+        "acl-current-user",
+        "acl-readonly-user",
+        "acl-group-writer",
+    ] {
+        check_extraction(case, false);
+    }
+}
+
+#[test]
+fn private_group_accepts_absent_and_unnamed_access_acls() {
+    for case in ["personal", "acl-mask-only", "acl-enodata", "acl-enotsup"] {
+        check_extraction(case, true);
+    }
+}
+
+#[test]
+fn private_group_rejects_acl_probe_errors_and_invalid_values() {
+    for case in [
+        "acl-eacces",
+        "acl-eio",
+        "acl-erange",
+        "acl-invalid-version",
+        "acl-truncated",
+        "acl-invalid-permissions",
+        "acl-invalid-id",
+        "acl-unknown-tag",
+    ] {
+        check_extraction(case, false);
     }
 }
 
