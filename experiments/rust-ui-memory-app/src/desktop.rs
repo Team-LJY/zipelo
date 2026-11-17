@@ -13,6 +13,9 @@ mod fake;
 mod renderer;
 #[path = "system_font.rs"]
 mod system_font;
+#[cfg(target_os = "linux")]
+#[path = "drag_out_wayland.rs"]
+mod drag_out_wayland;
 use eframe::egui;
 fn main() -> eframe::Result {
     zipelo_ui_memory_app::log_info!(
@@ -151,6 +154,11 @@ fn run() -> eframe::Result {
                     fixture,
                 );
                 app.set_custom_frame(custom_frame);
+                // Wayland에서는 목록 항목을 창 밖으로 끌어 놓아 풀 수 있게 함.
+                #[cfg(target_os = "linux")]
+                if !fixture && let Some(drag) = drag_out_wayland::create(cc, cc.egui_ctx.clone()) {
+                    app.set_drag_out(Box::new(drag));
+                }
                 app.set_work_window_in_parent(custom_frame);
                 Ok(Box::new(app))
             })

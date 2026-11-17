@@ -202,6 +202,8 @@ struct OpenRequest {
     name: String,
     destination: PathBuf,
     automatic: bool,
+    /// 창 밖으로 끌어 놓으려고 푸는 경우, 받는 쪽에 넘길 항목(압축파일 안 경로).
+    drag: Option<Vec<String>>,
 }
 
 /// 찾기 창(Ctrl+F, Ctrl+Shift+F) 크기. 검색어 입력란 아래로 결과 목록이 길게 이어지는
@@ -315,6 +317,10 @@ pub struct ArchiveApp {
     open_roots: Vec<(PathBuf, present::OpenRoot)>,
     open_count: u64,
     opener: Opener,
+    /// 운영체제 끌어 놓기 구현. 지원하지 않는 환경에서는 없음.
+    drag_out: Option<Box<dyn crate::drag_out::DragOut>>,
+    /// 끌기를 놓지 않고 취소해 풀던 작업을 취소했는지. 결과 창을 띄우지 않음.
+    drag_cancelled: bool,
     find: FindState,
     /// 이번 화면에서 목록 선택 해제 등 다른 곳이 Esc를 이미 처리했는지.
     escape_handled: bool,
@@ -398,6 +404,8 @@ impl ArchiveApp {
             open_roots: Vec::new(),
             open_count: 0,
             opener: Box::new(present::open_with_default),
+            drag_out: None,
+            drag_cancelled: false,
             find: FindState::default(),
             escape_handled: false,
             focus_list: false,
@@ -450,9 +458,30 @@ impl ArchiveApp {
             self.ui_error = Some(present::open_blocked_text(&name));
             return false;
         }
-        let Some(archive) = self.model.archive.clone() else {
+        let Some(folder) = self.new_open_folder() else {
             return false;
         };
+        let request = OpenRequest {
+            folder: folder.clone(),
+            name: name.replace('\\', "/"),
+            destination: std::mem::replace(&mut self.destination, folder),
+            automatic: std::mem::replace(&mut self.automatic_destination, true),
+            drag: None,
+        };
+        self.opening = Some(request);
+        if self.extract_selection(Selection::EntryIds(vec![entry_id])) {
+            self.last_open = Some(entry_id);
+            true
+        } else {
+            self.finish_open(false);
+            false
+        }
+    }
+
+    /// 압축파일별 임시 폴더 아래에 이번 열기(또는 끌어 놓기)용 새 하위 폴더 경로를 정함.
+    /// 같은 파일을 여러 번 열어도 충돌하지 않도록 매번 새 하위 폴더에 풂.
+    fn new_open_folder(&mut self) -> Option<PathBuf> {
+        let archive = self.model.archive.clone()?;
         let root = match self.open_roots.iter().find(|(a, _)| *a == archive) {
             Some((_, root)) if root.is_current() => root.path().to_path_buf(),
             _ => match present::create_open_root(&archive) {
@@ -465,26 +494,97 @@ impl ArchiveApp {
                 Err(_) => {
                     self.dismissed = false;
                     self.ui_error = Some(present::FOLDER_ERROR.into());
-                    return false;
+                    return None;
                 }
             },
         };
-        // 같은 파일을 여러 번 열어도 충돌하지 않도록 열 때마다 새 하위 폴더에 풂.
         self.open_count += 1;
-        let folder = present::unique_folder(&root.join(self.open_count.to_string()));
+        Some(present::unique_folder(
+            &root.join(self.open_count.to_string()),
+        ))
+    }
+
+    /// 운영체제 끌어 놓기 구현을 정함. Wayland처럼 지원하는 환경에서만 씀.
+    pub fn set_drag_out(&mut self, drag_out: Box<dyn crate::drag_out::DragOut>) {
+        self.drag_out = Some(drag_out);
+    }
+
+    /// 목록에서 선택한 항목을 창 밖으로 끌기 시작함. 운영체제 끌기를 시작한 뒤 선택
+    /// 항목을 임시 폴더에 풀고, 다 풀리면 받는 쪽에 파일 경로를 넘김.
+    pub fn begin_drag_out(&mut self) -> bool {
+        self.release_open();
+        if self.drag_out.is_none()
+            || !self.model.can_extract()
+            || self.opening.is_some()
+            || self.model.selected.is_empty()
+        {
+            return false;
+        }
+        let gzip = self
+            .model
+            .list_id
+            .as_ref()
+            .is_some_and(|id| id.format == Format::Gzip);
+        let names: Vec<String> = if gzip {
+            vec![self.gzip_name.clone()]
+        } else {
+            browser::rows(&self.model.entries, &self.folder, &self.search)
+                .into_iter()
+                .filter(|row| !row.ids.is_empty() && row.ids.is_subset(&self.model.selected))
+                .map(|row| row.path)
+                .collect()
+        };
+        if names.is_empty() {
+            return false;
+        }
+        if !self.drag_out.as_mut().is_some_and(|drag| drag.start()) {
+            crate::log_warn!("운영체제 끌기를 시작하지 못함");
+            return false;
+        }
+        crate::log_debug!("창 밖으로 끌기 시작: {names:?}");
+        // 운영체제가 끌기를 넘겨받으면 버튼 놓기가 이 창에 오지 않으므로 대신 넣어 줌.
+        self.release_after_move = true;
+        self.marquee = None;
+        self.drag_cancelled = false;
+        self.last_open = None;
+        let Some(folder) = self.new_open_folder() else {
+            if let Some(drag) = self.drag_out.as_mut() {
+                drag.fail();
+            }
+            return false;
+        };
         let request = OpenRequest {
             folder: folder.clone(),
-            name: name.replace('\\', "/"),
+            name: String::new(),
             destination: std::mem::replace(&mut self.destination, folder),
             automatic: std::mem::replace(&mut self.automatic_destination, true),
+            drag: Some(names),
         };
         self.opening = Some(request);
-        if self.extract_selection(Selection::EntryIds(vec![entry_id])) {
-            self.last_open = Some(entry_id);
+        let selection = Selection::EntryIds(
+            browser::expand_selection(&self.model.entries, &self.model.selected)
+                .into_iter()
+                .collect(),
+        );
+        if self.extract_selection(selection) {
             true
         } else {
             self.finish_open(false);
             false
+        }
+    }
+
+    /// 운영체제 끌기에서 온 사건을 처리함.
+    fn poll_drag_out(&mut self) {
+        while let Some(event) = self.drag_out.as_mut().and_then(|drag| drag.poll()) {
+            crate::log_debug!("끌어 놓기 사건: {event:?}");
+            let dragging = self.opening.as_ref().is_some_and(|r| r.drag.is_some());
+            if event == crate::drag_out::DragEvent::Cancelled && dragging && self.model.busy() {
+                // 받을 곳이 없으므로 풀던 작업을 취소하고 결과 창은 띄우지 않음.
+                self.drag_cancelled = true;
+                self.clear_password();
+                self.model.cancel();
+            }
         }
     }
 
@@ -507,6 +607,34 @@ impl ArchiveApp {
         };
         self.destination = request.destination;
         self.automatic_destination = request.automatic;
+        if let Some(names) = request.drag {
+            let cancelled = std::mem::take(&mut self.drag_cancelled);
+            let paths: Vec<PathBuf> = names
+                .iter()
+                .map(|name| {
+                    name.split('/')
+                        .fold(request.folder.clone(), |path, part| path.join(part))
+                })
+                .filter(|path| completed && path.exists())
+                .collect();
+            let Some(drag) = self.drag_out.as_mut() else {
+                return;
+            };
+            if paths.is_empty() {
+                drag.fail();
+                if cancelled {
+                    self.dismissed = true;
+                } else if completed {
+                    self.ui_error = Some(present::OPEN_MISSING.into());
+                }
+            } else {
+                crate::log_debug!("끌어 놓을 파일 준비 끝: {}개", paths.len());
+                drag.provide(&paths);
+                // 결과 창 없이 받는 쪽이 파일을 가져가게 함.
+                self.dismissed = true;
+            }
+            return;
+        }
         if !completed {
             return;
         }
@@ -1329,6 +1457,7 @@ impl ArchiveApp {
             self.initialized = true;
         }
         self.poll();
+        self.poll_drag_out();
         let preview_was_open = self.preview_open;
         self.poll_picker();
         if self.model.challenge.is_some_and(|(_, _, encrypt)| encrypt)
@@ -2166,6 +2295,7 @@ impl ArchiveApp {
         let mut open = None;
         let mut open_file = None;
         let mut menu_action = None;
+        let mut drag_out = false;
         let mut next_offset = None;
         let output = egui::ScrollArea::vertical()
             .id_salt("archive-rows")
@@ -2260,7 +2390,10 @@ impl ArchiveApp {
                         .interact(
                             rect,
                             egui::Id::unique(("archive-row", &row.path)),
-                            if active {
+                            if active && self.drag_out.is_some() {
+                                // 선택한 항목을 창 밖으로 끌어 놓을 수 있게 끌기도 받음.
+                                egui::Sense::click_and_drag()
+                            } else if active {
                                 egui::Sense::click()
                             } else {
                                 egui::Sense::hover()
@@ -2304,6 +2437,13 @@ impl ArchiveApp {
                             modifiers.ctrl || modifiers.command,
                             modifiers.shift,
                         );
+                    }
+                    if active && self.drag_out.is_some() && response.drag_started() {
+                        if !selected {
+                            // 선택하지 않은 행을 끌면 그 행만 선택한 뒤 끎.
+                            self.select_row(&rows, index, false, false);
+                        }
+                        drag_out = true;
                     }
                     if response.double_clicked() {
                         if row.directory {
@@ -2502,6 +2642,9 @@ impl ArchiveApp {
         }
         if let Some(id) = open_file {
             self.open_entry(id);
+        }
+        if drag_out {
+            self.begin_drag_out();
         }
         match menu_action {
             Some(MenuAction::NewFolder) => {

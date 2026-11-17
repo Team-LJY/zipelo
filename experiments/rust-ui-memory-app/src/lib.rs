@@ -24,5 +24,7 @@ pub mod window_frame;
 
 pub mod archive_path;
 
+pub mod drag_out;
+
 #[cfg(feature = "ui")]
 pub mod app_icon;
