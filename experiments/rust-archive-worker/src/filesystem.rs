@@ -297,7 +297,29 @@ mod platform {
         }
     }
 
-    // files와 systemd만 열거하며 원격 계정 소스와 임의의 NSS 제어 규칙은 거부함.
+    // 없는 경로만 허용하며 중간 심볼릭 링크와 확인 오류는 거부함.
+    fn path_is_absent(path: &Path) -> bool {
+        let mut prefix = std::path::PathBuf::new();
+        for component in path.components() {
+            prefix.push(component.as_os_str());
+            match std::fs::symlink_metadata(&prefix) {
+                Ok(metadata) if metadata.is_dir() => {}
+                Ok(_) => return false,
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => return true,
+                Err(_) => return false,
+            }
+        }
+        false
+    }
+
+    fn sss_is_unused(socket: &Path, cache: &Path) -> bool {
+        path_is_absent(socket)
+            && ["passwd", "group", "initgr"]
+                .iter()
+                .all(|name| path_is_absent(&cache.join(name)))
+    }
+
+    // sss는 소켓과 캐시가 모두 없을 때만 빈 소스로 취급함.
     fn primary_group_is_private(gid: u32) -> bool {
         let Ok(policy) = std::fs::read_to_string("/etc/nsswitch.conf") else {
             return false;
@@ -310,9 +332,17 @@ mod platform {
         let Some(source) = sources.next() else {
             return false;
         };
+        let source: Vec<_> = source.split_whitespace().collect();
         if sources.next().is_some()
-            || !(source.split_whitespace().eq(["files"])
-                || source.split_whitespace().eq(["files", "systemd"]))
+            || !matches!(
+                source.as_slice(),
+                ["files"] | ["files", "systemd"] | ["files", "sss"] | ["files", "systemd", "sss"]
+            )
+            || (source.contains(&"sss")
+                && !sss_is_unused(
+                    Path::new("/var/lib/sss/pipes/nss"),
+                    Path::new("/var/lib/sss/mc"),
+                ))
         {
             return false;
         }
@@ -341,7 +371,7 @@ mod platform {
             }
         }
         found_current
-            && (!source.split_whitespace().any(|source| source == "systemd")
+            && (!source.contains(&"systemd")
                 || systemd_primary_group_is_private(gid, current_uid))
     }
 

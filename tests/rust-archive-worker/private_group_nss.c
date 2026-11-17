@@ -121,3 +121,31 @@ int _nss_systemd_getpwent_r(struct passwd *account, char *buffer, size_t length,
     };
     return 1;
 }
+
+#include <limits.h>
+#include <stdio.h>
+#include <sys/stat.h>
+
+int statx(int fd, const char *path, int flags, unsigned int mask,
+        struct statx *info) {
+    int (*original)(int, const char *, int, unsigned int, struct statx *) =
+        dlsym(RTLD_NEXT, "statx");
+    const char *prefix = "/var/lib/sss";
+    const size_t size = strlen(prefix);
+    if (!strncmp(path, prefix, size) && (!path[size] || path[size] == '/')) {
+        const char *base = getenv("ZIPELO_GROUP_SSS");
+        const char *phase = getenv("ZIPELO_GROUP_CASE");
+        if (!base || (phase && !strcmp(phase, "sss-probe-error"))) {
+            errno = EACCES;
+            return -1;
+        }
+        char redirected[PATH_MAX];
+        int n = snprintf(redirected, sizeof(redirected), "%s%s", base, path + size);
+        if (n < 0 || (size_t)n >= sizeof(redirected)) {
+            errno = ENAMETOOLONG;
+            return -1;
+        }
+        return original(fd, redirected, flags, mask, info);
+    }
+    return original(fd, path, flags, mask, info);
+}

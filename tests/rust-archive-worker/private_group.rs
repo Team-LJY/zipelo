@@ -51,7 +51,7 @@ fn run_case(case: &str, safe: bool, extraction: bool) {
         fs::remove_file(&passwd_path).unwrap();
     }
     let nss = match case {
-        "remote-accounts" => "passwd: files sss\n",
+        "remote-accounts" | "sss-files-only" => "passwd: files sss\n",
         "systemd-personal"
         | "systemd-dynamic-shared"
         | "systemd-homed-shared"
@@ -67,6 +67,7 @@ fn run_case(case: &str, safe: bool, extraction: bool) {
         "ldap-accounts" => "passwd: files ldap\n",
         "winbind-accounts" => "passwd: files winbind\n",
         "systemd-remote" => "passwd: files systemd sss\n",
+        _ if case.starts_with("sss-") => "passwd: files systemd sss\n",
         "unknown-accounts" => "passwd: files unknown\n",
         "short-circuit-policy" => "passwd: files [SUCCESS=return] systemd\n",
         "duplicate-policy" => "passwd: files\npasswd: files\n",
@@ -77,6 +78,39 @@ fn run_case(case: &str, safe: bool, extraction: bool) {
     fs::write(&nss_path, nss).unwrap();
     if case == "nss-unavailable" {
         fs::remove_file(&nss_path).unwrap();
+    }
+    let sss = scratch.0.join("sss");
+    fs::create_dir_all(sss.join("pipes")).unwrap();
+    fs::create_dir_all(sss.join("mc")).unwrap();
+    let _socket = match case {
+        "sss-socket" | "remote-accounts" | "systemd-remote" => {
+            use std::os::fd::AsRawFd;
+            let pipes = fs::File::open(sss.join("pipes")).unwrap();
+            let path = format!("/proc/self/fd/{}/nss", pipes.as_raw_fd());
+            Some(std::os::unix::net::UnixListener::bind(path).unwrap())
+        }
+        _ => None,
+    };
+    match case {
+        "sss-passwd-cache" => fs::write(sss.join("mc/passwd"), b"").unwrap(),
+        "sss-group-cache" => fs::write(sss.join("mc/group"), b"").unwrap(),
+        "sss-initgr-cache" => fs::write(sss.join("mc/initgr"), b"").unwrap(),
+        "sss-dangling-socket" => {
+            std::os::unix::fs::symlink("missing", sss.join("pipes/nss")).unwrap();
+        }
+        "sss-dangling-cache" => {
+            std::os::unix::fs::symlink("missing", sss.join("mc/passwd")).unwrap();
+        }
+        "sss-cache-symlink" => {
+            fs::remove_dir(sss.join("mc")).unwrap();
+            std::os::unix::fs::symlink("missing", sss.join("mc")).unwrap();
+        }
+        "sss-invalid-parent" => {
+            fs::remove_dir(sss.join("mc")).unwrap();
+            fs::write(sss.join("mc"), b"").unwrap();
+        }
+        "sss-missing-directories" => fs::remove_dir_all(&sss).unwrap(),
+        _ => {}
     }
     let library = scratch.0.join("private-group.so");
     assert!(
@@ -103,6 +137,7 @@ fn run_case(case: &str, safe: bool, extraction: bool) {
         .env("ZIPELO_GROUP_CASE", case)
         .env("ZIPELO_GROUP_PASSWD", passwd_path)
         .env("ZIPELO_GROUP_NSS", nss_path)
+        .env("ZIPELO_GROUP_SSS", sss)
         .env("ZIPELO_GROUP_OUTPUT", &output)
         .env("ZIPELO_GROUP_SAFE", if safe { "1" } else { "0" })
         .env("ZIPELO_GROUP_EXTRACT", if extraction { "1" } else { "0" })
@@ -215,6 +250,26 @@ fn private_group_checks_systemd_enumerated_accounts() {
 #[test]
 fn private_group_rejects_consumed_systemd_record_on_erange() {
     for case in ["systemd-large-record", "systemd-large-shared"] {
+        check_extraction(case, false);
+    }
+}
+
+#[test]
+fn private_group_accepts_sss_only_without_socket_and_caches() {
+    for case in ["sss-empty", "sss-files-only", "sss-missing-directories"] {
+        check_extraction(case, true);
+    }
+    for case in [
+        "sss-socket",
+        "sss-passwd-cache",
+        "sss-group-cache",
+        "sss-initgr-cache",
+        "sss-dangling-socket",
+        "sss-dangling-cache",
+        "sss-cache-symlink",
+        "sss-invalid-parent",
+        "sss-probe-error",
+    ] {
         check_extraction(case, false);
     }
 }
