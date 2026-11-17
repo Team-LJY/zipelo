@@ -28,21 +28,20 @@ use x11rb::{
 use zipelo_ui_memory_app::drag_out::{DragEvent, DragOut, uri_list};
 
 const XDND_VERSION: u32 = 5;
-/// 파일이 준비되거나 실패한 뒤에도 받는 쪽이 늦게 요청할 수 있도록 끌기 창을 남겨 두는 시간.
+/// 놓기와 파일 준비가 모두 끝난 뒤에도 늦은 요청을 받을 수 있도록 기다리는 시간.
 const READY_GRACE: Duration = Duration::from_secs(60);
 
-/// 끌기 스레드를 끝내도 되는지.
+/// 끌기 스레드를 끝내도 되는지 판단함.
 ///
-/// - 끌고 있는 동안에는 끝내지 않음.
-/// - 놓지 않고 끝났으면(취소, 받는 쪽 없음) 바로 끝냄.
-/// - 놓은 뒤에는 파일 준비가 아무리 오래 걸려도 기다림. 준비되거나 실패한 뒤에는 기다리는
-///   요청이 없고 `READY_GRACE`가 지났을 때 끝냄. 놓은 뒤 일정 시간으로 끝내면 큰 파일의
-///   준비가 끝나기 전에 XdndSelection 소유자가 사라져 전달에 실패함.
+/// 끌기를 취소하거나 받는 쪽이 없으면 바로 끝냄. 놓은 뒤에는 파일 준비가 끝나거나
+/// 실패할 때까지 기다림. 두 조건이 충족된 뒤에도 늦은 요청을 위해 끌기 창을 남겨 둠.
 fn session_over(
     grabbing: bool,
     dropped: bool,
-    ready_for: Option<Duration>,
+    files_resolved: impl FnOnce() -> bool,
+    grace_started_at: &mut Option<Instant>,
     waiting_requests: bool,
+    now: Instant,
 ) -> bool {
     if grabbing {
         return false;
@@ -50,7 +49,10 @@ fn session_over(
     if !dropped {
         return true;
     }
-    ready_for.is_some_and(|elapsed| !waiting_requests && elapsed >= READY_GRACE)
+    if grace_started_at.is_none() && files_resolved() {
+        *grace_started_at = Some(now);
+    }
+    grace_started_at.is_some_and(|at| !waiting_requests && now.duration_since(at) >= READY_GRACE)
 }
 
 enum Ready {
@@ -306,7 +308,7 @@ struct Session {
 impl Session {
     fn run(mut self) {
         let mut dropped = false;
-        let mut ready_at: Option<Instant> = None;
+        let mut grace_started_at = None;
         let mut grabbing = true;
         loop {
             self.answer_waiting();
@@ -319,14 +321,13 @@ impl Session {
                 }
             };
             let Some(event) = event else {
-                if ready_at.is_none() && self.shared.lock().unwrap().ready.is_some() {
-                    ready_at = Some(Instant::now());
-                }
                 if session_over(
                     grabbing,
                     dropped,
-                    ready_at.map(|at| at.elapsed()),
+                    || self.shared.lock().unwrap().ready.is_some(),
+                    &mut grace_started_at,
                     !self.requests.is_empty(),
+                    Instant::now(),
                 ) {
                     break;
                 }
