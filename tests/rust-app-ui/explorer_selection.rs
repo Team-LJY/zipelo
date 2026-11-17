@@ -327,6 +327,122 @@ fn explorer_double_click_opens_files_with_default_app_and_folders_in_place() {
     assert!(!root.exists());
 }
 
+/// 열기용 풀기가 한도 초과로 실패한 상태까지 진행함. 결과 창을 그리는 문맥도 함께 돌려줌.
+fn double_click_open_hits_limit(s: &mut Explorer) -> egui::Context {
+    s.factory.state.borrow_mut().manual = true;
+    s.double_click("alpha.txt");
+    assert_eq!(s.factory.state.borrow().starts.len(), 2);
+    finish_limit(s);
+    let ctx = egui::Context::default();
+    ctx.set_embed_viewports(false);
+    for _ in 0..12 {
+        policy_render(&ctx, &mut s.app, vec![]);
+    }
+    assert!(s.app.model.can_retry_expanded());
+    assert!(s.opened.borrow().is_empty());
+    ctx
+}
+
+fn finish_limit(s: &mut Explorer) {
+    {
+        let mut worker = s.factory.state.borrow_mut();
+        worker.frame(Event::Accepted { encryption: false });
+        worker.frame(Event::Terminal(Terminal {
+            outcome: Outcome::Failed,
+            error: Some(ErrorCode::Limit),
+            publication: Publication::None,
+            created_count: 0,
+            retained_partial_count: 0,
+            durability: Durability::NotApplicable,
+            cleanup: Cleanup::Complete,
+        }));
+        worker.queue.extend([
+            HostEvent::StdoutEof,
+            HostEvent::StderrEof,
+            HostEvent::Exited { success: true },
+        ]);
+    }
+    for _ in 0..30 {
+        s.frame(egui::Modifiers::NONE, vec![]);
+    }
+}
+
+#[test]
+fn explorer_open_keeps_pending_open_when_limit_retry_succeeds() {
+    let scratch = Folder::new();
+    let mut s = Explorer::new(&scratch);
+    let root = scratch.0.join("sample.zip (Zipelo 임시)");
+    let ctx = double_click_open_hits_limit(&mut s);
+    policy_click(&ctx, &mut s.app, "한도를 늘려 다시 시도");
+    assert!(s.app.model.busy());
+    assert!(s.factory.state.borrow().expanded);
+    assert!(matches!(
+        s.factory.state.borrow().starts.last(),
+        Some(Start::Extract { destination, .. }) if destination == &root.join("1")
+    ));
+    {
+        let mut worker = s.factory.state.borrow_mut();
+        worker.frame(Event::Accepted { encryption: false });
+        worker.frame(Event::Output {
+            entry_id: None,
+            relative_name: "alpha.txt".into(),
+            disposition: Disposition::Created,
+        });
+        worker.finish(Outcome::Completed, Publication::Complete);
+    }
+    for _ in 0..30 {
+        s.frame(egui::Modifiers::NONE, vec![]);
+    }
+    // 다시 시도가 성공하면 기본 프로그램이 열림.
+    assert_eq!(*s.opened.borrow(), vec![root.join("1").join("alpha.txt")]);
+    // 열기가 끝나면 풀 위치는 원래대로 돌아옴.
+    s.factory.state.borrow_mut().manual = false;
+    assert!(s.app.begin_extract());
+    assert!(matches!(
+        s.factory.state.borrow().starts.last(),
+        Some(Start::Extract { destination, .. }) if !destination.starts_with(&root)
+    ));
+}
+
+#[test]
+fn explorer_open_restores_destination_when_limit_result_is_dismissed() {
+    let scratch = Folder::new();
+    let mut s = Explorer::new(&scratch);
+    let root = scratch.0.join("sample.zip (Zipelo 임시)");
+    let ctx = double_click_open_hits_limit(&mut s);
+    policy_click(&ctx, &mut s.app, "확인");
+    for _ in 0..3 {
+        policy_render(&ctx, &mut s.app, vec![]);
+    }
+    assert!(s.opened.borrow().is_empty());
+    s.factory.state.borrow_mut().manual = false;
+    assert!(s.app.begin_extract());
+    let state = s.factory.state.borrow();
+    let Some(Start::Extract { destination, .. }) = state.starts.last() else {
+        panic!("{:?}", state.starts.last());
+    };
+    assert_eq!(destination, &scratch.0.join("sample"));
+    assert!(!destination.starts_with(&root));
+}
+
+#[test]
+fn explorer_open_restores_destination_when_expanded_retry_fails_again() {
+    let scratch = Folder::new();
+    let mut s = Explorer::new(&scratch);
+    let ctx = double_click_open_hits_limit(&mut s);
+    policy_click(&ctx, &mut s.app, "한도를 늘려 다시 시도");
+    assert!(s.app.model.busy());
+    finish_limit(&mut s);
+    assert!(s.opened.borrow().is_empty());
+    assert!(!s.app.model.can_retry_expanded());
+    s.factory.state.borrow_mut().manual = false;
+    assert!(s.app.begin_extract());
+    assert!(matches!(
+        s.factory.state.borrow().starts.last(),
+        Some(Start::Extract { destination, .. }) if destination == &scratch.0.join("sample")
+    ));
+}
+
 #[test]
 fn explorer_double_click_does_not_open_executables() {
     let scratch = Folder::new();
