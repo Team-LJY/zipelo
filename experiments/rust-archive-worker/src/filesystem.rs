@@ -195,6 +195,12 @@ mod platform {
         fn unlinkat(fd: i32, path: *const i8, flags: i32) -> i32;
         fn geteuid() -> u32;
         fn getegid() -> u32;
+        fn fgetxattr(
+            fd: i32,
+            name: *const std::ffi::c_char,
+            value: *mut std::ffi::c_void,
+            size: usize,
+        ) -> isize;
         fn getgrgid_r(
             gid: u32,
             group: *mut Group,
@@ -357,6 +363,42 @@ mod platform {
             && !group.members.is_null()
             && unsafe { *group.members }.is_null()
     }
+    fn access_acl_has_no_named_entries(file: &File) -> bool {
+        // 이름 없는 ACL은 소유자, 그룹, other와 선택적 mask의 최대 4항목임.
+        let mut bytes = [0u8; 4 + 4 * 8];
+        // 경로를 다시 해석하지 않고 판정 대상 폴더의 접근 ACL을 읽음.
+        let length = unsafe {
+            fgetxattr(
+                file.as_raw_fd(),
+                c"system.posix_acl_access".as_ptr(),
+                bytes.as_mut_ptr().cast(),
+                bytes.len(),
+            )
+        };
+        if length < 0 {
+            // 속성 없음과 미지원 외에는 ERANGE를 포함해 거부함.
+            return matches!(
+                std::io::Error::last_os_error().raw_os_error(),
+                Some(61 | 95)
+            );
+        }
+        let tags: &[u16] = match length {
+            28 => &[1, 4, 32],
+            36 => &[1, 4, 16, 32],
+            _ => return false,
+        };
+        if u32::from_le_bytes(bytes[..4].try_into().unwrap()) != 2 {
+            return false;
+        }
+        bytes[4..length as usize]
+            .chunks_exact(8)
+            .zip(tags)
+            .all(|(entry, expected)| {
+                u16::from_le_bytes(entry[..2].try_into().unwrap()) == *expected
+                    && u16::from_le_bytes(entry[2..4].try_into().unwrap()) & !7 == 0
+                    && u32::from_le_bytes(entry[4..8].try_into().unwrap()) == u32::MAX
+            })
+    }
     pub struct Dir {
         file: File,
     }
@@ -404,12 +446,13 @@ mod platform {
         fn trusted(&self) -> Result<()> {
             let m = self.file.metadata().map_err(|_| ErrorCode::Io)?;
             // 다른 계정이 바꿀 수 있는 출력 폴더를 거부함.
-            // 그룹 쓰기는 그 그룹이 현재 계정만의 개인 그룹일 때만 허용함.
+            // 그룹 쓰기는 이름 있는 접근 ACL이 없고 개인 그룹일 때만 허용함.
             let group_writable = m.mode() & 0o020 != 0;
             if !m.is_dir()
                 || m.uid() != unsafe { geteuid() }
                 || m.mode() & 0o002 != 0
-                || (group_writable && !private_group(m.gid()))
+                || (group_writable
+                    && (!access_acl_has_no_named_entries(&self.file) || !private_group(m.gid())))
             {
                 return Err(ErrorCode::UnsafePath);
             }

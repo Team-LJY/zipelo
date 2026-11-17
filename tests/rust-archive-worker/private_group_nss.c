@@ -137,3 +137,36 @@ int connect(int fd, const struct sockaddr *address, socklen_t length) {
     close(parent);
     return result;
 }
+
+#include <sys/xattr.h>
+
+ssize_t fgetxattr(int fd, const char *name, void *value, size_t size) {
+    ssize_t (*original)(int, const char *, void *, size_t) = dlsym(RTLD_NEXT, "fgetxattr");
+    const char *phase = getenv("ZIPELO_GROUP_CASE");
+    if (!phase || strcmp(name, "system.posix_acl_access")) {
+        return original(fd, name, value, size);
+    }
+    const char *errors[] = {"acl-enodata", "acl-enotsup", "acl-eacces", "acl-eio", "acl-erange"};
+    const int codes[] = {ENODATA, ENOTSUP, EACCES, EIO, ERANGE};
+    for (size_t i = 0; i < sizeof(codes) / sizeof(codes[0]); i++) {
+        if (!strcmp(phase, errors[i])) {
+            errno = codes[i];
+            return -1;
+        }
+    }
+    if (!strncmp(phase, "acl-invalid-", 12) || !strcmp(phase, "acl-truncated") || !strcmp(phase, "acl-unknown-tag")) {
+        unsigned char bytes[] = {2, 0, 0, 0,
+            1, 0, 7, 0, 255, 255, 255, 255,
+            4, 0, 7, 0, 255, 255, 255, 255,
+            32, 0, 5, 0, 255, 255, 255, 255};
+        if (!strcmp(phase, "acl-invalid-version")) bytes[0] = 3;
+        if (!strcmp(phase, "acl-invalid-permissions")) bytes[6] = 8;
+        if (!strcmp(phase, "acl-invalid-id")) bytes[8] = 0;
+        if (!strcmp(phase, "acl-unknown-tag")) bytes[4] = 64;
+        size_t length = !strcmp(phase, "acl-truncated") ? sizeof(bytes) - 1 : sizeof(bytes);
+        if (size < length) { errno = ERANGE; return -1; }
+        memcpy(value, bytes, length);
+        return (ssize_t)length;
+    }
+    return original(fd, name, value, size);
+}
