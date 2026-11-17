@@ -21,6 +21,10 @@ zeroize = "=1.9.1"
 sha2 = "=0.10.9"
 zlib-rs = { version = "=0.6.8", default-features = false, features = ["rust-allocator"] }
 
+[target.'cfg(target_os = "linux")'.dependencies]
+serde = "=1.0.229"
+serde_json = "=1.0.154"
+
 [workspace]
 exclude = ["vendor/zune-jpeg"]
 

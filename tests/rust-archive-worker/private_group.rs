@@ -52,26 +52,16 @@ fn run_case(case: &str, safe: bool, extraction: bool) {
     }
     let nss = match case {
         "remote-accounts" | "sss-files-only" => "passwd: files sss\n",
-        "systemd-personal"
-        | "systemd-dynamic-shared"
-        | "systemd-homed-shared"
-        | "systemd-unrelated"
-        | "systemd-large-record"
-        | "systemd-large-shared"
-        | "systemd-buffer-limit"
-        | "systemd-enumeration-error"
-        | "systemd-set-error"
-        | "systemd-load-error"
-        | "systemd-symbol-error"
-        | "systemd-partial-error" => "passwd: files systemd\n",
         "ldap-accounts" => "passwd: files ldap\n",
         "winbind-accounts" => "passwd: files winbind\n",
-        "systemd-remote" => "passwd: files systemd sss\n",
-        _ if case.starts_with("sss-") => "passwd: files systemd sss\n",
         "unknown-accounts" => "passwd: files unknown\n",
         "short-circuit-policy" => "passwd: files [SUCCESS=return] systemd\n",
         "duplicate-policy" => "passwd: files\npasswd: files\n",
         "missing-policy" => "group: files\n",
+        _ if case.starts_with("sss-") || case == "systemd-remote" => "passwd: files systemd sss\n",
+        _ if case.starts_with("systemd-") || case.starts_with("userdb-") => {
+            "passwd: files systemd\n"
+        }
         _ => "# fixture\npasswd: files # local accounts\n",
     };
     let nss_path = scratch.0.join("nsswitch.conf");
@@ -112,20 +102,9 @@ fn run_case(case: &str, safe: bool, extraction: bool) {
         "sss-missing-directories" => fs::remove_dir_all(&sss).unwrap(),
         _ => {}
     }
-    let library = scratch.0.join("private-group.so");
-    assert!(
-        Command::new("cc")
-            .args(["-shared", "-fPIC", "-O2", "-Wall", "-Wextra", "-Werror"])
-            .arg(
-                PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                    .join("../../tests/rust-archive-worker/private_group_nss.c")
-            )
-            .args(["-ldl", "-o"])
-            .arg(&library)
-            .status()
-            .unwrap()
-            .success()
-    );
+    let userdb = scratch.0.join("userdb");
+    let _services = FakeUserdb::new(&userdb, case, uid, gid);
+    let library = shim();
     let result = Command::new(std::env::current_exe().unwrap())
         .args([
             "--exact",
@@ -138,6 +117,7 @@ fn run_case(case: &str, safe: bool, extraction: bool) {
         .env("ZIPELO_GROUP_PASSWD", passwd_path)
         .env("ZIPELO_GROUP_NSS", nss_path)
         .env("ZIPELO_GROUP_SSS", sss)
+        .env("ZIPELO_GROUP_USERDB", &userdb)
         .env("ZIPELO_GROUP_OUTPUT", &output)
         .env("ZIPELO_GROUP_SAFE", if safe { "1" } else { "0" })
         .env("ZIPELO_GROUP_EXTRACT", if extraction { "1" } else { "0" })
@@ -227,29 +207,76 @@ fn private_group_rejects_incomplete_account_information() {
 }
 
 #[test]
-fn private_group_checks_systemd_enumerated_accounts() {
-    for case in ["systemd-personal", "systemd-unrelated"] {
+fn private_group_checks_varlink_records_and_completion() {
+    for case in [
+        "systemd-personal",
+        "systemd-unrelated",
+        "systemd-large-record",
+        "systemd-ignored-relays",
+        "systemd-multipart-empty",
+        "systemd-fragmented",
+    ] {
         check_extraction(case, true);
     }
     for case in [
         "systemd-dynamic-shared",
         "systemd-homed-shared",
-        "systemd-buffer-limit",
-        "systemd-enumeration-error",
-        "systemd-set-error",
-        "systemd-load-error",
-        "systemd-symbol-error",
+        "systemd-large-shared",
         "systemd-partial-error",
+        "systemd-group-error",
+        "systemd-membership-error",
+        "systemd-enumeration-error",
+        "systemd-disconnect",
+        "systemd-invalid-json",
+        "systemd-duplicate-key",
+        "systemd-missing-gid",
+        "systemd-wrong-type",
+        "systemd-group-member",
+        "systemd-membership-member",
+        "systemd-user-member",
+        "systemd-incomplete",
+        "systemd-overrides",
+        "systemd-non-socket",
+        "systemd-connect-error",
+        "systemd-buffer-limit",
+        "systemd-final-shared",
+        "systemd-unknown-membership",
+        "systemd-malformed-membership",
+        "systemd-second-service-error",
+        "systemd-socket-symlink",
+        "systemd-deep-json",
+        "systemd-invalid-utf8",
+        "systemd-negative-gid",
+        "systemd-float-gid",
+        "systemd-nested-duplicate",
+        "systemd-bad-continues",
     ] {
         check_extraction(case, false);
     }
-    check_extraction("remote-accounts", false);
-    check_extraction("systemd-remote", false);
 }
 
 #[test]
 fn private_group_rejects_consumed_systemd_record_on_erange() {
-    for case in ["systemd-large-record", "systemd-large-shared"] {
+    // NSS 버퍼 재시도 대신 완전한 varlink 레코드를 직접 검사함.
+    check_extraction("systemd-large-record", true);
+    check_extraction("systemd-large-shared", false);
+}
+
+#[test]
+fn private_group_rejects_userdb_dropins_and_probe_failures() {
+    for case in ["userdb-empty", "userdb-missing"] {
+        check_extraction(case, true);
+    }
+    for case in [
+        "userdb-d0",
+        "userdb-d1",
+        "userdb-host",
+        "userdb-d3",
+        "userdb-d4",
+        "userdb-probe-error",
+        "userdb-symlink",
+        "userdb-invalid-parent",
+    ] {
         check_extraction(case, false);
     }
 }
@@ -271,5 +298,295 @@ fn private_group_accepts_sss_only_without_socket_and_caches() {
         "sss-probe-error",
     ] {
         check_extraction(case, false);
+    }
+}
+
+fn shim() -> &'static PathBuf {
+    static LIBRARY: std::sync::OnceLock<(Scratch, PathBuf)> = std::sync::OnceLock::new();
+    &LIBRARY
+        .get_or_init(|| {
+            let scratch = Scratch::new();
+            let library = scratch.0.join("private-group.so");
+            assert!(
+                Command::new("cc")
+                    .args(["-shared", "-fPIC", "-O2", "-Wall", "-Wextra", "-Werror"])
+                    .arg(
+                        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                            .join("../../tests/rust-archive-worker/private_group_nss.c")
+                    )
+                    .args(["-ldl", "-o"])
+                    .arg(&library)
+                    .status()
+                    .unwrap()
+                    .success()
+            );
+            (scratch, library)
+        })
+        .1
+}
+
+struct FakeUserdb {
+    stop: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    thread: Option<std::thread::JoinHandle<()>>,
+}
+impl FakeUserdb {
+    fn new(root: &std::path::Path, case: &str, uid: u32, gid: u32) -> Self {
+        use std::os::fd::AsRawFd;
+        let sockets = root.join("s");
+        fs::create_dir_all(&sockets).unwrap();
+        for d in ["d0", "d1", "host/userdb", "d3", "d4"] {
+            fs::create_dir_all(root.join(d)).unwrap();
+        }
+        if case == "userdb-missing" {
+            fs::remove_dir_all(root.join("host")).unwrap();
+        }
+        if let Some(d) = case.strip_prefix("userdb-") {
+            let d = if d == "host" { "host/userdb" } else { d };
+            if root.join(d).is_dir() {
+                fs::write(root.join(d).join("fixture.user"), b"{}").unwrap();
+            }
+        }
+        if case == "userdb-symlink" {
+            fs::remove_dir(root.join("d0")).unwrap();
+            std::os::unix::fs::symlink("missing", root.join("d0")).unwrap();
+        }
+        if case == "userdb-invalid-parent" {
+            fs::remove_dir(root.join("d0")).unwrap();
+            fs::write(root.join("d0"), b"").unwrap();
+        }
+        let stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let mut result = Self {
+            stop: stop.clone(),
+            thread: None,
+        };
+        if case == "systemd-non-socket" {
+            fs::write(sockets.join("io.zipelo.Fixture"), b"").unwrap();
+            return result;
+        }
+        let parent = fs::File::open(&sockets).unwrap();
+        let path = format!("/proc/self/fd/{}/io.zipelo.Fixture", parent.as_raw_fd());
+        let listener = std::os::unix::net::UnixListener::bind(path).unwrap();
+        if case == "systemd-connect-error" {
+            return result;
+        }
+        if case == "systemd-second-service-error" {
+            drop(
+                std::os::unix::net::UnixListener::bind(format!(
+                    "/proc/self/fd/{}/io.zipelo.Failed",
+                    parent.as_raw_fd()
+                ))
+                .unwrap(),
+            );
+        }
+        if case == "systemd-socket-symlink" {
+            std::os::unix::fs::symlink("io.zipelo.Fixture", sockets.join("io.zipelo.Link"))
+                .unwrap();
+        }
+        let _relays = if case == "systemd-ignored-relays" {
+            Some(
+                ["io.systemd.Multiplexer", "io.systemd.NameServiceSwitch"].map(|v| {
+                    std::os::unix::net::UnixListener::bind(format!(
+                        "/proc/self/fd/{}/{v}",
+                        parent.as_raw_fd()
+                    ))
+                    .unwrap()
+                }),
+            )
+        } else {
+            None
+        };
+        // 중계 소켓은 연결 불가 상태로 남겨 실제로 건너뛰는지 확인함.
+        drop(_relays);
+        listener.set_nonblocking(true).unwrap();
+        let case = case.to_owned();
+        result.thread = Some(std::thread::spawn(move || {
+            use serde_json::{Value, json};
+            use std::io::{Read, Write};
+            while !stop.load(Ordering::Relaxed) {
+                let (mut stream, _) = match listener.accept() {
+                    Ok(v) => v,
+                    Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                        std::thread::sleep(std::time::Duration::from_millis(1));
+                        continue;
+                    }
+                    Err(e) => panic!("{e}"),
+                };
+                stream
+                    .set_read_timeout(Some(std::time::Duration::from_secs(5)))
+                    .unwrap();
+                let mut request = Vec::new();
+                loop {
+                    let mut byte = [0];
+                    stream.read_exact(&mut byte).unwrap();
+                    if byte == [0] {
+                        break;
+                    }
+                    request.push(byte[0]);
+                }
+                let request: Value = serde_json::from_slice(&request).unwrap();
+                assert_eq!(request["parameters"]["service"], "io.zipelo.Fixture");
+                assert_eq!(request["more"], true);
+                let method = request["method"]
+                    .as_str()
+                    .unwrap()
+                    .rsplit('.')
+                    .next()
+                    .unwrap();
+                let no_record = json!({"error":"io.systemd.UserDatabase.NoRecordFound"});
+                let failure = json!({"error":"io.systemd.UserDatabase.ServiceNotAvailable"});
+                let mut reply = match method {
+                    "GetGroupRecord" => {
+                        json!({"parameters":{"record":{"groupName":"test-personal","gid":gid,"members":[]}}})
+                    }
+                    "GetUserRecord" => {
+                        json!({"parameters":{"record":{"userName":"other","uid":uid+1,"gid":gid+1}}})
+                    }
+                    "GetMemberships" => no_record.clone(),
+                    _ => panic!("unexpected method"),
+                };
+                if method == "GetGroupRecord" {
+                    if case == "systemd-group-member" {
+                        reply["parameters"]["record"]["members"] = json!(["other"]);
+                    }
+                    if case == "systemd-group-error" {
+                        reply = failure.clone();
+                    }
+                }
+                if method == "GetMemberships" {
+                    if case == "systemd-membership-member" {
+                        reply =
+                            json!({"parameters":{"userName":"other","groupName":"test-personal"}});
+                    }
+                    if case == "systemd-unknown-membership" {
+                        reply = json!({"parameters":{"userName":"other","groupName":"unknown"}});
+                    }
+                    if case == "systemd-malformed-membership" {
+                        reply = json!({"parameters":{"userName":123,"groupName":"test-personal"}});
+                    }
+                    if case == "systemd-membership-error" {
+                        reply = failure.clone();
+                    }
+                }
+                if method == "GetUserRecord" {
+                    if [
+                        "systemd-dynamic-shared",
+                        "systemd-homed-shared",
+                        "systemd-large-shared",
+                    ]
+                    .contains(&case.as_str())
+                    {
+                        reply["parameters"]["record"]["gid"] = json!(gid);
+                    }
+                    if case == "systemd-large-record" || case == "systemd-large-shared" {
+                        reply["parameters"]["record"]["realName"] = json!("x".repeat(32768));
+                    }
+                    if case == "systemd-buffer-limit" {
+                        reply["parameters"]["record"]["realName"] = json!("x".repeat(1024 * 1024));
+                    }
+                    if case == "systemd-incomplete" {
+                        reply["parameters"]["incomplete"] = json!(true);
+                    }
+                    if case == "systemd-overrides" {
+                        reply["parameters"]["record"]["binding"] = json!({"machine":{"gid":gid}});
+                    }
+                    if case == "systemd-missing-gid" {
+                        reply["parameters"]["record"]
+                            .as_object_mut()
+                            .unwrap()
+                            .remove("gid");
+                    }
+                    if case == "systemd-wrong-type" {
+                        reply["parameters"]["record"]["gid"] = json!("1000");
+                    }
+                    if case == "systemd-user-member" {
+                        reply["parameters"]["record"]["memberOf"] = json!(["test-personal"]);
+                    }
+                    if case == "systemd-personal" {
+                        reply = no_record.clone();
+                    }
+                    if case == "systemd-enumeration-error" {
+                        reply = failure.clone();
+                    }
+                    if [
+                        "systemd-partial-error",
+                        "systemd-disconnect",
+                        "systemd-final-shared",
+                    ]
+                    .contains(&case.as_str())
+                    {
+                        reply["continues"] = json!(true);
+                    }
+                    if case == "systemd-invalid-json" {
+                        let _ = stream.write_all(b"{not-json}\0");
+                        continue;
+                    }
+                    if case == "systemd-duplicate-key" {
+                        let _ = stream.write_all(b"{\"error\":\"failure\",\"error\":\"io.systemd.UserDatabase.NoRecordFound\"}\0");
+                        continue;
+                    }
+                }
+                if method == "GetUserRecord" {
+                    if case == "systemd-negative-gid" {
+                        reply["parameters"]["record"]["gid"] = json!(-1);
+                    }
+                    if case == "systemd-float-gid" {
+                        reply["parameters"]["record"]["gid"] = json!(1000.0);
+                    }
+                    if case == "systemd-bad-continues" {
+                        reply["continues"] = json!("true");
+                    }
+                    if case == "systemd-multipart-empty" {
+                        reply["continues"] = json!(true);
+                    }
+                    if case == "systemd-invalid-utf8" {
+                        let _ = stream.write_all(b"\xff\0");
+                        continue;
+                    }
+                    if case == "systemd-nested-duplicate" {
+                        let _ = stream.write_all(b"{\"parameters\":{\"record\":{\"userName\":\"other\",\"uid\":1001,\"gid\":1000,\"gid\":1001}}}\0");
+                        continue;
+                    }
+                    if case == "systemd-deep-json" {
+                        let data = format!("{}0{}\0", "[".repeat(140), "]".repeat(140));
+                        let _ = stream.write_all(data.as_bytes());
+                        continue;
+                    }
+                }
+                let mut bytes = serde_json::to_vec(&reply).unwrap();
+                bytes.push(0);
+                if method == "GetUserRecord" && case == "systemd-partial-error" {
+                    bytes.extend(serde_json::to_vec(&failure).unwrap());
+                    bytes.push(0);
+                }
+                if method == "GetUserRecord" && case == "systemd-final-shared" {
+                    reply["parameters"]["record"]["gid"] = json!(gid);
+                    reply["continues"] = json!(false);
+                    bytes.extend(serde_json::to_vec(&reply).unwrap());
+                    bytes.push(0);
+                }
+                if method == "GetUserRecord" && case == "systemd-multipart-empty" {
+                    bytes.extend(serde_json::to_vec(&no_record).unwrap());
+                    bytes.push(0);
+                }
+                if case == "systemd-fragmented" {
+                    for byte in bytes {
+                        if stream.write_all(&[byte]).is_err() {
+                            break;
+                        }
+                    }
+                } else {
+                    let _ = stream.write_all(&bytes);
+                }
+            }
+        }));
+        result
+    }
+}
+impl Drop for FakeUserdb {
+    fn drop(&mut self) {
+        self.stop.store(true, Ordering::Relaxed);
+        if let Some(thread) = self.thread.take() {
+            thread.join().unwrap();
+        }
     }
 }

@@ -54,98 +54,86 @@ int getgrgid_r(gid_t gid, struct group *group, char *buffer, size_t length,
     *result = group;
     return 0;
 }
+#include <dirent.h>
+#include <limits.h>
+#include <stddef.h>
+#include <stdio.h>
+#include <sys/socket.h>
+#include <sys/stat.h>
+#include <sys/un.h>
 
-void *dlopen(const char *name, int flags) {
-    void *(*original)(const char *, int) = dlsym(RTLD_NEXT, "dlopen");
-    const char *phase = getenv("ZIPELO_GROUP_CASE");
-    if (name && !strcmp(name, "libnss_systemd.so.2")) {
-        if (phase && !strcmp(phase, "systemd-load-error")) {
-            return NULL;
+static const char *redirect(const char *path, char *buffer, size_t length) {
+    const char *base = NULL;
+    const char *tail = NULL;
+    if (!strncmp(path, "/var/lib/sss", 12) && (!path[12] || path[12] == '/')) {
+        base = getenv("ZIPELO_GROUP_SSS");
+        tail = path + 12;
+    } else {
+        const char *paths[] = {"/etc/userdb", "/run/userdb", "/run/host/userdb",
+            "/usr/local/lib/userdb", "/usr/lib/userdb", "/run/host", "/run/systemd/userdb"};
+        const char *names[] = {"/d0", "/d1", "/host/userdb", "/d3", "/d4", "/host", "/s"};
+        for (size_t i = 0; i < sizeof(paths) / sizeof(paths[0]); i++) {
+            size_t n = strlen(paths[i]);
+            if (!strncmp(path, paths[i], n) && (!path[n] || path[n] == '/')) {
+                base = getenv("ZIPELO_GROUP_USERDB");
+                int size = snprintf(buffer, length, "%s%s%s", base ? base : "", names[i], path + n);
+                if (!base || size < 0 || (size_t)size >= length) {
+                    errno = EACCES;
+                    return NULL;
+                }
+                return buffer;
+            }
         }
-        if (phase && !strcmp(phase, "systemd-symbol-error")) {
-            return original("libm.so.6", flags);
-        }
-        name = getenv("LD_PRELOAD");
+        return path;
     }
-    return original(name, flags);
+    int n = snprintf(buffer, length, "%s%s", base ? base : "", tail);
+    if (!base || n < 0 || (size_t)n >= length) {
+        errno = EACCES;
+        return NULL;
+    }
+    return buffer;
 }
 
-static int systemd_record;
-
-int _nss_systemd_setpwent(int stayopen) {
-    (void)stayopen;
-    systemd_record = 0;
+int statx(int fd, const char *path, int flags, unsigned int mask, struct statx *info) {
+    int (*original)(int, const char *, int, unsigned int, struct statx *) = dlsym(RTLD_NEXT, "statx");
     const char *phase = getenv("ZIPELO_GROUP_CASE");
-    return phase && !strcmp(phase, "systemd-set-error") ? -1 : 1;
-}
-
-int _nss_systemd_endpwent(void) {
-    return 1;
-}
-
-int _nss_systemd_getpwent_r(struct passwd *account, char *buffer, size_t length,
-        int *error) {
-    (void)buffer;
-    const char *phase = getenv("ZIPELO_GROUP_CASE");
-    if (!phase || !strcmp(phase, "systemd-enumeration-error") ||
-            (systemd_record && !strcmp(phase, "systemd-partial-error"))) {
-        *error = EIO;
+    if (phase && ((!strcmp(phase, "sss-probe-error") && !strncmp(path, "/var/lib/sss", 12)) ||
+            (!strcmp(phase, "userdb-probe-error") && !strcmp(path, "/etc/userdb")))) {
+        errno = EACCES;
         return -1;
     }
-    if (!systemd_record &&
-            ((!strcmp(phase, "systemd-large-record") && length < 32768) ||
-             !strcmp(phase, "systemd-large-shared"))) {
-        /* 실제 모듈처럼 버퍼 검사 전에 계정을 소비함. */
-        systemd_record = 1;
-        *error = ERANGE;
-        return -2;
-    }
-    if (!strcmp(phase, "systemd-buffer-limit")) {
-        *error = ERANGE;
-        return -2;
-    }
-    if (systemd_record || !strcmp(phase, "systemd-personal")) {
-        return 0;
-    }
-    systemd_record = 1;
-    *account = (struct passwd){
-        .pw_name = "systemd-fixture",
-        .pw_passwd = "x",
-        .pw_uid = geteuid() + 1,
-        .pw_gid = getegid() +
-            ((strcmp(phase, "systemd-dynamic-shared") &&
-              strcmp(phase, "systemd-homed-shared")) ? 1 : 0),
-        .pw_gecos = "",
-        .pw_dir = "/",
-        .pw_shell = "/bin/false"
-    };
-    return 1;
+    char buffer[PATH_MAX];
+    const char *mapped = redirect(path, buffer, sizeof(buffer));
+    return mapped ? original(fd, mapped, flags, mask, info) : -1;
 }
 
-#include <limits.h>
-#include <stdio.h>
-#include <sys/stat.h>
+DIR *opendir(const char *path) {
+    DIR *(*original)(const char *) = dlsym(RTLD_NEXT, "opendir");
+    char buffer[PATH_MAX];
+    const char *mapped = redirect(path, buffer, sizeof(buffer));
+    return mapped ? original(mapped) : NULL;
+}
 
-int statx(int fd, const char *path, int flags, unsigned int mask,
-        struct statx *info) {
-    int (*original)(int, const char *, int, unsigned int, struct statx *) =
-        dlsym(RTLD_NEXT, "statx");
-    const char *prefix = "/var/lib/sss";
-    const size_t size = strlen(prefix);
-    if (!strncmp(path, prefix, size) && (!path[size] || path[size] == '/')) {
-        const char *base = getenv("ZIPELO_GROUP_SSS");
-        const char *phase = getenv("ZIPELO_GROUP_CASE");
-        if (!base || (phase && !strcmp(phase, "sss-probe-error"))) {
-            errno = EACCES;
-            return -1;
-        }
-        char redirected[PATH_MAX];
-        int n = snprintf(redirected, sizeof(redirected), "%s%s", base, path + size);
-        if (n < 0 || (size_t)n >= sizeof(redirected)) {
-            errno = ENAMETOOLONG;
-            return -1;
-        }
-        return original(fd, redirected, flags, mask, info);
+int connect(int fd, const struct sockaddr *address, socklen_t length) {
+    int (*original)(int, const struct sockaddr *, socklen_t) = dlsym(RTLD_NEXT, "connect");
+    const struct sockaddr_un *un = (const struct sockaddr_un *)address;
+    if (address->sa_family != AF_UNIX || strncmp(un->sun_path, "/run/systemd/userdb/", 20)) {
+        return original(fd, address, length);
     }
-    return original(fd, path, flags, mask, info);
+    char buffer[PATH_MAX];
+    const char *mapped = redirect(un->sun_path, buffer, sizeof(buffer));
+    if (!mapped) return -1;
+    char *slash = strrchr(buffer, '/');
+    if (!slash) return -1;
+    *slash = 0;
+    int parent = open(buffer, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+    if (parent < 0) return -1;
+    struct sockaddr_un redirected = {.sun_family = AF_UNIX};
+    int n = snprintf(redirected.sun_path, sizeof(redirected.sun_path), "/proc/self/fd/%d/%s", parent, slash + 1);
+    int result = -1;
+    if (n >= 0 && (size_t)n < sizeof(redirected.sun_path)) {
+        result = original(fd, (const struct sockaddr *)&redirected, offsetof(struct sockaddr_un, sun_path) + n + 1);
+    }
+    close(parent);
+    return result;
 }
