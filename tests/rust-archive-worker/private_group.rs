@@ -57,6 +57,7 @@ fn run_case(case: &str, safe: bool, extraction: bool) {
         | "systemd-homed-shared"
         | "systemd-unrelated"
         | "systemd-large-record"
+        | "systemd-large-shared"
         | "systemd-buffer-limit"
         | "systemd-enumeration-error"
         | "systemd-set-error"
@@ -192,11 +193,7 @@ fn private_group_rejects_incomplete_account_information() {
 
 #[test]
 fn private_group_checks_systemd_enumerated_accounts() {
-    for case in [
-        "systemd-personal",
-        "systemd-unrelated",
-        "systemd-large-record",
-    ] {
+    for case in ["systemd-personal", "systemd-unrelated"] {
         check_extraction(case, true);
     }
     for case in [
@@ -213,4 +210,11 @@ fn private_group_checks_systemd_enumerated_accounts() {
     }
     check_extraction("remote-accounts", false);
     check_extraction("systemd-remote", false);
+}
+
+#[test]
+fn private_group_rejects_consumed_systemd_record_on_erange() {
+    for case in ["systemd-large-record", "systemd-large-shared"] {
+        check_extraction(case, false);
+    }
 }

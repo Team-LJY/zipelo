@@ -283,10 +283,7 @@ mod platform {
             let mut error = 0;
             let status =
                 unsafe { next(&mut account, buffer.as_mut_ptr(), buffer.len(), &mut error) };
-            if status == -2 && error == 34 && buffer.len() < 1024 * 1024 {
-                buffer.resize(buffer.len() * 2, 0);
-                continue;
-            }
+            // ERANGE도 계정을 이미 소비할 수 있으므로 재시도하지 않고 거부함.
             // NSS_STATUS_NOTFOUND만 정상 종료이며 UNAVAIL과 TRYAGAIN은 거부함.
             if status == 0 {
                 return true;

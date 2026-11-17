@@ -92,8 +92,15 @@ int _nss_systemd_getpwent_r(struct passwd *account, char *buffer, size_t length,
         *error = EIO;
         return -1;
     }
-    if ((!strcmp(phase, "systemd-large-record") && length < 32768) ||
-            !strcmp(phase, "systemd-buffer-limit")) {
+    if (!systemd_record &&
+            ((!strcmp(phase, "systemd-large-record") && length < 32768) ||
+             !strcmp(phase, "systemd-large-shared"))) {
+        /* 실제 모듈처럼 버퍼 검사 전에 계정을 소비함. */
+        systemd_record = 1;
+        *error = ERANGE;
+        return -2;
+    }
+    if (!strcmp(phase, "systemd-buffer-limit")) {
         *error = ERANGE;
         return -2;
     }
