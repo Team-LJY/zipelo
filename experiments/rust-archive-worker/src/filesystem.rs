@@ -935,6 +935,8 @@ pub(crate) struct PublicationTemp {
     pub parent: SourceObject,
     pub name: String,
     pub object: SourceObject,
+    /// 분할 볼륨처럼 한 번에 게시하는 나머지 임시 파일 (이름, 객체).
+    pub others: Vec<(String, SourceObject)>,
 }
 pub(crate) enum PublishStep {
     Check,
@@ -998,6 +1000,7 @@ pub(crate) fn publish_reader_steps(
                 parent: object(dir.handle())?,
                 name: temp.clone(),
                 object: object(&file)?,
+                others: Vec::new(),
             });
             completed(Ok(()), &mut PublicationMonitor(check))?;
             completed(
@@ -1135,5 +1138,207 @@ pub(crate) fn publish_reader_steps(
         finish
     })();
     result.error = prepared.err();
+    result
+}
+
+/// 여러 파일을 한 묶음으로 게시한 결과. `created`는 게시된 채 남은 이름.
+pub(crate) struct PublishedSet {
+    pub created: Vec<String>,
+    pub uncertain: bool,
+    pub error: Option<ErrorCode>,
+    pub durability: Durability,
+    pub cleanup: Cleanup,
+    pub retained: Vec<String>,
+}
+struct Staged {
+    temp: String,
+    object: Option<SourceObject>,
+}
+/// 분할 볼륨을 같은 폴더에 모두 임시 파일로 쓴 뒤 한 번의 확정 단계로 게시함.
+/// 쓰기 중 실패나 취소는 임시 파일만 지우고, 게시 중 실패는 이미 게시한 볼륨을 되돌림.
+/// 이름은 `root` 바로 아래 파일 이름이어야 하고 기존 이름은 덮어쓰지 않음.
+pub(crate) fn publish_set_steps(
+    root: &Dir,
+    files: &[(String, u64)],
+    data: &mut impl Read,
+    check: &mut impl FnMut(PublishStep) -> Result<()>,
+) -> PublishedSet {
+    let mut result = PublishedSet {
+        created: Vec::new(),
+        uncertain: false,
+        error: None,
+        durability: Durability::NotApplicable,
+        cleanup: Cleanup::Complete,
+        retained: Vec::new(),
+    };
+    let mut staged: Vec<Staged> = Vec::new();
+    let mut linked = 0usize;
+    let mut finish = (|| {
+        if files.is_empty() {
+            return Err(ErrorCode::InvalidRequest);
+        }
+        for (name, _) in files {
+            valid_name(name, false)?;
+            if name.contains('/') {
+                return Err(ErrorCode::InvalidRequest);
+            }
+        }
+        let parent = object(root.handle())?;
+        let mut buffer = zeroize::Zeroizing::new([0; 65536]);
+        for (_, length) in files {
+            check(PublishStep::Check)?;
+            let temp = format!(
+                ".zipelo-{}-{}.tmp",
+                std::process::id(),
+                TEMP.fetch_add(1, Ordering::Relaxed)
+            );
+            let mut file = root.create(&temp).map_err(|e| {
+                if e.kind() == std::io::ErrorKind::AlreadyExists {
+                    ErrorCode::Conflict
+                } else {
+                    crate::space::io_error(e)
+                }
+            })?;
+            staged.push(Staged { temp, object: None });
+            let written = (|| {
+                staged.last_mut().ok_or(ErrorCode::Internal)?.object = Some(object(&file)?);
+                completed(
+                    crate::space::ensure(&file, *length),
+                    &mut PublicationMonitor(check),
+                )?;
+                let mut remaining = *length;
+                while remaining != 0 {
+                    check(PublishStep::Check)?;
+                    let count = remaining.min(buffer.len() as u64) as usize;
+                    let n = data.read(&mut buffer[..count]).map_err(|_| ErrorCode::Io)?;
+                    if n == 0 {
+                        return Err(ErrorCode::Io);
+                    }
+                    completed(
+                        crate::space::ensure(&file, n as u64),
+                        &mut PublicationMonitor(check),
+                    )?;
+                    completed(
+                        file.write_all(&buffer[..n]).map_err(crate::space::io_error),
+                        &mut PublicationMonitor(check),
+                    )?;
+                    remaining -= n as u64;
+                }
+                completed(
+                    file.sync_all().map_err(crate::space::io_error),
+                    &mut PublicationMonitor(check),
+                )
+            })();
+            let closed = completed(
+                close(file).map_err(crate::space::io_error),
+                &mut PublicationMonitor(check),
+            );
+            written.and(closed)?;
+        }
+        let mut owned = staged
+            .iter()
+            .map(|s| Ok((s.temp.clone(), s.object.clone().ok_or(ErrorCode::Internal)?)))
+            .collect::<Result<Vec<_>>>()?;
+        let (name, first) = owned.remove(0);
+        check(PublishStep::Commit(Some(PublicationTemp {
+            parent,
+            name,
+            object: first,
+            others: owned,
+        })))?;
+        // 생성한 임시 파일과 이름이 가리키는 파일이 같은지 모두 확인함.
+        for s in &staged {
+            if root.existing(&s.temp)?.as_ref().map(|file| &file.object) != s.object.as_ref() {
+                return Err(ErrorCode::Conflict);
+            }
+        }
+        for ((name, _), s) in files.iter().zip(&staged) {
+            match root.link(&s.temp, name) {
+                Ok(()) => linked += 1,
+                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+                    return Err(ErrorCode::Conflict);
+                }
+                Err(error) => {
+                    // 실패한 이름도 되돌리기 대상으로 보고 아래에서 소유 여부를 확인함.
+                    linked += 1;
+                    return Err(crate::space::io_error(error));
+                }
+            }
+        }
+        Ok(())
+    })();
+    if finish.is_err() {
+        // 게시한 볼륨 중 이 작업이 만든 것만 지움. 다른 파일은 보존함.
+        for ((name, _), s) in files.iter().zip(&staged).take(linked) {
+            match root.existing(name) {
+                Ok(Some(current)) if Some(&current.object) == s.object.as_ref() => {
+                    if !root.remove(name) {
+                        result.created.push(name.clone());
+                    }
+                }
+                Ok(_) => {}
+                Err(_) => result.uncertain = true,
+            }
+        }
+    } else {
+        result.created = files.iter().map(|(name, _)| name.clone()).collect();
+        publication_activity(&mut finish, check);
+    }
+    for s in &staged {
+        match root.existing(&s.temp) {
+            Ok(None) => result.cleanup = Cleanup::Unconfirmed,
+            Ok(Some(current)) if s.object.as_ref() == Some(&current.object) => {
+                if root.remove(&s.temp) {
+                    publication_activity(&mut finish, check);
+                } else {
+                    result.cleanup = Cleanup::Failed;
+                    result.retained.push(s.temp.clone());
+                }
+            }
+            // 이름만 만들고 객체를 확인하지 못한 임시 파일이나 다른 파일은 보존함.
+            _ => {
+                if s.object.is_none() && root.remove(&s.temp) {
+                    continue;
+                }
+                result.cleanup = Cleanup::Unconfirmed;
+            }
+        }
+    }
+    if result.cleanup != Cleanup::Complete && finish.is_ok() {
+        finish = Err(ErrorCode::Io);
+    }
+    if !result.created.is_empty() || linked != 0 {
+        match root.sync_checked() {
+            Ok(durability) => {
+                result.durability = durability;
+                publication_activity(&mut finish, check);
+            }
+            Err(error) => {
+                result.durability = Durability::Failed;
+                if finish.is_ok() {
+                    finish = Err(error);
+                }
+            }
+        }
+    }
+    if finish.is_ok() {
+        // 이름 기반 게시 뒤에도 결과가 생성한 파일인지 확인함.
+        for ((name, _), s) in files.iter().zip(&staged) {
+            let verified = match root.existing(name) {
+                Ok(Some(current)) if s.object.as_ref() == Some(&current.object) => Ok(()),
+                Ok(_) => Err(ErrorCode::Conflict),
+                Err(error) => Err(error),
+            };
+            if let Err(error) = verified {
+                result.created.retain(|created| created != name);
+                result.uncertain = true;
+                result.durability = Durability::Unconfirmed;
+                if finish.is_ok() {
+                    finish = Err(error);
+                }
+            }
+        }
+    }
+    result.error = finish.err();
     result
 }

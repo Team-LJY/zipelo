@@ -65,6 +65,7 @@ fn prepare(s: &Scratch, operation: &str) -> (Start, PathBuf) {
                 method: SevenZipMethod::Lzma2,
                 solid: false,
                 encryption: Encryption::None,
+                volume_size: None,
             },
             s.0.join("result.7z"),
         ),

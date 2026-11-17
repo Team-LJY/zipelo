@@ -39,12 +39,15 @@ catalog! {
     "create-sevenzip-error" => "7z 만들기 저장 실패",
     "create-sevenzip-cancelled" => "7z 만들기 취소 완료",
     "create-sevenzip-resource" => "7z 만들기의 큰 작업 승인",
+    "create-sevenzip-split" => "7z 쪼갤 용량 설정과 볼륨 크기 입력",
+    "create-sevenzip-split-invalid" => "잘못된 쪼갤 용량의 오류와 압축하기 비활성화",
+    "create-sevenzip-split-complete" => "분할 7z 만들기 완료와 첫 볼륨 경로",
 
     "split-archive" => "분할 7z 목록과 미리보기 비활성화",
     "split-first-volume" => "첫 조각의 정확한 파일명 안내",
     "split-missing-volume" => "누락 조각 파일명과 재시도 안내",
     "split-incomplete" => "누락 이름을 단정하지 않는 불완전 묶음 안내",
-    "split-unsupported" => "분할 ZIP과 RAR 및 분할 생성 미지원 안내",
+    "split-unsupported" => "분할 ZIP과 RAR 미지원 안내",
     "split-source-changed" => "목록 이후 분할 조각 변경 안내",
     "preview-catalog-bytes-approval" => "16 GiB를 넘는 전체 목록의 미리보기 승인",
     "preview-catalog-approval" => "미리보기의 전체 목록 처리 예산 승인",
@@ -107,6 +110,11 @@ catalog! {
     "uninstall-settings-error" => "Windows 기본 앱 설정 실행 실패",
     "uninstall-ubuntu-missing" => "Ubuntu 이전 기본 앱 복원 불가 안내",
     "uninstall-ubuntu-unknown-user" => "Ubuntu 제거 사용자 확인 불가 안내",
+}
+
+/// 만들기 창의 쪼갤 용량 입력을 해석한 결과. 잘못된 입력이면 압축하기가 비활성임.
+pub fn split_volume(app: &ArchiveApp) -> Result<Option<u64>, &'static str> {
+    app.split_volume()
 }
 
 pub fn listing() -> String {
@@ -558,7 +566,11 @@ impl Scenario {
                 }
                 return app;
             }
-            "create" | "create-encrypted" | "create-sevenzip" => {
+            "create"
+            | "create-encrypted"
+            | "create-sevenzip"
+            | "create-sevenzip-split"
+            | "create-sevenzip-split-invalid" => {
                 app.sources = vec![base.join("읽어주세요.txt"), base.join("사진")];
                 app.scenario_sources = Some(std::rc::Rc::new(vec![
                     SourceRow {
@@ -573,7 +585,16 @@ impl Scenario {
                     },
                 ]));
                 app.show_create(self.name == "create-encrypted");
-                app.set_seven_zip(self.name == "create-sevenzip");
+                app.set_seven_zip(self.name.starts_with("create-sevenzip"));
+                if self.name.starts_with("create-sevenzip-split") {
+                    app.zip_name = "여행 자료.7z".into();
+                    app.split = true;
+                    app.split_amount = if self.name == "create-sevenzip-split" {
+                        "700".into()
+                    } else {
+                        "0".into()
+                    };
+                }
                 return app;
             }
             _ => {}
@@ -720,6 +741,7 @@ impl Scenario {
             return app;
         }
         let seven_zip = self.name.starts_with("create-sevenzip");
+        let split_complete = self.name == "create-sevenzip-split-complete";
         let creating = self.name.starts_with("create-") || self.name == "password-create";
         let listing_error = matches!(self.name, "unsupported" | "damaged");
         if matches!(self.name, "gzip-conflict" | "gzip-conflict-choice") {
@@ -738,6 +760,7 @@ impl Scenario {
             Start::CreateSevenZip {
                 sources: vec![(base.join("사진"), "사진".into())],
                 output_file: base.join("여행 자료.7z"),
+                volume_size: split_complete.then_some(700 * 1024 * 1024),
             }
         } else if creating {
             Start::CreateZip {
@@ -758,7 +781,10 @@ impl Scenario {
                     .then(|| app.gzip_name.clone()),
             }
         };
-        app.targets = Some(if creating {
+        app.targets = Some(if split_complete {
+            // 완료 보고와 대조하도록 실제 작업자처럼 볼륨 세 개의 이름을 기대함.
+            (1..=3).map(|n| format!("여행 자료.7z.{n:03}")).collect()
+        } else if creating {
             BTreeSet::from([if seven_zip {
                 "여행 자료.7z"
             } else {
@@ -932,6 +958,7 @@ impl Scenario {
                 "extract-complete"
                 | "create-complete"
                 | "create-sevenzip-complete"
+                | "create-sevenzip-split-complete"
                 | "extract-unsynced"
                 | "extract-complete-cleanup-failed" => {
                     let names = app.targets.as_ref().unwrap();

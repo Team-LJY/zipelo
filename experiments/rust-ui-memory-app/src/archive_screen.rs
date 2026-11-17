@@ -237,6 +237,10 @@ pub struct ArchiveApp {
     selected_only: bool,
     method: Method,
     seven_zip: bool,
+    /// 7z 만들기에서 "쪼갤 용량 설정"을 켰는지와 입력한 볼륨 크기.
+    split: bool,
+    split_amount: String,
+    split_unit: present::VolumeUnit,
     dialogs: Box<dyn Dialogs>,
     picker: Option<(Purpose, std::sync::mpsc::Receiver<DialogAnswer>)>,
     preview_open: bool,
@@ -316,6 +320,9 @@ impl ArchiveApp {
             selected_only: false,
             method: Method::Deflate,
             seven_zip: false,
+            split: false,
+            split_amount: "100".into(),
+            split_unit: present::VolumeUnit::Mb,
             dialogs: Box::new(NativeDialogs),
             picker: None,
             preview_open: false,
@@ -569,6 +576,14 @@ impl ArchiveApp {
                 && self.zip_password == self.zip_password_confirm)
     }
 
+    /// 7z 분할을 켰으면 볼륨 바이트 수. 입력이 잘못됐으면 화면에 보일 오류.
+    fn split_volume(&self) -> Result<Option<u64>, &'static str> {
+        if !self.seven_zip || !self.split {
+            return Ok(None);
+        }
+        present::volume_size(&self.split_amount, self.split_unit).map(Some)
+    }
+
     fn close_create(&mut self) {
         self.create = false;
         self.ui_error = None;
@@ -802,8 +817,23 @@ impl ArchiveApp {
             self.ui_error = Some("압축파일 이름을 확인하세요".into());
             return;
         }
+        let volume_size = match self.split_volume() {
+            Ok(size) => size,
+            Err(error) => {
+                self.ui_error = Some(error.into());
+                return;
+            }
+        };
         let output_file = self.zip_folder.join(&self.zip_name);
-        if std::fs::symlink_metadata(&output_file).is_ok() {
+        if volume_size.is_some() {
+            // 분할 읽기는 같은 이름의 숫자 조각을 모두 한 묶음으로 보므로 하나라도 있으면 막음.
+            if let Some(existing) = present::existing_volume(&output_file) {
+                self.ui_error = Some(format!(
+                    "같은 이름의 분할 파일({existing})이 이미 있습니다. 다른 이름을 입력하세요"
+                ));
+                return;
+            }
+        } else if std::fs::symlink_metadata(&output_file).is_ok() {
             self.ui_error = Some("같은 이름의 파일이 이미 있습니다. 다른 이름을 입력하세요".into());
             return;
         }
@@ -831,7 +861,16 @@ impl ArchiveApp {
             self.ui_error = Some("두 암호가 같은지 확인하세요".into());
             return;
         }
-        self.targets = Some([self.zip_name.clone()].into_iter().collect());
+        // 분할하면 볼륨 수를 미리 알 수 없으므로 결과 화면에서 보고된 수로 이름을 다시 정함.
+        self.targets = Some(
+            [if volume_size.is_some() {
+                format!("{}.001", self.zip_name)
+            } else {
+                self.zip_name.clone()
+            }]
+            .into_iter()
+            .collect(),
+        );
         self.directories.clear();
         // 암호는 ZIP 만들기 창에서 받아 두었다가 작업자가 요청하면 넘김.
         let password = self.aes256.then(|| std::mem::take(&mut self.zip_password));
@@ -839,6 +878,7 @@ impl ArchiveApp {
             Start::CreateSevenZip {
                 sources,
                 output_file,
+                volume_size,
             }
         } else {
             Start::CreateZip {
@@ -1040,9 +1080,19 @@ impl ArchiveApp {
                     }
                     self.extract_selection(selection);
                 }
-                Start::CreateSevenZip { .. } => {
+                Start::CreateSevenZip { volume_size, .. } => {
                     self.set_seven_zip(true);
                     self.create = true;
+                    self.split = volume_size.is_some();
+                    if let Some(size) = volume_size {
+                        let (amount, unit) = if size % (1 << 30) == 0 {
+                            (size >> 30, present::VolumeUnit::Gb)
+                        } else {
+                            (size >> 20, present::VolumeUnit::Mb)
+                        };
+                        self.split_amount = amount.to_string();
+                        self.split_unit = unit;
+                    }
                     self.begin_zip();
                 }
                 Start::CreateZip { aes256, .. } => {
@@ -2592,8 +2642,24 @@ impl ArchiveApp {
             self.last_request,
             Some(Start::CreateZip { .. } | Start::CreateSevenZip { .. })
         );
+        // 분할 7z는 작업자가 보고한 볼륨 수로 기대 이름(이름.7z.001…)을 정함.
+        let split_targets = match (&self.last_request, t.as_ref()) {
+            (
+                Some(Start::CreateSevenZip {
+                    output_file,
+                    volume_size: Some(_),
+                    ..
+                }),
+                Some(t),
+            ) => output_file.file_name().map(|name| {
+                (1..=t.created_count.clamp(1, present::MAX_VOLUMES))
+                    .map(|index| format!("{}.{index:03}", name.to_string_lossy()))
+                    .collect::<BTreeSet<_>>()
+            }),
+            _ => None,
+        };
         let resolved_targets = present::resolved_targets(
-            self.targets.as_ref(),
+            split_targets.as_ref().or(self.targets.as_ref()),
             &self.model.entries,
             matches!(
                 self.last_request,
@@ -2703,6 +2769,11 @@ impl ArchiveApp {
                 .show(ui, |ui| {
                     if success && t.as_ref().is_some_and(|t| t.created_count > 0) {
                         let path = match self.last_request.as_ref() {
+                            Some(Start::CreateSevenZip {
+                                output_file,
+                                volume_size: Some(_),
+                                ..
+                            }) => present::volume_path(output_file, 1).display().to_string(),
                             Some(
                                 Start::CreateZip { output_file, .. }
                                 | Start::CreateSevenZip { output_file, .. },
@@ -2710,6 +2781,18 @@ impl ArchiveApp {
                             _ => format!("{} 폴더에 저장했습니다.", self.destination.display()),
                         };
                         theme::bounded_text(ui, &path, ui.available_width());
+                        if matches!(
+                            self.last_request,
+                            Some(Start::CreateSevenZip {
+                                volume_size: Some(_),
+                                ..
+                            })
+                        ) {
+                            ui.label(format!(
+                                "볼륨 {}개로 나누어 저장했습니다. 풀 때는 첫 볼륨(.001)을 여세요.",
+                                t.as_ref().map_or(0, |t| t.created_count)
+                            ));
+                        }
                     } else if let Some(problem) = &self.model.volume_problem {
                         ui.add(egui::Label::new(present::volume_problem_text(problem)).wrap());
                     } else if let Some(code) = t.as_ref().and_then(|t| t.error) {
@@ -2727,6 +2810,16 @@ impl ArchiveApp {
                             } else if creating && code == ErrorCode::SourceChanged {
                                 "묶을 파일이 바뀌었습니다. 파일을 확인한 뒤 다시 만드세요"
                                     .to_owned()
+                            } else if code == ErrorCode::Limit
+                                && matches!(
+                                    self.last_request,
+                                    Some(Start::CreateSevenZip {
+                                        volume_size: Some(_),
+                                        ..
+                                    })
+                                )
+                            {
+                                present::VOLUME_LIMIT_ERROR.to_owned()
                             } else {
                                 present::operation_text(present::error_text(code), creating)
                             },
@@ -3284,6 +3377,7 @@ impl ArchiveApp {
         // 암호: 체크하면 바로 아래에 암호와 암호 확인 칸을 보여 줌.
         if self.seven_zip {
             ui.label("7z는 암호를 지원하지 않습니다. 암호가 필요하면 ZIP을 선택하세요");
+            self.split_rows(ui);
             return false;
         }
         let check = ui.checkbox(&mut self.aes256, "암호로 보호하기");
@@ -3349,9 +3443,54 @@ impl ArchiveApp {
         false
     }
 
+    /// 쪼갤 용량: 체크하면 바로 아래에 볼륨 크기 칸과 MB/GB 선택을 보여 줌.
+    fn split_rows(&mut self, ui: &mut egui::Ui) {
+        let check = ui.checkbox(&mut self.split, "쪼갤 용량 설정");
+        theme::pointer(&check);
+        theme::focus(&check);
+        if !self.split {
+            return;
+        }
+        ui.horizontal(|ui| {
+            ui.add_sized([72.0, theme::FIELD], egui::Label::new("볼륨 크기"));
+            let edit = ui.add_sized(
+                [120.0, theme::FIELD],
+                egui::TextEdit::singleline(&mut self.split_amount)
+                    .id(egui::Id::unique("split-volume-size"))
+                    .char_limit(9)
+                    .align(egui::Align2::LEFT_CENTER),
+            );
+            theme::focus(&edit);
+            for unit in [present::VolumeUnit::Mb, present::VolumeUnit::Gb] {
+                let choice = ui.selectable_value(&mut self.split_unit, unit, unit.label());
+                theme::pointer(&choice);
+            }
+        });
+        match self.split_volume() {
+            Err(error) => {
+                ui.colored_label(theme::ERROR, error);
+            }
+            Ok(_) => {
+                let name = if self.zip_name.is_empty() {
+                    "이름.7z"
+                } else {
+                    &self.zip_name
+                };
+                ui.label(
+                    RichText::new(format!(
+                        "{name}.001, {name}.002 …로 나누어 저장합니다. 볼륨은 최대 {}개입니다.",
+                        present::MAX_VOLUMES
+                    ))
+                    .color(theme::MUTED),
+                );
+            }
+        }
+    }
+
     /// 취소와 압축하기 버튼. 취소를 눌렀으면 true.
     fn create_actions(&mut self, ui: &mut egui::Ui) -> bool {
-        let ready = !self.sources.is_empty() && self.zip_password_ready();
+        let ready =
+            !self.sources.is_empty() && self.zip_password_ready() && self.split_volume().is_ok();
         let enabled = self.picker.is_none();
         let (cancel, compress) = ui
             .add_enabled_ui(enabled, |ui| {

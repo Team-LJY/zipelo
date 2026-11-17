@@ -208,27 +208,37 @@ impl Planned {
             return Err(ErrorCode::SourceChanged);
         }
         // 게시 임시 파일의 부모만 시각 대신 원래 항목과 소유 객체를 대조함.
+        // 분할 볼륨처럼 임시 파일이 여럿이면 모두 정확히 한 번씩 보여야 함.
+        let owned: Vec<(&str, &SourceObject)> =
+            std::iter::once((temporary.name.as_str(), &temporary.object))
+                .chain(
+                    temporary
+                        .others
+                        .iter()
+                        .map(|(name, object)| (name.as_str(), object)),
+                )
+                .collect();
+        let mut seen = vec![false; owned.len()];
         let mut count = 0;
-        let mut found = false;
         for entry in input.children(&self.path)? {
             check.check()?;
             let name = entry.map_err(crate::space::io_error)?.file_name();
             let name = name.to_str().ok_or(ErrorCode::SourceChanged)?;
-            if name == temporary.name {
+            if let Some(index) = owned.iter().position(|(owned, _)| *owned == name) {
                 let child = input
                     .open_child(&self.path, name)
                     .map_err(|_| ErrorCode::SourceChanged)?;
-                if found
+                if seen[index]
                     || !child
                         .file
                         .metadata()
                         .map_err(crate::space::io_error)?
                         .is_file()
-                    || filesystem::object(&child.file)? != temporary.object
+                    || filesystem::object(&child.file)? != *owned[index].1
                 {
                     return Err(ErrorCode::SourceChanged);
                 }
-                found = true;
+                seen[index] = true;
             } else if self
                 .children
                 .binary_search_by(|leaf| leaf.as_str().cmp(name))
@@ -241,6 +251,7 @@ impl Planned {
             crate::resources::completed(Ok(()), check)?;
         }
         let after = input.file.metadata().map_err(crate::space::io_error)?;
+        let found = seen.iter().all(|seen| *seen);
         if !found || count != self.children.len() || before.modified().ok() != after.modified().ok()
         {
             return Err(ErrorCode::SourceChanged);

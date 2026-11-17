@@ -45,6 +45,7 @@ impl Case {
                 method: SevenZipMethod::Lzma2,
                 solid: false,
                 encryption: Encryption::None,
+                volume_size: None,
             },
             limits: Limits::default(),
         }
@@ -847,3 +848,6 @@ fn gigabyte_creation_stays_below_64_mib_peak_rss() {
             .success()
     );
 }
+
+#[path = "seven_zip_split_create.rs"]
+mod split;

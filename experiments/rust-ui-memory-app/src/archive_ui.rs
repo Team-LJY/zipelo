@@ -76,6 +76,8 @@ pub enum Start {
     CreateSevenZip {
         sources: Vec<(PathBuf, String)>,
         output_file: PathBuf,
+        /// 있으면 `output_file`(이름.7z) 대신 이 크기의 `이름.7z.001`, `이름.7z.002`, …로 나눔.
+        volume_size: Option<u64>,
     },
     CreateZip {
         sources: Vec<(PathBuf, String)>,
@@ -668,6 +670,7 @@ impl Model {
             | Start::CreateSevenZip {
                 sources,
                 output_file,
+                ..
             } => {
                 !sources.is_empty()
                     && output_file.is_absolute()
@@ -675,6 +678,19 @@ impl Model {
                         .iter()
                         .all(|(p, n)| p.is_absolute() && valid_relative(n))
             }
+        } && match &start {
+            // 분할은 `이름.7z`에 볼륨 번호를 붙이므로 .7z 이름과 최소 볼륨 크기를 요구함.
+            Start::CreateSevenZip {
+                output_file,
+                volume_size: Some(size),
+                ..
+            } => {
+                *size >= worker_protocol::protocol::MIN_SEVEN_ZIP_VOLUME_BYTES
+                    && output_file
+                        .extension()
+                        .is_some_and(|ext| ext.eq_ignore_ascii_case("7z"))
+            }
+            _ => true,
         };
         if !validation {
             self.input_error = Some("입력 경로, 출력명과 선택한 목록을 확인하세요".into());

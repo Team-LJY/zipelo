@@ -469,7 +469,73 @@ pub fn volume_problem_text(problem: &VolumeProblem) -> String {
 }
 
 pub const SPLIT_SUPPORT: &str =
-    "분할 7z는 .7z.001부터 열 수 있습니다. 분할 ZIP과 RAR, 분할 압축 만들기는 지원하지 않습니다.";
+    "분할 7z는 .7z.001부터 열 수 있습니다. 분할 ZIP과 RAR는 지원하지 않습니다.";
+
+/// 7z 분할 볼륨 크기 단위. 크기 표시(bytes_text)와 같이 1 MB = 1,048,576바이트.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum VolumeUnit {
+    Mb,
+    Gb,
+}
+impl VolumeUnit {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Mb => "MB",
+            Self::Gb => "GB",
+        }
+    }
+    fn bytes(self) -> u64 {
+        match self {
+            Self::Mb => 1 << 20,
+            Self::Gb => 1 << 30,
+        }
+    }
+}
+/// 분할 7z 볼륨 수 상한. 분할 읽기는 `.001`부터 `.999`까지만 찾음.
+pub const MAX_VOLUMES: u64 = worker_protocol::protocol::MAX_SEVEN_ZIP_VOLUMES;
+pub const VOLUME_SIZE_ERROR: &str = "쪼갤 용량은 1 이상의 정수로 입력하세요";
+pub const VOLUME_LIMIT_ERROR: &str =
+    "볼륨이 999개를 넘거나 처리 한도를 넘었습니다. 쪼갤 용량을 늘려 다시 만드세요";
+
+/// 입력한 숫자와 단위를 볼륨 바이트 수로 바꿈. 최소 1 MB이고 정수만 받음.
+pub fn volume_size(amount: &str, unit: VolumeUnit) -> Result<u64, &'static str> {
+    let amount = amount.trim();
+    if amount.is_empty() || amount.len() > 9 || !amount.bytes().all(|b| b.is_ascii_digit()) {
+        return Err(VOLUME_SIZE_ERROR);
+    }
+    amount
+        .parse::<u64>()
+        .ok()
+        .and_then(|value| value.checked_mul(unit.bytes()))
+        .filter(|bytes| *bytes >= worker_protocol::protocol::MIN_SEVEN_ZIP_VOLUME_BYTES)
+        .ok_or(VOLUME_SIZE_ERROR)
+}
+
+/// 분할 7z의 `index`번째 볼륨 경로 (`이름.7z.001` 형식).
+pub fn volume_path(output: &Path, index: u64) -> PathBuf {
+    let mut name = output.as_os_str().to_owned();
+    name.push(format!(".{index:03}"));
+    PathBuf::from(name)
+}
+
+/// 같은 폴더에 분할 읽기가 한 묶음으로 볼 `이름.7z.<숫자>`가 이미 있으면 그 이름.
+pub fn existing_volume(output: &Path) -> Option<String> {
+    let parent = output.parent()?;
+    let prefix = format!("{}.", output.file_name()?.to_str()?);
+    let fold = |value: &str| {
+        if cfg!(windows) {
+            value.to_lowercase()
+        } else {
+            value.to_owned()
+        }
+    };
+    let prefix = fold(&prefix);
+    fs::read_dir(parent).ok()?.flatten().find_map(|entry| {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        let suffix = fold(&name).strip_prefix(&prefix)?.to_owned();
+        (!suffix.is_empty() && suffix.bytes().all(|b| b.is_ascii_digit())).then_some(name)
+    })
+}
 
 pub fn excluded_split(path: &Path) -> bool {
     let name = path
