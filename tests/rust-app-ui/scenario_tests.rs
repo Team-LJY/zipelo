@@ -199,7 +199,6 @@ fn every_listed_scenario_draws_and_keeps_its_expected_screen() {
                 "open-blocked" => "안전을 위해 바로 열 수 없습니다",
                 "open-failed" => "파일을 열 프로그램을 실행하지 못했습니다",
                 "open-missing" => "풀린 파일을 찾지 못해 열지 못했습니다",
-                "drag-released" => "버튼을 누른 채 다시 끌어 주세요",
                 "password" | "password-retry" => "암호",
                 "extract-complete" => "압축을 풀었습니다",
                 "extract-cancelled" => "작업을 취소했습니다",

@@ -170,7 +170,7 @@ fn run() -> eframe::Result {
                     }
                 }
                 #[cfg(target_os = "windows")]
-                if !fixture && let Some(drag) = drag_out_windows::create(cc) {
+                if !fixture && let Some(drag) = drag_out_windows::create(cc, cc.egui_ctx.clone()) {
                     app.set_drag_out(Box::new(drag));
                 }
                 app.set_work_window_in_parent(custom_frame);

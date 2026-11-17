@@ -85,7 +85,6 @@ catalog! {
     "open-blocked" => "실행 파일을 바로 열지 않는다는 안내",
     "open-failed" => "기본 프로그램 실행 실패 안내",
     "open-missing" => "풀린 파일을 찾지 못해 열지 못한 안내",
-    "drag-released" => "Windows에서 다 풀기 전에 버튼을 놓은 끌어 놓기 안내",
     "password" => "압축 해제 암호 입력",
     "password-retry" => "암호가 틀린 뒤 다시 입력",
     "extract-progress" => "압축 해제 진행률 62%",
@@ -568,11 +567,6 @@ impl Scenario {
                     "find-all" => "사진",
                     _ => "없는 이름",
                 });
-                return app;
-            }
-            "drag-released" => {
-                app.dismissed = false;
-                app.ui_error = Some(present::DRAG_RELEASED.into());
                 return app;
             }
             "open-blocked" | "open-failed" | "open-missing" => {

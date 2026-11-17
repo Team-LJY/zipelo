@@ -20,21 +20,12 @@ pub enum DragEvent {
 
 /// 운영체제별 끌어 놓기 시작 구현.
 ///
-/// Wayland와 X11은 끌기를 먼저 시작하고, 받는 쪽이 데이터를 요청하면 풀기가 끝난 뒤
-/// 경로를 넘김(`after_extract`가 false). Windows 셸 끌기는 시작할 때 파일이 있어야 하므로
-/// 먼저 풀고, 다 풀렸을 때 버튼을 아직 누르고 있으면 [`DragOut::provide`] 뒤에
-/// [`DragOut::start`]를 부름(`after_extract`가 true).
+/// 끌기를 먼저 시작하고, 받는 쪽이 놓은 뒤 데이터를 요청하면 풀기가 끝날 때까지 기다렸다가
+/// [`DragOut::provide`]로 받은 경로를 넘김(지연 제공). 그래서 파일 크기와 관계없이
+/// 놓은 위치에 바로 풀림.
 pub trait DragOut {
-    /// 파일을 다 푼 뒤에 끌기를 시작해야 하는지.
-    fn after_extract(&self) -> bool {
-        false
-    }
-    /// 왼쪽 마우스 버튼을 아직 누르고 있는지. `after_extract` 구현에서만 씀.
-    fn button_held(&mut self) -> bool {
-        true
-    }
     /// 지금 누르고 있는 마우스 버튼으로 운영체제 끌기를 시작함. 시작하지 못하면 false.
-    /// Windows처럼 끌기가 끝날 때까지 돌아오지 않는 구현도 있음.
+    /// 끌기 자체는 돌아온 뒤에도 계속되며 끝나면 [`DragOut::poll`]로 알림.
     fn start(&mut self) -> bool;
     /// 지난 화면 이후 들어온 끌기 사건.
     fn poll(&mut self) -> Option<DragEvent>;
@@ -78,20 +69,5 @@ pub fn file_uri(path: &Path) -> String {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[cfg(unix)]
-    #[test]
-    fn uri_list_escapes_spaces_hangul_and_reserved_bytes() {
-        let paths = [
-            PathBuf::from("/tmp/여행 자료/a#b.txt"),
-            PathBuf::from("/tmp/x/폴더"),
-        ];
-        assert_eq!(
-            uri_list(&paths),
-            "file:///tmp/%EC%97%AC%ED%96%89%20%EC%9E%90%EB%A3%8C/a%23b.txt\r\n\
-             file:///tmp/x/%ED%8F%B4%EB%8D%94\r\n"
-        );
-    }
-}
+#[path = "../../../tests/rust-app-ui/drag_out_uri.rs"]
+mod tests;

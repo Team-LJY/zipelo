@@ -207,7 +207,12 @@ struct OpenRequest {
     automatic: bool,
     /// 창 밖으로 끌어 놓으려고 푸는 경우, 받는 쪽에 넘길 항목(압축파일 안 경로).
     drag: Option<Vec<String>>,
+    /// 끌어 놓을 항목을 구분하는 값. 같은 항목을 다시 끌 때 풀어 둔 파일을 다시 씀.
+    key: Option<DragKey>,
 }
+
+/// 끌어 놓을 항목 묶음: 압축파일, 목록 식별값, 선택한 항목 ID, 넘길 경로.
+type DragKey = (PathBuf, Option<ListId>, BTreeSet<u32>, Vec<String>);
 
 /// 찾기 창(Ctrl+F, Ctrl+Shift+F) 크기. 검색어 입력란 아래로 결과 목록이 길게 이어지는
 /// 작은 세로 창임.
@@ -326,6 +331,8 @@ pub struct ArchiveApp {
     drag_cancelled: bool,
     /// 이번 버튼 누름에서 이미 창 밖 끌기를 시작했는지. 한 번 누름에 한 번만 시작함.
     drag_out_fired: bool,
+    /// 끌어 놓으려고 마지막으로 풀어 둔 항목과 풀린 경로. 같은 항목을 다시 끌면 다시 씀.
+    drag_prepared: Option<(Option<DragKey>, Vec<PathBuf>)>,
     find: FindState,
     /// 이번 화면에서 목록 선택 해제 등 다른 곳이 Esc를 이미 처리했는지.
     escape_handled: bool,
@@ -412,6 +419,7 @@ impl ArchiveApp {
             drag_out: None,
             drag_cancelled: false,
             drag_out_fired: false,
+            drag_prepared: None,
             find: FindState::default(),
             escape_handled: false,
             focus_list: false,
@@ -473,6 +481,7 @@ impl ArchiveApp {
             destination: std::mem::replace(&mut self.destination, folder),
             automatic: std::mem::replace(&mut self.automatic_destination, true),
             drag: None,
+            key: None,
         };
         self.opening = Some(request);
         if self.extract_selection(Selection::EntryIds(vec![entry_id])) {
@@ -543,16 +552,35 @@ impl ArchiveApp {
         if names.is_empty() {
             return false;
         }
-        let after_extract = self.drag_out.as_ref().is_some_and(|drag| drag.after_extract());
-        if !after_extract {
-            if !self.drag_out.as_mut().is_some_and(|drag| drag.start()) {
-                crate::log_warn!("운영체제 끌기를 시작하지 못함");
-                return false;
+        let key: DragKey = (
+            self.model.archive.clone().unwrap_or_default(),
+            self.model.list_id.clone(),
+            self.model.selected.clone(),
+            names.clone(),
+        );
+        if let Some((Some(prepared), paths)) = &self.drag_prepared
+            && *prepared == key
+            && paths.iter().all(|path| path.exists())
+        {
+            // 같은 항목을 이미 풀어 두었으면 다시 풀지 않고 바로 끎.
+            let paths = paths.clone();
+            crate::log_debug!("풀어 둔 파일로 바로 끌기: {}개", paths.len());
+            let drag = self.drag_out.as_mut().unwrap();
+            let started = drag.start();
+            if started {
+                drag.provide(&paths);
+                self.release_after_move = true;
+                self.marquee = None;
             }
-            // 운영체제가 끌기를 넘겨받으면 버튼 놓기가 이 창에 오지 않으므로 대신 넣어 줌.
-            self.release_after_move = true;
+            return started;
         }
-        crate::log_debug!("창 밖으로 끌기 시작 (푼 뒤 시작: {after_extract}): {names:?}");
+        if !self.drag_out.as_mut().is_some_and(|drag| drag.start()) {
+            crate::log_warn!("운영체제 끌기를 시작하지 못함");
+            return false;
+        }
+        // 운영체제가 끌기를 넘겨받으면 버튼 놓기가 이 창에 오지 않으므로 대신 넣어 줌.
+        self.release_after_move = true;
+        crate::log_debug!("창 밖으로 끌기 시작: {names:?}");
         self.marquee = None;
         self.drag_cancelled = false;
         self.last_open = None;
@@ -568,6 +596,7 @@ impl ArchiveApp {
             destination: std::mem::replace(&mut self.destination, folder),
             automatic: std::mem::replace(&mut self.automatic_destination, true),
             drag: Some(names),
+            key: Some(key),
         };
         self.opening = Some(request);
         let selection = Selection::EntryIds(
@@ -585,21 +614,6 @@ impl ArchiveApp {
 
     /// 운영체제 끌기에서 온 사건을 처리함.
     fn poll_drag_out(&mut self) {
-        let dragging = self.opening.as_ref().is_some_and(|r| r.drag.is_some());
-        if dragging
-            && self.model.busy()
-            && !self.drag_cancelled
-            && let Some(drag) = self.drag_out.as_mut()
-            && drag.after_extract()
-            && !drag.button_held()
-        {
-            // 푼 뒤 끌기를 시작하는 환경에서 다 풀기 전에 버튼을 놓으면 끌기를 그만둠.
-            crate::log_debug!("다 풀기 전에 버튼을 놓아 끌어 놓기 취소");
-            self.drag_cancelled = true;
-            self.ui_error = Some(present::DRAG_RELEASED.into());
-            self.clear_password();
-            self.model.cancel();
-        }
         while let Some(event) = self.drag_out.as_mut().and_then(|drag| drag.poll()) {
             crate::log_debug!("끌어 놓기 사건: {event:?}");
             let dragging = self.opening.as_ref().is_some_and(|r| r.drag.is_some());
@@ -655,18 +669,8 @@ impl ArchiveApp {
                 crate::log_debug!("끌어 놓을 파일 준비 끝: {}개", paths.len());
                 // 결과 창 없이 받는 쪽이 파일을 가져가게 함.
                 self.dismissed = true;
-                if !drag.after_extract() {
-                    drag.provide(&paths);
-                } else if drag.button_held() {
-                    drag.provide(&paths);
-                    let started = drag.start();
-                    crate::log_debug!("푼 뒤 끌기 {}", if started { "끝남" } else { "시작 실패" });
-                    self.release_after_move = true;
-                } else {
-                    drag.fail();
-                    self.dismissed = false;
-                    self.ui_error = Some(present::DRAG_RELEASED.into());
-                }
+                drag.provide(&paths);
+                self.drag_prepared = Some((request.key, paths));
             }
             return;
         }
@@ -970,6 +974,7 @@ impl ArchiveApp {
         self.search.clear();
         self.clear_list_selection();
         self.close_find();
+        self.drag_prepared = None;
         self.targets = None;
         self.directories.clear();
         crate::log_debug!("압축파일 열기: {}", archive.display());
@@ -1974,7 +1979,13 @@ impl ArchiveApp {
             self.find.offset = 0.0;
             self.find.scroll_to_cursor = true;
         }
-        let keyboard = own_keyboard || edit.has_focus() || edit.lost_focus();
+        // 결과를 한 번 누르면 입력란 대신 결과 목록이 초점을 가지므로, 목록에 초점이 있을
+        // 때도 화살표와 Enter를 받음(부모 안 찾기 창에서도 결과를 고른 뒤 Enter로 이동).
+        let list_id = egui::Id::unique("archive-find-results");
+        let keyboard = own_keyboard
+            || edit.has_focus()
+            || edit.lost_focus()
+            || ui.memory(|m| m.has_focus(list_id));
         let count = self.find.results.len();
         let mut chosen = None;
         if keyboard && count > 0 {
@@ -2024,6 +2035,20 @@ impl ArchiveApp {
         };
         let (frame_rect, _) =
             ui.allocate_exact_size(egui::vec2(width, height), egui::Sense::hover());
+        // 결과 목록 전체가 키보드 초점을 받는 목록 상자임. 행 누름은 위에 그리는 행이 받음.
+        let list = ui.interact(frame_rect, list_id, egui::Sense::click());
+        list.widget_info(|| egui::WidgetInfo::labeled(egui::Role::ListBox, true, "찾기 결과"));
+        if list.has_focus() {
+            ui.memory_mut(|memory| {
+                memory.set_focus_lock_filter(
+                    list_id,
+                    egui::EventFilter {
+                        vertical_arrows: true,
+                        ..Default::default()
+                    },
+                )
+            });
+        }
         theme::boxed_field(ui, frame_rect);
         let mut list_ui = ui.new_child(
             egui::UiBuilder::new()
@@ -2107,6 +2132,7 @@ impl ArchiveApp {
                 );
                 if response.clicked() {
                     self.find.cursor = Some(index);
+                    ui.memory_mut(|m| m.request_focus(list_id));
                 }
                 if response.double_clicked() {
                     chosen = Some(index);

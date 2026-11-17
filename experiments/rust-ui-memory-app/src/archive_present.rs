@@ -654,12 +654,15 @@ pub fn create_open_root_with(
 ) -> io::Result<OpenRoot> {
     let name = archive.file_name().unwrap_or_default().to_string_lossy();
     let mut error = None;
+    // Windows는 점으로 숨겨지지 않으므로 숨김 속성을 줌.
     if let Some(parent) = archive.parent().filter(|p| !p.as_os_str().is_empty()) {
         let base = parent.join(open_root_name_in(parent, &name));
         for _ in 0..8 {
             let path = unique_folder(&base);
             match private_dir(&path) {
                 Ok(()) => {
+                    #[cfg(windows)]
+                    hide_folder(&path);
                     after_create(&path);
                     match OpenRoot::capture(path.clone()) {
                         Ok(root) => return Ok(root),
@@ -688,9 +691,27 @@ pub fn create_open_root_with(
     })
 }
 
+/// Windows 탐색기에서 임시 폴더가 압축파일 옆에 보이지 않도록 숨김 속성을 줌.
+/// 실패해도 폴더는 그대로 씀. unsafe 없이 시스템의 attrib.exe를 창 없이 실행함.
+#[cfg(windows)]
+pub fn hide_folder(path: &Path) {
+    use std::os::windows::process::CommandExt;
+    let Some(system) = std::env::var_os("SystemRoot").map(PathBuf::from) else {
+        return;
+    };
+    let _ = std::process::Command::new(system.join("System32").join("attrib.exe"))
+        .arg("+h")
+        .arg(path)
+        .creation_flags(0x0800_0000)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status();
+}
+
 /// 열기와 끌어 놓기용 임시 폴더 이름. 예: `.자료.zip (Zipelo 임시)`.
 /// 파일 관리자에서 압축파일 옆에 풀린 것처럼 보이지 않도록 Unix 계열에서는 숨김
-/// 이름(앞에 '.')을 씀. Windows는 점으로 숨겨지지 않으므로 원래 이름을 씀.
+/// 이름(앞에 '.')을 씀. Windows는 점으로 숨겨지지 않으므로 원래 이름에 숨김 속성을 줌.
 pub fn open_root_name(archive_name: &str) -> String {
     if cfg!(windows) {
         format!("{archive_name} (Zipelo 임시)")
@@ -771,9 +792,6 @@ pub fn open_blocked_text(name: &str) -> String {
 pub const OPEN_FAILED: &str = "파일을 열 프로그램을 실행하지 못했습니다";
 pub const OPEN_MISSING: &str = "풀린 파일을 찾지 못해 열지 못했습니다";
 
-/// Windows에서 파일을 다 풀기 전에 마우스 버튼을 놓아 끌어 놓기를 시작하지 못한 안내.
-pub const DRAG_RELEASED: &str =
-    "파일을 다 풀기 전에 마우스 버튼을 놓아 끌어 놓지 않았습니다. 버튼을 누른 채 다시 끌어 주세요";
 
 /// 운영체제에 설정된 기본 프로그램으로 파일을 엶.
 pub fn open_with_default(path: &Path) -> Result<(), String> {

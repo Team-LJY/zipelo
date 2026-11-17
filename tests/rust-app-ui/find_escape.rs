@@ -247,3 +247,49 @@ fn escape_in_the_search_box_only_leaves_the_text_field() {
     let outputs = press(&mut s, egui::Key::Escape, egui::Modifiers::NONE);
     assert!(!close_requested(&outputs));
 }
+
+#[test]
+fn enter_after_clicking_a_result_in_the_parent_find_window_moves_there() {
+    let scratch = Folder::new();
+    let mut s = Explorer::new(&scratch);
+    s.app.model.entries = find_entries();
+    s.frame(egui::Modifiers::NONE, vec![]);
+    press(&mut s, egui::Key::F, find_ctrl(false));
+    s.app.set_find_query("report");
+    let labels = layout_text(&s.frame(egui::Modifiers::NONE, vec![]));
+    let row = labels
+        .iter()
+        .rev()
+        .find(|(text, _, _)| text == "report.TXT")
+        .map(|(_, rect, _)| rect.center())
+        .expect("찾은 파일 행");
+    // 결과를 한 번 누르면 입력란은 초점을 잃음.
+    s.time += 1.0;
+    s.pointer(row, true, egui::Modifiers::NONE);
+    s.pointer(row, false, egui::Modifiers::NONE);
+    s.frame(egui::Modifiers::NONE, vec![]);
+    assert!(s.app.find_open());
+    assert!(!s.ctx.text_edit_focused());
+    press(&mut s, egui::Key::Enter, egui::Modifiers::NONE);
+    s.frame(egui::Modifiers::NONE, vec![]);
+    assert!(!s.app.find_open());
+    s.selected(&[1]);
+    // 화살표로 고른 뒤 Enter도 같음.
+    press(&mut s, egui::Key::F, find_ctrl(true));
+    s.app.set_find_query("txt");
+    let labels = layout_text(&s.frame(egui::Modifiers::NONE, vec![]));
+    let first = labels
+        .iter()
+        .rev()
+        .find(|(text, _, _)| text == "child.txt")
+        .map(|(_, rect, _)| rect.center())
+        .expect("첫 결과 행");
+    s.time += 1.0;
+    s.pointer(first, true, egui::Modifiers::NONE);
+    s.pointer(first, false, egui::Modifiers::NONE);
+    press(&mut s, egui::Key::ArrowDown, egui::Modifiers::NONE);
+    press(&mut s, egui::Key::Enter, egui::Modifiers::NONE);
+    s.frame(egui::Modifiers::NONE, vec![]);
+    assert!(!s.app.find_open());
+    s.selected(&[1]);
+}

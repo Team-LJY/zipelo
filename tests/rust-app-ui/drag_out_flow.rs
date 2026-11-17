@@ -5,9 +5,6 @@
 struct DragLog {
     starts: usize,
     accept: bool,
-    /// Windows처럼 다 푼 뒤에 끌기를 시작하는 구현을 흉내 냄.
-    after_extract: bool,
-    held: bool,
     /// provide와 start가 불린 순서.
     calls: Vec<&'static str>,
     provided: Vec<Vec<PathBuf>>,
@@ -18,12 +15,6 @@ struct DragLog {
 struct FakeDrag(std::rc::Rc<std::cell::RefCell<DragLog>>);
 
 impl zipelo_ui_memory_app::drag_out::DragOut for FakeDrag {
-    fn after_extract(&self) -> bool {
-        self.0.borrow().after_extract
-    }
-    fn button_held(&mut self) -> bool {
-        self.0.borrow().held
-    }
     fn start(&mut self) -> bool {
         let mut log = self.0.borrow_mut();
         log.starts += 1;
@@ -46,7 +37,6 @@ impl zipelo_ui_memory_app::drag_out::DragOut for FakeDrag {
 fn with_drag(s: &mut Explorer) -> std::rc::Rc<std::cell::RefCell<DragLog>> {
     let log = std::rc::Rc::new(std::cell::RefCell::new(DragLog {
         accept: true,
-        held: true,
         ..Default::default()
     }));
     s.app.set_drag_out(Box::new(FakeDrag(log.clone())));
@@ -184,59 +174,65 @@ fn rows_do_not_start_a_drag_when_the_platform_cannot() {
 }
 
 #[test]
-fn after_extract_platforms_start_the_drag_once_files_exist_and_the_button_is_held() {
+fn dragging_the_same_items_again_reuses_the_extracted_files() {
     let scratch = Folder::new();
     let mut s = Explorer::new(&scratch);
     let log = with_drag(&mut s);
-    log.borrow_mut().after_extract = true;
     s.click("alpha.txt", egui::Modifiers::NONE);
     s.factory.state.borrow_mut().manual = true;
     drag_row(&mut s, "alpha.txt");
-    // 먼저 풀기만 시작하고 운영체제 끌기는 아직 시작하지 않음.
-    assert_eq!(log.borrow().starts, 0);
-    assert!(s.app.model.busy());
-    let folder = scratch.0.join(zipelo_ui_memory_app::archive_present::open_root_name("sample.zip")).join("1");
+    let folder = scratch
+        .0
+        .join(zipelo_ui_memory_app::archive_present::open_root_name("sample.zip"))
+        .join("1");
     fs::create_dir_all(&folder).unwrap();
     fs::write(folder.join("alpha.txt"), "x").unwrap();
     finish_worker(&mut s);
-    assert_eq!(log.borrow().calls, ["provide", "start"]);
-    assert_eq!(log.borrow().provided, vec![vec![folder.join("alpha.txt")]]);
+    let extracts = s.factory.state.borrow().starts.len();
+    // 같은 항목을 다시 끌면 다시 풀지 않고 바로 시작해 풀어 둔 경로를 넘김.
+    s.pointer(egui::pos2(5.0, 5.0), false, egui::Modifiers::NONE);
+    drag_row(&mut s, "alpha.txt");
+    assert_eq!(s.factory.state.borrow().starts.len(), extracts);
+    assert_eq!(log.borrow().calls, ["start", "provide", "start", "provide"]);
+    assert_eq!(
+        log.borrow().provided,
+        vec![vec![folder.join("alpha.txt")], vec![folder.join("alpha.txt")]]
+    );
 }
 
 #[test]
-fn after_extract_platforms_stop_when_the_button_is_released_early() {
+fn a_different_selection_is_extracted_again() {
     let scratch = Folder::new();
     let mut s = Explorer::new(&scratch);
     let log = with_drag(&mut s);
-    log.borrow_mut().after_extract = true;
     s.click("alpha.txt", egui::Modifiers::NONE);
     s.factory.state.borrow_mut().manual = true;
     drag_row(&mut s, "alpha.txt");
-    assert!(s.app.model.busy());
-    log.borrow_mut().held = false;
-    s.frame(egui::Modifiers::NONE, vec![]);
-    assert!(s.app.model.cancellation_requested());
-    {
-        let mut worker = s.factory.state.borrow_mut();
-        worker.frame(Event::Accepted { encryption: false });
-        worker.finish(Outcome::Cancelled, Publication::None);
-    }
-    let mut labels = Vec::new();
-    for _ in 0..10 {
-        labels = layout_text(&s.frame(egui::Modifiers::NONE, vec![]));
-    }
-    assert_eq!(log.borrow().starts, 0);
-    assert!(log.borrow().provided.is_empty());
-    assert!(
-        labels
-            .iter()
-            .any(|(text, _, _)| text.contains("마우스 버튼을 놓아 끌어 놓지 않았습니다")),
-        "{labels:?}"
-    );
-    assert!(
-        !labels.iter().any(|(text, _, _)| text.contains("취소했습니다")),
-        "{labels:?}"
-    );
+    let folder = scratch
+        .0
+        .join(zipelo_ui_memory_app::archive_present::open_root_name("sample.zip"))
+        .join("1");
+    fs::create_dir_all(&folder).unwrap();
+    fs::write(folder.join("alpha.txt"), "x").unwrap();
+    finish_worker(&mut s);
+    assert_eq!(log.borrow().provided.len(), 1);
+    let extracts = s.factory.state.borrow().starts.len();
+    s.pointer(egui::pos2(5.0, 5.0), false, egui::Modifiers::NONE);
+    s.click("beta.txt", egui::Modifiers::NONE);
+    drag_row(&mut s, "beta.txt");
+    assert_eq!(s.factory.state.borrow().starts.len(), extracts + 1);
+}
+
+#[cfg(windows)]
+#[test]
+fn windows_temp_folder_is_hidden() {
+    use std::os::windows::fs::MetadataExt;
+    let scratch = Folder::new();
+    let root = zipelo_ui_memory_app::archive_present::create_open_root(&scratch.0.join("sample.zip"))
+        .unwrap();
+    let attributes = fs::metadata(root.path()).unwrap().file_attributes();
+    assert_ne!(attributes & 0x2, 0, "FILE_ATTRIBUTE_HIDDEN");
+    zipelo_ui_memory_app::archive_present::remove_open_root(root);
 }
 
 #[test]
