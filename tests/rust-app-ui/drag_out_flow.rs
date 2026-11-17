@@ -432,3 +432,52 @@ fn escape_during_a_blocking_drag_cancels_extraction_right_away() {
     // 끌기 안에서 바로 취소 요청을 보냄(다 풀릴 때까지 기다리지 않음).
     assert!(s.app.model.cancellation_requested());
 }
+
+#[test]
+fn dropping_dragged_items_back_onto_zipelo_is_ignored() {
+    let scratch = Folder::new();
+    let mut s = Explorer::new(&scratch);
+    let log = with_drag(&mut s);
+    s.click("alpha.txt", egui::Modifiers::NONE);
+    s.factory.state.borrow_mut().manual = true;
+    drag_row(&mut s, "alpha.txt");
+    let folder = scratch
+        .0
+        .join(zipelo_ui_memory_app::archive_present::open_root_name("sample.zip"))
+        .join("1");
+    fs::create_dir_all(&folder).unwrap();
+    fs::write(folder.join("alpha.txt"), "x").unwrap();
+    finish_worker(&mut s);
+    assert_eq!(log.borrow().provided.len(), 1);
+    let archive = s.app.model.archive.clone();
+    let extracts = s.factory.state.borrow().starts.len();
+    #[derive(Debug)]
+    struct Dropped(PathBuf);
+    impl egui::DroppedFile for Dropped {
+        fn path(&self) -> &std::path::Path {
+            &self.0
+        }
+        fn bytes(&self) -> Result<Vec<u8>, String> {
+            panic!("화면이 파일을 직접 읽으면 안 됨")
+        }
+    }
+    // 넘긴 경로가 Zipelo 창에 다시 놓임.
+    s.time += 1.0;
+    s.ctx.run_ui(
+        egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(760.0, 540.0))),
+            time: Some(s.time),
+            dropped_files: vec![std::sync::Arc::new(Dropped(folder.join("alpha.txt")))],
+            ..Default::default()
+        },
+        |ui| s.app.show(ui),
+    );
+    let labels = layout_text(&s.frame(egui::Modifiers::NONE, vec![]));
+    // 압축파일로 열려 하지 않고 오류도 띄우지 않음.
+    assert_eq!(s.app.model.archive, archive);
+    assert_eq!(s.factory.state.borrow().starts.len(), extracts);
+    assert!(
+        !labels.iter().any(|(text, _, _)| text.contains("열지 못했습니다")),
+        "{labels:?}"
+    );
+}

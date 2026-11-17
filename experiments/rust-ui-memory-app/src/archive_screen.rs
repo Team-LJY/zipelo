@@ -1500,7 +1500,20 @@ impl ArchiveApp {
     }
 
     fn on_drop(&mut self, paths: Vec<PathBuf>) {
-        if self.preview_open || self.model.busy() || paths.is_empty() {
+        if paths.is_empty() {
+            return;
+        }
+        // 목록 항목을 끌다가 Zipelo 창 위에 놓으면 Zipelo가 넘긴 임시 폴더의 경로가 다시
+        // 들어옴. 그 파일을 압축파일로 열지 않고 무시함.
+        if paths.iter().any(|path| {
+            self.open_roots
+                .iter()
+                .any(|(_, root)| path.starts_with(root.path()))
+        }) {
+            crate::log_debug!("Zipelo 임시 폴더의 항목을 자기 창에 놓음: 무시");
+            return;
+        }
+        if self.preview_open || self.model.busy() {
             return;
         }
         if paths.len() == 1 && !self.create && !paths[0].is_dir() {

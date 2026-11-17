@@ -32,7 +32,11 @@ use windows_sys::{
         UI::{
             Input::KeyboardAndMouse::{GetAsyncKeyState, VK_ESCAPE, VK_LBUTTON, VK_RBUTTON},
             Shell::SHCreateStdEnumFmtEtc,
-            WindowsAndMessaging::{GetSystemMetrics, SM_SWAPBUTTON},
+            WindowsAndMessaging::{
+                DispatchMessageW, GetSystemMetrics, MSG, MsgWaitForMultipleObjects, PM_REMOVE,
+                PeekMessageW, PostQuitMessage, QS_ALLINPUT, SM_SWAPBUTTON, TranslateMessage,
+                WM_KEYDOWN, WM_QUIT,
+            },
         },
     },
     core::{GUID, HRESULT},
@@ -159,9 +163,49 @@ fn button_held() -> bool {
     }
 }
 
+/// Esc가 지금 눌려 있거나 지난 확인 이후 눌린 적이 있는지. 짧게 누른 것도 놓치지 않음.
 fn escape_pressed() -> bool {
     // 안전성: 인자만 받는 Win32 상태 조회임.
-    unsafe { GetAsyncKeyState(VK_ESCAPE as i32) < 0 }
+    let state = unsafe { GetAsyncKeyState(VK_ESCAPE as i32) };
+    state < 0 || state & 1 != 0
+}
+
+/// 화면 스레드에 쌓인 메시지를 처리함. 기다리는 동안에도 진행률 창이 표시되고 Zipelo 창이
+/// 응답 없음으로 바뀌지 않게 함. 창에 온 Esc 키를 보았거나 종료 요청이 오면 true.
+fn pump_messages() -> bool {
+    let mut cancel = false;
+    // 안전성: 표준 메시지 루프임. 받은 메시지는 같은 스레드에서 바로 처리함.
+    unsafe {
+        let mut message: MSG = std::mem::zeroed();
+        while PeekMessageW(&mut message, std::ptr::null_mut(), 0, 0, PM_REMOVE) != 0 {
+            if message.message == WM_QUIT {
+                // 종료 요청은 끌기가 끝난 뒤 앱 메시지 루프가 받도록 다시 넣고 끌기를 취소함.
+                PostQuitMessage(message.wParam as i32);
+                return true;
+            }
+            if message.message == WM_KEYDOWN && message.wParam == VK_ESCAPE as usize {
+                cancel = true;
+                continue;
+            }
+            TranslateMessage(&message);
+            DispatchMessageW(&message);
+        }
+    }
+    cancel
+}
+
+/// 메시지가 오거나 시간이 지날 때까지 기다림.
+fn wait_messages(timeout: Duration) {
+    // 안전성: 기다릴 핸들 없이 메시지 도착만 기다림.
+    unsafe {
+        MsgWaitForMultipleObjects(
+            0,
+            std::ptr::null(),
+            0,
+            timeout.as_millis() as u32,
+            QS_ALLINPUT,
+        );
+    }
 }
 
 /// 끌기 중에 앱의 작업 진행을 받음. start 밖에서는 실패로 봄.
@@ -585,8 +629,12 @@ impl DropSource {
     fn wait_for_files(&self) -> bool {
         let started = Instant::now();
         let mut dialog: Option<ProgressDialog> = None;
+        // 기다리기 전에 눌렸던 Esc 기록은 지움.
+        escape_pressed();
         loop {
-            let cancelled = escape_pressed() || dialog.as_ref().is_some_and(|d| d.cancelled());
+            // 메시지를 처리해야 진행률 창(Zipelo 창이 부모)이 표시되고 Zipelo 창도 응답함.
+            let cancelled =
+                pump_messages() | escape_pressed() | dialog.as_ref().is_some_and(|d| d.cancelled());
             let state = pump(cancelled);
             match state {
                 PumpState::Waiting { done, total } => {
@@ -600,7 +648,7 @@ impl DropSource {
                     if let Some(dialog) = &dialog {
                         dialog.progress(done, total);
                     }
-                    std::thread::sleep(Duration::from_millis(30));
+                    wait_messages(Duration::from_millis(30));
                 }
                 ready => {
                     let ok = matches!(ready, PumpState::Ready(_));
