@@ -81,9 +81,14 @@ impl<'a> Reader<'a> {
         }
     }
 }
+const AES: [u8; 4] = [6, 0xf1, 7, 1];
 struct Folder {
     method: Vec<u8>,
     properties: Vec<u8>,
+    /// 7zAES 코더가 있으면 그 속성. 묶음 스트림을 복호화한 뒤 `method`로 풂.
+    encryption: Option<crate::crypto::SevenZipAes>,
+    /// 복호화한 뒤 `method` 코더에 넘기는 크기. 암호가 없으면 묶음 크기와 같음.
+    inner: usize,
     size: usize,
     crc: Option<u32>,
     sizes: Vec<usize>,
@@ -131,31 +136,64 @@ impl Streams {
             return Err(ErrorCode::UnsupportedFeature);
         }
         let mut folders = Vec::new();
+        let mut layouts = Vec::new();
         for _ in 0..num {
-            if r.integer()? != 1 {
+            // 단일 코더이거나, 7zAES와 Copy/LZMA/LZMA2를 묶은 `7z a -p`의 두 코더 구성만 받음.
+            let coders = r.integer()?;
+            if !(1..=2).contains(&coders) {
                 return Err(ErrorCode::UnsupportedFeature);
             }
-            let flags = r.byte()?;
-            let len = (flags & 15) as usize;
-            if flags & 0xc0 != 0 || len == 0 {
-                return Err(ErrorCode::UnsupportedFeature);
+            let mut list = Vec::new();
+            for _ in 0..coders {
+                let flags = r.byte()?;
+                let len = (flags & 15) as usize;
+                if flags & 0xc0 != 0 || len == 0 {
+                    return Err(ErrorCode::UnsupportedFeature);
+                }
+                let method = r.take(len)?.to_vec();
+                if flags & 0x10 != 0 && (r.integer()? != 1 || r.integer()? != 1) {
+                    return Err(ErrorCode::UnsupportedFeature);
+                }
+                let properties = if flags & 0x20 != 0 {
+                    let n = r.number(64)?;
+                    r.take(n)?.to_vec()
+                } else {
+                    Vec::new()
+                };
+                if !matches!(method.as_slice(), [0] | [3, 1, 1] | [0x21]) && method != AES {
+                    return Err(ErrorCode::UnsupportedFeature);
+                }
+                list.push((method, properties));
             }
-            let method = r.take(len)?.to_vec();
-            if flags & 0x10 != 0 && (r.integer()? != 1 || r.integer()? != 1) {
-                return Err(ErrorCode::UnsupportedFeature);
-            }
-            let properties = if flags & 0x20 != 0 {
-                let n = r.number(64)?;
-                r.take(n)?.to_vec()
+            let aes = list.iter().position(|(method, _)| *method == AES);
+            let main = if coders == 2 {
+                // 결합 쌍은 주 코더의 입력을 7zAES의 출력에 잇고, 남은 7zAES 입력이 묶음 스트림임.
+                let input = r.integer()?;
+                let output = r.integer()?;
+                let (Some(aes), main) = (aes, aes.map_or(0, |a| 1 - a)) else {
+                    return Err(ErrorCode::UnsupportedFeature);
+                };
+                if list[main].0 == AES || input != main as u64 || output != aes as u64 {
+                    return Err(ErrorCode::UnsupportedFeature);
+                }
+                main
             } else {
-                Vec::new()
+                0
             };
-            if !matches!(method.as_slice(), [0] | [3, 1, 1] | [0x21]) {
-                return Err(ErrorCode::UnsupportedFeature);
-            }
+            let encryption = aes
+                .map(|index| crate::crypto::SevenZipAes::parse(&list[index].1))
+                .transpose()?;
+            let (method, properties) = if coders == 1 && encryption.is_some() {
+                (vec![0], Vec::new())
+            } else {
+                list.swap_remove(main)
+            };
+            layouts.push((coders as usize, main, aes));
             folders.push(Folder {
                 method,
                 properties,
+                encryption,
+                inner: 0,
                 size: 0,
                 crc: None,
                 sizes: Vec::new(),
@@ -165,8 +203,16 @@ impl Streams {
         }
         r.expect(12)?;
         let mut total = 0usize;
-        for folder in &mut folders {
-            folder.size = r.number(limits.output as usize)?;
+        for (folder, (coders, main, aes)) in folders.iter_mut().zip(&layouts) {
+            let mut sizes = [0; 2];
+            for size in &mut sizes[..*coders] {
+                *size = r.number(limits.output as usize)?;
+            }
+            folder.size = sizes[*main];
+            folder.inner = match aes {
+                Some(aes) if *coders == 2 => sizes[*aes],
+                _ => folder.size,
+            };
             total = total
                 .checked_add(folder.size)
                 .filter(|n| *n <= limits.output as usize)
@@ -265,6 +311,10 @@ impl Streams {
             if *n == 0 && f.size != 0 {
                 return Err(ErrorCode::Integrity);
             }
+            // 틀린 암호의 출력을 CRC로 가려내야 하므로 CRC가 없는 암호 폴더는 받지 않음.
+            if f.encryption.is_some() && f.crc.is_none() && f.crcs.iter().any(|c| c.is_none()) {
+                return Err(ErrorCode::UnsupportedFeature);
+            }
             crate::resources::completed(Ok(()), check)?;
         }
         Ok(Self {
@@ -307,9 +357,10 @@ impl Streams {
         ranges: &[(u64, u64)],
         output: &mut std::fs::File,
         selected: Option<usize>,
+        keys: &mut Keys<'_>,
         check: &mut impl crate::resources::Monitor,
     ) -> Result<()> {
-        use std::io::{Seek, SeekFrom, Write};
+        use std::io::{Read, Seek, SeekFrom};
         let total = self
             .folders
             .iter()
@@ -340,71 +391,134 @@ impl Streams {
             input
                 .seek(SeekFrom::Start(*start))
                 .map_err(crate::space::io_error)?;
-            match f.method.as_slice() {
-                [0] => {
-                    if !f.properties.is_empty() || *size != f.size as u64 {
-                        return Err(ErrorCode::Integrity);
-                    }
-                    let mut buffer = zeroize::Zeroizing::new([0; 65536]);
-                    let mut remaining = *size;
-                    while remaining != 0 {
-                        check.check()?;
-                        let n = remaining.min(buffer.len() as u64) as usize;
-                        input
-                            .read_exact(&mut buffer[..n])
-                            .map_err(|_| ErrorCode::Integrity)?;
-                        crate::space::ensure(output, n as u64)?;
-                        output
-                            .write_all(&buffer[..n])
-                            .map_err(crate::space::io_error)?;
-                        remaining -= n as u64;
-                        crate::resources::completed(Ok(()), check)?;
-                    }
+            match &f.encryption {
+                None => decode_folder(input, *size, f, output, base, check)?,
+                Some(aes) => {
+                    let key = keys.key(aes, check)?;
+                    let mut reader = crate::crypto::SevenZipReader::new(
+                        input.by_ref().take(*size),
+                        *size,
+                        f.inner as u64,
+                        aes,
+                        &key,
+                    )?;
+                    // 복호화한 뒤의 해제 실패나 CRC 불일치는 틀린 암호로 보고함. LZMA2는 청크
+                    // 머리의 속성도 암호문에서 나오므로 미지원 속성도 틀린 암호로 봄.
+                    decode_folder(&mut reader, f.inner as u64, f, output, base, check).map_err(
+                        |error| match error {
+                            ErrorCode::Integrity => ErrorCode::WrongPassword,
+                            ErrorCode::UnsupportedFeature if f.method == [0x21] => {
+                                ErrorCode::WrongPassword
+                            }
+                            error => error,
+                        },
+                    )?
                 }
-                [3, 1, 1] | [0x21] => crate::lzma::decode_stream(
-                    input,
-                    *size,
-                    &f.properties,
-                    f.method == [0x21],
-                    f.size as u64,
-                    output,
-                    check,
-                )?,
-                _ => return Err(ErrorCode::UnsupportedFeature),
             }
-            let single = f.sizes.len() == 1 && f.sizes[0] == f.size;
-            let folder_crc = if f.crc.is_some() || single && f.crcs[0].is_some() {
-                Some(digest(output, base, f.size as u64, check)?)
-            } else {
-                None
-            };
-            if f.crc.is_some() && f.crc != folder_crc {
-                return Err(ErrorCode::Integrity);
-            }
-            let mut at = base;
-            for (size, expected) in f.sizes.iter().zip(&f.crcs) {
-                if let Some(expected) = expected {
-                    let actual = if single {
-                        folder_crc.ok_or(ErrorCode::Internal)?
-                    } else {
-                        digest(output, at, *size as u64, check)?
-                    };
-                    if actual != *expected {
-                        return Err(ErrorCode::Integrity);
-                    }
-                }
-                at = at.checked_add(*size as u64).ok_or(ErrorCode::Integrity)?;
-                crate::resources::completed(Ok(()), check)?;
-            }
-            crate::resources::completed(
-                output
-                    .seek(SeekFrom::Start(base + f.size as u64))
-                    .map_err(crate::space::io_error),
-                check,
-            )?;
         }
         Ok(())
     }
+}
+/// 한 번 여는 동안 받은 암호와, 같은 반복 횟수와 솔트로 이미 유도한 키를 보관함.
+pub(crate) struct Keys<'a> {
+    password: Option<&'a [u8]>,
+    cached: Option<(crate::crypto::SevenZipAes, zeroize::Zeroizing<[u8; 32]>)>,
+}
+impl<'a> Keys<'a> {
+    fn new(password: Option<&'a [u8]>) -> Self {
+        Self {
+            password,
+            cached: None,
+        }
+    }
+    fn key(
+        &mut self,
+        aes: &crate::crypto::SevenZipAes,
+        check: &mut impl crate::resources::Monitor,
+    ) -> Result<zeroize::Zeroizing<[u8; 32]>> {
+        if let Some((known, key)) = &self.cached {
+            if known.same_key(aes) {
+                return Ok(key.clone());
+            }
+        }
+        // 암호 없이 암호 폴더를 만나면 호출자가 암호를 물어 다시 열도록 틀린 암호로 보고함.
+        let key = aes.key(self.password.ok_or(ErrorCode::WrongPassword)?, check)?;
+        self.cached = Some((aes.clone(), key.clone()));
+        Ok(key)
+    }
+}
+fn decode_folder(
+    input: &mut impl std::io::Read,
+    size: u64,
+    f: &Folder,
+    output: &mut std::fs::File,
+    base: u64,
+    check: &mut impl crate::resources::Monitor,
+) -> Result<()> {
+    use std::io::{Seek, SeekFrom, Write};
+    match f.method.as_slice() {
+        [0] => {
+            if !f.properties.is_empty() || size != f.size as u64 {
+                return Err(ErrorCode::Integrity);
+            }
+            let mut buffer = zeroize::Zeroizing::new([0; 65536]);
+            let mut remaining = size;
+            while remaining != 0 {
+                check.check()?;
+                let n = remaining.min(buffer.len() as u64) as usize;
+                input
+                    .read_exact(&mut buffer[..n])
+                    .map_err(|_| ErrorCode::Integrity)?;
+                crate::space::ensure(output, n as u64)?;
+                output
+                    .write_all(&buffer[..n])
+                    .map_err(crate::space::io_error)?;
+                remaining -= n as u64;
+                crate::resources::completed(Ok(()), check)?;
+            }
+        }
+        [3, 1, 1] | [0x21] => crate::lzma::decode_stream(
+            input,
+            size,
+            &f.properties,
+            f.method == [0x21],
+            f.size as u64,
+            output,
+            check,
+        )?,
+        _ => return Err(ErrorCode::UnsupportedFeature),
+    }
+    let single = f.sizes.len() == 1 && f.sizes[0] == f.size;
+    let folder_crc = if f.crc.is_some() || single && f.crcs[0].is_some() {
+        Some(digest(output, base, f.size as u64, check)?)
+    } else {
+        None
+    };
+    if f.crc.is_some() && f.crc != folder_crc {
+        return Err(ErrorCode::Integrity);
+    }
+    let mut at = base;
+    for (size, expected) in f.sizes.iter().zip(&f.crcs) {
+        if let Some(expected) = expected {
+            let actual = if single {
+                folder_crc.ok_or(ErrorCode::Internal)?
+            } else {
+                digest(output, at, *size as u64, check)?
+            };
+            if actual != *expected {
+                return Err(ErrorCode::Integrity);
+            }
+        }
+        at = at.checked_add(*size as u64).ok_or(ErrorCode::Integrity)?;
+        crate::resources::completed(Ok(()), check)?;
+    }
+    crate::resources::completed(
+        output
+            .seek(SeekFrom::Start(base + f.size as u64))
+            .map_err(crate::space::io_error),
+        check,
+    )?;
+    Ok(())
 }
 fn digest(
     file: &mut (impl std::io::Read + std::io::Seek),
@@ -446,7 +560,8 @@ fn files(
         if property == 0 {
             break;
         }
-        if !seen.insert(property) {
+        // 7-Zip은 정렬용 kDummy(25)를 한 헤더에 여러 번 쓸 수 있음.
+        if property != 25 && !seen.insert(property) {
             return Err(ErrorCode::Integrity);
         }
         let len = r.number(check.metadata_limits().bytes)?;
@@ -532,7 +647,11 @@ fn files(
     if let Some(streams) = streams {
         for (folder, compressed) in streams.folders.iter().zip(&streams.packed) {
             for (i, size) in folder.sizes.iter().enumerate() {
-                descriptions.push((*size, if i == 0 { *compressed } else { 0 }));
+                descriptions.push((
+                    *size,
+                    if i == 0 { *compressed } else { 0 },
+                    folder.encryption.is_some(),
+                ));
                 crate::resources::completed(Ok(()), check)?;
             }
         }
@@ -564,8 +683,8 @@ fn files(
         if !empty {
             stream_indices.push(index);
         }
-        let (size, compressed_size) = if empty {
-            (0, 0)
+        let (size, compressed_size, encrypted) = if empty {
+            (0, 0, false)
         } else {
             descriptions.next().ok_or(ErrorCode::Integrity)?
         };
@@ -576,7 +695,7 @@ fn files(
                 kind,
                 size: size as u64,
                 compressed_size: compressed_size as u64,
-                encrypted: false,
+                encrypted,
             },
             data: Vec::new(),
         });
@@ -595,18 +714,30 @@ pub(crate) fn open(
     decode: bool,
     check: &mut impl crate::resources::Monitor,
 ) -> Result<crate::streaming::Catalog> {
-    open_selected(input, length, limits, decode, None, check)
+    open_selected(input, length, limits, decode, None, None, check)
+}
+/// 암호화된 헤더나 항목을 받은 암호로 엶. 암호가 필요한데 없으면 WrongPassword를 돌려줌.
+pub(crate) fn open_with_password(
+    input: &mut (impl std::io::Read + std::io::Seek),
+    length: u64,
+    limits: Limits,
+    password: Option<&[u8]>,
+    check: &mut impl crate::resources::Monitor,
+) -> Result<crate::streaming::Catalog> {
+    open_selected(input, length, limits, false, password, None, check)
 }
 pub(crate) fn open_selected(
     input: &mut (impl std::io::Read + std::io::Seek),
     length: u64,
     limits: Limits,
     decode: bool,
+    password: Option<&[u8]>,
     selected: Option<u32>,
     check: &mut impl crate::resources::Monitor,
 ) -> Result<crate::streaming::Catalog> {
     use std::io::{Read, Seek, SeekFrom};
     check.check()?;
+    let mut keys = Keys::new(password);
     if length > limits.input {
         return Err(ErrorCode::Limit);
     }
@@ -673,6 +804,7 @@ pub(crate) fn open_selected(
             &ranges,
             &mut data,
             None,
+            &mut keys,
             &mut crate::resources::MetadataMonitor(check),
         )?;
         data_end = 32u64
@@ -763,7 +895,7 @@ pub(crate) fn open_selected(
             return Err(ErrorCode::Limit);
         }
         if decode && (selected.is_none() || selected_folder.is_some()) {
-            streams.decode_file(input, &ranges, &mut data, selected_folder, check)?;
+            streams.decode_file(input, &ranges, &mut data, selected_folder, &mut keys, check)?;
         }
     }
     Ok(crate::streaming::Catalog {

@@ -290,3 +290,156 @@ pub(crate) fn aes_encrypt_file(
         .map_err(crate::space::io_error)?;
     Ok(())
 }
+
+/// 7-Zip AES 키 유도의 반복 상한(2^24회). 7-Zip 기본값은 2^19회이며, 더 큰 값은
+/// 키 유도만으로 오래 걸리게 만드는 입력으로 보고 거부함.
+const SEVEN_ZIP_MAX_CYCLES: u8 = 24;
+
+/// 7zAES 코더 속성: 반복 지수, 솔트와 CBC 초기 벡터.
+#[derive(Clone, PartialEq, Eq)]
+pub(crate) struct SevenZipAes {
+    cycles: u8,
+    salt: Vec<u8>,
+    iv: [u8; 16],
+}
+impl SevenZipAes {
+    pub fn parse(properties: &[u8]) -> Result<Self> {
+        let first = *properties.first().ok_or(ErrorCode::Integrity)?;
+        let cycles = first & 0x3f;
+        let (salt, iv) = if first & 0xc0 == 0 {
+            if properties.len() != 1 {
+                return Err(ErrorCode::Integrity);
+            }
+            (&[][..], &[][..])
+        } else {
+            let second = *properties.get(1).ok_or(ErrorCode::Integrity)?;
+            let salt = ((first >> 7) & 1) as usize + (second >> 4) as usize;
+            let iv = ((first >> 6) & 1) as usize + (second & 15) as usize;
+            if properties.len() != 2 + salt + iv {
+                return Err(ErrorCode::Integrity);
+            }
+            (&properties[2..2 + salt], &properties[2 + salt..])
+        };
+        // 0x3f는 해시 없이 암호를 키로 쓰는 방식이므로 반복 상한과 함께 거부함.
+        if cycles > SEVEN_ZIP_MAX_CYCLES {
+            return Err(ErrorCode::UnsupportedFeature);
+        }
+        let mut padded = [0; 16];
+        padded[..iv.len()].copy_from_slice(iv);
+        Ok(Self {
+            cycles,
+            salt: salt.to_vec(),
+            iv: padded,
+        })
+    }
+    /// 같은 키를 유도하는 속성인지. 초기 벡터는 폴더마다 다를 수 있음.
+    pub fn same_key(&self, other: &Self) -> bool {
+        self.cycles == other.cycles && self.salt == other.salt
+    }
+    /// SHA-256(솔트 || UTF-16LE 암호 || 8바이트 카운터)를 2^cycles회 이어 계산함.
+    pub fn key(
+        &self,
+        password: &[u8],
+        check: &mut impl crate::resources::Monitor,
+    ) -> Result<Zeroizing<[u8; 32]>> {
+        use sha2::{Digest, Sha256};
+        let text = std::str::from_utf8(password).map_err(|_| ErrorCode::WrongPassword)?;
+        let mut block = Zeroizing::new(Vec::with_capacity(self.salt.len() + text.len() * 4 + 8));
+        block.extend_from_slice(&self.salt);
+        for unit in text.encode_utf16() {
+            block.extend_from_slice(&unit.to_le_bytes());
+        }
+        let counter_at = block.len();
+        block.extend_from_slice(&[0; 8]);
+        let mut hash = Sha256::new();
+        for round in 0..1u64 << self.cycles {
+            if round % 65536 == 0 {
+                crate::resources::completed(Ok(()), check)?;
+            }
+            block[counter_at..].copy_from_slice(&round.to_le_bytes());
+            hash.update(&block[..]);
+        }
+        let mut key = Zeroizing::new([0; 32]);
+        key.copy_from_slice(&hash.finalize());
+        Ok(key)
+    }
+}
+
+/// 7zAES(AES-256-CBC) 묶음 스트림을 읽으며 복호화함. 마지막 블록의 채움 바이트는
+/// 코더 출력 크기에서 잘라 냄.
+pub(crate) struct SevenZipReader<R> {
+    input: R,
+    cipher: Aes256,
+    previous: [u8; 16],
+    buffer: Zeroizing<[u8; 4096]>,
+    start: usize,
+    end: usize,
+    remaining: u64,
+}
+impl<R: std::io::Read> SevenZipReader<R> {
+    /// `packed`는 암호문 크기, `size`는 복호화 뒤 다음 코더에 넘길 크기임.
+    pub fn new(
+        input: R,
+        packed: u64,
+        size: u64,
+        properties: &SevenZipAes,
+        key: &[u8; 32],
+    ) -> Result<Self> {
+        if packed % 16 != 0 || size > packed {
+            return Err(ErrorCode::Integrity);
+        }
+        Ok(Self {
+            input,
+            cipher: Aes256::new_from_slice(key).map_err(|_| ErrorCode::Internal)?,
+            previous: properties.iv,
+            buffer: Zeroizing::new([0; 4096]),
+            start: 0,
+            end: 0,
+            remaining: size,
+        })
+    }
+}
+impl<R: std::io::Read> std::io::Read for SevenZipReader<R> {
+    fn read(&mut self, output: &mut [u8]) -> std::io::Result<usize> {
+        use aes::cipher::BlockDecrypt;
+        if self.remaining == 0 || output.is_empty() {
+            return Ok(0);
+        }
+        if self.start == self.end {
+            let wanted = self.remaining.min(self.buffer.len() as u64) as usize;
+            let length = wanted.div_ceil(16) * 16;
+            let mut filled = 0;
+            while filled < length {
+                match self.input.read(&mut self.buffer[filled..length]) {
+                    Ok(0) => return Err(std::io::ErrorKind::UnexpectedEof.into()),
+                    Ok(n) => filled += n,
+                    Err(error) if error.kind() == std::io::ErrorKind::Interrupted => {}
+                    Err(error) => return Err(error),
+                }
+            }
+            for chunk in self.buffer[..length].chunks_exact_mut(16) {
+                let mut block = aes::Block::clone_from_slice(chunk);
+                let cipher_text: [u8; 16] = block.into();
+                self.cipher.decrypt_block(&mut block);
+                for ((byte, plain), mask) in chunk.iter_mut().zip(block.iter()).zip(&self.previous)
+                {
+                    *byte = plain ^ mask;
+                }
+                block.as_mut_slice().zeroize();
+                self.previous = cipher_text;
+            }
+            self.start = 0;
+            self.end = wanted;
+        }
+        let n = output.len().min(self.end - self.start);
+        output[..n].copy_from_slice(&self.buffer[self.start..self.start + n]);
+        self.start += n;
+        self.remaining -= n as u64;
+        Ok(n)
+    }
+}
+impl<R> Drop for SevenZipReader<R> {
+    fn drop(&mut self) {
+        self.previous.zeroize();
+    }
+}
