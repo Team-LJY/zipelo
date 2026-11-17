@@ -13,6 +13,10 @@ ROOT = Path(__file__).resolve().parents[1]
 
 # 미리보기 디코더는 MIT 조건을 선택하며 원문 고지를 함께 수집함.
 LICENSE_CHOICES = {
+    # userdb 응답은 직접 파서를 만들지 않고 검증된 JSON 해석기를 사용함.
+    ("serde", "1.0.229"): "MIT",
+    ("serde_core", "1.0.229"): "MIT",
+    ("serde_json", "1.0.154"): "MIT",
     ("png", "0.18.1"): "MIT",
     ("zune-jpeg", "0.5.15"): "MIT",
     ("zipelo-jpeg", "0.5.15"): "MIT",
