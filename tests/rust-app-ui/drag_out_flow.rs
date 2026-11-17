@@ -11,7 +11,11 @@ struct DragLog {
     /// 머무는 동안 실행할 일(가짜 작업자 끝내기 등)을 담음.
     blocking: Option<Box<dyn FnMut()>>,
     /// blocking일 때 pump로 받은 결과.
-    pumped: Vec<Result<Vec<PathBuf>, ()>>,
+    pumped: Vec<zipelo_ui_memory_app::drag_out::PumpState>,
+    /// blocking일 때 Esc를 누른 것처럼 처음 pump에서 취소함.
+    cancel_in_drag: bool,
+    /// start가 받은 예정 경로.
+    planned: Vec<Vec<PathBuf>>,
     provided: Vec<Vec<PathBuf>>,
     failed: usize,
     events: std::collections::VecDeque<zipelo_ui_memory_app::drag_out::DragEvent>,
@@ -20,22 +24,36 @@ struct DragLog {
 struct FakeDrag(std::rc::Rc<std::cell::RefCell<DragLog>>);
 
 impl zipelo_ui_memory_app::drag_out::DragOut for FakeDrag {
-    fn start(&mut self, pump: &mut zipelo_ui_memory_app::drag_out::Pump<'_>) -> bool {
-        let mut hook = {
+    fn start(
+        &mut self,
+        planned: &[PathBuf],
+        pump: &mut zipelo_ui_memory_app::drag_out::Pump<'_>,
+    ) -> bool {
+        use zipelo_ui_memory_app::drag_out::PumpState;
+        let (mut hook, cancel) = {
             let mut log = self.0.borrow_mut();
             log.starts += 1;
             log.calls.push("start");
+            log.planned.push(planned.to_vec());
             if !log.accept {
                 return false;
             }
-            log.blocking.take()
+            (log.blocking.take(), log.cancel_in_drag)
         };
         if let Some(work) = hook.as_mut() {
+            // 끌고 다니는 동안의 pump는 막히지 않고 바로 돌아와야 함.
+            assert!(matches!(pump(false), PumpState::Waiting { .. }));
+            if cancel {
+                let state = pump(true);
+                self.0.borrow_mut().pumped.push(state);
+                return true;
+            }
             work();
-            // 받는 쪽이 놓은 뒤 파일을 요청한 것처럼 결과가 나올 때까지 pump를 부름.
+            // 버튼을 놓은 뒤처럼 결과가 나올 때까지 pump를 부름.
             for _ in 0..1000 {
-                if let Some(result) = pump() {
-                    self.0.borrow_mut().pumped.push(result);
+                let state = pump(false);
+                if !matches!(state, PumpState::Waiting { .. }) {
+                    self.0.borrow_mut().pumped.push(state);
                     break;
                 }
             }
@@ -346,7 +364,14 @@ fn blocking_drag_waits_for_extraction_inside_the_drag_and_hands_over_paths() {
     let before = s.factory.state.borrow().starts.len();
     drag_row(&mut s, "alpha.txt");
     assert_eq!(s.factory.state.borrow().starts.len(), before + 1);
-    assert_eq!(log.borrow().pumped, vec![Ok(vec![folder.join("alpha.txt")])]);
+    assert_eq!(
+        log.borrow().pumped,
+        vec![zipelo_ui_memory_app::drag_out::PumpState::Ready(vec![
+            folder.join("alpha.txt")
+        ])]
+    );
+    // 놓기 전 목록 요청에 쓸 예정 경로를 시작할 때 넘김.
+    assert_eq!(log.borrow().planned, vec![vec![folder.join("alpha.txt")]]);
     // 끌기에서 돌아오면 이미 끝난 작업을 마무리하고 원래 풀 위치로 되돌림.
     assert!(!s.app.model.busy());
     for _ in 0..5 {
@@ -379,7 +404,31 @@ fn blocking_drag_does_not_wait_for_a_password_prompt() {
     }));
     drag_row(&mut s, "alpha.txt");
     // 끌기 중에는 암호를 물을 수 없으므로 실패로 넘기고, 끌기가 끝나면 암호 창을 보여 줌.
-    assert_eq!(log.borrow().pumped, vec![Err(())]);
+    assert_eq!(
+        log.borrow().pumped,
+        vec![zipelo_ui_memory_app::drag_out::PumpState::Failed]
+    );
     assert!(s.app.model.busy());
     assert!(s.app.model.challenge.is_some());
+}
+
+#[test]
+fn escape_during_a_blocking_drag_cancels_extraction_right_away() {
+    let scratch = Folder::new();
+    let mut s = Explorer::new(&scratch);
+    let log = with_drag(&mut s);
+    s.click("alpha.txt", egui::Modifiers::NONE);
+    s.factory.state.borrow_mut().manual = true;
+    {
+        let mut log = log.borrow_mut();
+        log.blocking = Some(Box::new(|| {}));
+        log.cancel_in_drag = true;
+    }
+    drag_row(&mut s, "alpha.txt");
+    assert_eq!(
+        log.borrow().pumped,
+        vec![zipelo_ui_memory_app::drag_out::PumpState::Failed]
+    );
+    // 끌기 안에서 바로 취소 요청을 보냄(다 풀릴 때까지 기다리지 않음).
+    assert!(s.app.model.cancellation_requested());
 }

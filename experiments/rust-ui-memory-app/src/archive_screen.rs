@@ -191,11 +191,18 @@ struct Marquee {
     moved: bool,
 }
 
-/// 끌어 놓으려고 푼 폴더에서 넘길 항목의 경로. 실제로 있는 것만 돌려줌.
-fn drag_paths(folder: &Path, names: &[String]) -> Vec<PathBuf> {
+/// 끌어 놓으려고 풀 폴더에서 넘길 항목의 경로(아직 없어도 됨).
+fn planned_paths(folder: &Path, names: &[String]) -> Vec<PathBuf> {
     names
         .iter()
         .map(|name| name.split('/').fold(folder.to_path_buf(), |path, part| path.join(part)))
+        .collect()
+}
+
+/// 끌어 놓으려고 푼 폴더에서 넘길 항목의 경로. 실제로 있는 것만 돌려줌.
+fn drag_paths(folder: &Path, names: &[String]) -> Vec<PathBuf> {
+    planned_paths(folder, names)
+        .into_iter()
         .filter(|path| path.exists())
         .collect()
 }
@@ -577,7 +584,9 @@ impl ArchiveApp {
             let ready = paths.clone();
             let drag = self.drag_out.as_mut().unwrap();
             // Wayland와 X11은 시작할 때 이전 경로를 지우므로 시작한 뒤 넘김.
-            let started = drag.start(&mut || Some(Ok(ready.clone())));
+            let started = drag.start(&paths, &mut |_| {
+                crate::drag_out::PumpState::Ready(ready.clone())
+            });
             if started {
                 drag.provide(&paths);
                 self.release_after_move = true;
@@ -612,16 +621,29 @@ impl ArchiveApp {
             return false;
         }
         crate::log_debug!("창 밖으로 끌기 시작: {names:?}");
+        let planned = planned_paths(&folder, &names);
         let started = {
+            use crate::drag_out::PumpState;
             let model = &mut self.model;
-            let mut pump = move || {
+            let mut pump = move |cancel: bool| {
+                if cancel && model.busy() && !model.cancellation_requested() {
+                    crate::log_debug!("끌기 중 취소: 풀던 작업을 취소함");
+                    model.cancel();
+                }
                 model.poll();
                 if model.busy() {
                     // 암호, 큰 작업 승인 등 사용자 응답이 필요하면 끌기 중에는 넘길 수 없음.
-                    return (model.challenge.is_some()
+                    if model.challenge.is_some()
                         || model.resource.is_some()
-                        || model.conflict.is_some())
-                    .then_some(Err(()));
+                        || model.conflict.is_some()
+                        || model.cancellation_requested()
+                    {
+                        return PumpState::Failed;
+                    }
+                    let (done, total) = model
+                        .progress
+                        .map_or((0, None), |(_, done, total, _)| (done, total));
+                    return PumpState::Waiting { done, total };
                 }
                 let completed = model.confirmed
                     && model
@@ -629,13 +651,13 @@ impl ArchiveApp {
                         .as_ref()
                         .is_some_and(|t| t.outcome == Outcome::Completed);
                 let paths = drag_paths(&folder, &names);
-                Some(if completed && !paths.is_empty() {
-                    Ok(paths)
+                if completed && !paths.is_empty() {
+                    PumpState::Ready(paths)
                 } else {
-                    Err(())
-                })
+                    PumpState::Failed
+                }
             };
-            self.drag_out.as_mut().unwrap().start(&mut pump)
+            self.drag_out.as_mut().unwrap().start(&planned, &mut pump)
         };
         if !started {
             crate::log_warn!("운영체제 끌기를 시작하지 못함");

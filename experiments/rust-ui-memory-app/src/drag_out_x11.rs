@@ -119,7 +119,11 @@ impl Atoms {
 }
 
 impl DragOut for X11Drag {
-    fn start(&mut self, _: &mut zipelo_ui_memory_app::drag_out::Pump<'_>) -> bool {
+    fn start(
+        &mut self,
+        _: &[PathBuf],
+        _: &mut zipelo_ui_memory_app::drag_out::Pump<'_>,
+    ) -> bool {
         match self.begin() {
             Ok(()) => true,
             Err(error) => {

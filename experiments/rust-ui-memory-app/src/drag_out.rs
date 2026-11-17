@@ -18,10 +18,20 @@ pub enum DragEvent {
     Cancelled,
 }
 
-/// 끌기가 끝날 때까지 돌아오지 않는 구현(Windows)이 받는 쪽의 요청을 기다리는 동안
-/// 앱의 작업 진행을 받으려고 부르는 함수. 다 풀렸으면 `Some(Ok(경로))`, 실패했거나
-/// 사용자 응답(암호 등)이 필요해 지금 넘길 수 없으면 `Some(Err(()))`, 아직이면 `None`.
-pub type Pump<'a> = dyn FnMut() -> Option<Result<Vec<PathBuf>, ()>> + 'a;
+/// 끌기용 풀기의 현재 상태.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum PumpState {
+    /// 아직 푸는 중. 처리한 바이트와 전체 바이트(알 때).
+    Waiting { done: u64, total: Option<u64> },
+    /// 다 풀림. 받는 쪽에 넘길 경로.
+    Ready(Vec<PathBuf>),
+    /// 실패, 취소, 또는 사용자 응답(암호 등)이 필요해 지금 넘길 수 없음.
+    Failed,
+}
+
+/// 끌기가 끝날 때까지 돌아오지 않는 구현(Windows)이 끌기 동안 앱의 작업 진행을 받으려고
+/// 부르는 함수. 인자가 true면 풀기를 취소함. 부를 때마다 막히지 않고 바로 돌아옴.
+pub type Pump<'a> = dyn FnMut(bool) -> PumpState + 'a;
 
 /// 운영체제별 끌어 놓기 시작 구현.
 ///
@@ -29,10 +39,11 @@ pub type Pump<'a> = dyn FnMut() -> Option<Result<Vec<PathBuf>, ()>> + 'a;
 /// 끝날 때까지 기다렸다가 경로를 넘김(지연 제공). 그래서 파일 크기와 관계없이 놓은 위치에
 /// 바로 풀림. Wayland와 X11은 끌기를 시작하고 바로 돌아오며 [`DragOut::provide`]로 경로를
 /// 받음. Windows OLE 끌기는 버튼을 누른 창의 스레드(화면 스레드)에서 놓을 때까지 돌아오지
-/// 않으므로, 그동안 `pump`로 작업 진행을 받음.
+/// 않으므로, 그동안 `pump`로 작업 진행을 받고 놓을 때 다 풀리기를 기다림.
 pub trait DragOut {
     /// 지금 누르고 있는 마우스 버튼으로 운영체제 끌기를 시작함. 시작하지 못하면 false.
-    fn start(&mut self, pump: &mut Pump<'_>) -> bool;
+    /// `planned`는 다 풀린 뒤 넘길 경로로, 놓기 전에 받는 쪽이 목록을 물을 때 씀.
+    fn start(&mut self, planned: &[PathBuf], pump: &mut Pump<'_>) -> bool;
     /// 지난 화면 이후 들어온 끌기 사건.
     fn poll(&mut self) -> Option<DragEvent>;
     /// 풀기가 끝난 파일과 폴더의 절대 경로를 넘김. 이미 들어온 요청과 이후 요청에 씀.
