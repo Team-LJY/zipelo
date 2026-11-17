@@ -4,15 +4,18 @@
 //! 동시에 풀기를 시작함. 탐색기나 브라우저에 놓으면 받는 쪽이 CF_HDROP을 요청하는데,
 //! 그때 다 풀릴 때까지 기다렸다가 풀린 파일 경로를 넘겨 받는 쪽이 놓은 위치로 복사함.
 //!
-//! OLE 끌기(SHDoDragDrop)는 놓거나 취소할 때까지 돌아오지 않으므로 별도 스레드에서
-//! 진행함. 그동안 화면 스레드는 작업자의 풀기 진행을 계속 받음.
+//! OLE 끌기(SHDoDragDrop)는 버튼을 누른 창의 스레드(화면 스레드)에서 불러야 마우스 입력을
+//! 받음(다른 스레드에서 부르면 놓기를 받지 못해 끝나지 않음). 놓거나 취소할 때까지
+//! 돌아오지 않으므로, 받는 쪽이 파일을 요청하면 앱이 넘긴 pump로 작업자의 풀기 진행을
+//! 직접 받으며 다 풀리기를 기다림.
 
 use std::{
+    cell::Cell,
     collections::VecDeque,
     ffi::c_void,
     path::PathBuf,
     sync::{
-        Arc, Condvar, Mutex,
+        Arc, Mutex,
         atomic::{AtomicU32, Ordering},
     },
     time::Duration,
@@ -22,7 +25,7 @@ use windows_sys::{
         Foundation::{DRAGDROP_S_DROP, HWND},
         System::{
             Memory::{GHND, GlobalAlloc, GlobalLock, GlobalUnlock},
-            Ole::{CF_HDROP, DROPEFFECT, DROPEFFECT_COPY, OleInitialize, OleUninitialize},
+            Ole::{CF_HDROP, DROPEFFECT, DROPEFFECT_COPY, OleInitialize},
         },
         UI::{
             Input::KeyboardAndMouse::{GetAsyncKeyState, VK_LBUTTON, VK_RBUTTON},
@@ -32,7 +35,12 @@ use windows_sys::{
     },
     core::{GUID, HRESULT},
 };
-use zipelo_ui_memory_app::drag_out::{DragEvent, DragOut};
+use zipelo_ui_memory_app::drag_out::{DragEvent, DragOut, Pump};
+
+thread_local! {
+    /// 끌기가 진행되는 동안(start 안에서만) 앱이 넘긴 작업 진행 함수.
+    static PUMP: Cell<Option<*mut Pump<'static>>> = const { Cell::new(None) };
+}
 
 const S_OK: HRESULT = 0;
 const E_NOINTERFACE: HRESULT = 0x8000_4002_u32 as i32;
@@ -100,7 +108,7 @@ struct Shared {
     generation: u64,
 }
 
-type State = Arc<(Mutex<Shared>, Condvar)>;
+type State = Arc<Mutex<Shared>>;
 
 pub struct WindowsDrag {
     hwnd: isize,
@@ -117,10 +125,13 @@ pub fn create(
     else {
         return None;
     };
-    zipelo_ui_memory_app::log_debug!("Windows 끌어 놓기 준비");
+    // 안전성: 화면 스레드에서 OLE를 초기화함. winit이 이미 했으면 S_FALSE이며 앱이 끝날
+    // 때까지 유지함.
+    let result = unsafe { OleInitialize(std::ptr::null()) };
+    zipelo_ui_memory_app::log_debug!("Windows 끌어 놓기 준비 (OLE {result:#x})");
     Some(WindowsDrag {
         hwnd: window.hwnd.get(),
-        state: Arc::new((Mutex::new(Shared::default()), Condvar::new())),
+        state: Arc::new(Mutex::new(Shared::default())),
         repaint,
     })
 }
@@ -135,67 +146,64 @@ fn button_held() -> bool {
 }
 
 impl DragOut for WindowsDrag {
-    fn start(&mut self) -> bool {
+    fn start(&mut self, pump: &mut Pump<'_>) -> bool {
         if !button_held() {
             return false;
         }
         let generation = {
-            let mut shared = self.state.0.lock().unwrap();
+            let mut shared = self.state.lock().unwrap();
             shared.generation += 1;
             shared.ready = None;
             shared.events.clear();
             shared.generation
         };
-        let state = self.state.clone();
-        let hwnd = self.hwnd;
-        let repaint = self.repaint.clone();
-        std::thread::Builder::new()
-            .name("zipelo-windows-drag".into())
-            .spawn(move || {
-                // 안전성: 이 스레드에서만 OLE를 초기화하고 끝날 때 해제함. 데이터 객체는
-                // 끌기가 끝난 뒤 이 스레드가 가진 참조 하나를 놓음.
-                let result = unsafe {
-                    OleInitialize(std::ptr::null());
-                    let object = DataObject::create(state.clone(), generation);
-                    let mut effect: DROPEFFECT = 0;
-                    let result = SHDoDragDrop(
-                        hwnd as HWND,
-                        object,
-                        std::ptr::null_mut(),
-                        DROPEFFECT_COPY,
-                        &mut effect,
-                    );
-                    release(object);
-                    OleUninitialize();
-                    result
-                };
-                zipelo_ui_memory_app::log_debug!("셸 끌기 끝: {result:#x}");
-                let mut shared = state.0.lock().unwrap();
-                if shared.generation == generation {
-                    shared.events.push_back(if result == DRAGDROP_S_DROP {
-                        DragEvent::Finished
-                    } else {
-                        DragEvent::Cancelled
-                    });
-                }
-                drop(shared);
-                repaint.request_repaint();
-            })
-            .is_ok()
+        // 안전성: pump는 이 함수가 돌아오기 전까지만 쓰고, 끝나면 바로 지움. 데이터 객체의
+        // GetData는 SHDoDragDrop 안에서 같은 스레드로 불림.
+        let pump: *mut Pump<'_> = pump;
+        PUMP.with(|cell| {
+            cell.set(Some(unsafe {
+                std::mem::transmute::<*mut Pump<'_>, *mut Pump<'static>>(pump)
+            }))
+        });
+        // 안전성: 데이터 객체는 끌기가 끝난 뒤 이 함수가 가진 참조 하나를 놓음.
+        let result = unsafe {
+            let object = DataObject::create(self.state.clone(), generation);
+            let mut effect: DROPEFFECT = 0;
+            let result = SHDoDragDrop(
+                self.hwnd as HWND,
+                object,
+                std::ptr::null_mut(),
+                DROPEFFECT_COPY,
+                &mut effect,
+            );
+            release(object);
+            result
+        };
+        PUMP.with(|cell| cell.set(None));
+        zipelo_ui_memory_app::log_debug!("셸 끌기 끝: {result:#x}");
+        let mut shared = self.state.lock().unwrap();
+        if shared.generation == generation {
+            shared.events.push_back(if result == DRAGDROP_S_DROP {
+                DragEvent::Finished
+            } else {
+                DragEvent::Cancelled
+            });
+        }
+        drop(shared);
+        self.repaint.request_repaint();
+        true
     }
 
     fn poll(&mut self) -> Option<DragEvent> {
-        self.state.0.lock().unwrap().events.pop_front()
+        self.state.lock().unwrap().events.pop_front()
     }
 
     fn provide(&mut self, paths: &[PathBuf]) {
-        self.state.0.lock().unwrap().ready = Some(Ready::Paths(paths.to_vec()));
-        self.state.1.notify_all();
+        self.state.lock().unwrap().ready = Some(Ready::Paths(paths.to_vec()));
     }
 
     fn fail(&mut self) {
-        self.state.0.lock().unwrap().ready = Some(Ready::Failed);
-        self.state.1.notify_all();
+        self.state.lock().unwrap().ready = Some(Ready::Failed);
     }
 }
 
@@ -288,23 +296,34 @@ impl DataObject {
         .cast()
     }
 
-    /// 다 풀릴 때까지 기다린 뒤 경로를 돌려줌. 실패했거나 새 끌기가 시작되면 None.
+    /// 다 풀릴 때까지 작업 진행을 받으며 기다린 뒤 경로를 돌려줌. 실패했거나, 사용자 응답이
+    /// 필요하거나, 새 끌기가 시작됐으면 None.
     fn wait_paths(&self) -> Option<Vec<PathBuf>> {
-        let (lock, ready) = &*self.state;
-        let mut shared = lock.lock().unwrap();
         loop {
-            if shared.generation != self.generation {
-                return None;
-            }
-            match &shared.ready {
-                Some(Ready::Paths(paths)) => return Some(paths.clone()),
-                Some(Ready::Failed) => return None,
-                None => {
-                    shared = ready
-                        .wait_timeout(shared, Duration::from_millis(200))
-                        .unwrap()
-                        .0;
+            {
+                let shared = self.state.lock().unwrap();
+                if shared.generation != self.generation {
+                    return None;
                 }
+                match &shared.ready {
+                    Some(Ready::Paths(paths)) => return Some(paths.clone()),
+                    Some(Ready::Failed) => return None,
+                    None => {}
+                }
+            }
+            // 끌기 밖에서 불리면(받는 쪽이 객체를 늦게 쓰는 경우) 기다릴 방법이 없으므로 실패.
+            let pump = PUMP.with(Cell::get)?;
+            // 안전성: PUMP는 start가 진행 중인 같은 스레드에서만 설정돼 있음.
+            match unsafe { (*pump)() } {
+                Some(Ok(paths)) => {
+                    self.state.lock().unwrap().ready = Some(Ready::Paths(paths.clone()));
+                    return Some(paths);
+                }
+                Some(Err(())) => {
+                    self.state.lock().unwrap().ready = Some(Ready::Failed);
+                    return None;
+                }
+                None => std::thread::sleep(Duration::from_millis(15)),
             }
         }
     }

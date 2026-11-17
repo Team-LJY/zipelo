@@ -191,6 +191,15 @@ struct Marquee {
     moved: bool,
 }
 
+/// 끌어 놓으려고 푼 폴더에서 넘길 항목의 경로. 실제로 있는 것만 돌려줌.
+fn drag_paths(folder: &Path, names: &[String]) -> Vec<PathBuf> {
+    names
+        .iter()
+        .map(|name| name.split('/').fold(folder.to_path_buf(), |path, part| path.join(part)))
+        .filter(|path| path.exists())
+        .collect()
+}
+
 /// 창 밖 끌기를 시작하려면 누른 곳에서 이만큼(px) 움직여야 함.
 const DRAG_OUT_DISTANCE: f32 = 8.0;
 
@@ -565,8 +574,10 @@ impl ArchiveApp {
             // 같은 항목을 이미 풀어 두었으면 다시 풀지 않고 바로 끎.
             let paths = paths.clone();
             crate::log_debug!("풀어 둔 파일로 바로 끌기: {}개", paths.len());
+            let ready = paths.clone();
             let drag = self.drag_out.as_mut().unwrap();
-            let started = drag.start();
+            // Wayland와 X11은 시작할 때 이전 경로를 지우므로 시작한 뒤 넘김.
+            let started = drag.start(&mut || Some(Ok(ready.clone())));
             if started {
                 drag.provide(&paths);
                 self.release_after_move = true;
@@ -574,28 +585,18 @@ impl ArchiveApp {
             }
             return started;
         }
-        if !self.drag_out.as_mut().is_some_and(|drag| drag.start()) {
-            crate::log_warn!("운영체제 끌기를 시작하지 못함");
-            return false;
-        }
-        // 운영체제가 끌기를 넘겨받으면 버튼 놓기가 이 창에 오지 않으므로 대신 넣어 줌.
-        self.release_after_move = true;
-        crate::log_debug!("창 밖으로 끌기 시작: {names:?}");
         self.marquee = None;
         self.drag_cancelled = false;
         self.last_open = None;
         let Some(folder) = self.new_open_folder() else {
-            if let Some(drag) = self.drag_out.as_mut() {
-                drag.fail();
-            }
             return false;
         };
         let request = OpenRequest {
             folder: folder.clone(),
             name: String::new(),
-            destination: std::mem::replace(&mut self.destination, folder),
+            destination: std::mem::replace(&mut self.destination, folder.clone()),
             automatic: std::mem::replace(&mut self.automatic_destination, true),
-            drag: Some(names),
+            drag: Some(names.clone()),
             key: Some(key),
         };
         self.opening = Some(request);
@@ -604,12 +605,61 @@ impl ArchiveApp {
                 .into_iter()
                 .collect(),
         );
-        if self.extract_selection(selection) {
-            true
-        } else {
+        // 풀기를 먼저 시작함. Windows처럼 놓을 때까지 돌아오지 않는 끌기는 그동안 pump로
+        // 작업 진행을 받아 다 풀린 파일을 넘김.
+        if !self.extract_selection(selection) {
             self.finish_open(false);
-            false
+            return false;
         }
+        crate::log_debug!("창 밖으로 끌기 시작: {names:?}");
+        let started = {
+            let model = &mut self.model;
+            let mut pump = move || {
+                model.poll();
+                if model.busy() {
+                    // 암호, 큰 작업 승인 등 사용자 응답이 필요하면 끌기 중에는 넘길 수 없음.
+                    return (model.challenge.is_some()
+                        || model.resource.is_some()
+                        || model.conflict.is_some())
+                    .then_some(Err(()));
+                }
+                let completed = model.confirmed
+                    && model
+                        .terminal
+                        .as_ref()
+                        .is_some_and(|t| t.outcome == Outcome::Completed);
+                let paths = drag_paths(&folder, &names);
+                Some(if completed && !paths.is_empty() {
+                    Ok(paths)
+                } else {
+                    Err(())
+                })
+            };
+            self.drag_out.as_mut().unwrap().start(&mut pump)
+        };
+        if !started {
+            crate::log_warn!("운영체제 끌기를 시작하지 못함");
+            // 받을 곳이 없으므로 풀던 작업을 취소하고 결과 창은 띄우지 않음.
+            self.drag_cancelled = true;
+            self.clear_password();
+            self.model.cancel();
+            return false;
+        }
+        // 운영체제가 끌기를 넘겨받으면 버튼 놓기가 이 창에 오지 않으므로 대신 넣어 줌.
+        self.release_after_move = true;
+        // 끌기 동안 pump가 작업을 끝까지 받았으면 다음 화면의 끝남 감지를 거치지 않으므로
+        // 여기서 마무리함.
+        if !self.model.busy() && self.opening.is_some() {
+            let completed = self.model.confirmed
+                && self
+                    .model
+                    .terminal
+                    .as_ref()
+                    .is_some_and(|t| t.outcome == Outcome::Completed);
+            self.owned_destination = None;
+            self.finish_open(completed);
+        }
+        true
     }
 
     /// 운영체제 끌기에서 온 사건을 처리함.
@@ -647,14 +697,11 @@ impl ArchiveApp {
         self.automatic_destination = request.automatic;
         if let Some(names) = request.drag {
             let cancelled = std::mem::take(&mut self.drag_cancelled);
-            let paths: Vec<PathBuf> = names
-                .iter()
-                .map(|name| {
-                    name.split('/')
-                        .fold(request.folder.clone(), |path, part| path.join(part))
-                })
-                .filter(|path| completed && path.exists())
-                .collect();
+            let paths = if completed {
+                drag_paths(&request.folder, &names)
+            } else {
+                Vec::new()
+            };
             let Some(drag) = self.drag_out.as_mut() else {
                 return;
             };

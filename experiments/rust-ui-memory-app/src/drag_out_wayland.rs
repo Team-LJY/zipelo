@@ -146,7 +146,7 @@ pub fn create(
 }
 
 impl DragOut for WaylandDrag {
-    fn start(&mut self) -> bool {
+    fn start(&mut self, _: &mut zipelo_ui_memory_app::drag_out::Pump<'_>) -> bool {
         let mut shared = self.shared.lock().unwrap();
         let Some(serial) = shared.press else {
             zipelo_ui_memory_app::log_debug!("끌기 시작 실패: 누르고 있는 버튼 없음");

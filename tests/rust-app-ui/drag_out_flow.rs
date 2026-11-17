@@ -7,6 +7,11 @@ struct DragLog {
     accept: bool,
     /// provide와 start가 불린 순서.
     calls: Vec<&'static str>,
+    /// Windows처럼 놓을 때까지 start 안에 머물며, 받는 쪽 요청에 pump로 경로를 받음.
+    /// 머무는 동안 실행할 일(가짜 작업자 끝내기 등)을 담음.
+    blocking: Option<Box<dyn FnMut()>>,
+    /// blocking일 때 pump로 받은 결과.
+    pumped: Vec<Result<Vec<PathBuf>, ()>>,
     provided: Vec<Vec<PathBuf>>,
     failed: usize,
     events: std::collections::VecDeque<zipelo_ui_memory_app::drag_out::DragEvent>,
@@ -15,11 +20,27 @@ struct DragLog {
 struct FakeDrag(std::rc::Rc<std::cell::RefCell<DragLog>>);
 
 impl zipelo_ui_memory_app::drag_out::DragOut for FakeDrag {
-    fn start(&mut self) -> bool {
-        let mut log = self.0.borrow_mut();
-        log.starts += 1;
-        log.calls.push("start");
-        log.accept
+    fn start(&mut self, pump: &mut zipelo_ui_memory_app::drag_out::Pump<'_>) -> bool {
+        let mut hook = {
+            let mut log = self.0.borrow_mut();
+            log.starts += 1;
+            log.calls.push("start");
+            if !log.accept {
+                return false;
+            }
+            log.blocking.take()
+        };
+        if let Some(work) = hook.as_mut() {
+            work();
+            // 받는 쪽이 놓은 뒤 파일을 요청한 것처럼 결과가 나올 때까지 pump를 부름.
+            for _ in 0..1000 {
+                if let Some(result) = pump() {
+                    self.0.borrow_mut().pumped.push(result);
+                    break;
+                }
+            }
+        }
+        true
     }
     fn poll(&mut self) -> Option<zipelo_ui_memory_app::drag_out::DragEvent> {
         self.0.borrow_mut().events.pop_front()
@@ -166,11 +187,26 @@ fn rows_do_not_start_a_drag_when_the_platform_cannot() {
     let log = with_drag(&mut s);
     log.borrow_mut().accept = false;
     s.click("alpha.txt", egui::Modifiers::NONE);
+    s.factory.state.borrow_mut().manual = true;
     drag_row(&mut s, "alpha.txt");
     assert_eq!(log.borrow().starts, 1);
-    // 끌기를 시작하지 못하면 아무 작업도 시작하지 않음.
+    // 풀기를 먼저 시작하므로, 끌기를 시작하지 못하면 바로 취소하고 결과 창을 띄우지 않음.
+    assert!(s.app.model.cancellation_requested());
+    {
+        let mut worker = s.factory.state.borrow_mut();
+        worker.frame(Event::Accepted { encryption: false });
+        worker.finish(Outcome::Cancelled, Publication::None);
+    }
+    let mut labels = Vec::new();
+    for _ in 0..10 {
+        labels = layout_text(&s.frame(egui::Modifiers::NONE, vec![]));
+    }
     assert!(!s.app.model.busy());
-    assert_eq!(s.factory.state.borrow().starts.len(), 1);
+    assert!(log.borrow().provided.is_empty());
+    assert!(
+        !labels.iter().any(|(text, _, _)| text.contains("취소했습니다")),
+        "{labels:?}"
+    );
 }
 
 #[test]
@@ -283,4 +319,67 @@ fn drag_temp_folder_is_hidden_next_to_the_archive() {
         zipelo_ui_memory_app::archive_present::open_root_name_in(&home.join("다운로드"), "자료.zip"),
         ".자료.zip (Zipelo 임시)"
     );
+}
+
+#[test]
+fn blocking_drag_waits_for_extraction_inside_the_drag_and_hands_over_paths() {
+    let scratch = Folder::new();
+    let mut s = Explorer::new(&scratch);
+    let log = with_drag(&mut s);
+    s.click("alpha.txt", egui::Modifiers::NONE);
+    s.factory.state.borrow_mut().manual = true;
+    let folder = scratch
+        .0
+        .join(zipelo_ui_memory_app::archive_present::open_root_name("sample.zip"))
+        .join("1");
+    // 끌기가 진행되는 동안(화면이 그려지지 않는 동안) 작업자가 풀기를 마침.
+    let worker = s.factory.state.clone();
+    let target = folder.clone();
+    log.borrow_mut().blocking = Some(Box::new(move || {
+        assert!(!worker.borrow().starts.is_empty(), "끌기 전에 풀기를 시작해야 함");
+        fs::create_dir_all(&target).unwrap();
+        fs::write(target.join("alpha.txt"), "x").unwrap();
+        let mut worker = worker.borrow_mut();
+        worker.frame(Event::Accepted { encryption: false });
+        worker.finish(Outcome::Completed, Publication::Complete);
+    }));
+    let before = s.factory.state.borrow().starts.len();
+    drag_row(&mut s, "alpha.txt");
+    assert_eq!(s.factory.state.borrow().starts.len(), before + 1);
+    assert_eq!(log.borrow().pumped, vec![Ok(vec![folder.join("alpha.txt")])]);
+    // 끌기에서 돌아오면 이미 끝난 작업을 마무리하고 원래 풀 위치로 되돌림.
+    assert!(!s.app.model.busy());
+    for _ in 0..5 {
+        s.frame(egui::Modifiers::NONE, vec![]);
+    }
+    s.factory.state.borrow_mut().manual = false;
+    assert!(s.app.begin_extract());
+    assert!(matches!(
+        s.factory.state.borrow().starts.last(),
+        Some(Start::Extract { destination, .. }) if !destination.starts_with(&folder)
+    ));
+}
+
+#[test]
+fn blocking_drag_does_not_wait_for_a_password_prompt() {
+    let scratch = Folder::new();
+    let mut s = Explorer::new(&scratch);
+    let log = with_drag(&mut s);
+    s.click("alpha.txt", egui::Modifiers::NONE);
+    s.factory.state.borrow_mut().manual = true;
+    let worker = s.factory.state.clone();
+    log.borrow_mut().blocking = Some(Box::new(move || {
+        let mut worker = worker.borrow_mut();
+        worker.frame(Event::Accepted { encryption: false });
+        worker.frame(Event::PasswordRequired {
+            challenge_id: 1,
+            attempt: 1,
+            encrypt: false,
+        });
+    }));
+    drag_row(&mut s, "alpha.txt");
+    // 끌기 중에는 암호를 물을 수 없으므로 실패로 넘기고, 끌기가 끝나면 암호 창을 보여 줌.
+    assert_eq!(log.borrow().pumped, vec![Err(())]);
+    assert!(s.app.model.busy());
+    assert!(s.app.model.challenge.is_some());
 }
