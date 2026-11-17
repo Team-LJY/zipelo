@@ -277,4 +277,14 @@ fn drag_temp_folder_is_hidden_next_to_the_archive() {
         zipelo_ui_memory_app::archive_present::open_root_name("자료.zip"),
         ".자료.zip (Zipelo 임시)"
     );
+    // snap 앱은 홈 폴더 바로 아래의 숨김 항목을 읽지 못하므로 그 자리에서는 숨기지 않음.
+    let home = zipelo_ui_memory_app::archive_present::home_directory();
+    assert_eq!(
+        zipelo_ui_memory_app::archive_present::open_root_name_in(&home, "자료.zip"),
+        "자료.zip (Zipelo 임시)"
+    );
+    assert_eq!(
+        zipelo_ui_memory_app::archive_present::open_root_name_in(&home.join("다운로드"), "자료.zip"),
+        ".자료.zip (Zipelo 임시)"
+    );
 }

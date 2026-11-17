@@ -655,7 +655,7 @@ pub fn create_open_root_with(
     let name = archive.file_name().unwrap_or_default().to_string_lossy();
     let mut error = None;
     if let Some(parent) = archive.parent().filter(|p| !p.as_os_str().is_empty()) {
-        let base = parent.join(open_root_name(&name));
+        let base = parent.join(open_root_name_in(parent, &name));
         for _ in 0..8 {
             let path = unique_folder(&base);
             match private_dir(&path) {
@@ -696,6 +696,21 @@ pub fn open_root_name(archive_name: &str) -> String {
         format!("{archive_name} (Zipelo 임시)")
     } else {
         format!(".{archive_name} (Zipelo 임시)")
+    }
+}
+
+/// `parent` 폴더에 만들 임시 폴더 이름. snap 앱(Firefox 등)은 홈 폴더 바로 아래의
+/// 숨김 항목을 읽지 못하므로, 압축파일이 홈 폴더 바로 아래에 있으면 숨기지 않음.
+/// 그보다 아래 폴더의 숨김 항목은 snap 앱도 읽을 수 있음.
+pub fn open_root_name_in(parent: &Path, archive_name: &str) -> String {
+    let home = home_directory();
+    let same = |a: &Path, b: &Path| {
+        a == b || a.canonicalize().ok().zip(b.canonicalize().ok()).is_some_and(|(a, b)| a == b)
+    };
+    if cfg!(windows) || same(parent, &home) {
+        format!("{archive_name} (Zipelo 임시)")
+    } else {
+        open_root_name(archive_name)
     }
 }
 
