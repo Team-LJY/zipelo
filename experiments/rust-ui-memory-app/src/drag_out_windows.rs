@@ -23,25 +23,31 @@ use std::{
 };
 use windows_sys::{
     Win32::{
-        Foundation::{DRAGDROP_S_CANCEL, DRAGDROP_S_DROP, DRAGDROP_S_USEDEFAULTCURSORS, HWND},
+        Foundation::{
+            DRAGDROP_S_CANCEL, DRAGDROP_S_DROP, DRAGDROP_S_USEDEFAULTCURSORS, HWND, POINT,
+        },
         System::{
             Com::{CLSCTX_INPROC_SERVER, CoCreateInstance},
             Memory::{GHND, GlobalAlloc, GlobalLock, GlobalUnlock},
             Ole::{CF_HDROP, DROPEFFECT, DROPEFFECT_COPY, DoDragDrop, OleInitialize},
+            Threading::GetCurrentProcessId,
         },
         UI::{
             Input::KeyboardAndMouse::{GetAsyncKeyState, VK_ESCAPE, VK_LBUTTON, VK_RBUTTON},
             Shell::SHCreateStdEnumFmtEtc,
             WindowsAndMessaging::{
-                DispatchMessageW, GetSystemMetrics, MSG, MsgWaitForMultipleObjects, PM_REMOVE,
-                PeekMessageW, PostQuitMessage, QS_ALLINPUT, SM_SWAPBUTTON, TranslateMessage,
-                WM_KEYDOWN, WM_QUIT,
+                DispatchMessageW, GA_ROOT, GetAncestor, GetCursorPos, GetSystemMetrics,
+                GetWindowThreadProcessId, MSG, MsgWaitForMultipleObjects, PM_REMOVE, PeekMessageW,
+                PostQuitMessage, QS_ALLINPUT, SM_SWAPBUTTON, TranslateMessage, WM_KEYDOWN, WM_QUIT,
+                WindowFromPoint,
             },
         },
     },
     core::{GUID, HRESULT},
 };
-use zipelo_ui_memory_app::drag_out::{DragEvent, DragOut, Pump, PumpState};
+use zipelo_ui_memory_app::drag_out::{
+    DragEvent, DragOut, Pump, PumpState, ReleaseAction, is_own_window, release_action,
+};
 
 thread_local! {
     /// 끌기가 진행되는 동안(start 안에서만) 앱이 넘긴 작업 진행 함수.
@@ -192,6 +198,26 @@ fn pump_messages() -> bool {
         }
     }
     cancel
+}
+
+/// 커서 아래 최상위 창이 Zipelo 프로세스의 창인지.
+fn cursor_over_own_window() -> bool {
+    // 안전성: 인자만 받는 Win32 상태 조회이며 POINT는 호출 동안 유효함.
+    unsafe {
+        let mut point = POINT { x: 0, y: 0 };
+        if GetCursorPos(&mut point) == 0 {
+            return false;
+        }
+        let window = WindowFromPoint(point);
+        if window.is_null() {
+            return false;
+        }
+        let root = GetAncestor(window, GA_ROOT);
+        let top = if root.is_null() { window } else { root };
+        let mut process = 0u32;
+        GetWindowThreadProcessId(top, &mut process);
+        is_own_window((process != 0).then_some(process), GetCurrentProcessId())
+    }
 }
 
 /// 메시지가 오거나 시간이 지날 때까지 기다림.
@@ -717,12 +743,21 @@ unsafe extern "system" fn query_continue_drag(
     if keys & (MK_LBUTTON | MK_RBUTTON) != 0 {
         return S_OK;
     }
-    // 버튼을 놓음: 다 풀린 뒤에 놓기를 완료함.
-    match source.ready() {
-        Some(true) => DRAGDROP_S_DROP,
-        Some(false) => DRAGDROP_S_CANCEL,
-        None if source.wait_for_files() => DRAGDROP_S_DROP,
-        None => DRAGDROP_S_CANCEL,
+    // 버튼을 놓음: Zipelo 창 위면 기다리지 않고 끌기와 풀기를 함께 취소하고, 아니면 다 풀린
+    // 뒤에 놓기를 완료함.
+    let over_own = cursor_over_own_window();
+    match release_action(source.ready(), over_own) {
+        ReleaseAction::Drop => DRAGDROP_S_DROP,
+        ReleaseAction::Cancel => {
+            if over_own {
+                zipelo_ui_memory_app::log_debug!("Zipelo 창 위에 놓음: 끌기와 풀기를 취소함");
+            }
+            pump(true);
+            source.set_ready(PumpState::Failed);
+            DRAGDROP_S_CANCEL
+        }
+        ReleaseAction::Wait if source.wait_for_files() => DRAGDROP_S_DROP,
+        ReleaseAction::Wait => DRAGDROP_S_CANCEL,
     }
 }
 
