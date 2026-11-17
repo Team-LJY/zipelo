@@ -19,8 +19,22 @@ pub enum DragEvent {
 }
 
 /// 운영체제별 끌어 놓기 시작 구현.
+///
+/// Wayland와 X11은 끌기를 먼저 시작하고, 받는 쪽이 데이터를 요청하면 풀기가 끝난 뒤
+/// 경로를 넘김(`after_extract`가 false). Windows 셸 끌기는 시작할 때 파일이 있어야 하므로
+/// 먼저 풀고, 다 풀렸을 때 버튼을 아직 누르고 있으면 [`DragOut::provide`] 뒤에
+/// [`DragOut::start`]를 부름(`after_extract`가 true).
 pub trait DragOut {
+    /// 파일을 다 푼 뒤에 끌기를 시작해야 하는지.
+    fn after_extract(&self) -> bool {
+        false
+    }
+    /// 왼쪽 마우스 버튼을 아직 누르고 있는지. `after_extract` 구현에서만 씀.
+    fn button_held(&mut self) -> bool {
+        true
+    }
     /// 지금 누르고 있는 마우스 버튼으로 운영체제 끌기를 시작함. 시작하지 못하면 false.
+    /// Windows처럼 끌기가 끝날 때까지 돌아오지 않는 구현도 있음.
     fn start(&mut self) -> bool;
     /// 지난 화면 이후 들어온 끌기 사건.
     fn poll(&mut self) -> Option<DragEvent>;

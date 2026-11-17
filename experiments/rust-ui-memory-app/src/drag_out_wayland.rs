@@ -311,9 +311,9 @@ impl Dispatch<wl_pointer::WlPointer, ()> for State {
                 state: WEnum::Value(pressed),
                 ..
             } => {
-                state.shared.lock().unwrap().press =
-                    (state.focused && pressed == wl_pointer::ButtonState::Pressed)
-                        .then_some(serial);
+                state.shared.lock().unwrap().press = (state.focused
+                    && pressed == wl_pointer::ButtonState::Pressed)
+                    .then_some(serial);
             }
             _ => {}
         }

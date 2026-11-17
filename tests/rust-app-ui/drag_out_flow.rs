@@ -5,6 +5,11 @@
 struct DragLog {
     starts: usize,
     accept: bool,
+    /// Windows처럼 다 푼 뒤에 끌기를 시작하는 구현을 흉내 냄.
+    after_extract: bool,
+    held: bool,
+    /// provide와 start가 불린 순서.
+    calls: Vec<&'static str>,
     provided: Vec<Vec<PathBuf>>,
     failed: usize,
     events: std::collections::VecDeque<zipelo_ui_memory_app::drag_out::DragEvent>,
@@ -13,16 +18,25 @@ struct DragLog {
 struct FakeDrag(std::rc::Rc<std::cell::RefCell<DragLog>>);
 
 impl zipelo_ui_memory_app::drag_out::DragOut for FakeDrag {
+    fn after_extract(&self) -> bool {
+        self.0.borrow().after_extract
+    }
+    fn button_held(&mut self) -> bool {
+        self.0.borrow().held
+    }
     fn start(&mut self) -> bool {
         let mut log = self.0.borrow_mut();
         log.starts += 1;
+        log.calls.push("start");
         log.accept
     }
     fn poll(&mut self) -> Option<zipelo_ui_memory_app::drag_out::DragEvent> {
         self.0.borrow_mut().events.pop_front()
     }
     fn provide(&mut self, paths: &[PathBuf]) {
-        self.0.borrow_mut().provided.push(paths.to_vec());
+        let mut log = self.0.borrow_mut();
+        log.calls.push("provide");
+        log.provided.push(paths.to_vec());
     }
     fn fail(&mut self) {
         self.0.borrow_mut().failed += 1;
@@ -32,6 +46,7 @@ impl zipelo_ui_memory_app::drag_out::DragOut for FakeDrag {
 fn with_drag(s: &mut Explorer) -> std::rc::Rc<std::cell::RefCell<DragLog>> {
     let log = std::rc::Rc::new(std::cell::RefCell::new(DragLog {
         accept: true,
+        held: true,
         ..Default::default()
     }));
     s.app.set_drag_out(Box::new(FakeDrag(log.clone())));
@@ -166,4 +181,60 @@ fn rows_do_not_start_a_drag_when_the_platform_cannot() {
     // 끌기를 시작하지 못하면 아무 작업도 시작하지 않음.
     assert!(!s.app.model.busy());
     assert_eq!(s.factory.state.borrow().starts.len(), 1);
+}
+
+#[test]
+fn after_extract_platforms_start_the_drag_once_files_exist_and_the_button_is_held() {
+    let scratch = Folder::new();
+    let mut s = Explorer::new(&scratch);
+    let log = with_drag(&mut s);
+    log.borrow_mut().after_extract = true;
+    s.click("alpha.txt", egui::Modifiers::NONE);
+    s.factory.state.borrow_mut().manual = true;
+    drag_row(&mut s, "alpha.txt");
+    // 먼저 풀기만 시작하고 운영체제 끌기는 아직 시작하지 않음.
+    assert_eq!(log.borrow().starts, 0);
+    assert!(s.app.model.busy());
+    let folder = scratch.0.join("sample.zip (Zipelo 임시)").join("1");
+    fs::create_dir_all(&folder).unwrap();
+    fs::write(folder.join("alpha.txt"), "x").unwrap();
+    finish_worker(&mut s);
+    assert_eq!(log.borrow().calls, ["provide", "start"]);
+    assert_eq!(log.borrow().provided, vec![vec![folder.join("alpha.txt")]]);
+}
+
+#[test]
+fn after_extract_platforms_stop_when_the_button_is_released_early() {
+    let scratch = Folder::new();
+    let mut s = Explorer::new(&scratch);
+    let log = with_drag(&mut s);
+    log.borrow_mut().after_extract = true;
+    s.click("alpha.txt", egui::Modifiers::NONE);
+    s.factory.state.borrow_mut().manual = true;
+    drag_row(&mut s, "alpha.txt");
+    assert!(s.app.model.busy());
+    log.borrow_mut().held = false;
+    s.frame(egui::Modifiers::NONE, vec![]);
+    assert!(s.app.model.cancellation_requested());
+    {
+        let mut worker = s.factory.state.borrow_mut();
+        worker.frame(Event::Accepted { encryption: false });
+        worker.finish(Outcome::Cancelled, Publication::None);
+    }
+    let mut labels = Vec::new();
+    for _ in 0..10 {
+        labels = layout_text(&s.frame(egui::Modifiers::NONE, vec![]));
+    }
+    assert_eq!(log.borrow().starts, 0);
+    assert!(log.borrow().provided.is_empty());
+    assert!(
+        labels
+            .iter()
+            .any(|(text, _, _)| text.contains("마우스 버튼을 놓아 끌어 놓지 않았습니다")),
+        "{labels:?}"
+    );
+    assert!(
+        !labels.iter().any(|(text, _, _)| text.contains("취소했습니다")),
+        "{labels:?}"
+    );
 }

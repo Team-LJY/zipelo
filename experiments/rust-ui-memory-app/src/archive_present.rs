@@ -750,6 +750,10 @@ pub fn open_blocked_text(name: &str) -> String {
 pub const OPEN_FAILED: &str = "파일을 열 프로그램을 실행하지 못했습니다";
 pub const OPEN_MISSING: &str = "풀린 파일을 찾지 못해 열지 못했습니다";
 
+/// Windows에서 파일을 다 풀기 전에 마우스 버튼을 놓아 끌어 놓기를 시작하지 못한 안내.
+pub const DRAG_RELEASED: &str =
+    "파일을 다 풀기 전에 마우스 버튼을 놓아 끌어 놓지 않았습니다. 버튼을 누른 채 다시 끌어 주세요";
+
 /// 운영체제에 설정된 기본 프로그램으로 파일을 엶.
 pub fn open_with_default(path: &Path) -> Result<(), String> {
     #[cfg(windows)]

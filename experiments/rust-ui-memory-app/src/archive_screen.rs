@@ -537,13 +537,16 @@ impl ArchiveApp {
         if names.is_empty() {
             return false;
         }
-        if !self.drag_out.as_mut().is_some_and(|drag| drag.start()) {
-            crate::log_warn!("운영체제 끌기를 시작하지 못함");
-            return false;
+        let after_extract = self.drag_out.as_ref().is_some_and(|drag| drag.after_extract());
+        if !after_extract {
+            if !self.drag_out.as_mut().is_some_and(|drag| drag.start()) {
+                crate::log_warn!("운영체제 끌기를 시작하지 못함");
+                return false;
+            }
+            // 운영체제가 끌기를 넘겨받으면 버튼 놓기가 이 창에 오지 않으므로 대신 넣어 줌.
+            self.release_after_move = true;
         }
-        crate::log_debug!("창 밖으로 끌기 시작: {names:?}");
-        // 운영체제가 끌기를 넘겨받으면 버튼 놓기가 이 창에 오지 않으므로 대신 넣어 줌.
-        self.release_after_move = true;
+        crate::log_debug!("창 밖으로 끌기 시작 (푼 뒤 시작: {after_extract}): {names:?}");
         self.marquee = None;
         self.drag_cancelled = false;
         self.last_open = None;
@@ -576,6 +579,21 @@ impl ArchiveApp {
 
     /// 운영체제 끌기에서 온 사건을 처리함.
     fn poll_drag_out(&mut self) {
+        let dragging = self.opening.as_ref().is_some_and(|r| r.drag.is_some());
+        if dragging
+            && self.model.busy()
+            && !self.drag_cancelled
+            && let Some(drag) = self.drag_out.as_mut()
+            && drag.after_extract()
+            && !drag.button_held()
+        {
+            // 푼 뒤 끌기를 시작하는 환경에서 다 풀기 전에 버튼을 놓으면 끌기를 그만둠.
+            crate::log_debug!("다 풀기 전에 버튼을 놓아 끌어 놓기 취소");
+            self.drag_cancelled = true;
+            self.ui_error = Some(present::DRAG_RELEASED.into());
+            self.clear_password();
+            self.model.cancel();
+        }
         while let Some(event) = self.drag_out.as_mut().and_then(|drag| drag.poll()) {
             crate::log_debug!("끌어 놓기 사건: {event:?}");
             let dragging = self.opening.as_ref().is_some_and(|r| r.drag.is_some());
@@ -629,9 +647,20 @@ impl ArchiveApp {
                 }
             } else {
                 crate::log_debug!("끌어 놓을 파일 준비 끝: {}개", paths.len());
-                drag.provide(&paths);
                 // 결과 창 없이 받는 쪽이 파일을 가져가게 함.
                 self.dismissed = true;
+                if !drag.after_extract() {
+                    drag.provide(&paths);
+                } else if drag.button_held() {
+                    drag.provide(&paths);
+                    let started = drag.start();
+                    crate::log_debug!("푼 뒤 끌기 {}", if started { "끝남" } else { "시작 실패" });
+                    self.release_after_move = true;
+                } else {
+                    drag.fail();
+                    self.dismissed = false;
+                    self.ui_error = Some(present::DRAG_RELEASED.into());
+                }
             }
             return;
         }
@@ -2078,7 +2107,7 @@ impl ArchiveApp {
                 }
             }
         });
-        self.find.offset = output.state.offset().y;
+        self.find.offset = output.state.clamped_offset().y;
         chosen.and_then(|index| self.find.results.get(index).cloned())
     }
 
