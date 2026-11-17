@@ -191,6 +191,9 @@ struct Marquee {
     moved: bool,
 }
 
+/// 창 밖 끌기를 시작하려면 누른 곳에서 이만큼(px) 움직여야 함.
+const DRAG_OUT_DISTANCE: f32 = 8.0;
+
 /// 파일 목록 한 행의 높이. 행 안의 크기 칸(theme::ROW)이 위아래 2px 여백으로 들어감.
 const LIST_ROW: f32 = 36.0;
 
@@ -321,6 +324,8 @@ pub struct ArchiveApp {
     drag_out: Option<Box<dyn crate::drag_out::DragOut>>,
     /// 끌기를 놓지 않고 취소해 풀던 작업을 취소했는지. 결과 창을 띄우지 않음.
     drag_cancelled: bool,
+    /// 이번 버튼 누름에서 이미 창 밖 끌기를 시작했는지. 한 번 누름에 한 번만 시작함.
+    drag_out_fired: bool,
     find: FindState,
     /// 이번 화면에서 목록 선택 해제 등 다른 곳이 Esc를 이미 처리했는지.
     escape_handled: bool,
@@ -406,6 +411,7 @@ impl ArchiveApp {
             opener: Box::new(present::open_with_default),
             drag_out: None,
             drag_cancelled: false,
+            drag_out_fired: false,
             find: FindState::default(),
             escape_handled: false,
             focus_list: false,
@@ -2467,7 +2473,19 @@ impl ArchiveApp {
                             modifiers.shift,
                         );
                     }
-                    if active && self.drag_out.is_some() && response.drag_started() {
+                    // 오래 누르기만 해도 egui는 끌기로 보므로, 실제로 움직였을 때만 시작함.
+                    if active
+                        && self.drag_out.is_some()
+                        && !self.drag_out_fired
+                        && response.dragged()
+                        && ui.input(|i| {
+                            i.pointer
+                                .press_origin()
+                                .zip(i.pointer.interact_pos())
+                                .is_some_and(|(from, to)| from.distance(to) >= DRAG_OUT_DISTANCE)
+                        })
+                    {
+                        self.drag_out_fired = true;
                         if !selected {
                             // 선택하지 않은 행을 끌면 그 행만 선택한 뒤 끎.
                             self.select_row(&rows, index, false, false);
@@ -2571,6 +2589,7 @@ impl ArchiveApp {
         self.list_offset = next_offset.unwrap_or(output.state.clamped_offset().y);
         if ui.input(|i| i.pointer.primary_released() || !i.pointer.primary_down()) {
             self.marquee = None;
+            self.drag_out_fired = false;
         }
         let escape_from_list = self.list_focused
             && ui.ctx().memory(|memory| memory.focused()).is_none()

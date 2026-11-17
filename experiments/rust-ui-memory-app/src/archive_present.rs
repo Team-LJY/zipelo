@@ -688,9 +688,15 @@ pub fn create_open_root_with(
     })
 }
 
-/// 열기용 임시 폴더 이름. 예: `자료.zip (Zipelo 임시)`.
+/// 열기와 끌어 놓기용 임시 폴더 이름. 예: `.자료.zip (Zipelo 임시)`.
+/// 파일 관리자에서 압축파일 옆에 풀린 것처럼 보이지 않도록 Unix 계열에서는 숨김
+/// 이름(앞에 '.')을 씀. Windows는 점으로 숨겨지지 않으므로 원래 이름을 씀.
 pub fn open_root_name(archive_name: &str) -> String {
-    format!("{archive_name} (Zipelo 임시)")
+    if cfg!(windows) {
+        format!("{archive_name} (Zipelo 임시)")
+    } else {
+        format!(".{archive_name} (Zipelo 임시)")
+    }
 }
 
 /// 이 앱이 만든 열기용 폴더를 지움. 다른 프로그램이 파일을 쓰고 있으면 남을 수 있음.

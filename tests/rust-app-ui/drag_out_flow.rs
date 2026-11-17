@@ -91,7 +91,7 @@ fn dragging_selected_rows_out_extracts_them_and_hands_over_their_paths() {
     assert_eq!(log.borrow().starts, 1);
     // 선택이 유지되고(끌기는 범위 선택이 아님), 하위 항목을 포함해 임시 폴더에 풂.
     s.selected(&[0, 1, 5]);
-    let folder = scratch.0.join("sample.zip (Zipelo 임시)").join("1");
+    let folder = scratch.0.join(zipelo_ui_memory_app::archive_present::open_root_name("sample.zip")).join("1");
     {
         let state = s.factory.state.borrow();
         let Some(Start::Extract {
@@ -122,7 +122,7 @@ fn dragging_selected_rows_out_extracts_them_and_hands_over_their_paths() {
     assert!(s.app.begin_extract());
     assert!(matches!(
         s.factory.state.borrow().starts.last(),
-        Some(Start::Extract { destination, .. }) if !destination.starts_with(scratch.0.join("sample.zip (Zipelo 임시)"))
+        Some(Start::Extract { destination, .. }) if !destination.starts_with(scratch.0.join(zipelo_ui_memory_app::archive_present::open_root_name("sample.zip")))
     ));
 }
 
@@ -195,7 +195,7 @@ fn after_extract_platforms_start_the_drag_once_files_exist_and_the_button_is_hel
     // 먼저 풀기만 시작하고 운영체제 끌기는 아직 시작하지 않음.
     assert_eq!(log.borrow().starts, 0);
     assert!(s.app.model.busy());
-    let folder = scratch.0.join("sample.zip (Zipelo 임시)").join("1");
+    let folder = scratch.0.join(zipelo_ui_memory_app::archive_present::open_root_name("sample.zip")).join("1");
     fs::create_dir_all(&folder).unwrap();
     fs::write(folder.join("alpha.txt"), "x").unwrap();
     finish_worker(&mut s);
@@ -236,5 +236,45 @@ fn after_extract_platforms_stop_when_the_button_is_released_early() {
     assert!(
         !labels.iter().any(|(text, _, _)| text.contains("취소했습니다")),
         "{labels:?}"
+    );
+}
+
+#[test]
+fn long_press_without_moving_does_not_extract_and_one_drag_extracts_once() {
+    let scratch = Folder::new();
+    let mut s = Explorer::new(&scratch);
+    let log = with_drag(&mut s);
+    s.click("docs", egui::Modifiers::NONE);
+    let before = s.factory.state.borrow().starts.len();
+    s.time += 1.0;
+    let start = s.row("docs").center();
+    s.pointer(start, true, egui::Modifiers::NONE);
+    // 움직이지 않고 1.5초 동안 누르고 있어도 끌기와 풀기를 시작하지 않음.
+    for _ in 0..30 {
+        s.frame(egui::Modifiers::NONE, vec![]);
+    }
+    assert_eq!(log.borrow().starts, 0);
+    assert_eq!(s.factory.state.borrow().starts.len(), before);
+    // 움직이면 한 번만 시작하고, 계속 끌고 놓아도 다시 풀지 않음.
+    for step in 1..=20 {
+        s.frame(
+            egui::Modifiers::NONE,
+            vec![egui::Event::PointerMoved(start + egui::vec2(0.0, 6.0 * step as f32))],
+        );
+    }
+    s.pointer(start + egui::vec2(0.0, 120.0), false, egui::Modifiers::NONE);
+    for _ in 0..10 {
+        s.frame(egui::Modifiers::NONE, vec![]);
+    }
+    assert_eq!(log.borrow().starts, 1);
+    assert_eq!(s.factory.state.borrow().starts.len(), before + 1);
+}
+
+#[cfg(unix)]
+#[test]
+fn drag_temp_folder_is_hidden_next_to_the_archive() {
+    assert_eq!(
+        zipelo_ui_memory_app::archive_present::open_root_name("자료.zip"),
+        ".자료.zip (Zipelo 임시)"
     );
 }
