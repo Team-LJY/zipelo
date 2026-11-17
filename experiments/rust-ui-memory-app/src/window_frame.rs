@@ -11,6 +11,7 @@ pub const TITLE_HEIGHT: f32 = 38.0;
 const BUTTON_SIZE: Vec2 = egui::vec2(34.0, 26.0);
 const RESIZE_EDGE: f32 = 6.0;
 const DRAG_THRESHOLD: f32 = 4.0;
+const IN_PARENT_TITLE: f32 = 36.0;
 const TITLE_BG: Color32 = Color32::from_rgb(235, 238, 242);
 
 /// 창 테두리를 직접 그려야 하는지 판단함.
@@ -111,6 +112,35 @@ pub fn title_bar(root: &mut egui::Ui, id: &str, title: &str, buttons: Buttons) -
             );
         });
     moved
+}
+
+/// 부모 창 안에 그리는 자식 창의 제목 줄. 닫기 버튼을 누르면 true를 돌려줌.
+/// 별도 창의 제목 표시줄과 같은 닫기 버튼(마우스를 올리면 빨간 배경)을 씀.
+pub fn in_parent_title(ui: &mut egui::Ui, id: &str, title: &str, closable: bool) -> bool {
+    let width = ui.available_width();
+    let (rect, _) = ui.allocate_exact_size(egui::vec2(width, IN_PARENT_TITLE), Sense::hover());
+    let painter = ui.painter();
+    painter.rect_filled(rect, 0.0, theme::STRIPE);
+    painter.hline(
+        rect.x_range(),
+        rect.bottom() - 0.5,
+        Stroke::new(1.0, theme::BORDER),
+    );
+    let button = Rect::from_center_size(
+        egui::pos2(rect.right() - 6.0 - BUTTON_SIZE.x / 2.0, rect.center().y),
+        BUTTON_SIZE,
+    );
+    let reserved = if closable { BUTTON_SIZE.x + 12.0 } else { 0.0 };
+    let font = FontId::proportional(theme::FONT_SMALL);
+    let text = fit(ui, title, &font, (rect.width() - 32.0 - reserved).max(0.0));
+    ui.painter().text(
+        egui::pos2(rect.left() + 16.0, rect.center().y),
+        Align2::LEFT_CENTER,
+        text,
+        font,
+        theme::TEXT,
+    );
+    closable && window_button(ui, id, button, Glyph::Close).clicked()
 }
 
 /// 제목 표시줄을 누른 채 움직였는지를 원시 입력으로 판단함.

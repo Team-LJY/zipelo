@@ -938,3 +938,86 @@ fn scenario_window_hosting_survives_platform_frame_configuration() {
         }
     }
 }
+
+#[test]
+fn hosted_work_window_close_button_shows_hover_and_dismisses_result() {
+    let factory = FakeFactory::manual();
+    let mut app = ArchiveApp::new(Box::new(factory.clone()), Some("/sample.zip".into()), false);
+    app.set_work_window_in_parent(true);
+    let ctx = egui::Context::default();
+    ctx.set_embed_viewports(false);
+    install_work_child_renderer();
+    {
+        let mut worker = factory.state.borrow_mut();
+        worker.finish(Outcome::Failed, Publication::None);
+        for event in &mut worker.queue {
+            if let HostEvent::Frame {
+                event: Event::Terminal(terminal),
+                ..
+            } = event
+            {
+                terminal.error = Some(ErrorCode::Io);
+            }
+        }
+    }
+    let render = |app: &mut ArchiveApp, events: Vec<egui::Event>| {
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(1060.0, 720.0),
+                )),
+                events,
+                ..Default::default()
+            },
+            |ui| app.show(ui),
+        );
+        output.textures_delta.clear();
+        output
+    };
+    for _ in 0..4 {
+        render(&mut app, vec![]);
+    }
+    let close_id = egui::Id::unique(("window-button", "work-in-parent", "닫기"));
+    let close = ctx.read_response(close_id).expect("닫기 버튼").rect;
+    let red = egui::Color32::from_rgb(232, 17, 35);
+    fn has_fill(shapes: &[egui::epaint::ClippedShape], color: egui::Color32) -> bool {
+        fn walk(shape: &Shape, color: egui::Color32) -> bool {
+            match shape {
+                Shape::Rect(rect) => rect.fill == color,
+                Shape::Vec(shapes) => shapes.iter().any(|s| walk(s, color)),
+                _ => false,
+            }
+        }
+        shapes.iter().any(|s| walk(&s.shape, color))
+    }
+    let idle = render(&mut app, vec![egui::Event::PointerMoved(egui::pos2(5.0, 5.0))]);
+    assert!(!has_fill(&idle.shapes, red));
+    assert!(
+        labels(&idle.shapes)
+            .iter()
+            .any(|(text, _)| text == "압축파일을 열지 못했습니다")
+    );
+    render(&mut app, vec![egui::Event::PointerMoved(close.center())]);
+    let hovered = render(&mut app, vec![]);
+    assert!(has_fill(&hovered.shapes, red));
+    for pressed in [true, false] {
+        render(
+            &mut app,
+            vec![egui::Event::PointerButton {
+                pos: close.center(),
+                button: egui::PointerButton::Primary,
+                pressed,
+                modifiers: egui::Modifiers::NONE,
+            }],
+        );
+    }
+    render(&mut app, vec![]);
+    let shown = labels(&render(&mut app, vec![]).shapes);
+    assert!(
+        !shown
+            .iter()
+            .any(|(text, _)| text == "압축파일을 열지 못했습니다"),
+        "{shown:?}"
+    );
+}

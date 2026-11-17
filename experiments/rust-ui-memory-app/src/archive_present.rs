@@ -479,3 +479,233 @@ pub fn excluded_split(path: &Path) -> bool {
         .to_ascii_lowercase();
     name.ends_with(".zip.001") || name.ends_with(".z01") || name.ends_with(".rar")
 }
+
+/// 같은 이름이 이미 있으면 `이름 (1)`, `이름 (2)`처럼 비어 있는 이름을 찾음.
+pub fn unique_folder(base: &Path) -> PathBuf {
+    let taken = |path: &Path| fs::symlink_metadata(path).is_ok();
+    if !taken(base) {
+        return base.to_path_buf();
+    }
+    let name = base.file_name().unwrap_or_default().to_string_lossy();
+    (1..)
+        .map(|n| base.with_file_name(format!("{name} ({n})")))
+        .find(|path| !taken(path))
+        .unwrap()
+}
+
+fn private_dir(path: &Path) -> io::Result<()> {
+    let mut builder = fs::DirBuilder::new();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::DirBuilderExt;
+        builder.mode(0o700);
+    }
+    builder.create(path)
+}
+
+pub struct OpenRoot {
+    path: PathBuf,
+    handle: fs::File,
+    identity: worker_protocol::protocol::SourceObject,
+}
+
+impl OpenRoot {
+    fn capture(path: PathBuf) -> io::Result<Self> {
+        let handle = open_root_handle(&path)?;
+        // 만든 직후에는 비어 있어야 함. 만든 뒤 핸들을 잡기 전에 다른 폴더로 바뀌었다면
+        // 사용자 데이터가 들어 있을 수 있으므로 원본으로 기록하지 않음.
+        if !worker_protocol::tree_remove::is_empty(&handle, &path)? {
+            return Err(io::Error::other("만든 임시 폴더가 아님"));
+        }
+        let identity = worker_protocol::filesystem::object(&handle)
+            .map_err(|_| io::Error::other("임시 폴더 식별 실패"))?;
+        Ok(Self {
+            path,
+            handle,
+            identity,
+        })
+    }
+
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
+    pub fn is_current(&self) -> bool {
+        // 원본 핸들을 유지해 삭제된 inode가 재사용되어도 같다고 판정하지 않음.
+        self.handle.metadata().is_ok()
+            && open_root_handle(&self.path)
+                .ok()
+                .and_then(|file| worker_protocol::filesystem::object(&file).ok())
+                .is_some_and(|identity| identity == self.identity)
+    }
+}
+
+fn open_root_handle(path: &Path) -> io::Result<fs::File> {
+    let mut options = fs::OpenOptions::new();
+    options.read(true);
+    #[cfg(target_os = "linux")]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(0x20000); // 심볼릭 링크를 따라가지 않음.
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        // 폴더 자체를 열며 재분석 지점을 따라가지 않음.
+        // 삭제 공유를 허용하지 않아 열어 둔 동안 폴더 이름을 바꾸거나 지울 수 없게 함.
+        options.share_mode(1 | 2).custom_flags(0x02000000 | 0x00200000);
+    }
+    let file = options.open(path)?;
+    let metadata = file.metadata()?;
+    if !metadata.is_dir() || fs::symlink_metadata(path)?.file_type().is_symlink() {
+        return Err(io::Error::other("임시 폴더가 아님"));
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        if metadata.file_attributes() & 0x400 != 0 {
+            return Err(io::Error::other("재분석 지점은 임시 폴더로 쓰지 않음"));
+        }
+    }
+    Ok(file)
+}
+
+/// 압축파일 안 파일을 기본 프로그램으로 열 때 쓸 임시 폴더를 만듦.
+/// 압축파일과 같은 폴더에 만들고, 그곳에 만들 수 없으면 시스템 임시 폴더를 씀.
+/// 숨김 폴더로 만들지 않음. snap으로 설치한 Firefox 등은 홈 바로 아래 숨김 폴더와
+/// 시스템 임시 폴더의 파일을 읽지 못해 열기 요청을 조용히 무시함.
+pub fn create_open_root(archive: &Path) -> io::Result<OpenRoot> {
+    create_open_root_with(archive, |_| {})
+}
+
+/// `create_open_root`와 같고, 폴더를 만든 직후 핸들을 잡기 전에 `after_create`를 실행함.
+/// 만든 뒤 경로가 바뀌는 경우를 시험하려고 둠.
+/// 폴더를 만든 뒤 핸들을 잡기까지의 틈에 경로가 바뀌어도, 핸들로 확인한 폴더가 비어 있지
+/// 않으면 원본으로 쓰지 않고 다른 이름으로 다시 만듦. 바뀐 폴더는 건드리지 않음.
+pub fn create_open_root_with(
+    archive: &Path,
+    mut after_create: impl FnMut(&Path),
+) -> io::Result<OpenRoot> {
+    let name = archive.file_name().unwrap_or_default().to_string_lossy();
+    let mut error = None;
+    if let Some(parent) = archive.parent().filter(|p| !p.as_os_str().is_empty()) {
+        let base = parent.join(open_root_name(&name));
+        for _ in 0..8 {
+            let path = unique_folder(&base);
+            match private_dir(&path) {
+                Ok(()) => {
+                    after_create(&path);
+                    match OpenRoot::capture(path.clone()) {
+                        Ok(root) => return Ok(root),
+                        Err(e) => {
+                            // 비어 있는 폴더만 지워지므로 바뀐 폴더의 내용은 남음.
+                            let _ = fs::remove_dir(&path);
+                            error = Some(e);
+                            continue;
+                        }
+                    }
+                }
+                Err(e) if e.kind() == io::ErrorKind::AlreadyExists => continue,
+                Err(e) => {
+                    error = Some(e);
+                    break;
+                }
+            }
+        }
+    }
+    let base = std::env::temp_dir().join(format!("zipelo-{}-{name}", std::process::id()));
+    let path = unique_folder(&base);
+    private_dir(&path).map_err(|e| error.unwrap_or(e))?;
+    after_create(&path);
+    OpenRoot::capture(path.clone()).inspect_err(|_| {
+        let _ = fs::remove_dir(&path);
+    })
+}
+
+/// 열기용 임시 폴더 이름. 예: `자료.zip (Zipelo 임시)`.
+pub fn open_root_name(archive_name: &str) -> String {
+    format!("{archive_name} (Zipelo 임시)")
+}
+
+/// 이 앱이 만든 열기용 폴더를 지움. 다른 프로그램이 파일을 쓰고 있으면 남을 수 있음.
+pub fn remove_open_root(root: OpenRoot) {
+    remove_open_root_with(root, || {});
+}
+
+/// `remove_open_root`와 같고, 정체를 확인한 직후 삭제 전에 `after_check`를 실행함.
+/// 확인과 삭제 사이에 경로가 바뀌는 경우를 시험하려고 둠.
+/// 내용은 만들 때 열어 둔 폴더 핸들에 묶어 지우므로 경로가 바뀌어도 다른 폴더는 건드리지 않음.
+pub fn remove_open_root_with(root: OpenRoot, after_check: impl FnOnce()) {
+    if !root.is_current() {
+        return;
+    }
+    after_check();
+    let OpenRoot { path, handle, .. } = root;
+    let _ = worker_protocol::tree_remove::remove_contents(&handle, &path);
+    // Windows는 핸들을 닫아야 폴더를 지울 수 있음.
+    drop(handle);
+    // 비어 있지 않거나 링크로 바뀐 경로는 지워지지 않으므로 다른 내용이 사라지지 않음.
+    let _ = fs::remove_dir(&path);
+}
+
+/// 기본 프로그램으로 열면 실행될 수 있는 파일은 바로 열지 않음.
+/// Windows는 스크립트도 연결 프로그램이 바로 실행하므로 범위가 넓고,
+/// Linux는 스크립트를 편집기로 열므로 실행·설치 파일만 막음.
+pub fn blocked_open(name: &str) -> bool {
+    #[cfg(windows)]
+    const EXECUTABLE: &[&str] = &[
+        "exe", "com", "bat", "cmd", "scr", "pif", "msi", "msp", "msc", "ps1", "psm1", "vbs",
+        "vbe", "js", "jse", "wsf", "wsh", "hta", "cpl", "lnk", "url", "reg", "jar", "inf", "scf",
+        "chm", "dll", "sys", "appref-ms", "application", "gadget", "settingcontent-ms",
+    ];
+    #[cfg(not(windows))]
+    const EXECUTABLE: &[&str] = &[
+        "desktop", "appimage", "run", "bin", "jar", "deb", "rpm", "snap", "flatpakref",
+        "flatpak", "exe", "msi",
+    ];
+    open_extension(name).is_some_and(|ext| EXECUTABLE.contains(&ext.to_ascii_lowercase().as_str()))
+}
+
+fn open_extension(name: &str) -> Option<&str> {
+    let leaf = name.rsplit(['/', '\\']).next().unwrap_or(name);
+    leaf.rsplit_once('.')
+        .map(|(_, ext)| ext)
+        .filter(|ext| !ext.is_empty())
+}
+
+/// 실행 파일이라 열지 않았다는 짧은 안내. 압축은 풀지 않음.
+pub fn open_blocked_text(name: &str) -> String {
+    match open_extension(name) {
+        Some(ext) => format!("실행 파일(.{ext})은 안전을 위해 바로 열 수 없습니다"),
+        None => "실행 파일은 안전을 위해 바로 열 수 없습니다".into(),
+    }
+}
+
+pub const OPEN_FAILED: &str = "파일을 열 프로그램을 실행하지 못했습니다";
+pub const OPEN_MISSING: &str = "풀린 파일을 찾지 못해 열지 못했습니다";
+
+/// 운영체제에 설정된 기본 프로그램으로 파일을 엶.
+pub fn open_with_default(path: &Path) -> Result<(), String> {
+    #[cfg(windows)]
+    let mut command = {
+        let mut command = std::process::Command::new("explorer.exe");
+        command.arg(path);
+        command
+    };
+    #[cfg(not(windows))]
+    let mut command = {
+        let mut command = std::process::Command::new("xdg-open");
+        command.arg(path);
+        command
+    };
+    command
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null());
+    let mut child = command.spawn().map_err(|_| OPEN_FAILED.to_owned())?;
+    // 끝난 자식 프로세스를 거둬 좀비로 남지 않게 함.
+    std::thread::spawn(move || {
+        let _ = child.wait();
+    });
+    Ok(())
+}

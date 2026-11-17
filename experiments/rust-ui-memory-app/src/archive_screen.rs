@@ -198,6 +198,24 @@ struct Marquee {
 /// 파일 목록 한 행의 높이. 행 안의 크기 칸(theme::ROW)이 위아래 2px 여백으로 들어감.
 const LIST_ROW: f32 = 36.0;
 
+/// 기본 프로그램으로 열려고 임시 폴더에 푸는 작업. 끝나면 원래 풀 위치로 되돌림.
+struct OpenRequest {
+    folder: PathBuf,
+    /// 풀린 뒤 열 파일의 압축파일 안 경로. 작업자는 새로 만든 상위 폴더도 출력으로 알리므로
+    /// 출력 목록에서 이 경로와 같은 항목을 찾아 엶.
+    name: String,
+    destination: PathBuf,
+    automatic: bool,
+}
+
+/// 파일 목록의 오른쪽 클릭 메뉴에서 고른 동작.
+enum MenuAction {
+    NewFolder,
+    ChooseFolder,
+}
+
+type Opener = Box<dyn FnMut(&Path) -> Result<(), String>>;
+
 pub struct ArchiveApp {
     pub model: Model,
     factory: Box<dyn Factory>,
@@ -262,6 +280,13 @@ pub struct ArchiveApp {
     checked_destination: bool,
     ui_error: Option<String>,
     initialized: bool,
+    opening: Option<OpenRequest>,
+    /// 마지막 풀기가 기본 프로그램으로 열기였으면 그 항목. 다시 시도할 때 다시 엶.
+    last_open: Option<u32>,
+    /// 압축파일별 열기용 임시 폴더. 앱을 닫을 때 지움.
+    open_roots: Vec<(PathBuf, present::OpenRoot)>,
+    open_count: u64,
+    opener: Opener,
     #[cfg(all(feature = "ui-fixture", debug_assertions))]
     scenario_marquee: Option<egui::Rect>,
     #[cfg(all(feature = "ui-fixture", debug_assertions))]
@@ -329,6 +354,11 @@ impl ArchiveApp {
             checked_destination: false,
             ui_error: None,
             initialized: false,
+            opening: None,
+            last_open: None,
+            open_roots: Vec::new(),
+            open_count: 0,
+            opener: Box::new(present::open_with_default),
             #[cfg(all(feature = "ui-fixture", debug_assertions))]
             scenario_marquee: None,
             #[cfg(all(feature = "ui-fixture", debug_assertions))]
@@ -342,6 +372,131 @@ impl ArchiveApp {
 
     pub fn set_dialogs(&mut self, dialogs: Box<dyn Dialogs>) {
         self.dialogs = dialogs;
+    }
+
+    /// 파일을 기본 프로그램으로 여는 방법을 바꿈. 시험에서 실제 프로그램 실행을 막을 때 씀.
+    pub fn set_opener(&mut self, opener: Opener) {
+        self.opener = opener;
+    }
+
+    /// 압축파일 안 파일 하나를 임시 폴더에 풀고 기본 프로그램으로 엶.
+    pub fn open_entry(&mut self, entry_id: u32) -> bool {
+        self.release_open();
+        if !self.model.can_extract() || self.opening.is_some() {
+            return false;
+        }
+        let Some(entry) = self.model.entries.iter().find(|e| e.id == entry_id) else {
+            return false;
+        };
+        if entry.kind != Kind::File {
+            return false;
+        }
+        let name = if self
+            .model
+            .list_id
+            .as_ref()
+            .is_some_and(|id| id.format == Format::Gzip)
+        {
+            self.gzip_name.clone()
+        } else {
+            entry.name.clone()
+        };
+        if present::blocked_open(&name) {
+            // 압축을 풀지 않고 바로 안내만 함.
+            self.dismissed = false;
+            self.ui_error = Some(present::open_blocked_text(&name));
+            return false;
+        }
+        let Some(archive) = self.model.archive.clone() else {
+            return false;
+        };
+        let root = match self.open_roots.iter().find(|(a, _)| *a == archive) {
+            Some((_, root)) if root.is_current() => root.path().to_path_buf(),
+            _ => match present::create_open_root(&archive) {
+                Ok(root) => {
+                    self.open_roots.retain(|(a, _)| *a != archive);
+                    let path = root.path().to_path_buf();
+                    self.open_roots.push((archive, root));
+                    path
+                }
+                Err(_) => {
+                    self.dismissed = false;
+                    self.ui_error = Some(present::FOLDER_ERROR.into());
+                    return false;
+                }
+            },
+        };
+        // 같은 파일을 여러 번 열어도 충돌하지 않도록 열 때마다 새 하위 폴더에 풂.
+        self.open_count += 1;
+        let folder = present::unique_folder(&root.join(self.open_count.to_string()));
+        let request = OpenRequest {
+            folder: folder.clone(),
+            name: name.replace('\\', "/"),
+            destination: std::mem::replace(&mut self.destination, folder),
+            automatic: std::mem::replace(&mut self.automatic_destination, true),
+        };
+        self.opening = Some(request);
+        if self.extract_selection(Selection::EntryIds(vec![entry_id])) {
+            self.last_open = Some(entry_id);
+            true
+        } else {
+            self.finish_open(false);
+            false
+        }
+    }
+
+    /// 한도를 늘려 다시 시도할 수 있는 결과가 화면에 남아 있는 동안은 열기 상태를 유지함.
+    fn open_retry_pending(&self) -> bool {
+        self.opening.is_some() && !self.dismissed && self.model.can_retry_expanded()
+    }
+
+    /// 다시 시도를 기다리던 열기를 접고 원래 풀 위치로 되돌림. 다른 작업을 시작하기 전에 씀.
+    fn release_open(&mut self) {
+        if self.opening.is_some() && !self.model.busy() {
+            self.finish_open(false);
+        }
+    }
+
+    /// 열기용 풀기가 끝나면 원래 풀 위치를 되돌리고, 성공했으면 기본 프로그램을 실행함.
+    fn finish_open(&mut self, completed: bool) {
+        let Some(request) = self.opening.take() else {
+            return;
+        };
+        self.destination = request.destination;
+        self.automatic_destination = request.automatic;
+        if !completed {
+            return;
+        }
+        let Some(name) = self
+            .model
+            .outputs
+            .iter()
+            .filter(|(_, d)| *d == Disposition::Created)
+            .map(|(name, _)| name.replace('\\', "/"))
+            .find(|name| name.trim_end_matches('/') == request.name)
+        else {
+            self.ui_error = Some(present::OPEN_MISSING.into());
+            return;
+        };
+        let path = name
+            .split('/')
+            .fold(request.folder, |path, part| path.join(part));
+        match (self.opener)(&path) {
+            // 결과 창 없이 바로 열린 파일을 보여 줌.
+            Ok(()) => self.dismissed = true,
+            Err(error) => self.ui_error = Some(error),
+        }
+    }
+
+    /// 압축파일 이름으로 새 폴더를 만들고(같은 이름이 있으면 번호를 붙임) 선택 항목을 풂.
+    fn extract_to_new_folder(&mut self) -> bool {
+        self.release_open();
+        let Some(archive) = self.model.archive.clone() else {
+            return false;
+        };
+        self.destination = present::unique_folder(&present::default_destination(&archive));
+        self.automatic_destination = true;
+        self.begin_extract()
     }
 
     /// 창 순서를 지정할 수 없는 환경에서는 부모 안에 작업 화면을 그림.
@@ -469,6 +624,7 @@ impl ArchiveApp {
         if self.model.busy() {
             return;
         }
+        self.release_open();
         if self
             .recovery_warning
             .as_ref()
@@ -570,6 +726,7 @@ impl ArchiveApp {
     }
 
     pub fn begin_extract(&mut self) -> bool {
+        self.release_open();
         self.selected_only = !self.model.selected.is_empty();
         let selection = if self.selected_only {
             Selection::EntryIds(
@@ -590,6 +747,9 @@ impl ArchiveApp {
             return false;
         }
         self.selected_only = matches!(&selection, Selection::EntryIds(_));
+        if self.opening.is_none() {
+            self.last_open = None;
+        }
         match present::prepare_destination(&self.destination, self.automatic_destination) {
             Ok(true) => self.owned_destination = Some(self.destination.clone()),
             Ok(false) => self.owned_destination = None,
@@ -688,6 +848,8 @@ impl ArchiveApp {
                 aes256: self.aes256,
             }
         };
+        // 한도 초과 뒤 보류된 열기는 만들기와 무관하므로 시작 전에 접음.
+        self.release_open();
         if self.start(request) {
             self.create = false;
             self.create_win = WorkWindow::default();
@@ -806,6 +968,9 @@ impl ArchiveApp {
                         }
                     }
                     Purpose::Destination | Purpose::Retry => {
+                        // 다른 폴더를 골랐으면 기본 프로그램 열기가 아닌 일반 풀기로 다시 함.
+                        self.release_open();
+                        self.last_open = None;
                         self.choose_destination(path);
                         self.selected_only = !self.model.selected.is_empty();
                         if purpose == Purpose::Retry {
@@ -862,6 +1027,9 @@ impl ArchiveApp {
             match request {
                 Start::List { archive } => self.open_path(archive),
                 Start::Preview { .. } | Start::RecoverZip { .. } => {}
+                Start::Extract { .. } if let Some(entry_id) = self.last_open => {
+                    self.open_entry(entry_id);
+                }
                 Start::Extract {
                     selection,
                     gzip_output_name,
@@ -918,6 +1086,20 @@ impl ArchiveApp {
             self.model.close = Close::Confirm;
         }
         if busy && !self.model.busy() {
+            let completed = self.model.confirmed
+                && self
+                    .model
+                    .terminal
+                    .as_ref()
+                    .is_some_and(|t| t.outcome == Outcome::Completed);
+            if self.opening.is_some() {
+                // 열기용 폴더는 앱을 닫을 때 지우므로 풀 위치 소유 기록만 정리함.
+                self.owned_destination = None;
+                // 한도 실패는 늘려서 다시 시도할 수 있으므로 열기 상태를 남김.
+                if completed || !self.open_retry_pending() {
+                    self.finish_open(completed);
+                }
+            }
             if let Some(path) = self.owned_destination.take() {
                 if !self.model.confirmed
                     || self
@@ -929,6 +1111,10 @@ impl ArchiveApp {
                     present::remove_owned_empty(&path);
                 }
             }
+        }
+        if self.opening.is_some() && !self.model.busy() && !self.open_retry_pending() {
+            // 결과를 닫았거나 다시 시도할 수 없게 되었으면 원래 풀 위치로 되돌림.
+            self.finish_open(false);
         }
     }
 
@@ -1365,6 +1551,8 @@ impl ArchiveApp {
         }
         let mut focused = None;
         let mut open = None;
+        let mut open_file = None;
+        let mut menu_action = None;
         let mut next_offset = None;
         let output = egui::ScrollArea::vertical()
             .id_salt("archive-rows")
@@ -1386,7 +1574,12 @@ impl ArchiveApp {
                         && relative.x <= width
                         && relative.y >= 0.0
                         && relative.y < rows.len() as f32 * LIST_ROW;
-                    if clip.contains(press) && !in_row && ui.input(|i| i.pointer.primary_pressed())
+                    // 목록 위에 떠 있는 창(부모 안 작업 창 등)을 누른 경우는 목록 조작이 아님.
+                    let on_list = ui.ctx().layer_id_at(press) == Some(ui.layer_id());
+                    if clip.contains(press)
+                        && on_list
+                        && !in_row
+                        && ui.input(|i| i.pointer.primary_pressed())
                     {
                         background.request_focus();
                         let ctrl = ui.input(|i| i.modifiers.ctrl || i.modifiers.command);
@@ -1499,8 +1692,26 @@ impl ArchiveApp {
                             modifiers.shift,
                         );
                     }
-                    if row.directory && response.double_clicked() {
-                        open = Some(row.path.clone());
+                    if response.double_clicked() {
+                        if row.directory {
+                            open = Some(row.path.clone());
+                        } else if let [id] = row.ids.iter().copied().collect::<Vec<_>>()[..] {
+                            open_file = Some(id);
+                        }
+                    }
+                    if active && response.secondary_clicked() && !selected {
+                        // 선택하지 않은 행을 오른쪽 클릭하면 그 행만 선택한 뒤 메뉴를 엶.
+                        self.select_row(&rows, index, false, false);
+                    }
+                    if active {
+                        response.context_menu(|ui| {
+                            if ui.button("압축 파일명으로 새 폴더를 만들어 압축 풀기").clicked() {
+                                menu_action = Some(MenuAction::NewFolder);
+                            }
+                            if ui.button("특정 폴더에 압축 풀기").clicked() {
+                                menu_action = Some(MenuAction::ChooseFolder);
+                            }
+                        });
                     }
                     // 암호가 걸린 항목은 이름 앞에 *를 붙이고, 툴팁은 실제 이름을 보여 줌.
                     let name = if row.encrypted {
@@ -1638,6 +1849,8 @@ impl ArchiveApp {
                         .min(rows.len() - 1);
                     if rows[index].directory {
                         open = Some(rows[index].path.clone());
+                    } else if let [id] = rows[index].ids.iter().copied().collect::<Vec<_>>()[..] {
+                        open_file = Some(id);
                     }
                 }
             }
@@ -1650,9 +1863,36 @@ impl ArchiveApp {
                 );
             }
         }
+        // 마우스 옆 버튼(뒤로)을 목록 위에서 누르면 상위 폴더로 이동함.
+        if active
+            && !self.folder.is_empty()
+            && ui.input(|i| {
+                i.pointer.button_pressed(egui::PointerButton::Extra1)
+                    && i.pointer
+                        .interact_pos()
+                        .is_some_and(|pos| path_row.union(background.rect).contains(pos))
+            })
+        {
+            open = Some(
+                self.folder
+                    .rsplit_once('/')
+                    .map_or("", |(parent, _)| parent)
+                    .to_owned(),
+            );
+        }
         if let Some(folder) = open {
             self.browse_folder(&folder);
             background.request_focus();
+        }
+        if let Some(id) = open_file {
+            self.open_entry(id);
+        }
+        match menu_action {
+            Some(MenuAction::NewFolder) => {
+                self.extract_to_new_folder();
+            }
+            Some(MenuAction::ChooseFolder) => self.open_picker(Purpose::Destination),
+            None => {}
         }
     }
 
@@ -1966,9 +2206,13 @@ impl ArchiveApp {
         };
         if self.work_in_parent {
             // Wayland는 창 올리기를 지원하지 않으므로 부모 안에서 같은 내용을 그림.
-            let mut open = true;
-            let mut window = egui::Window::new(RichText::new(title).size(theme::FONT_SMALL))
+            // egui 기본 제목 줄의 닫기 버튼은 마우스를 올려도 모양이 바뀌지 않으므로
+            // 제목 줄을 직접 그리고 별도 창과 같은 닫기 버튼을 씀.
+            let mut close = false;
+            let busy = self.model.busy();
+            egui::Window::new(RichText::new(&title).size(theme::FONT_SMALL))
                 .id(egui::Id::new("archive-work-in-parent"))
+                .title_bar(false)
                 .default_pos(
                     ctx.content_rect().center() - egui::vec2(WORK_WIDTH, self.work.height) / 2.0,
                 )
@@ -1980,21 +2224,26 @@ impl ArchiveApp {
                 .resizable(false)
                 .fade_in(false)
                 .fade_out(false)
-                .title_frame(
-                    theme::panel(theme::STRIPE)
-                        .inner_margin(egui::Margin::symmetric(16, 8))
+                .frame(
+                    egui::Frame::new()
+                        .fill(theme::PANEL)
+                        .stroke(egui::Stroke::new(1.0, theme::BORDER))
+                        .inner_margin(egui::Margin::ZERO)
                         .corner_radius(0),
                 )
-                .frame(
-                    theme::panel(theme::PANEL)
-                        .stroke(egui::Stroke::new(1.0, theme::BORDER))
-                        .corner_radius(0),
-                );
-            if !self.model.busy() {
-                window = window.open(&mut open);
-            }
-            window.show(ctx, |ui| self.work_area(ui));
-            if !open {
+                .show(ctx, |ui| {
+                    let spacing = ui.spacing().item_spacing.y;
+                    ui.spacing_mut().item_spacing.y = 0.0;
+                    close = window_frame::in_parent_title(ui, "work-in-parent", &title, !busy);
+                    egui::Frame::new()
+                        .inner_margin(egui::Margin::same(theme::PAD))
+                        .show(ui, |ui| {
+                            ui.spacing_mut().item_spacing.y = spacing;
+                            ui.set_width(WORK_WIDTH - 2.0 * theme::PAD as f32);
+                            self.work_area(ui)
+                        });
+                });
+            if close {
                 self.dismissed = true;
                 self.ui_error = None;
                 self.model.input_error = None;
@@ -3435,5 +3684,8 @@ impl eframe::App for ArchiveApp {
 impl Drop for ArchiveApp {
     fn drop(&mut self) {
         self.clear_password();
+        for (_, root) in self.open_roots.drain(..) {
+            present::remove_open_root(root);
+        }
     }
 }

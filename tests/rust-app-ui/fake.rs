@@ -18,6 +18,8 @@ pub struct State {
     pub list_format: Option<Format>,
     pub fail_start: bool,
     pub dropped_connections: usize,
+    /// 풀기 출력으로 알릴 이름. 없으면 "읽어주세요.txt" 하나를 알림.
+    pub outputs: Option<Vec<String>>,
     pause: bool,
 }
 #[derive(Default, Clone)]
@@ -132,11 +134,17 @@ impl State {
                     total: Some(31),
                     completed_entries: 1,
                 });
-                self.frame(Event::Output {
-                    entry_id: Some(0),
-                    relative_name: "읽어주세요.txt".into(),
-                    disposition: Disposition::Created,
-                });
+                let names = self
+                    .outputs
+                    .clone()
+                    .unwrap_or_else(|| vec!["읽어주세요.txt".into()]);
+                for name in names {
+                    self.frame(Event::Output {
+                        entry_id: None,
+                        relative_name: name,
+                        disposition: Disposition::Created,
+                    });
+                }
                 self.finish(Outcome::Completed, Publication::Complete);
             }
         }

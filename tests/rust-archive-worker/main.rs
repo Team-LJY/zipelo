@@ -523,6 +523,15 @@ fn symlink_parent_escape_is_rejected() {
     assert_eq!(fs::read_dir(s.0.join("outside")).unwrap().count(), 0);
 }
 
+// 개인 그룹의 압축 해제만 허용하고 공유 쓰기는 거부함.
+#[cfg(target_os = "linux")]
+#[test]
+fn private_group_writable_output_is_accepted() {
+    private_group::check_extraction("personal", true);
+    private_group::check_extraction("shared-primary", false);
+    private_group::check_extraction("world-writable", false);
+}
+
 #[test]
 fn changed_source_is_reopen_error_before_decode() {
     let s = Scratch::new();
@@ -1611,3 +1620,6 @@ mod spool_location;
 
 #[cfg(target_os = "linux")]
 mod spool_fallback;
+
+#[cfg(target_os = "linux")]
+mod private_group;

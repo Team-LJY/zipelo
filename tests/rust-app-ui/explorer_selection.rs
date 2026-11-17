@@ -3,6 +3,7 @@ struct Explorer {
     ctx: egui::Context,
     factory: FakeFactory,
     time: f64,
+    opened: std::rc::Rc<std::cell::RefCell<Vec<PathBuf>>>,
 }
 impl Explorer {
     fn new(scratch: &Folder) -> Self {
@@ -25,11 +26,18 @@ impl Explorer {
             encrypted: false,
         })
         .into();
+        let opened = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
+        let record = opened.clone();
+        app.set_opener(Box::new(move |path| {
+            record.borrow_mut().push(path.to_path_buf());
+            Ok(())
+        }));
         let mut screen = Self {
             app,
             ctx: egui::Context::default(),
             factory,
             time: 0.0,
+            opened,
         };
         screen.frame(egui::Modifiers::NONE, vec![]);
         screen.frame(egui::Modifiers::NONE, vec![]);
@@ -114,6 +122,44 @@ impl Explorer {
                 modifiers,
             }],
         );
+    }
+    fn button(&mut self, point: egui::Pos2, button: egui::PointerButton) {
+        self.time += 1.0;
+        for pressed in [true, false] {
+            self.frame(
+                egui::Modifiers::NONE,
+                vec![
+                    egui::Event::PointerMoved(point),
+                    egui::Event::PointerButton {
+                        pos: point,
+                        button,
+                        pressed,
+                        modifiers: egui::Modifiers::NONE,
+                    },
+                ],
+            );
+        }
+        self.frame(egui::Modifiers::NONE, vec![]);
+    }
+    fn double_click(&mut self, path: &str) {
+        self.time += 1.0;
+        let point = self.row(path).center();
+        for _ in 0..2 {
+            self.pointer(point, true, egui::Modifiers::NONE);
+            self.pointer(point, false, egui::Modifiers::NONE);
+        }
+        for _ in 0..30 {
+            self.frame(egui::Modifiers::NONE, vec![]);
+        }
+    }
+    fn click_text(&mut self, label: &str) {
+        let output = self.frame(egui::Modifiers::NONE, vec![]);
+        let rect = layout_text(&output)
+            .into_iter()
+            .find(|(text, _, _)| text == label)
+            .unwrap_or_else(|| panic!("{label} 없음"))
+            .1;
+        self.button(rect.center(), egui::PointerButton::Primary);
     }
     #[track_caller]
     fn selected(&self, ids: &[u32]) {
@@ -222,16 +268,383 @@ fn explorer_keyboard_ranges_enter_backspace_and_escape_are_scoped_to_the_list() 
 }
 
 #[test]
+fn explorer_double_click_opens_files_with_default_app_and_folders_in_place() {
+    let scratch = Folder::new();
+    let mut s = Explorer::new(&scratch);
+    let destination = s.app.model.archive.clone().unwrap().with_file_name("sample");
+    // 실제 작업자처럼 새로 만든 상위 폴더도 출력으로 알림.
+    s.factory.state.borrow_mut().outputs = Some(vec!["docs".into(), "docs/child.txt".into()]);
+    s.app.browse_folder("docs");
+    s.double_click("docs/child.txt");
+    s.selected(&[0]);
+    // 파일은 압축파일 옆 숨김 임시 폴더에 그 파일만 풀고 기본 프로그램으로 엶.
+    let root = scratch.0.join("sample.zip (Zipelo 임시)");
+    {
+        let state = s.factory.state.borrow();
+        assert_eq!(state.starts.len(), 2);
+        let Start::Extract {
+            destination: folder,
+            selection,
+            ..
+        } = state.starts.last().unwrap()
+        else {
+            panic!("{:?}", state.starts.last());
+        };
+        assert_eq!(selection, &Selection::EntryIds(vec![0]));
+        assert_eq!(folder, &root.join("1"));
+    }
+    assert_eq!(
+        *s.opened.borrow(),
+        vec![root.join("1").join("docs").join("child.txt")]
+    );
+    let output = s.frame(egui::Modifiers::NONE, vec![]);
+    assert!(
+        !layout_text(&output)
+            .iter()
+            .any(|(text, _, _)| text == "작업 결과")
+    );
+    // 같은 파일을 다시 열면 새 하위 폴더를 씀.
+    s.double_click("docs/child.txt");
+    assert!(matches!(
+        s.factory.state.borrow().starts.last(),
+        Some(Start::Extract { destination, .. }) if destination == &root.join("2")
+    ));
+    assert_eq!(s.opened.borrow().len(), 2);
+    // 열 파일이 출력에 없으면 조용히 넘어가지 않고 알림.
+    s.factory.state.borrow_mut().outputs = Some(vec!["docs".into()]);
+    s.double_click("docs/child.txt");
+    assert_eq!(s.opened.borrow().len(), 2);
+    assert!(
+        layout_text(&s.frame(egui::Modifiers::NONE, vec![]))
+            .iter()
+            .any(|(text, _, _)| text == "풀린 파일을 찾지 못해 열지 못했습니다")
+    );
+    // 열기용 폴더는 압축파일 이름 폴더와 섞이지 않음.
+    assert!(!destination.exists());
+    // 앱을 닫으면 열기용 폴더를 지움.
+    assert!(root.is_dir());
+    drop(s);
+    assert!(!root.exists());
+}
+
+/// 열기용 풀기가 한도 초과로 실패한 상태까지 진행함. 결과 창을 그리는 문맥도 함께 돌려줌.
+fn double_click_open_hits_limit(s: &mut Explorer) -> egui::Context {
+    s.factory.state.borrow_mut().manual = true;
+    s.double_click("alpha.txt");
+    assert_eq!(s.factory.state.borrow().starts.len(), 2);
+    finish_limit(s);
+    let ctx = egui::Context::default();
+    ctx.set_embed_viewports(false);
+    for _ in 0..12 {
+        policy_render(&ctx, &mut s.app, vec![]);
+    }
+    assert!(s.app.model.can_retry_expanded());
+    assert!(s.opened.borrow().is_empty());
+    ctx
+}
+
+fn finish_limit(s: &mut Explorer) {
+    {
+        let mut worker = s.factory.state.borrow_mut();
+        worker.frame(Event::Accepted { encryption: false });
+        worker.frame(Event::Terminal(Terminal {
+            outcome: Outcome::Failed,
+            error: Some(ErrorCode::Limit),
+            publication: Publication::None,
+            created_count: 0,
+            retained_partial_count: 0,
+            durability: Durability::NotApplicable,
+            cleanup: Cleanup::Complete,
+        }));
+        worker.queue.extend([
+            HostEvent::StdoutEof,
+            HostEvent::StderrEof,
+            HostEvent::Exited { success: true },
+        ]);
+    }
+    for _ in 0..30 {
+        s.frame(egui::Modifiers::NONE, vec![]);
+    }
+}
+
+#[test]
+fn explorer_open_keeps_pending_open_when_limit_retry_succeeds() {
+    let scratch = Folder::new();
+    let mut s = Explorer::new(&scratch);
+    let root = scratch.0.join("sample.zip (Zipelo 임시)");
+    let ctx = double_click_open_hits_limit(&mut s);
+    policy_click(&ctx, &mut s.app, "한도를 늘려 다시 시도");
+    assert!(s.app.model.busy());
+    assert!(s.factory.state.borrow().expanded);
+    assert!(matches!(
+        s.factory.state.borrow().starts.last(),
+        Some(Start::Extract { destination, .. }) if destination == &root.join("1")
+    ));
+    {
+        let mut worker = s.factory.state.borrow_mut();
+        worker.frame(Event::Accepted { encryption: false });
+        worker.frame(Event::Output {
+            entry_id: None,
+            relative_name: "alpha.txt".into(),
+            disposition: Disposition::Created,
+        });
+        worker.finish(Outcome::Completed, Publication::Complete);
+    }
+    for _ in 0..30 {
+        s.frame(egui::Modifiers::NONE, vec![]);
+    }
+    // 다시 시도가 성공하면 기본 프로그램이 열림.
+    assert_eq!(*s.opened.borrow(), vec![root.join("1").join("alpha.txt")]);
+    // 열기가 끝나면 풀 위치는 원래대로 돌아옴.
+    s.factory.state.borrow_mut().manual = false;
+    assert!(s.app.begin_extract());
+    assert!(matches!(
+        s.factory.state.borrow().starts.last(),
+        Some(Start::Extract { destination, .. }) if !destination.starts_with(&root)
+    ));
+}
+
+#[test]
+fn explorer_open_restores_destination_when_limit_result_is_dismissed() {
+    let scratch = Folder::new();
+    let mut s = Explorer::new(&scratch);
+    let root = scratch.0.join("sample.zip (Zipelo 임시)");
+    let ctx = double_click_open_hits_limit(&mut s);
+    policy_click(&ctx, &mut s.app, "확인");
+    for _ in 0..3 {
+        policy_render(&ctx, &mut s.app, vec![]);
+    }
+    assert!(s.opened.borrow().is_empty());
+    s.factory.state.borrow_mut().manual = false;
+    assert!(s.app.begin_extract());
+    let state = s.factory.state.borrow();
+    let Some(Start::Extract { destination, .. }) = state.starts.last() else {
+        panic!("{:?}", state.starts.last());
+    };
+    assert_eq!(destination, &scratch.0.join("sample"));
+    assert!(!destination.starts_with(&root));
+}
+
+#[test]
+fn explorer_open_restores_destination_when_expanded_retry_fails_again() {
+    let scratch = Folder::new();
+    let mut s = Explorer::new(&scratch);
+    let ctx = double_click_open_hits_limit(&mut s);
+    policy_click(&ctx, &mut s.app, "한도를 늘려 다시 시도");
+    assert!(s.app.model.busy());
+    finish_limit(&mut s);
+    assert!(s.opened.borrow().is_empty());
+    assert!(!s.app.model.can_retry_expanded());
+    s.factory.state.borrow_mut().manual = false;
+    assert!(s.app.begin_extract());
+    assert!(matches!(
+        s.factory.state.borrow().starts.last(),
+        Some(Start::Extract { destination, .. }) if destination == &scratch.0.join("sample")
+    ));
+}
+
+#[test]
+fn explorer_open_pending_after_limit_is_dropped_when_zip_creation_starts() {
+    let scratch = Folder::new();
+    let mut s = Explorer::new(&scratch);
+    let root = scratch.0.join("sample.zip (Zipelo 임시)");
+    let _limit_ctx = double_click_open_hits_limit(&mut s);
+    // 한도 초과 결과를 닫지 않고 폴더를 끌어 놓아 ZIP 만들기를 시작함.
+    let folder = scratch.0.join("photos");
+    std::fs::create_dir_all(&folder).unwrap();
+    std::fs::write(folder.join("a.txt"), b"abc").unwrap();
+    s.app.add_sources(vec![folder]);
+    let ctx = egui::Context::default();
+    policy_click(&ctx, &mut s.app, "압축하기");
+    assert!(s.app.model.busy());
+    assert!(matches!(
+        s.factory.state.borrow().starts.last(),
+        Some(Start::CreateZip { .. })
+    ));
+    {
+        let mut worker = s.factory.state.borrow_mut();
+        worker.frame(Event::Accepted { encryption: false });
+        worker.frame(Event::Output {
+            entry_id: None,
+            relative_name: "photos.zip".into(),
+            disposition: Disposition::Created,
+        });
+        worker.finish(Outcome::Completed, Publication::Complete);
+    }
+    for _ in 0..30 {
+        s.frame(egui::Modifiers::NONE, vec![]);
+    }
+    // 만들기가 끝나도 이전 열기가 적용되지 않아 오류가 뜨지 않음.
+    for _ in 0..3 {
+        policy_render(&ctx, &mut s.app, vec![]);
+    }
+    let shown = policy_render(&ctx, &mut s.app, vec![]);
+    assert!(
+        !shown.iter().any(|(text, _)| text.contains("열지 못했습니다")),
+        "{shown:?}"
+    );
+    assert!(s.opened.borrow().is_empty());
+    // 풀 위치도 원래대로 돌아옴.
+    s.factory.state.borrow_mut().manual = false;
+    assert!(s.app.begin_extract());
+    let state = s.factory.state.borrow();
+    let Some(Start::Extract { destination, .. }) = state.starts.last() else {
+        panic!("{:?}", state.starts.last());
+    };
+    assert_eq!(destination, &scratch.0.join("sample"));
+    assert!(!destination.starts_with(&root));
+}
+
+#[test]
+fn explorer_double_click_does_not_open_executables() {
+    let scratch = Folder::new();
+    let mut s = Explorer::new(&scratch);
+    s.app.model.entries[2].name = "setup.EXE".into();
+    s.double_click("setup.EXE");
+    assert_eq!(s.factory.state.borrow().starts.len(), 1);
+    assert!(s.opened.borrow().is_empty());
+    let output = s.frame(egui::Modifiers::NONE, vec![]);
+    assert!(
+        layout_text(&output)
+            .iter()
+            .any(|(text, _, _)| text == "실행 파일(.EXE)은 안전을 위해 바로 열 수 없습니다")
+    );
+    // 실행 파일은 압축을 풀지 않으므로 임시 폴더도 만들지 않음.
+    assert!(!scratch.0.join("sample.zip (Zipelo 임시)").exists());
+}
+
+#[test]
+fn explorer_dragging_in_parent_work_window_does_not_select_rows() {
+    let scratch = Folder::new();
+    let mut s = Explorer::new(&scratch);
+    s.app.set_work_window_in_parent(true);
+    s.app.model.entries[2].name = "setup.EXE".into();
+    s.double_click("setup.EXE");
+    s.selected(&[2]);
+    let close = s
+        .ctx
+        .read_response(egui::Id::unique(("window-button", "work-in-parent", "닫기")))
+        .expect("부모 안 작업 창")
+        .rect;
+    // 행이 하나뿐인 폴더로 옮겨 작업 창 제목 줄 아래가 목록의 빈 곳이 되게 함.
+    s.app.browse_folder("docs");
+    let row = s.row("docs/child.txt");
+    s.selected(&[]);
+    // 작업 창 제목 줄을 누르고 목록 행 위로 끌어도 목록 선택 사각형이 생기지 않아야 함.
+    let start = egui::pos2(close.left() - 120.0, close.center().y);
+    assert!(start.y > row.bottom(), "{start:?} {row:?}");
+    s.pointer(start, true, egui::Modifiers::NONE);
+    let end = egui::pos2(row.center().x, row.center().y);
+    for step in 1..=6 {
+        let t = step as f32 / 6.0;
+        s.frame(
+            egui::Modifiers::NONE,
+            vec![egui::Event::PointerMoved(start + (end - start) * t)],
+        );
+    }
+    let output = s.frame(egui::Modifiers::NONE, vec![]);
+    s.selected(&[]);
+    assert!(!output.shapes.iter().any(|shape| matches!(
+        &shape.shape,
+        egui::epaint::Shape::Rect(rect) if rect.fill == theme_blue_fill()
+    )));
+    s.pointer(end, false, egui::Modifiers::NONE);
+    s.selected(&[]);
+}
+
+fn theme_blue_fill() -> egui::Color32 {
+    zipelo_ui_memory_app::archive_theme::BLUE.gamma_multiply(0.16)
+}
+
+#[test]
+fn explorer_context_menu_extracts_selection_into_numbered_archive_folder() {
+    let scratch = Folder::new();
+    let mut s = Explorer::new(&scratch);
+    fs::create_dir(scratch.0.join("sample")).unwrap();
+    s.click("alpha.txt", egui::Modifiers::NONE);
+    // 선택하지 않은 행을 오른쪽 클릭하면 그 행만 선택하고 메뉴를 엶.
+    let point = s.row("docs").center();
+    s.button(point, egui::PointerButton::Secondary);
+    s.selected(&[0, 5]);
+    s.click_text("압축 파일명으로 새 폴더를 만들어 압축 풀기");
+    for _ in 0..30 {
+        s.frame(egui::Modifiers::NONE, vec![]);
+    }
+    let state = s.factory.state.borrow();
+    let Some(Start::Extract {
+        destination,
+        selection,
+        ..
+    }) = state.starts.last()
+    else {
+        panic!("{:?}", state.starts.last());
+    };
+    assert_eq!(destination, &scratch.0.join("sample (1)"));
+    assert_eq!(selection, &Selection::EntryIds(vec![0, 5]));
+    assert!(scratch.0.join("sample (1)").is_dir());
+    assert!(s.opened.borrow().is_empty());
+}
+
+#[test]
+fn explorer_context_menu_asks_for_folder_and_extracts_only_selection() {
+    let scratch = Folder::new();
+    let mut s = Explorer::new(&scratch);
+    let dialogs = crate::dialogs::TestDialogs::default();
+    let target = scratch.0.join("target");
+    fs::create_dir(&target).unwrap();
+    dialogs
+        .0
+        .borrow_mut()
+        .answers
+        .push_back(Some(vec![target.clone()]));
+    s.app.set_dialogs(Box::new(dialogs.clone()));
+    s.click("alpha.txt", egui::Modifiers::NONE);
+    s.click("beta.txt", explorer_ctrl());
+    let point = s.row("beta.txt").center();
+    s.button(point, egui::PointerButton::Secondary);
+    s.selected(&[1, 2]);
+    s.click_text("특정 폴더에 압축 풀기");
+    for _ in 0..30 {
+        s.frame(egui::Modifiers::NONE, vec![]);
+    }
+    assert_eq!(
+        dialogs.0.borrow().requests.last().unwrap().purpose,
+        zipelo_ui_memory_app::archive_dialog::Purpose::Destination
+    );
+    assert!(matches!(
+        s.factory.state.borrow().starts.last(),
+        Some(Start::Extract { destination, selection: Selection::EntryIds(ids), .. })
+            if destination == &target && ids == &vec![1, 2]
+    ));
+}
+
+#[test]
+fn explorer_mouse_back_button_goes_to_parent_folder() {
+    let scratch = Folder::new();
+    let mut s = Explorer::new(&scratch);
+    s.app.browse_folder("docs");
+    let point = s.row("docs/child.txt").center();
+    s.button(point, egui::PointerButton::Extra2);
+    assert!(s.ctx.read_response(egui::Id::unique(("archive-row", "docs/child.txt"))).is_some());
+    s.button(point, egui::PointerButton::Extra1);
+    assert!(
+        layout_text(&s.frame(egui::Modifiers::NONE, vec![]))
+            .iter()
+            .any(|(text, _, _)| text == "alpha.txt")
+    );
+    // 최상위에서는 아무 일도 하지 않음.
+    s.button(point, egui::PointerButton::Extra1);
+    assert!(
+        layout_text(&s.frame(egui::Modifiers::NONE, vec![]))
+            .iter()
+            .any(|(text, _, _)| text == "alpha.txt")
+    );
+}
+
+#[test]
 fn explorer_double_click_opens_only_folders_and_resets_selection() {
     let scratch = Folder::new();
     let mut s = Explorer::new(&scratch);
-    let point = s.row("alpha.txt").center();
-    for _ in 0..2 {
-        s.pointer(point, true, egui::Modifiers::NONE);
-        s.pointer(point, false, egui::Modifiers::NONE);
-    }
-    s.selected(&[1]);
-    assert_eq!(s.factory.state.borrow().starts.len(), 1);
     s.time += 1.0;
     let point = s.row("docs").center();
     for _ in 0..2 {

@@ -194,6 +194,210 @@ mod platform {
         fn renameat(fd: i32, path: *const i8, newfd: i32, newpath: *const i8) -> i32;
         fn unlinkat(fd: i32, path: *const i8, flags: i32) -> i32;
         fn geteuid() -> u32;
+        fn getegid() -> u32;
+        fn fgetxattr(
+            fd: i32,
+            name: *const std::ffi::c_char,
+            value: *mut std::ffi::c_void,
+            size: usize,
+        ) -> isize;
+        fn getgrgid_r(
+            gid: u32,
+            group: *mut Group,
+            buffer: *mut i8,
+            length: usize,
+            result: *mut *mut Group,
+        ) -> i32;
+    }
+    #[repr(C)]
+    struct Group {
+        name: *mut i8,
+        password: *mut i8,
+        gid: u32,
+        members: *mut *mut i8,
+    }
+    // 없는 경로만 허용하며 중간 심볼릭 링크와 확인 오류는 거부함.
+    fn path_is_absent(path: &Path) -> bool {
+        let mut prefix = std::path::PathBuf::new();
+        for component in path.components() {
+            prefix.push(component.as_os_str());
+            match std::fs::symlink_metadata(&prefix) {
+                Ok(metadata) if metadata.is_dir() => {}
+                Ok(_) => return false,
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => return true,
+                Err(_) => return false,
+            }
+        }
+        false
+    }
+
+    fn sss_is_unused(socket: &Path, cache: &Path) -> bool {
+        path_is_absent(socket)
+            && ["passwd", "group", "initgr"]
+                .iter()
+                .all(|name| path_is_absent(&cache.join(name)))
+    }
+
+    // sss는 소켓과 캐시가 모두 없을 때만 빈 소스로 취급함.
+    fn primary_group_is_private(gid: u32) -> bool {
+        let Ok(policy) = std::fs::read_to_string("/etc/nsswitch.conf") else {
+            return false;
+        };
+        let mut databases = [None, None, None];
+        for line in policy.lines() {
+            let line = line.split('#').next().unwrap_or_default();
+            let Some((database, sources)) = line.split_once(':') else {
+                continue;
+            };
+            let index = match database.trim() {
+                "passwd" => 0,
+                "group" => 1,
+                "initgroups" => 2,
+                _ => continue,
+            };
+            if databases[index]
+                .replace(sources.split_whitespace().collect::<Vec<_>>())
+                .is_some()
+            {
+                return false;
+            }
+        }
+        let [Some(passwd), Some(group), initgroups] = databases else {
+            return false;
+        };
+        let mut has_systemd = false;
+        let mut has_sss = false;
+        // initgroups가 생략되어도 기본값인 group 소스를 검사함.
+        for source in [Some(passwd), Some(group), initgroups]
+            .into_iter()
+            .flatten()
+        {
+            if !matches!(
+                source.as_slice(),
+                ["files"] | ["files", "systemd"] | ["files", "sss"] | ["files", "systemd", "sss"]
+            ) {
+                return false;
+            }
+            has_systemd |= source.contains(&"systemd");
+            has_sss |= source.contains(&"sss");
+        }
+        if has_sss
+            && !sss_is_unused(
+                Path::new("/var/lib/sss/pipes/nss"),
+                Path::new("/var/lib/sss/mc"),
+            )
+        {
+            return false;
+        }
+        let Ok(accounts) = std::fs::read_to_string("/etc/passwd") else {
+            return false;
+        };
+        let current_uid = unsafe { geteuid() };
+        let mut current_name = None;
+        for account in accounts.lines() {
+            if account.trim().is_empty() || account.starts_with('#') {
+                continue;
+            }
+            let fields: Vec<_> = account.split(':').collect();
+            if fields.len() != 7 || fields[0].is_empty() {
+                return false;
+            }
+            let (Ok(uid), Ok(primary_gid)) = (fields[2].parse::<u32>(), fields[3].parse::<u32>())
+            else {
+                return false;
+            };
+            if primary_gid == gid {
+                if uid != current_uid {
+                    return false;
+                }
+                if current_name.replace(fields[0]).is_some() {
+                    return false;
+                }
+            }
+        }
+        let Some(current_name) = current_name else {
+            return false;
+        };
+        !has_systemd
+            || crate::systemd_userdb::group_is_private(
+                gid,
+                current_uid,
+                current_name,
+                Path::new("/run/systemd/userdb/"),
+                &[
+                    Path::new("/etc/userdb"),
+                    Path::new("/run/userdb"),
+                    Path::new("/run/host/userdb"),
+                    Path::new("/usr/local/lib/userdb"),
+                    Path::new("/usr/lib/userdb"),
+                ],
+            )
+    }
+
+    // 기본 구성원과 보조 구성원을 모두 확인함.
+    fn private_group(gid: u32) -> bool {
+        if gid != unsafe { getegid() } || !primary_group_is_private(gid) {
+            return false;
+        }
+        let mut group = Group {
+            name: std::ptr::null_mut(),
+            password: std::ptr::null_mut(),
+            gid: 0,
+            members: std::ptr::null_mut(),
+        };
+        let mut result = std::ptr::null_mut();
+        let mut buffer = vec![0i8; 16 * 1024];
+        let status = unsafe {
+            getgrgid_r(
+                gid,
+                &mut group,
+                buffer.as_mut_ptr(),
+                buffer.len(),
+                &mut result,
+            )
+        };
+        // 그룹 정보를 읽지 못하면 안전하다고 볼 근거가 없으므로 거부함.
+        status == 0
+            && !result.is_null()
+            && group.gid == gid
+            && !group.members.is_null()
+            && unsafe { *group.members }.is_null()
+    }
+    fn access_acl_has_no_named_entries(file: &File) -> bool {
+        // 이름 없는 ACL은 소유자, 그룹, other와 선택적 mask의 최대 4항목임.
+        let mut bytes = [0u8; 4 + 4 * 8];
+        // 경로를 다시 해석하지 않고 판정 대상 폴더의 접근 ACL을 읽음.
+        let length = unsafe {
+            fgetxattr(
+                file.as_raw_fd(),
+                c"system.posix_acl_access".as_ptr(),
+                bytes.as_mut_ptr().cast(),
+                bytes.len(),
+            )
+        };
+        if length < 0 {
+            // 속성 없음과 미지원 외에는 ERANGE를 포함해 거부함.
+            return matches!(
+                std::io::Error::last_os_error().raw_os_error(),
+                Some(61 | 95)
+            );
+        }
+        let tags: &[u16] = match length {
+            28 => &[1, 4, 32],
+            36 => &[1, 4, 16, 32],
+            _ => return false,
+        };
+        if u32::from_le_bytes(bytes[..4].try_into().unwrap()) != 2 {
+            return false;
+        }
+        bytes[4..length as usize]
+            .chunks_exact(8)
+            .zip(tags)
+            .all(|(entry, expected)| {
+                u16::from_le_bytes(entry[..2].try_into().unwrap()) == *expected
+                    && u16::from_le_bytes(entry[2..4].try_into().unwrap()) & !7 == 0
+                    && u32::from_le_bytes(entry[4..8].try_into().unwrap()) == u32::MAX
+            })
     }
     pub struct Dir {
         file: File,
@@ -242,7 +446,14 @@ mod platform {
         fn trusted(&self) -> Result<()> {
             let m = self.file.metadata().map_err(|_| ErrorCode::Io)?;
             // 다른 계정이 바꿀 수 있는 출력 폴더를 거부함.
-            if !m.is_dir() || m.uid() != unsafe { geteuid() } || m.mode() & 0o022 != 0 {
+            // 그룹 쓰기는 이름 있는 접근 ACL이 없고 개인 그룹일 때만 허용함.
+            let group_writable = m.mode() & 0o020 != 0;
+            if !m.is_dir()
+                || m.uid() != unsafe { geteuid() }
+                || m.mode() & 0o002 != 0
+                || (group_writable
+                    && (!access_acl_has_no_named_entries(&self.file) || !private_group(m.gid())))
+            {
                 return Err(ErrorCode::UnsafePath);
             }
             Ok(())

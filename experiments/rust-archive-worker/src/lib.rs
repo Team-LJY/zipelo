@@ -16,6 +16,10 @@ mod space;
 mod split_seven_zip;
 mod spool;
 mod streaming;
+pub mod tree_remove;
 pub mod wire;
 mod zip_extra;
 mod zip_recovery;
+
+#[cfg(target_os = "linux")]
+mod systemd_userdb;
