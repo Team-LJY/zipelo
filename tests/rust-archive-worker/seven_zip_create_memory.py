@@ -23,7 +23,9 @@ with tempfile.TemporaryDirectory(prefix="7zc-memory-", dir=os.environ["TMPDIR"])
     archive = root / "result.7z"
     body = b"\x04" + struct.pack("<I", 1) + native(source)
     body += struct.pack("<I", 11) + b"payload.bin" + native(archive)
-    body += b"\x00\x00\x00" + struct.pack("<QQI", 2**64 - 1, 16 * 1024**3, 10000)
+    body += b"\x00\x00\x00"
+    body += b"\x00"  # volume_size=None으로 분할하지 않음.
+    body += struct.pack("<QQI", 2**64 - 1, 16 * 1024**3, 10000)
     frame = b"ZAW1" + struct.pack("<HHIIQQ", 1, 1, len(body), 0, 17, 0) + body
     started = time.monotonic()
     result = subprocess.run(
