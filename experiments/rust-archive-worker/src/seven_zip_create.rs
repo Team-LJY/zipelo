@@ -448,6 +448,36 @@ pub(crate) fn archive(
     Ok((output, length))
 }
 
+/// 분할 7z 볼륨 이름 (`이름.7z.001` 형식).
+pub(crate) fn volume_name(name: &str, index: u64) -> Result<String> {
+    if !(1..=MAX_SEVEN_ZIP_VOLUMES).contains(&index) {
+        return Err(ErrorCode::Limit);
+    }
+    crate::archive::valid_name(&format!("{name}.{index:03}"), false)
+}
+/// 완성한 7z 길이를 볼륨 크기로 나눈 (이름, 길이) 목록. 마지막 볼륨만 짧을 수 있음.
+/// 분할 읽기가 받는 999개를 넘거나 볼륨이 최소 크기보다 작으면 거부함.
+pub(crate) fn volumes(name: &str, length: u64, size: u64) -> Result<Vec<(String, u64)>> {
+    if size < MIN_SEVEN_ZIP_VOLUME_BYTES || length == 0 {
+        return Err(ErrorCode::InvalidRequest);
+    }
+    let count = length.div_ceil(size);
+    if count > MAX_SEVEN_ZIP_VOLUMES {
+        return Err(ErrorCode::Limit);
+    }
+    let mut files = Vec::new();
+    files
+        .try_reserve_exact(count as usize)
+        .map_err(|_| ErrorCode::Limit)?;
+    for index in 0..count {
+        files.push((
+            volume_name(name, index + 1)?,
+            size.min(length - index * size),
+        ));
+    }
+    Ok(files)
+}
+
 #[cfg(test)]
 #[path = "../../../tests/rust-archive-worker/seven_zip_create_fields.rs"]
 mod tests;

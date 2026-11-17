@@ -165,3 +165,33 @@ fn header_metadata_is_charged_before_source_capture() {
     ));
     std::fs::remove_dir_all(root).unwrap();
 }
+
+#[test]
+fn split_volume_plan_sizes_names_and_limits() {
+    const MIB: u64 = 1024 * 1024;
+    let files = volumes("묶음.7z", 2 * MIB + 5, MIB).unwrap();
+    assert_eq!(
+        files,
+        vec![
+            ("묶음.7z.001".to_owned(), MIB),
+            ("묶음.7z.002".to_owned(), MIB),
+            ("묶음.7z.003".to_owned(), 5),
+        ]
+    );
+    // 정확히 나누어떨어지면 빈 마지막 볼륨을 만들지 않음.
+    assert_eq!(volumes("a.7z", 2 * MIB, MIB).unwrap().len(), 2);
+    assert_eq!(
+        volumes("a.7z", 100, MIB).unwrap(),
+        vec![("a.7z.001".to_owned(), 100)]
+    );
+    let last = volumes("a.7z", 999 * MIB, MIB).unwrap();
+    assert_eq!(last.len(), 999);
+    assert_eq!(last[998].0, "a.7z.999");
+    assert_eq!(volumes("a.7z", 999 * MIB + 1, MIB), Err(ErrorCode::Limit));
+    assert_eq!(volumes("a.7z", u64::MAX, MIB), Err(ErrorCode::Limit));
+    assert_eq!(volumes("a.7z", 10, MIB - 1), Err(ErrorCode::InvalidRequest));
+    assert_eq!(volumes("a.7z", 10, 0), Err(ErrorCode::InvalidRequest));
+    assert_eq!(volume_name("a.7z", 0), Err(ErrorCode::Limit));
+    assert_eq!(volume_name("a.7z", 1000), Err(ErrorCode::Limit));
+    assert_eq!(volume_name("a.7z", 42).unwrap(), "a.7z.042");
+}

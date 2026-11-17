@@ -84,6 +84,7 @@ Python 표준 bz2, lzma와 tarfile로 독립 생성 및 해제한 결과의 SHA2
 - lzma-rust2 =0.25.0의 std,xz,encoder만 사용합니다. encoder 기능은 추가 전이 의존성이 없고 Apache-2.0 원문은 기존 packaging/licenses.py 고지에 포함합니다. tests/release-packages/test_compressed_tar_licenses.py에서 실제 원문과 해시, 고정 버전 및 기능을 확인합니다. 기본/optimization 기능과 liblzma 개발 의존성은 제품에 포함하지 않습니다.
 - 2026-11-14 OSV에 lzma-rust2 0.25.0을 조회했을 때 알려진 권고가 반환되지 않았습니다. RustSec 패키지명 검색도 결과가 없었으며 전체 의존성 감사나 취약점 부재를 뜻하지 않습니다. 정확한 질의와 결과는 PR의 검증 기록에 남깁니다.
 - tests/rust-archive-worker/seven_zip_create_fields.rs와 seven_zip_create_runtime.rs는 정수/비트맵/버퍼 경계, 원본/목적지 변경, 자원 승인, 취소와 저장 실패를 검사합니다. ZIPELO_TEST_7ZIP에 독립 7-Zip 실행 파일을 지정하면 실제 test/list/extract와 SHA256/구조 대조도 수행합니다. 도구를 지정하지 않은 실행은 독립 7-Zip 검증 근거가 아닙니다. 1 GiB 메모리 회귀는 Linux에서 실행합니다. Windows/Wayland 실제 생성 통합 검증과 독립 리뷰는 별도입니다.
+- CreateSevenZip의 volume_size가 있으면 완성한 7z를 그 크기(최소 1 MiB)로 나눠 `이름.7z.001`부터 최대 999개 볼륨으로 게시합니다. 같은 폴더에 `이름.7z.<숫자>`가 하나라도 있으면 Conflict로 거부하고, 모든 볼륨을 임시 파일로 쓴 뒤 한 번의 확정 단계로 링크하며 게시 중 실패하면 이미 게시한 볼륨을 지웁니다. tests/rust-archive-worker/seven_zip_split_create.rs가 볼륨 크기, 분할 읽기 왕복, 이름 충돌, 취소와 게시 중 충돌의 되돌리기를 검사하며 ZIPELO_TEST_7ZIP이 있으면 `7z t 이름.7z.001`도 실행합니다.
 
 ## ZIP 생성 입력
 

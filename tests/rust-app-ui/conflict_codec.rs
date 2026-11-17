@@ -115,6 +115,7 @@ fn sevenzip_creation_adapter_preserves_paths_and_fixed_options() {
     let converted = start_to_wire(ui::Start::CreateSevenZip {
         sources: vec![(source.clone(), "원본".into())],
         output_file: output.clone(),
+        volume_size: None,
     });
     match converted.action {
         wire::Action::CreateSevenZip {
@@ -123,7 +124,9 @@ fn sevenzip_creation_adapter_preserves_paths_and_fixed_options() {
             method,
             solid,
             encryption,
+            volume_size,
         } => {
+            assert_eq!(volume_size, None);
             assert_eq!(sources[0].archive_name, "원본");
             assert_eq!(
                 sources[0].path,
@@ -139,4 +142,16 @@ fn sevenzip_creation_adapter_preserves_paths_and_fixed_options() {
         }
         other => panic!("잘못된 생성 형식: {other:?}"),
     }
+    let converted = start_to_wire(ui::Start::CreateSevenZip {
+        sources: vec![(source, "원본".into())],
+        output_file: output,
+        volume_size: Some(700 * 1024 * 1024),
+    });
+    assert!(matches!(
+        converted.action,
+        wire::Action::CreateSevenZip {
+            volume_size: Some(size),
+            ..
+        } if size == 700 * 1024 * 1024
+    ));
 }

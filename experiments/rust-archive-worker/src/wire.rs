@@ -469,13 +469,15 @@ impl Wire for Action {
                 method,
                 solid,
                 encryption,
+                volume_size,
             } => {
                 4u8.enc(e)?;
                 sources.enc(e)?;
                 output_file.enc(e)?;
                 method.enc(e)?;
                 solid.enc(e)?;
-                encryption.enc(e)
+                encryption.enc(e)?;
+                volume_size.enc(e)
             }
         }
     }
@@ -512,6 +514,7 @@ impl Wire for Action {
                 method: Wire::dec(d)?,
                 solid: Wire::dec(d)?,
                 encryption: Wire::dec(d)?,
+                volume_size: Wire::dec(d)?,
             }),
             _ => Err(invalid()),
         }

@@ -186,6 +186,9 @@ fn every_listed_scenario_draws_and_keeps_its_expected_screen() {
                 "create-sevenzip-error" => "7z 파일을 만들지 못했습니다",
                 "create-sevenzip-cancelled" => "작업을 취소했습니다",
                 "create-sevenzip-resource" => "큰 작업을 허용할까요?",
+                "create-sevenzip-split" => "쪼갤 용량 설정",
+                "create-sevenzip-split-invalid" => "쪼갤 용량은 1 이상의 정수로 입력하세요",
+                "create-sevenzip-split-complete" => "볼륨 3개로 나누어 저장했습니다",
                 "create-error" => "ZIP 파일을 만들지 못했습니다",
                 "password-create" => "암호 확인",
                 "folder" => "바다.jpg",
@@ -225,6 +228,33 @@ fn every_listed_scenario_draws_and_keeps_its_expected_screen() {
                     _ => &[],
                 };
                 assert_eq!(paths, expected, "{}", scenario.name);
+            }
+            match scenario.name {
+                "create-sevenzip-split" => {
+                    for label in [
+                        "볼륨 크기",
+                        "700",
+                        "MB",
+                        "GB",
+                        "여행 자료.7z.001, 여행 자료.7z.002",
+                    ] {
+                        assert!(labels.contains(label), "{label}: {labels}");
+                    }
+                    assert!(!labels.contains("쪼갤 용량은"), "{labels}");
+                    assert_eq!(scenarios::split_volume(&app), Ok(Some(700 * 1024 * 1024)));
+                }
+                "create-sevenzip-split-invalid" => {
+                    assert!(scenarios::split_volume(&app).is_err());
+                    assert!(!labels.contains("여행 자료.7z.001"), "{labels}");
+                }
+                "create-sevenzip-split-complete" => {
+                    let terminal = app.model.terminal.as_ref().unwrap();
+                    assert_eq!(terminal.created_count, 3);
+                    assert!(labels.contains("7z 파일을 만들었습니다"), "{labels}");
+                    assert!(labels.contains("여행 자료.7z.001"), "{labels}");
+                    assert!(!labels.contains("확인하지 못했습니다"), "{labels}");
+                }
+                _ => {}
             }
             if scenario.name == "extract-complete-cleanup-failed" {
                 use zipelo_ui_memory_app::archive_ui::{

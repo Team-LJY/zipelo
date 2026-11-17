@@ -21,6 +21,7 @@ fn request(windows: bool) -> Action {
         method: SevenZipMethod::Lzma2,
         solid: false,
         encryption: Encryption::None,
+        volume_size: None,
     }
 }
 
@@ -104,7 +105,8 @@ fn request_preserves_agreed_field_order_and_native_encodings() {
         } else {
             expected.extend(b"\x01\x05\x00\x00\x00/o.7z");
         }
-        expected.extend([0, 0, 0]);
+        // 방식, solid, 암호화, 분할 크기(없음).
+        expected.extend([0, 0, 0, 0]);
         expected.extend(u64::MAX.to_le_bytes());
         expected.extend((16u64 * 1024 * 1024 * 1024).to_le_bytes());
         expected.extend(10_000u32.to_le_bytes());
@@ -180,8 +182,14 @@ fn truncated_unknown_and_trailing_creation_fields_are_rejected() {
         let mut trailing = body.to_vec();
         trailing.push(0);
         reject_decode(&raw(1, &trailing));
-        let method = body.len() - 20 - 3;
-        for (at, value) in [(0, 5), (method, 1), (method + 1, 2), (method + 2, 2)] {
+        let method = body.len() - 20 - 4;
+        for (at, value) in [
+            (0, 5),
+            (method, 1),
+            (method + 1, 2),
+            (method + 2, 2),
+            (method + 3, 2),
+        ] {
             let mut body = body.to_vec();
             body[at] = value;
             reject_decode(&raw(1, &body));
@@ -363,6 +371,7 @@ fn unsupported_options_fail_before_questions_or_file_access() {
                     method: SevenZipMethod::Lzma2,
                     solid,
                     encryption,
+                    volume_size: None,
                 };
                 let start = start(action);
                 let message = if kind == 1 {
@@ -410,4 +419,23 @@ fn existing_runtime_encryption_capability_is_preserved() {
         }
     ));
     assert_eq!(terminal(&events).outcome, Outcome::Failed);
+}
+
+#[test]
+fn split_volume_size_round_trips_and_absence_stays_distinct() {
+    for size in [
+        None,
+        Some(MIN_SEVEN_ZIP_VOLUME_BYTES),
+        Some(5 * 1024 * 1024 * 1024),
+    ] {
+        let mut action = request(false);
+        if let Action::CreateSevenZip { volume_size, .. } = &mut action {
+            *volume_size = size;
+        }
+        let start = start(action);
+        match decode(&encode(&Message::Start(start.clone()))) {
+            Message::Start(actual) => assert_eq!(actual, start),
+            other => panic!("{other:?}"),
+        }
+    }
 }

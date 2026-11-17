@@ -439,6 +439,72 @@ impl<W: Write> Job<W> {
         }
         Ok(())
     }
+    /// 분할 7z 볼륨을 한 묶음으로 게시함. 실패하면 게시한 볼륨을 되돌림.
+    fn output_set(
+        &mut self,
+        root: &Dir,
+        files: &[(String, u64)],
+        data: &mut impl Read,
+    ) -> Result<()> {
+        self.check()?;
+        let total = files
+            .iter()
+            .try_fold(0u64, |sum, (_, length)| sum.checked_add(*length))
+            .ok_or(ErrorCode::Limit)?;
+        self.progress(
+            Stage::Write,
+            0,
+            Some(total),
+            self.terminal.created_count as u32,
+        )?;
+        let p = filesystem::publish_set_steps(root, files, data, &mut |step| {
+            self.publication_step(step, true)
+        });
+        self.terminal.retained_partial_count += p.retained.len() as u64;
+        if p.cleanup != Cleanup::Complete {
+            self.terminal.cleanup = p.cleanup;
+        }
+        if !p.created.is_empty() {
+            self.terminal.publication = Publication::Partial;
+            self.terminal.durability = match (self.terminal.durability, p.durability) {
+                (Durability::Failed, _) | (_, Durability::Failed) => Durability::Failed,
+                (Durability::Unconfirmed, _) | (_, Durability::Unconfirmed) => {
+                    Durability::Unconfirmed
+                }
+                _ => p.durability,
+            };
+        }
+        for name in &p.created {
+            self.terminal.created_count += 1;
+            self.event(Message::Output {
+                entry_id: None,
+                relative_name: name.clone(),
+                disposition: Disposition::Created,
+            })?;
+        }
+        if p.uncertain {
+            self.terminal.publication = Publication::Uncertain;
+            self.terminal.durability = Durability::Unconfirmed;
+            for (name, _) in files.iter().filter(|(name, _)| !p.created.contains(name)) {
+                self.event(Message::Output {
+                    entry_id: None,
+                    relative_name: name.clone(),
+                    disposition: Disposition::CommitUncertain,
+                })?;
+            }
+        }
+        for name in &p.retained {
+            self.event(Message::Output {
+                entry_id: None,
+                relative_name: name.clone(),
+                disposition: Disposition::PartialRetained,
+            })?;
+        }
+        if let Some(error) = p.error {
+            return Err(error);
+        }
+        completed(Ok(()), self)
+    }
     fn direct_snapshot(
         &mut self,
         path: &std::path::Path,
@@ -1125,6 +1191,7 @@ impl<W: Write> Job<W> {
             Action::CreateSevenZip {
                 sources,
                 output_file,
+                volume_size,
                 ..
             } => {
                 let output = output_file.to_path()?;
@@ -1133,26 +1200,87 @@ impl<W: Write> Job<W> {
                     .and_then(|n| n.to_str())
                     .ok_or(ErrorCode::InvalidRequest)?;
                 let name = archive::valid_name(leaf, false)?;
-                let root = completed(
-                    Dir::root(output.parent().ok_or(ErrorCode::InvalidRequest)?),
-                    self,
-                )?;
-                filesystem::preflight_mode_with(
-                    &root,
-                    &[(name.clone(), EntryKind::File)],
-                    false,
-                    self,
-                )?;
+                let parent = output.parent().ok_or(ErrorCode::InvalidRequest)?;
+                let root = completed(Dir::root(parent), self)?;
+                if let Some(size) = volume_size {
+                    // 분할 읽기가 찾는 `이름.7z.001` 형식만 만들고 너무 작은 볼륨은 거부함.
+                    if size < MIN_SEVEN_ZIP_VOLUME_BYTES
+                        || !name.to_ascii_lowercase().ends_with(".7z")
+                    {
+                        return Err(ErrorCode::InvalidRequest);
+                    }
+                    filesystem::preflight_mode_with(
+                        &root,
+                        &[(
+                            crate::seven_zip_create::volume_name(&name, 1)?,
+                            EntryKind::File,
+                        )],
+                        false,
+                        self,
+                    )?;
+                    self.split_names_free(parent, &name)?;
+                } else {
+                    filesystem::preflight_mode_with(
+                        &root,
+                        &[(name.clone(), EntryKind::File)],
+                        false,
+                        self,
+                    )?;
+                }
                 self.progress(Stage::Scan, 0, None, 0)?;
                 let mut plan = crate::create::plan(&sources, limits, self)?;
                 let (mut data, length) = crate::seven_zip_create::archive(&mut plan, limits, self)?;
-                filesystem::preflight_space_with(&root, &[(name.clone(), length)], None, self)?;
-                self.creation_plan = Some(plan);
-                self.output_reader(&root, &name, &mut data, length, None, true, None)?;
+                if let Some(size) = volume_size {
+                    let files = crate::seven_zip_create::volumes(&name, length, size)?;
+                    let kinds = files
+                        .iter()
+                        .map(|(file, _)| (file.clone(), EntryKind::File))
+                        .collect::<Vec<_>>();
+                    // 모든 볼륨 이름이 비어 있는지 다시 확인함. 압축하는 사이 생긴 이름도 거부함.
+                    filesystem::preflight_mode_with(&root, &kinds, false, self)?;
+                    self.split_names_free(parent, &name)?;
+                    filesystem::preflight_space_with(&root, &files, None, self)?;
+                    self.creation_plan = Some(plan);
+                    self.output_set(&root, &files, &mut data)?;
+                } else {
+                    filesystem::preflight_space_with(&root, &[(name.clone(), length)], None, self)?;
+                    self.creation_plan = Some(plan);
+                    self.output_reader(&root, &name, &mut data, length, None, true, None)?;
+                }
                 self.terminal.publication = Publication::Complete;
             }
         }
         self.cutoff()?;
+        Ok(())
+    }
+}
+impl<W: Write> Job<W> {
+    /// 분할 읽기는 같은 폴더의 `이름.7z.<숫자>`를 모두 한 묶음으로 보므로,
+    /// 자릿수와 관계없이 그런 이름이 하나라도 있으면 새 볼륨을 만들지 않음.
+    fn split_names_free(&mut self, parent: &std::path::Path, name: &str) -> Result<()> {
+        let fold = |value: &str| {
+            if cfg!(windows) {
+                value.to_lowercase()
+            } else {
+                value.to_owned()
+            }
+        };
+        let prefix = fold(&format!("{name}."));
+        let entries = completed(
+            std::fs::read_dir(parent).map_err(crate::space::io_error),
+            self,
+        )?;
+        for entry in entries {
+            self.check()?;
+            let leaf = entry.map_err(crate::space::io_error)?.file_name();
+            let leaf = fold(&leaf.to_string_lossy());
+            if let Some(suffix) = leaf.strip_prefix(&prefix) {
+                if !suffix.is_empty() && suffix.bytes().all(|b| b.is_ascii_digit()) {
+                    return Err(ErrorCode::Conflict);
+                }
+            }
+            completed(Ok(()), self)?;
+        }
         Ok(())
     }
 }

@@ -213,6 +213,7 @@ fn start_to_wire(start: ui::Start) -> wire::Start {
         ui::Start::CreateSevenZip {
             sources,
             output_file,
+            volume_size,
         } => wire::Action::CreateSevenZip {
             sources: sources
                 .into_iter()
@@ -227,6 +228,7 @@ fn start_to_wire(start: ui::Start) -> wire::Start {
             method: wire::SevenZipMethod::Lzma2,
             solid: false,
             encryption: wire::Encryption::None,
+            volume_size,
         },
         ui::Start::CreateZip {
             sources,
