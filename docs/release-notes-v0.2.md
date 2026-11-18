@@ -1,6 +1,6 @@
 # Zipelo v0.2.1 릴리스 노트
 
-v0.2.1은 v0.1.0 다음으로 게시하는 버전입니다. 내부 빌드였던 0.2.0은 게시하지 않았습니다. 이 문서는 main `8b38fbf`(PR152 병합)까지의 변경을 다룹니다.
+v0.2.1은 v0.1.0 다음으로 게시하는 버전입니다. 내부 빌드였던 0.2.0은 게시하지 않았습니다. 이 문서는 main `a78fa3d`(PR152 병합과 버전 0.2.1 통일)까지의 변경을 다룹니다.
 
 ## 새로 할 수 있는 일
 
@@ -42,12 +42,17 @@ v0.2.1은 v0.1.0 다음으로 게시하는 버전입니다. 내부 빌드였던 
 - 자원 제한은 모든 압축 폭탄이나 메모리 사용을 완전히 막는다는 보장이 아닙니다. 공간 검사는 공간을 미리 잡아 두지 않으므로 실제로 쓰는 중에 실패할 수 있습니다. 실패나 취소 뒤에는 결과 안내를 확인하세요.
 - 설치 파일에는 코드 서명이 없어 Windows에서 "Windows의 PC 보호" 창이 뜰 수 있습니다. 다른 Ubuntu 버전과 모든 Windows 환경에서 확인한 것은 아닙니다. JAR 같은 앱과 문서용 형식은 제품 범위가 아닙니다.
 
-## 검증 근거와 출시 전 남은 확인
+## 검증 근거
 
 아래는 각 PR과 팀 실기 기록이며, 이 문서 변경에서 다시 실행한 결과가 아닙니다.
 
-- **자동 검증:** 각 PR은 `python3 tests/ci/run_rust.py local`(Linux 빌드, 시험, Windows 교차 빌드) 통과 기록이 있습니다. 최종 main과 파일 내용이 같은 `beba6ae`에서 build, test, Windows 교차 빌드가 모두 6/6 통과했습니다([PR155 리뷰](https://github.com/Team-LJY/zipelo/pull/155#pullrequestreview-5944969211)).
+- **자동 검증:** 각 PR은 `python3 tests/ci/run_rust.py local`(Linux 빌드, 시험, Windows 교차 빌드) 통과 기록이 있습니다. PR152 최종 내용과 같은 `beba6ae`([PR155 리뷰](https://github.com/Team-LJY/zipelo/pull/155#pullrequestreview-5944969211))와 버전을 0.2.1로 맞춘 `dca139c`([PR157 리뷰](https://github.com/Team-LJY/zipelo/pull/157#pullrequestreview-5949371301))에서 build, test, Windows 교차 빌드가 모두 6/6 통과했습니다.
 - **마지막 전체 실기 (`3a77cfd`):** 2026-11-15 Windows 11 Pro build 26300, Ubuntu 26.04.1 LTS Wayland와 X11에서 텍스트 미리보기, 나뉜 7z 풀기, 7z 만들기, ZIP 복구, 틀린 암호 재입력과 v0.1 위 덮어 설치를 확인했습니다. 결과 파일은 독립 도구와 기대 SHA256으로 대조했습니다([검토 기록](https://github.com/Team-LJY/zipelo/pull/129#pullrequestreview-5905758223)). 이때 설치 파일의 버전 표시는 0.1.0이었습니다.
-- **그 뒤의 부분 실기:** 진행 창 위치는 Ubuntu Wayland와 X11 VM에서 확인했습니다([PR142](https://github.com/Team-LJY/zipelo/pull/142)). Windows 끌어서 풀기는 PR153 head `7b2f88b`까지 Windows 11 VM에서 확인했습니다([실기 기록](https://github.com/Team-LJY/zipelo/pull/153#issuecomment-6956538306)). X11 끌어 놓기는 보이지 않는 시험 창으로 프로토콜 전달과 수명 시험만 확인했고 실제 파일 관리자 화면은 다시 확인하지 않았습니다([PR155 리뷰](https://github.com/Team-LJY/zipelo/pull/155#pullrequestreview-5944969211)). Wayland 끌어 놓기는 PR152 작성자의 실사용 뒤 수정분을 다시 확인하지 않았습니다.
-- **출시 전 남은 확인:** 앱과 작업자 버전을 0.2.1로 맞춘 최종 main으로 `.exe`와 `.deb`를 만들어 Windows, Wayland, X11에서 덮어 설치, 기본 앱, 끌어서 풀기와 주요 기능을 확인해야 합니다. 이 확인이 끝나기 전에는 게시하지 않습니다.
-- Windows에서 7z를 만드는 도중 취소하는 실기, 모든 오류 화면, 다른 OS 버전과 성능은 확인 범위 밖입니다.
+- **최종 실기 (`a78fa3d`):** 2026-11-18 이 커밋으로 만든 `Zipelo-0.2.1-windows-x64-setup.exe`와 `zipelo_0.2.1_amd64.deb`를 Windows 11(build 26300), Ubuntu 26.04.1 LTS Wayland와 X11 VM에서 직접 조작했습니다. 세 환경 모두 차단 결함 없이 아래 항목을 통과했습니다([Wayland](https://github.com/Team-LJY/zipelo/pull/156#issuecomment-6967793527), [X11](https://github.com/Team-LJY/zipelo/pull/156#issuecomment-6968245084), [Windows](https://github.com/Team-LJY/zipelo/pull/156#issuecomment-6968448684)).
+    - v0.1.0 위에 덮어 설치하면 0.2.1로 바뀌고, 압축파일을 더블클릭하면 기본 앱인 Zipelo로 열립니다.
+    - 찾기(Ctrl+F, Ctrl+Shift+F)와 Enter 이동, Esc로 선택 풀기, 창 닫기, 프로그램 끝내기가 동작합니다.
+    - 더블클릭으로 열 때 진행 창이 Zipelo 창 뒤로 숨지 않습니다. Windows와 X11은 따로 뜬 진행 창이 위에 있고, Wayland는 Zipelo 창 안에 뜹니다.
+    - 탐색기와 Nautilus로 끌어서 풀면 원본과 같은 파일(SHA256 일치)이 나오고, Zipelo 창 위에 놓으면 바로 취소됩니다.
+    - 1 MB로 나눈 7z를 만들고 다시 열어 풀면 원본과 내용이 같습니다.
+    - 설치된 실행 파일은 최종 빌드와 같고, 앱 로그에 0.2.1이 찍힙니다.
+- 실기는 모두 VM에서 했으며 실제 PC에서는 확인하지 않았습니다. 설치 파일에는 코드 서명이 없습니다. Windows에서 7z를 만드는 도중 취소하는 실기, 모든 오류 화면, 다른 OS 버전과 성능은 확인 범위 밖입니다.
