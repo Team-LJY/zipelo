@@ -41,3 +41,7 @@ opt-level = 3
 
 [profile.dev.package.lzma-rust2]
 opt-level = 3
+
+# 7z AES 키 유도의 반복 SHA-256도 시험 빌드에서 배포판처럼 최적화함.
+[profile.dev.package.sha2]
+opt-level = 3

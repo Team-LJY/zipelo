@@ -278,7 +278,7 @@ fn explorer_double_click_opens_files_with_default_app_and_folders_in_place() {
     s.double_click("docs/child.txt");
     s.selected(&[0]);
     // 파일은 압축파일 옆 숨김 임시 폴더에 그 파일만 풀고 기본 프로그램으로 엶.
-    let root = scratch.0.join("sample.zip (Zipelo 임시)");
+    let root = scratch.0.join(zipelo_ui_memory_app::archive_present::open_root_name("sample.zip"));
     {
         let state = s.factory.state.borrow();
         assert_eq!(state.starts.len(), 2);
@@ -371,7 +371,7 @@ fn finish_limit(s: &mut Explorer) {
 fn explorer_open_keeps_pending_open_when_limit_retry_succeeds() {
     let scratch = Folder::new();
     let mut s = Explorer::new(&scratch);
-    let root = scratch.0.join("sample.zip (Zipelo 임시)");
+    let root = scratch.0.join(zipelo_ui_memory_app::archive_present::open_root_name("sample.zip"));
     let ctx = double_click_open_hits_limit(&mut s);
     policy_click(&ctx, &mut s.app, "한도를 늘려 다시 시도");
     assert!(s.app.model.busy());
@@ -408,7 +408,7 @@ fn explorer_open_keeps_pending_open_when_limit_retry_succeeds() {
 fn explorer_open_restores_destination_when_limit_result_is_dismissed() {
     let scratch = Folder::new();
     let mut s = Explorer::new(&scratch);
-    let root = scratch.0.join("sample.zip (Zipelo 임시)");
+    let root = scratch.0.join(zipelo_ui_memory_app::archive_present::open_root_name("sample.zip"));
     let ctx = double_click_open_hits_limit(&mut s);
     policy_click(&ctx, &mut s.app, "확인");
     for _ in 0..3 {
@@ -447,7 +447,7 @@ fn explorer_open_restores_destination_when_expanded_retry_fails_again() {
 fn explorer_open_pending_after_limit_is_dropped_when_zip_creation_starts() {
     let scratch = Folder::new();
     let mut s = Explorer::new(&scratch);
-    let root = scratch.0.join("sample.zip (Zipelo 임시)");
+    let root = scratch.0.join(zipelo_ui_memory_app::archive_present::open_root_name("sample.zip"));
     let _limit_ctx = double_click_open_hits_limit(&mut s);
     // 한도 초과 결과를 닫지 않고 폴더를 끌어 놓아 ZIP 만들기를 시작함.
     let folder = scratch.0.join("photos");
@@ -510,7 +510,7 @@ fn explorer_double_click_does_not_open_executables() {
             .any(|(text, _, _)| text == "실행 파일(.EXE)은 안전을 위해 바로 열 수 없습니다")
     );
     // 실행 파일은 압축을 풀지 않으므로 임시 폴더도 만들지 않음.
-    assert!(!scratch.0.join("sample.zip (Zipelo 임시)").exists());
+    assert!(!scratch.0.join(zipelo_ui_memory_app::archive_present::open_root_name("sample.zip")).exists());
 }
 
 #[test]

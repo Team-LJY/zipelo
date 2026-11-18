@@ -3,6 +3,8 @@
 #[cfg(all(feature = "ui-fixture", debug_assertions))]
 extern crate self as zipelo_ui_memory_app;
 
+pub mod applog;
+
 pub mod archive_ui;
 
 #[cfg(feature = "ui")]
@@ -21,6 +23,8 @@ pub mod archive_theme;
 pub mod window_frame;
 
 pub mod archive_path;
+
+pub mod drag_out;
 
 #[cfg(feature = "ui")]
 pub mod app_icon;

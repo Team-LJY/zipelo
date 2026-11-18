@@ -469,7 +469,73 @@ pub fn volume_problem_text(problem: &VolumeProblem) -> String {
 }
 
 pub const SPLIT_SUPPORT: &str =
-    "분할 7z는 .7z.001부터 열 수 있습니다. 분할 ZIP과 RAR, 분할 압축 만들기는 지원하지 않습니다.";
+    "분할 7z는 .7z.001부터 열 수 있습니다. 분할 ZIP과 RAR는 지원하지 않습니다.";
+
+/// 7z 분할 볼륨 크기 단위. 크기 표시(bytes_text)와 같이 1 MB = 1,048,576바이트.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum VolumeUnit {
+    Mb,
+    Gb,
+}
+impl VolumeUnit {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Mb => "MB",
+            Self::Gb => "GB",
+        }
+    }
+    fn bytes(self) -> u64 {
+        match self {
+            Self::Mb => 1 << 20,
+            Self::Gb => 1 << 30,
+        }
+    }
+}
+/// 분할 7z 볼륨 수 상한. 분할 읽기는 `.001`부터 `.999`까지만 찾음.
+pub const MAX_VOLUMES: u64 = worker_protocol::protocol::MAX_SEVEN_ZIP_VOLUMES;
+pub const VOLUME_SIZE_ERROR: &str = "쪼갤 용량은 1 이상의 정수로 입력하세요";
+pub const VOLUME_LIMIT_ERROR: &str =
+    "볼륨이 999개를 넘거나 처리 한도를 넘었습니다. 쪼갤 용량을 늘려 다시 만드세요";
+
+/// 입력한 숫자와 단위를 볼륨 바이트 수로 바꿈. 최소 1 MB이고 정수만 받음.
+pub fn volume_size(amount: &str, unit: VolumeUnit) -> Result<u64, &'static str> {
+    let amount = amount.trim();
+    if amount.is_empty() || amount.len() > 9 || !amount.bytes().all(|b| b.is_ascii_digit()) {
+        return Err(VOLUME_SIZE_ERROR);
+    }
+    amount
+        .parse::<u64>()
+        .ok()
+        .and_then(|value| value.checked_mul(unit.bytes()))
+        .filter(|bytes| *bytes >= worker_protocol::protocol::MIN_SEVEN_ZIP_VOLUME_BYTES)
+        .ok_or(VOLUME_SIZE_ERROR)
+}
+
+/// 분할 7z의 `index`번째 볼륨 경로 (`이름.7z.001` 형식).
+pub fn volume_path(output: &Path, index: u64) -> PathBuf {
+    let mut name = output.as_os_str().to_owned();
+    name.push(format!(".{index:03}"));
+    PathBuf::from(name)
+}
+
+/// 같은 폴더에 분할 읽기가 한 묶음으로 볼 `이름.7z.<숫자>`가 이미 있으면 그 이름.
+pub fn existing_volume(output: &Path) -> Option<String> {
+    let parent = output.parent()?;
+    let prefix = format!("{}.", output.file_name()?.to_str()?);
+    let fold = |value: &str| {
+        if cfg!(windows) {
+            value.to_lowercase()
+        } else {
+            value.to_owned()
+        }
+    };
+    let prefix = fold(&prefix);
+    fs::read_dir(parent).ok()?.flatten().find_map(|entry| {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        let suffix = fold(&name).strip_prefix(&prefix)?.to_owned();
+        (!suffix.is_empty() && suffix.bytes().all(|b| b.is_ascii_digit())).then_some(name)
+    })
+}
 
 pub fn excluded_split(path: &Path) -> bool {
     let name = path
@@ -588,12 +654,15 @@ pub fn create_open_root_with(
 ) -> io::Result<OpenRoot> {
     let name = archive.file_name().unwrap_or_default().to_string_lossy();
     let mut error = None;
+    // Windows는 점으로 숨겨지지 않으므로 숨김 속성을 줌.
     if let Some(parent) = archive.parent().filter(|p| !p.as_os_str().is_empty()) {
-        let base = parent.join(open_root_name(&name));
+        let base = parent.join(open_root_name_in(parent, &name));
         for _ in 0..8 {
             let path = unique_folder(&base);
             match private_dir(&path) {
                 Ok(()) => {
+                    #[cfg(windows)]
+                    hide_folder(&path);
                     after_create(&path);
                     match OpenRoot::capture(path.clone()) {
                         Ok(root) => return Ok(root),
@@ -622,9 +691,48 @@ pub fn create_open_root_with(
     })
 }
 
-/// 열기용 임시 폴더 이름. 예: `자료.zip (Zipelo 임시)`.
+/// Windows 탐색기에서 임시 폴더가 압축파일 옆에 보이지 않도록 숨김 속성을 줌.
+/// 실패해도 폴더는 그대로 씀. unsafe 없이 시스템의 attrib.exe를 창 없이 실행함.
+#[cfg(windows)]
+pub fn hide_folder(path: &Path) {
+    use std::os::windows::process::CommandExt;
+    let Some(system) = std::env::var_os("SystemRoot").map(PathBuf::from) else {
+        return;
+    };
+    let _ = std::process::Command::new(system.join("System32").join("attrib.exe"))
+        .arg("+h")
+        .arg(path)
+        .creation_flags(0x0800_0000)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status();
+}
+
+/// 열기와 끌어 놓기용 임시 폴더 이름. 예: `.자료.zip (Zipelo 임시)`.
+/// 파일 관리자에서 압축파일 옆에 풀린 것처럼 보이지 않도록 Unix 계열에서는 숨김
+/// 이름(앞에 '.')을 씀. Windows는 점으로 숨겨지지 않으므로 원래 이름에 숨김 속성을 줌.
 pub fn open_root_name(archive_name: &str) -> String {
-    format!("{archive_name} (Zipelo 임시)")
+    if cfg!(windows) {
+        format!("{archive_name} (Zipelo 임시)")
+    } else {
+        format!(".{archive_name} (Zipelo 임시)")
+    }
+}
+
+/// `parent` 폴더에 만들 임시 폴더 이름. snap 앱(Firefox 등)은 홈 폴더 바로 아래의
+/// 숨김 항목을 읽지 못하므로, 압축파일이 홈 폴더 바로 아래에 있으면 숨기지 않음.
+/// 그보다 아래 폴더의 숨김 항목은 snap 앱도 읽을 수 있음.
+pub fn open_root_name_in(parent: &Path, archive_name: &str) -> String {
+    let home = home_directory();
+    let same = |a: &Path, b: &Path| {
+        a == b || a.canonicalize().ok().zip(b.canonicalize().ok()).is_some_and(|(a, b)| a == b)
+    };
+    if cfg!(windows) || same(parent, &home) {
+        format!("{archive_name} (Zipelo 임시)")
+    } else {
+        open_root_name(archive_name)
+    }
 }
 
 /// 이 앱이 만든 열기용 폴더를 지움. 다른 프로그램이 파일을 쓰고 있으면 남을 수 있음.
@@ -683,6 +791,7 @@ pub fn open_blocked_text(name: &str) -> String {
 
 pub const OPEN_FAILED: &str = "파일을 열 프로그램을 실행하지 못했습니다";
 pub const OPEN_MISSING: &str = "풀린 파일을 찾지 못해 열지 못했습니다";
+
 
 /// 운영체제에 설정된 기본 프로그램으로 파일을 엶.
 pub fn open_with_default(path: &Path) -> Result<(), String> {

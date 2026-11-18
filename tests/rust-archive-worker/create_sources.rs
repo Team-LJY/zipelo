@@ -127,6 +127,7 @@ fn publication_exception_requires_the_exact_parent_name_and_temporary_object() {
             parent: filesystem::object(&Input::open(&s.0.join("folder")).unwrap().file).unwrap(),
             name: ".zipelo-owned.tmp".into(),
             object: filesystem::object(&Input::open(&path).unwrap().file).unwrap(),
+            others: Vec::new(),
         };
         assert_eq!(plan.verify(&mut || Ok(())), Err(ErrorCode::SourceChanged));
         assert_eq!(
@@ -170,6 +171,7 @@ fn publication_directory_enumeration_remains_cancellable() {
         parent: filesystem::object(&Input::open(&s.0.join("folder")).unwrap().file).unwrap(),
         name: ".zipelo-owned.tmp".into(),
         object: filesystem::object(&Input::open(&path).unwrap().file).unwrap(),
+        others: Vec::new(),
     };
     let mut calls = 0;
     let result = plan.verify_for_publication(&temporary, &mut || {

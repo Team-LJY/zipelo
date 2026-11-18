@@ -1,4 +1,7 @@
 #![allow(dead_code)]
+// 직접 포함한 앱 소스의 crate::log_* 호출이 앱 라이브러리의 로그를 쓰게 함.
+#[allow(unused_imports)]
+use zipelo_ui_memory_app::{applog, log_debug, log_error, log_info, log_trace, log_warn};
 #[path = "../../experiments/rust-ui-memory-app/src/archive_ui.rs"]
 mod archive_ui;
 use zipelo_ui_memory_app::archive_path;

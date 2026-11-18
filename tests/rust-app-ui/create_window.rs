@@ -662,7 +662,7 @@ fn sevenzip_selection_clears_zip_password_and_sends_only_supported_options() {
     assert_eq!(save.purpose, Purpose::SaveSevenZip);
     assert_eq!(save.file_name, "photos.7z");
     assert!(matches!(factory.state.borrow().starts.last(),
-        Some(Start::CreateSevenZip { sources, output_file })
+        Some(Start::CreateSevenZip { sources, output_file, volume_size: None })
         if sources.len() == 1 && sources[0].1 == "photos" && output_file.ends_with("photos.7z")));
     assert!(!factory.state.borrow().password_seen);
 }
@@ -681,4 +681,78 @@ fn cancelling_sevenzip_save_keeps_selected_format_without_starting() {
     let shown = policy_render(&ctx, &mut app, vec![]);
     assert!(shown.iter().any(|(s, _)| s == "7z 만들기"));
     assert!(shown.iter().any(|(s, _)| s == "LZMA2"));
+}
+
+#[test]
+fn sevenzip_split_checkbox_validates_volume_size_and_sends_it() {
+    let scratch = Folder::new();
+    let factory = FakeFactory::default();
+    let (mut app, ctx) = create_from_folder(&scratch, &factory);
+    let shown = |app: &mut ArchiveApp, label: &str| {
+        policy_render(&ctx, app, vec![])
+            .iter()
+            .any(|(text, _)| text == label)
+    };
+    // ZIP에서는 분할 설정을 보이지 않고, 7z를 고르면 체크만 보임.
+    assert!(!shown(&mut app, "쪼갤 용량 설정"));
+    policy_click(&ctx, &mut app, "7z");
+    assert!(shown(&mut app, "쪼갤 용량 설정"));
+    assert!(!shown(&mut app, "볼륨 크기"));
+
+    policy_click(&ctx, &mut app, "쪼갤 용량 설정");
+    assert!(shown(&mut app, "볼륨 크기"));
+    assert!(shown(&mut app, "MB"));
+    assert!(shown(&mut app, "GB"));
+    assert!(policy_render(&ctx, &mut app, vec![])
+        .iter()
+        .any(|(text, _)| text.starts_with("photos.7z.001, photos.7z.002")));
+
+    // 0, 문자, 소수는 빨간 안내를 보이고 저장 창도 열지 않음.
+    let dialogs = TestDialogs::default();
+    app.set_dialogs(Box::new(dialogs.clone()));
+    for value in ["0", "abc", "1.5", ""] {
+        text(&ctx, &mut app, "split-volume-size", value);
+        assert!(
+            shown(&mut app, "쪼갤 용량은 1 이상의 정수로 입력하세요"),
+            "{value}"
+        );
+        policy_click(&ctx, &mut app, "압축하기");
+        assert!(dialogs.0.borrow().requests.is_empty(), "{value}");
+        assert_eq!(factory.state.borrow().starts.len(), 1, "{value}");
+    }
+
+    // 같은 이름의 숫자 조각이 이미 있으면 시작하지 않음.
+    text(&ctx, &mut app, "split-volume-size", "2");
+    policy_click(&ctx, &mut app, "GB");
+    assert!(!shown(&mut app, "쪼갤 용량은 1 이상의 정수로 입력하세요"));
+    fs::write(scratch.0.join("photos.7z.003"), b"old").unwrap();
+    policy_click(&ctx, &mut app, "압축하기");
+    assert_eq!(factory.state.borrow().starts.len(), 1);
+    assert!(policy_render(&ctx, &mut app, vec![])
+        .iter()
+        .any(|(text, _)| text.contains("photos.7z.003")));
+    fs::remove_file(scratch.0.join("photos.7z.003")).unwrap();
+
+    policy_click(&ctx, &mut app, "압축하기");
+    assert!(matches!(factory.state.borrow().starts.last(),
+        Some(Start::CreateSevenZip { output_file, volume_size: Some(size), .. })
+        if output_file.ends_with("photos.7z") && *size == 2 * 1024 * 1024 * 1024));
+
+    // 체크를 해제하면 분할하지 않은 요청을 보냄.
+    let (mut app, ctx) = create_from_folder(&scratch, &factory);
+    policy_click(&ctx, &mut app, "7z");
+    policy_click(&ctx, &mut app, "쪼갤 용량 설정");
+    policy_click(&ctx, &mut app, "쪼갤 용량 설정");
+    assert!(!policy_render(&ctx, &mut app, vec![])
+        .iter()
+        .any(|(text, _)| text == "볼륨 크기"));
+    app.set_dialogs(Box::new(TestDialogs::default()));
+    policy_click(&ctx, &mut app, "압축하기");
+    assert!(matches!(
+        factory.state.borrow().starts.last(),
+        Some(Start::CreateSevenZip {
+            volume_size: None,
+            ..
+        })
+    ));
 }

@@ -61,6 +61,12 @@ pub fn rows(entries: &[Entry], current: &str, query: &str) -> Vec<Row> {
         }
         if !directory {
             row.bytes = entry.bytes;
+        } else if entry.kind == Kind::File {
+            // 폴더 크기는 안에 있는 모든 파일 크기의 합으로 표시함.
+            let total = row.bytes.unwrap_or(0);
+            row.bytes = Some(total.saturating_add(entry.bytes.unwrap_or(0)));
+        } else if row.bytes.is_none() {
+            row.bytes = Some(0);
         }
         row.encrypted |= entry.encrypted;
     }
@@ -113,4 +119,82 @@ pub fn remove_selection(entries: &[Entry], selected: &mut BTreeSet<u32>, removed
         })
         .collect::<BTreeSet<_>>();
     selected.retain(|id| !removed.contains(id) && !ancestors.contains(id));
+}
+
+/// 찾기 창의 결과 한 줄.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Found {
+    /// 압축파일 안 전체 경로 (앞뒤 '/' 없음).
+    pub path: String,
+    pub name: String,
+    pub directory: bool,
+}
+
+/// 찾기 결과를 너무 많이 그리지 않도록 정한 최대 개수.
+pub const FIND_LIMIT: usize = 5000;
+
+/// 압축파일 안에서 검색어가 들어간 파일과 폴더를 찾음. 대소문자는 구분하지 않음.
+///
+/// - `whole_path`가 false면(Ctrl+F) `base` 폴더 아래의 모든 하위 폴더를 찾아 내려가며
+///   이름에 검색어가 들어간 항목을 찾음.
+/// - `whole_path`가 true면(Ctrl+Shift+F) 압축파일 전체에서 전체 경로에 검색어가 들어간
+///   항목을 찾음. 이때 `base`는 쓰지 않음.
+///
+/// 압축파일에 따로 적혀 있지 않은 상위 폴더도 결과에 포함함. 결과는 경로 순서이며
+/// `limit`개를 넘으면 잘라 내고 두 번째 값으로 true를 돌려줌.
+pub fn find(
+    entries: &[Entry],
+    base: &str,
+    query: &str,
+    whole_path: bool,
+    limit: usize,
+) -> (Vec<Found>, bool) {
+    let query = query.trim().to_lowercase();
+    if query.is_empty() {
+        return (Vec::new(), false);
+    }
+    let base = base.trim_matches('/');
+    let prefix = if whole_path || base.is_empty() {
+        String::new()
+    } else {
+        format!("{base}/")
+    };
+    let mut paths = BTreeMap::<String, bool>::new();
+    for entry in entries {
+        if !matches!(entry.kind, Kind::File | Kind::Directory) {
+            continue;
+        }
+        let Some(path) = normalized(&entry.name) else {
+            continue;
+        };
+        if !path.starts_with(&prefix) {
+            continue;
+        }
+        // 상위 폴더는 압축파일에 따로 없어도 폴더로 넣음.
+        let mut end = prefix.len();
+        while let Some(slash) = path[end..].find('/') {
+            end += slash;
+            paths.insert(path[..end].to_owned(), true);
+            end += 1;
+        }
+        let directory = entry.kind == Kind::Directory;
+        *paths.entry(path).or_insert(directory) |= directory;
+    }
+    let mut found = Vec::new();
+    for (path, directory) in paths {
+        let name = path.rsplit('/').next().unwrap_or(&path);
+        let haystack = if whole_path { path.as_str() } else { name };
+        if !haystack.to_lowercase().contains(&query) {
+            continue;
+        }
+        if found.len() == limit {
+            return (found, true);
+        }
+        found.push(Found {
+            name: name.to_owned(),
+            path,
+            directory,
+        });
+    }
+    (found, false)
 }

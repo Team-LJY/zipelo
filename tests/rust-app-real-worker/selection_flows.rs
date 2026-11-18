@@ -323,7 +323,7 @@ fn double_click_open_extracts_nested_file_and_opens_that_file() {
         screen.settle();
         screen.render(vec![]);
     }
-    let root = scratch.path("site.zip (Zipelo 임시)");
+    let root = scratch.path(&zipelo_ui_memory_app::archive_present::open_root_name("site.zip"));
     assert_eq!(
         *opened.borrow(),
         vec![

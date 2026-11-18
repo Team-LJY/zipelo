@@ -4630,9 +4630,15 @@ dependencies = [
  "ashpd",
  "eframe",
  "pollster 0.4.0",
+ "raw-window-handle",
  "rfd",
  "sha2 0.10.9",
+ "wayland-backend",
+ "wayland-client",
  "wgpu",
+ "windows-sys 0.61.2",
+ "x11-dl",
+ "x11rb",
  "zipelo-archive-worker",
 ]
 

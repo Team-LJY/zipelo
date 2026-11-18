@@ -213,6 +213,7 @@ fn start_to_wire(start: ui::Start) -> wire::Start {
         ui::Start::CreateSevenZip {
             sources,
             output_file,
+            volume_size,
         } => wire::Action::CreateSevenZip {
             sources: sources
                 .into_iter()
@@ -227,6 +228,7 @@ fn start_to_wire(start: ui::Start) -> wire::Start {
             method: wire::SevenZipMethod::Lzma2,
             solid: false,
             encryption: wire::Encryption::None,
+            volume_size,
         },
         ui::Start::CreateZip {
             sources,
@@ -486,8 +488,10 @@ impl ProcessFactory {
 impl ui::Factory for ProcessFactory {
     fn connect(&mut self, job_id: u64) -> Result<Box<dyn ui::Connection>, String> {
         if !self.worker.is_absolute() || job_id == 0 {
+            crate::log_error!("작업자 경로 또는 작업 ID가 올바르지 않음: job={job_id}");
             return Err("작업자 경로 또는 작업 ID가 올바르지 않습니다".into());
         }
+        crate::log_debug!("작업 {job_id} 작업자 실행: {}", self.worker.display());
         let (send, requests) = mpsc::sync_channel::<Frame>(8);
         let (events, receive) = mpsc::sync_channel(64);
         let (ready, started) = mpsc::sync_channel(1);
@@ -515,7 +519,8 @@ impl ui::Factory for ProcessFactory {
                 }
                 let child = match command.spawn() {
                     Ok(child) => child,
-                    Err(_) => {
+                    Err(error) => {
+                        crate::log_error!("작업자를 실행하지 못함: {error}");
                         let _ = ready.send(Err(
                             "작업자를 실행하지 못했습니다. 앱과 작업자를 함께 설치하세요"
                                 .to_string(),
@@ -830,9 +835,16 @@ fn supervise(
                             notify(&tx, ui::HostEvent::StderrEof);
                             break;
                         }
-                        Ok(_) => {}
+                        Ok(count) => {
+                            // 작업자가 표준 오류에 남긴 내용은 디버그 로그로만 옮김.
+                            crate::log_debug!(
+                                "작업자 표준 오류: {}",
+                                String::from_utf8_lossy(&bytes[..count]).trim_end()
+                            );
+                        }
                         Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
-                        Err(_) => {
+                        Err(error) => {
+                            crate::log_error!("작업자 오류 파이프 읽기 실패: {error}");
                             fault(&tx, &abort, "작업자 오류 파이프를 읽지 못했습니다");
                             break;
                         }

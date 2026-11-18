@@ -347,3 +347,72 @@ fn oversized_zip_password_never_starts_a_worker() {
 fn invalid_zip_password_then_close_allows_closing() {
     invalid_zip_password_never_starts_a_worker("", true);
 }
+
+/// 실제 7-Zip이 `-p -mhe=on`으로 만든 분할 표본을 복사함. 공개 시험 암호는 zipelo-split-test.
+fn encrypted_seven_zip_volumes(scratch: &Scratch, name: &str) -> PathBuf {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../tests/rust-archive-worker/fixtures/split7z");
+    for index in 1.. {
+        let source = root.join(format!("{name}.7z.{index:03}"));
+        if !source.is_file() {
+            assert!(index > 2);
+            break;
+        }
+        fs::copy(source, scratch.path(&format!("sample.7z.{index:03}"))).unwrap();
+    }
+    scratch.path("sample.7z.001")
+}
+#[test]
+fn encrypted_seven_zip_header_asks_password_while_listing_then_again_for_extract() {
+    let scratch = Scratch::new();
+    let archive = encrypted_seven_zip_volumes(&scratch, "encrypted-header");
+    let output = make_directory(&scratch.path("output"));
+    let (factory, observed) = observed_factory();
+    let mut screen = Screen::new(factory);
+    screen.app.open_path(archive.clone());
+    // 헤더가 암호화되어 있으면 목록을 읽는 작업에서 같은 암호 창이 열림.
+    screen.password_request(1, false);
+    assert!(
+        screen
+            .render(vec![])
+            .iter()
+            .any(|(value, _)| value == "암호가 필요합니다")
+    );
+    screen.password_answer("wrong-password");
+    screen.password_request(2, false);
+    screen.password_answer("zipelo-split-test");
+    screen.settle();
+    assert_eq!(screen.app.model.entries.len(), 3);
+    assert!(
+        screen
+            .app
+            .model
+            .entries
+            .iter()
+            .filter(|entry| entry.bytes.is_some_and(|bytes| bytes != 0))
+            .all(|entry| entry.encrypted)
+    );
+    // 해제는 새 작업자이므로 암호를 다시 물음.
+    screen.start_password_extract(&output);
+    screen.password_request(1, false);
+    screen.password_answer("zipelo-split-test");
+    screen.finish_password_job(Outcome::Completed);
+    assert_eq!(
+        fs::read(output.join("folder/hello.txt")).unwrap(),
+        b"Zipelo 7z interoperability\n".repeat(100)
+    );
+    assert_reaped(&observed);
+}
+#[test]
+fn encrypted_seven_zip_header_cancel_while_listing_shows_no_entries() {
+    let scratch = Scratch::new();
+    let archive = encrypted_seven_zip_volumes(&scratch, "encrypted-header");
+    let (factory, observed) = observed_factory();
+    let mut screen = Screen::new(factory);
+    screen.app.open_path(archive);
+    screen.password_request(1, false);
+    screen.escape();
+    screen.finish_password_job(Outcome::Cancelled);
+    assert!(screen.app.model.entries.is_empty());
+    assert_reaped(&observed);
+}

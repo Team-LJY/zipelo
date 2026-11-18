@@ -887,6 +887,7 @@ fn sevenzip_creation_rejects_password_prompts_and_encrypted_acceptance() {
             Start::CreateSevenZip {
                 sources: vec![(path("source"), "source".into())],
                 output_file: path("output.7z"),
+                volume_size: None,
             },
             &mut f
         ));
@@ -917,6 +918,7 @@ fn sevenzip_creation_waits_for_both_eofs_and_child_reap() {
         Start::CreateSevenZip {
             sources: vec![(path("source"), "source".into())],
             output_file: path("output.7z"),
+            volume_size: None,
         },
         &mut f
     ));

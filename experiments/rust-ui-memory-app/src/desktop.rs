@@ -13,9 +13,27 @@ mod fake;
 mod renderer;
 #[path = "system_font.rs"]
 mod system_font;
+#[cfg(target_os = "linux")]
+#[path = "drag_out_wayland.rs"]
+mod drag_out_wayland;
+#[cfg(target_os = "linux")]
+#[path = "drag_out_x11.rs"]
+mod drag_out_x11;
+#[cfg(target_os = "windows")]
+#[path = "drag_out_windows.rs"]
+mod drag_out_windows;
 use eframe::egui;
 fn main() -> eframe::Result {
+    zipelo_ui_memory_app::log_info!(
+        "Zipelo {} 시작 (로그 단계 {:?}, ZIPELO_LOG로 변경 가능)",
+        env!("CARGO_PKG_VERSION"),
+        zipelo_ui_memory_app::applog::level()
+    );
     let result = run();
+    match &result {
+        Ok(()) => zipelo_ui_memory_app::log_info!("Zipelo 정상 종료"),
+        Err(error) => zipelo_ui_memory_app::log_error!("Zipelo 시작 또는 실행 실패: {error}"),
+    }
     #[cfg(all(
         target_os = "windows",
         not(all(feature = "ui-fixture", debug_assertions))
@@ -84,6 +102,10 @@ fn run() -> eframe::Result {
     )
     .map_err(|e| eframe::Error::AppCreation(Box::new(std::io::Error::other(e))))?;
     let custom_frame = zipelo_ui_memory_app::window_frame::custom_frame_needed();
+    zipelo_ui_memory_app::log_debug!(
+        "실행 인자 해석: 시험 모드={fixture}, 시작 파일={:?}, 직접 그린 창 테두리={custom_frame}",
+        startup
+    );
     // 운영체제 한글 글꼴은 Pretendard에 없는 글자를 위한 대체 글꼴로만 씀.
     let fallback = system_font::load()
         .ok()
@@ -138,6 +160,19 @@ fn run() -> eframe::Result {
                     fixture,
                 );
                 app.set_custom_frame(custom_frame);
+                // 목록 항목을 창 밖으로 끌어 놓아 풀 수 있게 함.
+                #[cfg(target_os = "linux")]
+                if !fixture {
+                    if let Some(drag) = drag_out_wayland::create(cc, cc.egui_ctx.clone()) {
+                        app.set_drag_out(Box::new(drag));
+                    } else if let Some(drag) = drag_out_x11::create(cc, cc.egui_ctx.clone()) {
+                        app.set_drag_out(Box::new(drag));
+                    }
+                }
+                #[cfg(target_os = "windows")]
+                if !fixture && let Some(drag) = drag_out_windows::create(cc, cc.egui_ctx.clone()) {
+                    app.set_drag_out(Box::new(drag));
+                }
                 app.set_work_window_in_parent(custom_frame);
                 Ok(Box::new(app))
             })

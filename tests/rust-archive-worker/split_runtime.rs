@@ -536,20 +536,60 @@ fn seven_zip_created_volumes_list_and_extract_with_matching_reference_hashes() {
 }
 
 #[test]
-fn encrypted_seven_zip_volumes_keep_the_existing_unsupported_policy() {
-    for name in ["encrypted-header", "encrypted-body"] {
+fn encrypted_seven_zip_volumes_list_and_extract_with_password() {
+    for (name, header) in [("encrypted-header", true), ("encrypted-body", false)] {
         let s = Scratch::new();
         let paths = reference_fixture(&s, name);
         let before = hashes(&paths);
-        directory(&s, "output");
-        let result = execute(request(&s, None, Selection::All));
-        failure(&result, ErrorCode::UnsupportedFeature);
-        assert!(
-            !result
-                .iter()
-                .any(|event| matches!(event, Message::PasswordRequired { .. }))
+        let mut prompts = Vec::new();
+        let listing = interactive(
+            Start {
+                action: Action::List {
+                    archive: s.path("sample.7z.001"),
+                },
+                limits: Limits::default(),
+            },
+            |id, attempt, _| {
+                prompts.push(attempt);
+                password_reply(id, b"zipelo-split-test")
+            },
         );
+        let token = id(&listing);
+        // 헤더가 암호화된 경우에만 목록을 읽기 전에 암호를 물음.
+        assert_eq!(prompts, if header { vec![1] } else { vec![] });
+        assert!(listing.iter().any(|event| matches!(
+            event,
+            Message::Entry(Entry {
+                encrypted: true,
+                ..
+            })
+        )));
+        directory(&s, "output");
+        // 틀린 암호 세 번은 출력 없이 끝나고 조각을 바꾸지 않음.
+        let wrong = interactive(
+            request(&s, Some(token.clone()), Selection::All),
+            |id, _, _| password_reply(id, b"wrong-password"),
+        );
+        failure(&wrong, ErrorCode::WrongPassword);
         assert_eq!(fs::read_dir(s.0.join("output")).unwrap().count(), 0);
+        let mut prompts = Vec::new();
+        let events = interactive(
+            request(&s, Some(token), Selection::All),
+            |id, attempt, _| {
+                prompts.push(attempt);
+                password_reply(id, b"zipelo-split-test")
+            },
+        );
+        assert_eq!(terminal(&events).outcome, Outcome::Completed, "{events:?}");
+        assert_eq!(prompts, [1]);
+        assert_eq!(
+            fs::read(s.0.join("output/folder/hello.txt")).unwrap(),
+            SEVEN_PAYLOAD.repeat(100)
+        );
+        let expected = (0..4096usize)
+            .map(|index| ((index * 37 + (index >> 3)) % 256) as u8)
+            .collect::<Vec<_>>();
+        assert_eq!(fs::read(s.0.join("output/second.bin")).unwrap(), expected);
         assert_eq!(hashes(&paths), before);
     }
 }

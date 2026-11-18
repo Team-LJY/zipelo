@@ -6,6 +6,10 @@ pub const MAX_PREVIEW_RGBA_BYTES: u64 = 64 * 1024 * 1024;
 pub const MAX_PREVIEW_DIMENSION: u32 = 8192;
 pub const MAX_PREVIEW_PIXELS: u64 = 16_000_000;
 pub const MAX_PREVIEW_CHUNK_BYTES: usize = 32 * 1024;
+/// 7z 분할 볼륨 하나의 최소 크기 (1 MiB).
+pub const MIN_SEVEN_ZIP_VOLUME_BYTES: u64 = 1024 * 1024;
+/// 분할 7z 읽기가 받는 최대 볼륨 수 (`이름.7z.001`~`이름.7z.999`).
+pub const MAX_SEVEN_ZIP_VOLUMES: u64 = 999;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum NativePath {
@@ -247,6 +251,8 @@ pub enum Action {
         method: SevenZipMethod,
         solid: bool,
         encryption: Encryption,
+        /// 있으면 `output_file`(이름.7z) 대신 이 크기로 나눈 `이름.7z.001`, `이름.7z.002`, …를 만듦.
+        volume_size: Option<u64>,
     },
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
