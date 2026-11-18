@@ -5,7 +5,7 @@ v0.2.1은 v0.1.0 다음으로 게시하는 버전입니다. 내부 빌드였던 
 ## 새로 할 수 있는 일
 
 - **파일 내용 미리보기:** 파일 하나를 고르고 [미리보기]를 누르면 UTF-8 텍스트(`.txt`, `.md`, `.log`, `.csv`, `.json`)와 정적 PNG/JPEG를 읽기 전용으로 봅니다. 텍스트는 1 MiB, 이미지 파일은 8 MiB, 가로와 세로 각각 8,192픽셀, 전체 1,600만 픽셀까지입니다. 큰 작업 허용으로 이 한도를 늘릴 수는 없습니다([PR125](https://github.com/Team-LJY/zipelo/pull/125)).
-- **압축파일 안 파일 바로 열기:** 목록에서 파일을 두 번 누르거나 Enter를 누르면 그 파일만 풀어서 기본 프로그램으로 엽니다. 실행 파일과 스크립트는 열지 않고 안내만 합니다([PR144](https://github.com/Team-LJY/zipelo/pull/144)).
+- **압축파일 안 파일 바로 열기:** 목록에서 파일을 두 번 누르거나 Enter를 누르면 그 파일만 풀어서 기본 프로그램으로 엽니다. 실행되거나 설치될 수 있는 파일은 열지 않고 안내만 합니다. 제외하는 형식은 운영체제마다 다르며, Windows에서는 `.js`, `.ps1`, `.bat` 같은 스크립트도 제외합니다. Linux에서는 스크립트를 편집기로 열 수 있습니다([PR144](https://github.com/Team-LJY/zipelo/pull/144)).
 - **끌어서 풀기:** 목록에서 고른 파일과 폴더를 창 밖으로 끌어 파일 관리자나 브라우저의 파일 올리기 영역에 놓으면 그 자리에 풀립니다. 큰 항목은 다 풀릴 때까지 기다렸다가 넘기고, Windows에서는 이때 진행률 창이 나타나며 취소할 수 있습니다. 끄는 도중 Esc를 누르거나 Zipelo 창 위에 놓으면 끌기와 풀기가 함께 취소됩니다. 이름이 겹칠 때의 처리는 받는 프로그램이 정합니다([PR152](https://github.com/Team-LJY/zipelo/pull/152), [PR153](https://github.com/Team-LJY/zipelo/pull/153), [PR155](https://github.com/Team-LJY/zipelo/pull/155)).
 - **오른쪽 클릭으로 골라 풀기:** "압축 파일명으로 새 폴더를 만들어 압축 풀기"는 `이름`, `이름 (1)`처럼 비어 있는 폴더에, "특정 폴더에 압축 풀기"는 고른 폴더에 선택한 항목만 풉니다. 마우스 뒤로 버튼은 상위 폴더로 이동합니다([PR144](https://github.com/Team-LJY/zipelo/pull/144)).
 - **찾기:** 압축파일을 연 뒤 Ctrl+F는 지금 폴더 아래 모든 하위 폴더에서 이름으로, Ctrl+Shift+F는 압축파일 전체에서 경로로 찾습니다. 결과를 두 번 누르거나 Enter를 누르면 그 위치로 이동합니다([PR152](https://github.com/Team-LJY/zipelo/pull/152)).
@@ -48,6 +48,6 @@ v0.2.1은 v0.1.0 다음으로 게시하는 버전입니다. 내부 빌드였던 
 
 - **자동 검증:** 각 PR은 `python3 tests/ci/run_rust.py local`(Linux 빌드, 시험, Windows 교차 빌드) 통과 기록이 있습니다. 최종 main과 파일 내용이 같은 `beba6ae`에서 build, test, Windows 교차 빌드가 모두 6/6 통과했습니다([PR155 리뷰](https://github.com/Team-LJY/zipelo/pull/155#pullrequestreview-5944969211)).
 - **마지막 전체 실기 (`3a77cfd`):** 2026-11-15 Windows 11 Pro build 26300, Ubuntu 26.04.1 LTS Wayland와 X11에서 텍스트 미리보기, 나뉜 7z 풀기, 7z 만들기, ZIP 복구, 틀린 암호 재입력과 v0.1 위 덮어 설치를 확인했습니다. 결과 파일은 독립 도구와 기대 SHA256으로 대조했습니다([검토 기록](https://github.com/Team-LJY/zipelo/pull/129#pullrequestreview-5905758223)). 이때 설치 파일의 버전 표시는 0.1.0이었습니다.
-- **그 뒤의 부분 실기:** 진행 창 위치는 Ubuntu Wayland와 X11 VM에서 확인했습니다([PR142](https://github.com/Team-LJY/zipelo/pull/142)). Windows 끌어서 풀기는 PR153 head `7b2f88b`까지 Windows 11 VM에서 확인했습니다([실기 기록](https://github.com/Team-LJY/zipelo/pull/153#issuecomment-6956538306)). X11 끌어 놓기는 Xvfb 전달 시험만 했고([PR155](https://github.com/Team-LJY/zipelo/pull/155)), Wayland 끌어 놓기는 PR152 작성자의 실사용 뒤 수정분을 다시 확인하지 않았습니다.
+- **그 뒤의 부분 실기:** 진행 창 위치는 Ubuntu Wayland와 X11 VM에서 확인했습니다([PR142](https://github.com/Team-LJY/zipelo/pull/142)). Windows 끌어서 풀기는 PR153 head `7b2f88b`까지 Windows 11 VM에서 확인했습니다([실기 기록](https://github.com/Team-LJY/zipelo/pull/153#issuecomment-6956538306)). X11 끌어 놓기는 보이지 않는 시험 창으로 프로토콜 전달과 수명 시험만 확인했고 실제 파일 관리자 화면은 다시 확인하지 않았습니다([PR155 리뷰](https://github.com/Team-LJY/zipelo/pull/155#pullrequestreview-5944969211)). Wayland 끌어 놓기는 PR152 작성자의 실사용 뒤 수정분을 다시 확인하지 않았습니다.
 - **출시 전 남은 확인:** 앱과 작업자 버전을 0.2.1로 맞춘 최종 main으로 `.exe`와 `.deb`를 만들어 Windows, Wayland, X11에서 덮어 설치, 기본 앱, 끌어서 풀기와 주요 기능을 확인해야 합니다. 이 확인이 끝나기 전에는 게시하지 않습니다.
 - Windows에서 7z를 만드는 도중 취소하는 실기, 모든 오류 화면, 다른 OS 버전과 성능은 확인 범위 밖입니다.
