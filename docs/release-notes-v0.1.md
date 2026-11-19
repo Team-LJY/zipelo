@@ -1,6 +1,6 @@
 # Zipelo v0.1 릴리스 노트
 
-[v0.1.0은 2026-11-13에 게시됐습니다](https://github.com/Team-LJY/zipelo/releases/tag/v0.1.0). 아래 지원 범위와 커밋별 시험 기록은 v0.1 당시 스냅샷이며 현재 main의 검증 결과가 아닙니다. 이후 개선은 [v0.2.1 릴리스 노트](release-notes-v0.2.md)을 참고하세요.
+[v0.1.0은 2026-11-13에 게시됐습니다](https://github.com/Team-LJY/zipelo/releases/tag/v0.1.0). 아래 지원 범위와 커밋별 시험 기록은 v0.1 당시 스냅샷이며 현재 main의 검증 결과가 아닙니다. 이후 개선은 [v0.2 릴리스 노트](release-notes-v0.2.md)을 참고하세요.
 
 ## 지원 형식
 
