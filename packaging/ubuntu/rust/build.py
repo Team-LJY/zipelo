@@ -13,11 +13,13 @@ SPEC = importlib.util.spec_from_file_location("windows_build", ROOT / "packaging
 WINDOWS = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(WINDOWS)
 TARGET = "x86_64-unknown-linux-gnu"
+APP_MANIFEST = ROOT / "experiments/rust-ui-memory-app/Cargo.toml"
 
 
 def build(args):
     output = Path(args.output).resolve()
     output.mkdir(parents=True, exist_ok=False)
+    version = WINDOWS.read_package_version(APP_MANIFEST)
     stage = output / "stage"
     lib = stage / "usr/lib/zipelo"
     lib.mkdir(parents=True)
@@ -27,11 +29,11 @@ def build(args):
     docs = stage / "usr/share/doc/zipelo"
     docs.mkdir(parents=True)
     WINDOWS.LICENSES.generate(
-        [ROOT / "experiments/rust-ui-memory-app/Cargo.toml", ROOT / "experiments/rust-archive-worker/Cargo.toml"],
+        [APP_MANIFEST, ROOT / "experiments/rust-archive-worker/Cargo.toml"],
         docs / "THIRD-PARTY-LICENSES.txt",
     )
     for name, manifest, binary, features in (
-        ("Zipelo", ROOT / "experiments/rust-ui-memory-app/Cargo.toml", "zipelo-ui-memory-app", ("ui",)),
+        ("Zipelo", APP_MANIFEST, "zipelo-ui-memory-app", ("ui",)),
         ("zipelo-archive-worker", ROOT / "experiments/rust-archive-worker/Cargo.toml", "zipelo-archive-worker", ()),
     ):
         source, records[name] = WINDOWS.build_binary(manifest, binary, Path(args.target_dir).resolve(), args.profile, features, TARGET)
@@ -52,8 +54,8 @@ def build(args):
     shutil.copyfile(ROOT / "LICENSE", docs / "copyright")
     control = stage / "DEBIAN"
     control.mkdir()
-    (control / "control").write_text("""Package: zipelo
-Version: 0.2.2
+    (control / "control").write_text(f"""Package: zipelo
+Version: {version}
 Architecture: amd64
 Maintainer: Zipelo contributors <hoshinohinata.dev@gmail.com>
 Section: utils
@@ -65,7 +67,7 @@ Description: Lightweight Rust archive application
     for script in ("postinst", "prerm", "postrm"):
         shutil.copyfile(Path(__file__).with_name(script), control / script)
         (control / script).chmod(0o755)
-    package = output / "zipelo_0.2.2_amd64.deb"
+    package = output / f"zipelo_{version}_amd64.deb"
     subprocess.run(["dpkg-deb", "--root-owner-group", "--build", str(stage), str(package)], check=True)
     print(package)
     print("SHA-256 " + hashlib.sha256(package.read_bytes()).hexdigest())
