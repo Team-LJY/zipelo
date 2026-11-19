@@ -2,9 +2,9 @@
 
 쉽고 빠른 압축과 압축 해제를 목표로 만드는 MIT 오픈소스 프로그램입니다.
 
-[![Windows용 Zipelo 다운로드](assets/download-windows.svg)](https://github.com/Team-LJY/zipelo/releases/download/v0.2.1/Zipelo-0.2.1-windows-x64-setup.exe)
+[![Windows용 Zipelo 다운로드](assets/download-windows.svg)](https://github.com/Team-LJY/zipelo/releases/download/v0.2.2/Zipelo-0.2.2-windows-x64-setup.exe)
 
-버튼을 누르면 Windows 설치 파일(v0.2.1)을 바로 받습니다. Ubuntu용은 [.deb 설치 파일](https://github.com/Team-LJY/zipelo/releases/download/v0.2.1/zipelo_0.2.1_amd64.deb)을 받으세요. 모든 버전은 [릴리스 페이지](https://github.com/Team-LJY/zipelo/releases/latest)에 있습니다.
+버튼을 누르면 Windows 설치 파일(v0.2.2)을 바로 받습니다. Ubuntu용은 [.deb 설치 파일](https://github.com/Team-LJY/zipelo/releases/download/v0.2.2/zipelo_0.2.2_amd64.deb)을 받으세요. 모든 버전은 [릴리스 페이지](https://github.com/Team-LJY/zipelo/releases/latest)에 있습니다.
 
 ![Windows에서 샘플 ZIP을 연 Zipelo 화면](assets/screenshots/windows-archive-open.png)
 
@@ -32,7 +32,7 @@ Windows에서는 아래 순서로 설치합니다.
 
 v0.1.0을 쓰고 있다면 제거하지 않고 새 설치 파일을 실행하면 됩니다. 기존 위치에 업데이트하며 기본 앱 연결도 유지합니다.
 
-Ubuntu에서는 [.deb 설치 파일](https://github.com/Team-LJY/zipelo/releases/download/v0.2.1/zipelo_0.2.1_amd64.deb)을 받아 `sudo apt install ./zipelo_0.2.1_amd64.deb`로 설치하세요. 필요한 구성 요소도 함께 설치되고, 이전 버전은 그대로 업데이트됩니다. 처음 설치할 때 ZIP, 7z, TAR, GZ, TAR.GZ의 기본 앱이 Zipelo로 바뀝니다.
+Ubuntu에서는 [.deb 설치 파일](https://github.com/Team-LJY/zipelo/releases/download/v0.2.2/zipelo_0.2.2_amd64.deb)을 받아 `sudo apt install ./zipelo_0.2.2_amd64.deb`로 설치하세요. 필요한 구성 요소도 함께 설치되고, 이전 버전은 그대로 업데이트됩니다. 처음 설치할 때 ZIP, 7z, TAR, GZ, TAR.GZ의 기본 앱이 Zipelo로 바뀝니다.
 
 ## 아직 안 되는 것과 사용 전 알아둘 점
 
@@ -45,7 +45,7 @@ Ubuntu에서는 [.deb 설치 파일](https://github.com/Team-LJY/zipelo/releases
 - Windows에서 Zipelo를 제거해도 압축 파일의 기본 앱 설정은 남습니다. 제거할 때 안내에 따라 다른 앱을 고르거나 설정의 [기본 앱]에서 다시 지정하세요. Ubuntu는 설치한 사용자가 제거하고 그동안 기본 앱을 바꾸지 않았다면 이전에 쓰던 압축 앱으로 되돌립니다. 이전 앱을 찾지 못하면 직접 다시 선택하세요.
 - 설치 파일에는 코드 서명이 없습니다.
 
-자세한 지원 범위와 제한은 [v0.2.1 릴리스 노트](docs/release-notes-v0.2.md)를 참고하세요. 지난 버전은 [v0.1 릴리스 노트](docs/release-notes-v0.1.md)에 있습니다.
+자세한 지원 범위와 제한은 [v0.2.2 릴리스 노트](docs/release-notes-v0.2.md)를 참고하세요. 지난 버전은 [v0.1 릴리스 노트](docs/release-notes-v0.1.md)에 있습니다.
 
 ## 개발자용
 
