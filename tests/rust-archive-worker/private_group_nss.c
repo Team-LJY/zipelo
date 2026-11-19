@@ -97,7 +97,10 @@ static const char *redirect(const char *path, char *buffer, size_t length) {
     return buffer;
 }
 
-int statx(int fd, const char *path, int flags, unsigned int mask, struct statx *info) {
+int private_group_statx(int fd, const char *path, int flags, unsigned int mask,
+    struct statx *info) __asm__("statx");
+
+int private_group_statx(int fd, const char *path, int flags, unsigned int mask, struct statx *info) {
     int (*original)(int, const char *, int, unsigned int, struct statx *) = dlsym(RTLD_NEXT, "statx");
     const char *phase = getenv("ZIPELO_GROUP_CASE");
     if (path && phase && ((!strcmp(phase, "sss-probe-error") && !strncmp(path, "/var/lib/sss", 12)) ||
