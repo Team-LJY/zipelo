@@ -9,12 +9,18 @@ from pathlib import Path
 import shutil
 import struct
 import subprocess
+import tomllib
 
 ROOT = Path(__file__).resolve().parents[3]
 TARGET = "x86_64-pc-windows-gnu"
 SPEC = importlib.util.spec_from_file_location("licenses", ROOT / "packaging/licenses.py")
 LICENSES = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(LICENSES)
+
+
+def read_package_version(manifest):
+    with Path(manifest).open("rb") as source:
+        return tomllib.load(source)["package"]["version"]
 
 
 def pe_machine(path):
@@ -72,6 +78,7 @@ def build_binary(manifest, binary, target_dir, profile, features=(), target=TARG
 def build(args):
     output = Path(args.output).resolve()
     output.mkdir(parents=True, exist_ok=False)
+    version = read_package_version(args.app_manifest)
     target_dir = Path(args.target_dir).resolve()
     records = {}
     payload = output / "payload"
@@ -89,8 +96,8 @@ def build(args):
     (payload / "BUILD-INFO.json").write_text(json.dumps(records, indent=4) + "\n", encoding="utf-8")
     shutil.copyfile(Path(__file__).with_name("installer.nsi"), output / "installer.nsi")
     shutil.copyfile(ROOT / "experiments/rust-ui-memory-app/src/assets/icons/zipelo.ico", output / "zipelo.ico")
-    subprocess.run(["makensis", "-WX", "installer.nsi"], cwd=output, check=True)
-    installer = output / "Zipelo-0.2.2-windows-x64-setup.exe"
+    subprocess.run(["makensis", "-WX", f"-DVERSION={version}", "installer.nsi"], cwd=output, check=True)
+    installer = output / f"Zipelo-{version}-windows-x64-setup.exe"
     if pe_machine(installer) not in (0x14C, 0x8664):
         raise ValueError("NSIS 설치 실행 파일이 아님")
     print(installer)

@@ -5,7 +5,10 @@ Unicode true
 !include "x64.nsh"
 !include "FileFunc.nsh"
 Name "Zipelo"
-OutFile "Zipelo-0.2.2-windows-x64-setup.exe"
+!ifndef VERSION
+    !error "VERSION을 지정해야 함"
+!endif
+OutFile "Zipelo-${VERSION}-windows-x64-setup.exe"
 !define INSTALLROOT "$LOCALAPPDATA\Programs\Zipelo"
 InstallDir "${INSTALLROOT}"
 RequestExecutionLevel user
@@ -228,7 +231,7 @@ prepare:
     ${If} $Upgrading == 1
         StrCpy $VersionChanged 1
         ClearErrors
-        WriteRegStr HKCU "${UNKEY}" "DisplayVersion" "0.2.2"
+        WriteRegStr HKCU "${UNKEY}" "DisplayVersion" "${VERSION}"
         IfErrors failed
         Goto committed
     ${EndIf}
@@ -238,7 +241,7 @@ prepare:
     StrCpy $UninstallOwned 1
     WriteRegStr HKCU "${UNKEY}" "DisplayName" "Zipelo"
     WriteRegStr HKCU "${UNKEY}" "DisplayIcon" '$\"$INSTDIR\Zipelo.exe$\",0'
-    WriteRegStr HKCU "${UNKEY}" "DisplayVersion" "0.2.2"
+    WriteRegStr HKCU "${UNKEY}" "DisplayVersion" "${VERSION}"
     WriteRegStr HKCU "${UNKEY}" "UninstallString" '$\"$INSTDIR\Uninstall.exe$\"'
     IfErrors failed
 committed:

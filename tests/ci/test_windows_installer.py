@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import tempfile
 import sys
+import tomllib
 from unittest.mock import patch
 import unittest
 
@@ -64,10 +65,15 @@ class InstallerInputTests(unittest.TestCase):
             (payload / name).write_bytes(b"compile-only test fixture")
         shutil.copyfile(ROOT / "packaging/windows/rust/installer.nsi", self.root / "installer.nsi")
         shutil.copyfile(ROOT / "experiments/rust-ui-memory-app/src/assets/icons/zipelo.ico", self.root / "zipelo.ico")
-        completed = subprocess.run(["makensis", "-WX", "installer.nsi"], cwd=self.root,
-                                   stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        manifest = ROOT / "experiments/rust-ui-memory-app/Cargo.toml"
+        with manifest.open("rb") as source:
+            version = tomllib.load(source)["package"]["version"]
+        completed = subprocess.run(
+            ["makensis", "-WX", f"-DVERSION={version}", "installer.nsi"],
+            cwd=self.root, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+        )
         self.assertEqual(completed.returncode, 0, completed.stdout)
-        installer = self.root / "Zipelo-0.2.2-windows-x64-setup.exe"
+        installer = self.root / f"Zipelo-{version}-windows-x64-setup.exe"
         self.assertIn(MODULE.pe_machine(installer), (0x14C, 0x8664))
         self.assertGreater(installer.stat().st_size, 100000)
 
