@@ -4597,7 +4597,7 @@ dependencies = [
 
 [[package]]
 name = "zipelo-archive-worker"
-version = \"0.2.2\"
+version = "0.2.2"
 dependencies = [
  "aes",
  "bzip2",
@@ -4625,7 +4625,7 @@ dependencies = [
 
 [[package]]
 name = "zipelo-ui-memory-app"
-version = \"0.2.2\"
+version = "0.2.2"
 dependencies = [
  "ashpd",
  "eframe",
