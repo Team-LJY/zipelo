@@ -1352,13 +1352,8 @@ impl Model {
                             Start::Preview { .. } => ActionKind::Preview,
                             Start::RecoverZip { .. } => ActionKind::RecoverZip,
                         };
-                        let hard = Limits {
-                            input: u64::MAX,
-                            output: 64 * 1024 * 1024 * 1024,
-                            entries: 200_000,
-                        };
                         let ceiling = if run.expanded {
-                            hard
+                            Limits::expanded(expected)
                         } else {
                             Limits::default()
                         };

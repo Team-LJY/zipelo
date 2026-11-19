@@ -99,6 +99,18 @@ impl Limits {
         }
     }
 
+    /// 큰 작업 승인 뒤 쓰는 상한. 압축파일 만들기는 총량 상한이 없음.
+    pub fn expanded(action: ActionKind) -> Self {
+        Self {
+            input: u64::MAX,
+            output: match action {
+                ActionKind::CreateZip | ActionKind::CreateSevenZip => u64::MAX,
+                _ => MAX_EXPANDED_OUTPUT,
+            },
+            entries: 200_000,
+        }
+    }
+
     pub fn valid(self) -> bool {
         let hard = Self::default();
         self.input > 0
@@ -109,6 +121,10 @@ impl Limits {
             && self.entries <= hard.entries
     }
 }
+/// 승인 뒤 해제·목록·미리보기·복구가 풀어낼 수 있는 총량의 상한(64 GiB).
+/// 압축파일 만들기는 사용자가 고른 원본을 읽기만 하므로 이 상한을 적용하지 않으며,
+/// 디스크 여유 공간 검사가 실제 한계가 됨.
+pub const MAX_EXPANDED_OUTPUT: u64 = 64 * 1024 * 1024 * 1024;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GuardedStart {
     pub start: Start,
@@ -120,7 +136,11 @@ impl GuardedStart {
         self.start.limits.valid()
             && self.ceiling.input == self.start.limits.input
             && self.ceiling.output >= self.start.limits.output
-            && self.ceiling.output <= 64 * 1024 * 1024 * 1024
+            && (self.ceiling.output <= MAX_EXPANDED_OUTPUT
+                || matches!(
+                    self.start.action,
+                    Action::CreateZip { .. } | Action::CreateSevenZip { .. }
+                ))
             && self.ceiling.entries >= self.start.limits.entries
             && self.ceiling.entries <= 200_000
             && (!self.interactive

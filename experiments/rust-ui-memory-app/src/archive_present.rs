@@ -59,6 +59,15 @@ pub fn bytes_text(bytes: u64) -> String {
     format!("{bytes} B")
 }
 
+/// 자원 상한 표시. u64::MAX는 상한이 없다는 뜻임.
+pub fn limit_text(bytes: u64) -> String {
+    if bytes == u64::MAX {
+        "제한 없음".into()
+    } else {
+        bytes_text(bytes)
+    }
+}
+
 pub fn middle_text(text: &str, max_chars: usize) -> String {
     let chars = text.chars().collect::<Vec<_>>();
     if chars.len() <= max_chars || max_chars < 5 {

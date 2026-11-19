@@ -613,11 +613,7 @@ impl ui::Connection for ProcessConnection {
                     "작업자 요청 상태 오류"
                 })? = Some(start.action.kind());
                 let ceiling = if expanded {
-                    wire::Limits {
-                        input: u64::MAX,
-                        output: 64 * 1024 * 1024 * 1024,
-                        entries: 200_000,
-                    }
+                    wire::Limits::expanded(start.action.kind())
                 } else {
                     wire::Limits::default()
                 };
