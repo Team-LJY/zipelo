@@ -63,6 +63,9 @@ int getgrgid_r(gid_t gid, struct group *group, char *buffer, size_t length,
 #include <sys/un.h>
 
 static const char *redirect(const char *path, char *buffer, size_t length) {
+    if (!path) {
+        return path;
+    }
     const char *base = NULL;
     const char *tail = NULL;
     if (!strncmp(path, "/var/lib/sss", 12) && (!path[12] || path[12] == '/')) {
@@ -94,17 +97,20 @@ static const char *redirect(const char *path, char *buffer, size_t length) {
     return buffer;
 }
 
-int statx(int fd, const char *path, int flags, unsigned int mask, struct statx *info) {
+int private_group_statx(int fd, const char *path, int flags, unsigned int mask,
+    struct statx *info) __asm__("statx");
+
+int private_group_statx(int fd, const char *path, int flags, unsigned int mask, struct statx *info) {
     int (*original)(int, const char *, int, unsigned int, struct statx *) = dlsym(RTLD_NEXT, "statx");
     const char *phase = getenv("ZIPELO_GROUP_CASE");
-    if (phase && ((!strcmp(phase, "sss-probe-error") && !strncmp(path, "/var/lib/sss", 12)) ||
+    if (path && phase && ((!strcmp(phase, "sss-probe-error") && !strncmp(path, "/var/lib/sss", 12)) ||
             (!strcmp(phase, "userdb-probe-error") && !strcmp(path, "/etc/userdb")))) {
         errno = EACCES;
         return -1;
     }
     char buffer[PATH_MAX];
     const char *mapped = redirect(path, buffer, sizeof(buffer));
-    return mapped ? original(fd, mapped, flags, mask, info) : -1;
+    return mapped || !path ? original(fd, mapped, flags, mask, info) : -1;
 }
 
 DIR *opendir(const char *path) {

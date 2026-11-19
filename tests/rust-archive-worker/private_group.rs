@@ -486,6 +486,42 @@ fn private_group_accepts_sss_only_without_socket_and_caches() {
     }
 }
 
+#[test]
+fn private_group_shim_preserves_statx_null_and_empty_paths() {
+    let scratch = Scratch::new();
+    let probe = scratch.0.join("statx-path-probe");
+    assert!(
+        Command::new("cc")
+            .args(["-O2", "-Wall", "-Wextra", "-Werror"])
+            .arg(
+                PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                    .join("../../tests/rust-archive-worker/private_group_statx.c")
+            )
+            .args(["-ldl", "-o"])
+            .arg(&probe)
+            .status()
+            .unwrap()
+            .success()
+    );
+    for case in [None, Some("sss-probe-error"), Some("userdb-probe-error")] {
+        let mut command = Command::new(&probe);
+        command
+            .env("LD_PRELOAD", shim())
+            .env_remove("ZIPELO_GROUP_CASE");
+        if let Some(case) = case {
+            command.env("ZIPELO_GROUP_CASE", case);
+        }
+        let result = command.output().unwrap();
+        assert!(
+            result.status.success(),
+            "case={case:?} status={:?}: {} {}",
+            result.status,
+            String::from_utf8_lossy(&result.stdout),
+            String::from_utf8_lossy(&result.stderr)
+        );
+    }
+}
+
 fn shim() -> &'static PathBuf {
     static LIBRARY: std::sync::OnceLock<(Scratch, PathBuf)> = std::sync::OnceLock::new();
     &LIBRARY
