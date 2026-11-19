@@ -865,11 +865,11 @@ impl Scenario {
                         },
                         soft_limits: Limits::default(),
                         ceiling: if expanded {
-                            Limits {
-                                input: u64::MAX,
-                                output: 64 * 1024 * 1024 * 1024,
-                                entries: 200_000,
-                            }
+                            Limits::expanded(if seven_zip {
+                                ActionKind::CreateSevenZip
+                            } else {
+                                ActionKind::Extract
+                            })
                         } else {
                             Limits::default()
                         },

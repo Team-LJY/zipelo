@@ -241,11 +241,7 @@ fn output_history_ceiling_matches_approved_metadata_nodes() {
                 entries: permission == 2,
                 ratio: permission == 3,
             };
-            q.ceiling = Limits {
-                input: u64::MAX,
-                output: 64 * 1024 * 1024 * 1024,
-                entries: 200_000,
-            };
+            q.ceiling = Limits::expanded(ActionKind::CreateZip);
             receive(&mut m, &f, Event::ResourceRequired(q));
             assert!(m.resource_reply(m.job_id().unwrap(), 1, true));
         }

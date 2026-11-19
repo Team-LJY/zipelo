@@ -4435,7 +4435,7 @@ impl ArchiveApp {
                     ui.label(format!(
                         "총량 한도: {}에서 {}로",
                         present::bytes_text(question.soft_limits.output),
-                        present::bytes_text(question.ceiling.output)
+                        present::limit_text(question.ceiling.output)
                     ));
                 }
                 if question.scope.entries {
@@ -4481,7 +4481,7 @@ impl ArchiveApp {
                 ));
                 ui.label(format!(
                     "이 작업의 상한: {} / {}개",
-                    present::bytes_text(question.ceiling.output),
+                    present::limit_text(question.ceiling.output),
                     question.ceiling.entries
                 ));
                 ui.label("이 작업에만 적용합니다. 공간 부족이나 자원 상한에 도달하면 중단합니다.");

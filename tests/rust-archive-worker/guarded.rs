@@ -425,8 +425,33 @@ fn guarded_wire_round_trip_and_invalid_ceiling() {
         Message::StartGuarded(decoded) => assert_eq!(decoded, start),
         other => panic!("{other:?}"),
     }
+    let mut create = start.clone();
+    create.start.action = Action::CreateZip {
+        sources: vec![Source {
+            path: s.path("source"),
+            archive_name: "source".into(),
+        }],
+        output_file: s.path("new.zip"),
+        method: Method::Store,
+        encryption: Encryption::None,
+    };
+    create.ceiling = Limits::expanded(ActionKind::CreateZip);
+    assert_eq!(create.ceiling.output, u64::MAX);
+    assert!(create.valid());
+    let mut bytes = Vec::new();
+    Writer::new(&mut bytes, 17)
+        .send(&Message::StartGuarded(create.clone()))
+        .unwrap();
+    match Reader::new(bytes.as_slice()).read().unwrap().unwrap().2 {
+        Message::StartGuarded(decoded) => assert_eq!(decoded, create),
+        other => panic!("{other:?}"),
+    }
+    assert_eq!(
+        Limits::expanded(ActionKind::Extract).output,
+        MAX_EXPANDED_OUTPUT
+    );
     let mut invalid = start;
-    invalid.ceiling.output = 64 * 1024 * 1024 * 1024 + 1;
+    invalid.ceiling.output = MAX_EXPANDED_OUTPUT + 1;
     assert!(!invalid.valid());
     assert!(
         Writer::new(Vec::new(), 17)
