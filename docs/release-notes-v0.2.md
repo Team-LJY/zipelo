@@ -9,7 +9,7 @@ v0.2.2는 v0.2.1을 고친 버전입니다. 아래 "v0.2.2에서 바뀐 점"이 
 - **64 GiB보다 큰 압축파일 만들기:** ZIP과 7z 만들기는 큰 작업을 허용하면 총량 제한 없이 디스크 여유 공간만큼 처리합니다. 전에는 64 GiB를 넘으면 만들 수 없었습니다. 압축 풀기, 목록 보기, 미리보기, 복구의 한도는 그대로입니다([PR158](https://github.com/Team-LJY/zipelo/pull/158)).
 - 작업자 계약 문서와 시험 보조 코드를 실제 동작과 여러 glibc 버전에 맞게 고쳤습니다. 앱 동작에는 영향이 없습니다([PR159](https://github.com/Team-LJY/zipelo/pull/159), [PR160](https://github.com/Team-LJY/zipelo/pull/160)).
 - **알아 둘 점:** 64 GiB가 넘게 만든 ZIP이나 7z는 Zipelo의 풀기 한도(64 GiB)에 걸려 Zipelo로 다시 풀 수 없습니다. 7-Zip 같은 다른 프로그램을 쓰세요.
-- **검증:** 각 PR은 `python3 tests/ci/run_rust.py local`이 build, test, Windows 교차 빌드 모두 6/6으로 통과했습니다. 실제로 64 GiB가 넘는 파일을 만들어 보지는 않았고, v0.2.2 설치 파일의 플랫폼 실기는 하지 않았습니다.
+- **검증:** PR160 수정 후와 버전업 head `3f92b2d`에서 `python3 tests/ci/run_rust.py local`이 build, test, Windows 교차 빌드 모두 6/6으로 통과했습니다. PR159 시점에는 일부 환경에서 시험 보조 코드 결함으로 test 5/6이었고, PR160에서 고쳤습니다. 실제로 64 GiB가 넘는 파일을 만들어 보지는 않았고, v0.2.2 설치 파일의 플랫폼 실기는 하지 않았습니다.
 
 # v0.2.1 내용
 
